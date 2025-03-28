@@ -33,7 +33,7 @@ dependencies = [
   'EasyReflectometry @ git+https://github.com/EasyScience/EasyReflectometryLib@new-parameter-and-numpy2',
   'PySide6',
   'toml',
-  'EasyScience @ git+https://github.com/EasyScience/EasyScience@remove_old_parameter',
+  'EasyScience',
 ]
 
 [project.optional-dependencies]
