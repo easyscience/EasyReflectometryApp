@@ -12,6 +12,10 @@
 This allows **EasyReflectometry** to cover different functionality aspects within a signle, intuitive, and user-friendly interface.  
 The reflectomety packages are included with the installation so there is no need to download andn compile any additional components. 
 
+## Example of usage
+
+https://github.com/EasyScience/EasyReflectometryApp/wiki/Testing-in-Hand
+
 ## Main features
 
 **EasyReflectometry** is open source and cross-platform, with support for Windows, macOS and Linux (Ubuntu).

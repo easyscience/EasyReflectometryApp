@@ -6,20 +6,15 @@ The super-phase (where the neutrons are incident first) is a silicon (Si) wafer 
 Then a polymer film is attached to the silicon dioxide by some chemical method and this polymer film is solvated in heavy water (D<sub>2</sub>O) which also makes up the sub-phase of the system. 
 This is shown pictorially below, as a slab model. 
 
-<center>
-    <img src='./../_images/polymer_film.png' width='300px'></img>
-</center>
-<center>
-    A slab model description of the polymer film system.
-</center>
-<br></br>
+![A slab model description of the polymer film system.](./_images/polymer_film.png)
 
 Now for explaining the `Analysis` tab let's look at how the EasyReflectometryApp can fit. The tab is like the previous tabs split into two windows, a graph- and a data-window.<br>
 The graph window has the same functionality as the previous tabs, so it will not be explained further. The data window has two categories: `Basic` and `Advanced` controls.
 
 ## Basic controls 
 The basic controls is for fitting the variables.
-<img src='./../_images/anal_bsc.png' width='800px'></img>
+
+![Basic analytics](./_images/anal_bsc.png)
 
 - **A**: Picking the desired variable to use the slider for fine-tuning it.
 - **B**: Able to change the specific variable.
@@ -30,7 +25,8 @@ The basic controls is for fitting the variables.
 
 ## Advanced controls
 The advanced control is then for changing the calculation engine and setting the minimisation method.
-<img src='./../_images/anal_adv.png' width='800px'></img>
+
+![Advanced analytics](./_images/anal_adv.png)
 
 - **A**: Changing the calculation engine between `refnx` and `refl1d`.<br></br>
 - **B**: Setting the minimisation method for minimising variables.

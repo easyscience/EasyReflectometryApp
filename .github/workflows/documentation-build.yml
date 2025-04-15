@@ -1,0 +1,51 @@
+# This pipeline
+# - builds developer documentation
+# - pushes documentation to gh-pages branch of the same repository
+#
+# Deployment is handled by pages-build-deployment bot
+#
+# For more information see: https://docs.github.com/en/pages/getting-started-with-github-pages
+
+name: Build Documentation and Push to gh-pages Branch
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on tag creation
+  push:
+    tags:
+      - 'v*'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build_documentation:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@master
+      with:
+        fetch-depth: 0 # otherwise, you will failed to push refs to dest repo
+    - name: Upgrade pip
+      run: |
+        python -m pip install --upgrade pip
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.11
+    - name: Install Pandoc, repo and dependencies
+      run: |
+        sudo apt install pandoc
+        pip install . '.[docs]'
+    - name: Build and Commit
+      uses: sphinx-notes/pages@master
+      with:
+        install_requirements: true
+        documentation_path: docs/src
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      continue-on-error: true
+      with:
+        branch: gh-pages

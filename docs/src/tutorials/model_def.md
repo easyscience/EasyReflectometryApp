@@ -2,7 +2,8 @@
 When a project is initialised it is then possible to define material and set the model.  
 
 Let us first look at the general layout of the `Model` page, which is split up into two parts, the main window showing the graphs and the sidebar being the control panel for variables and data.
-<img src='./../_images/sample_overview.png' width='800px'></img>
+
+![Model overview](./_images/sample_overview.png)
 
 - **A**: Graph change between the Reflectivity- and Scattering Length Density (SLD) curve.
 - **B**: Graph control of ledger, visible coordinates on hower, zoom and pan control, and reset.
@@ -13,7 +14,7 @@ Let us first look at the general layout of the `Model` page, which is split up i
 To construct a model in the app, first, you add the materials that will compose the layers in `Material Editor`.  
 The materials are added by the real and imaginary components of the scattering length density (in units of 10<sup>-6</sup>Å<sup>-2</sup>) and given a name for the material.  
 
-<img src='./../_images/sample_material.png' width='800px'></img>
+![Material editor](./_images/sample_material.png)
 
 - **A**: For adding more material.
 - **B**: Duplicating the last clicked material.
@@ -22,7 +23,7 @@ The materials are added by the real and imaginary components of the scattering l
 ### Model creation and editing
 For creating new models, the `Models selector` tab is used, and then for setting the assemblies in the model the `Model editor` is used.  
 
-<img src='./../_images/sample_model.png' width='800px'></img>
+![Model creation](./_images/sample_model.png)
 
 - **A**: Renaming model.
 - **B**: Removing the specific model.
@@ -36,7 +37,7 @@ For creating new models, the `Models selector` tab is used, and then for setting
 Then for editing the assemblies in the model, the `Layer editor` is used.  
 By clicking an assembly, the `Layer editor` is specified and changes can be made to that assembly.
 
-<img src='./../_images/sample_layer.png' width='800px'></img>
+![Layer editor](./_images/sample_layer.png)
 
 - **A**: Pick the desired assembly to modify.
 - **1**: Choose a material from materials in the `Material Editor`.
@@ -45,7 +46,7 @@ By clicking an assembly, the `Layer editor` is specified and changes can be made
 ## Advanced controls
 In the advanced controls, it is possible to apply a specific Q-range of interest and sample constraints on the model.
 
-<img src='./../_images/sample_adv.png' width='800px'></img>
+![Advanced controls](./_images/sample_adv.png)
 
 - **A**: Setting min. Q value of interest.
 - **B**: Setting max. Q value of interest.
