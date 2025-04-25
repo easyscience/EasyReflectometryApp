@@ -29,7 +29,7 @@ classifiers = [
 
 requires-python = '>=3.11'
 dependencies = [
-  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@develop',
+  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@get-rid-of-qt5compat',
   'easyreflectometry',
   'PySide6',
   'toml',
