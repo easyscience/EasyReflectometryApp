@@ -82,7 +82,9 @@ jobs:
 
       - name: Run app in testmode and quit
         shell: bash
-        run: python EasyReflectometryApp/main.py --testmode
+        run: |
+          cd EasyReflectometryApp
+          python main.py --testmode
 
       - name: Create freezed python app bundle with PyInstaller
         run: python ${{ env.SCRIPTS_PATH }}/FreezeApp.py
