@@ -131,7 +131,7 @@ def runPyInstaller():
             '--noconfirm',                          # Replace output directory (default: SPECPATH/dist/SPECNAME) without asking for confirmation
             '--clean',                              # Clean PyInstaller cache and remove temporary files before building
             #'--windowed',                           # Windows and Mac OS X: do not provide a console window for standard i/o.
-            '--onedir',                             # Create a one-folder bundle containing an executable (default)
+            #'--onedir',                             # Create a one-folder bundle containing an executable (default)
             '--distpath', CONFIG.dist_dir,          # Where to put the bundled app (default: ./dist)
             '--workpath', CONFIG.build_dir,         # Where to put all the temporary work files, .log, .pyz and etc. (default: ./build)
             *excludedModules(),                     # Exclude modules
