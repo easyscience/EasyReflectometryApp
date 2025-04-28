@@ -80,6 +80,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xfixes0 libxcb-shape0 libxcb-cursor0
 
+      - name: Run app in testmode and quit
+        shell: bash
+        run: python EasyReflectometryApp/main.py --testmode
+
       - name: Create freezed python app bundle with PyInstaller
         run: python ${{ env.SCRIPTS_PATH }}/FreezeApp.py
 
