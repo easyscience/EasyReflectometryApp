@@ -33,6 +33,9 @@ if __name__ == '__main__':
     qInstallMessageHandler(console.qmlMessageHandler)
     console.debug('Custom Qt message handler defined')
 
+    qmlRegisterSingletonType(PyBackend, 'Backends', 1, 0, 'PyBackend')
+    console.debug('Backend class is registered to be accessible from QML via the name PyBackend')
+
     app = Application(sys.argv)  # Create the QApplication (Not QGuiApplication)
     console.debug(f'Qt Application created {app}')
 
@@ -40,9 +43,6 @@ if __name__ == '__main__':
     console.debug(f'QML application engine created {engine}')
 
     engine.rootContext().setContextProperty('isTestMode', args.testmode)
-
-    qmlRegisterSingletonType(PyBackend, 'Backends', 1, 0, 'PyBackend')
-    console.debug('Backend class is registered to be accessible from QML via the name PyBackend')
 
     if INSTALLER:  # Running from installer
         path_main_qml = QUrl.fromLocalFile(CURRENT_DIR / 'EasyReflectometryApp' / 'Gui' / 'ApplicationWindow.qml')
