@@ -150,8 +150,8 @@ def runPyInstaller():
                 # Needed for reportlab
                 '--noconfirm',  # Replace output directory (default: SPECPATH/dist/SPECNAME) without asking for confirmation
                 '--clean',  # Clean PyInstaller cache and remove temporary files before building
-                #'--windowed',  # Windows and Mac OS X: do not provide a console window for standard i/o.
-                #'--onedir',  # Create a one-folder bundle containing an executable (default)
+                '--windowed',  # Windows and Mac OS X: do not provide a console window for standard i/o.
+                '--onedir',  # Create a one-folder bundle containing an executable (default)
                 #'--target-architecture', 'universal2', # Target architecture (macOS only; valid values: x86_64, arm64, universal2). Error: _multiarray_tests.cpython-311-darwin.so is not a fat binary! (i.e. not multi-architecture)
                 #'--specpath', workDirPath(),           # Folder to store the generated spec file (default: current directory)
                 '--distpath',
