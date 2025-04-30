@@ -29,7 +29,7 @@ classifiers = [
 
 requires-python = '>=3.11'
 dependencies = [
-  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@get-rid-of-qt5compat',
+  'EasyApp',
   'easyreflectometry',
   'PySide6>=6.8,<6.9', # Issue with TableView formatting in 6.9,
   'toml',
