@@ -1,3 +1,4 @@
-# Version 1.0.0 (27 Nov 2024)
+# Version 1.1.0 (1 May 2025)
 
-Changed to Qt6
+New, updated documentation.
+Updated numpy and Qt6 versions.

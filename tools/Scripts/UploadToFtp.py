@@ -1,6 +1,6 @@
-# SPDX-FileCopyrightText: 2023 EasyReflectometry contributors <support@easyreflectometry.org>
+# SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
 # SPDX-License-Identifier: BSD-3-Clause
-# © 2021-2023 Contributors to the EasyReflectometry project <https://github.com/easyScience/EasyReflectometryApp>
+# © 2021-2025 Contributors to the EasyReflectometry project <https://github.com/easyScience/EasyReflectometryApp>
 
 __author__ = 'github.com/AndrewSazonov'
 __version__ = '0.0.1'
