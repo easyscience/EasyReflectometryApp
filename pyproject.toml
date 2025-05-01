@@ -4,18 +4,20 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'EasyReflectometryApp'
-version = '1.0.0'
-release_data = '27 November 2024'
+version = '1.1.0'
+release_data = '01 May 2025'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
-    {name = "Andrew R. McCluskey", email = "andrew.mccluskey@ess.eu"}, 
-    {name = "Andrew Sazonov"}, 
+    {name = "Andrew R. McCluskey"}, 
+    {name = "Andrew Sazonov", email = "andrew.sazonov@ess.eu"}, 
     {name = "Simon Ward"},
-    {name = "Andreas Pedersen", email = "andreas.pedersen@ess.eu"}
+    {name = "Andreas Pedersen"},
+    {name = "Piotr Rozyczko", email = "piotr.rozyczko@ess.eu"},
 ]
 maintainers = [
-    {name = "Andrew R. McCluskey", email = "andrew.mccluskey@ess.eu"},
-    {name = "Andreas Pedersen", email = "andreas.pedersen@ess.eu"}
+    {name = "Andrew R. McCluskey"},
+    {name = "Andreas Pedersen"},
+    {name = "Piotr Rozyczko", email = "piotr.rozyczko@ess.eu"},
 ]
 license = {file = 'LICENSE.md'}
 classifiers = [

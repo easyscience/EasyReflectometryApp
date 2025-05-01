@@ -1,6 +1,6 @@
-# SPDX-FileCopyrightText: 2024 EasyReflectometryApp contributors
+# 5SPDX-FileCopyrightText: 2025 EasyReflectometryApp contributors
 # SPDX-License-Identifier: BSD-3-Clause
-# © 2024 Contributors to the EasyReflectometryApp project <https://github.com/easyscience/EasyReflectometryApp>
+# © 2025 Contributors to the EasyReflectometryApp project <https://github.com/easyscience/EasyReflectometryApp>
 import argparse
 import sys
 from pathlib import Path
