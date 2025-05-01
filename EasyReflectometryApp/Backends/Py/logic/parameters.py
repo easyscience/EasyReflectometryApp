@@ -6,7 +6,7 @@ from easyreflectometry.utils import count_free_parameters
 from easyscience import global_object
 from easyscience.Constraints import NumericConstraint
 from easyscience.Constraints import ObjConstraint
-from easyscience.Objects.new_variable import Parameter
+from easyscience.Objects.variable import Parameter
 
 
 class Parameters:
