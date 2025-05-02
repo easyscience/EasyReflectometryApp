@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.1.1 (c3084ef, 2021-09-22)"
+   sodipodi:docname="polymer_film.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     showguides="false"
+     inkscape:zoom="1.206367"
+     inkscape:cx="361.8302"
+     inkscape:cy="548.34061"
+     inkscape:window-width="2560"
+     inkscape:window-height="1395"
+     inkscape:window-x="0"
+     inkscape:window-y="478"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2">
+    <rect
+       x="-184.85254"
+       y="247.85162"
+       width="128.48495"
+       height="116.87986"
+       id="rect3288" />
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient2364">
+      <stop
+         style="stop-color:#1a936f;stop-opacity:1;"
+         offset="0"
+         id="stop2360" />
+      <stop
+         style="stop-color:#1a936f;stop-opacity:0;"
+         offset="1"
+         id="stop2362" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient1926">
+      <stop
+         style="stop-color:#3f7cac;stop-opacity:1;"
+         offset="0"
+         id="stop1922" />
+      <stop
+         style="stop-color:#3f7cac;stop-opacity:0;"
+         offset="1"
+         id="stop1924" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1926"
+       id="linearGradient1928"
+       x1="101.98492"
+       y1="140.36635"
+       x2="101.98492"
+       y2="189.49458"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient2364"
+       id="linearGradient2366"
+       x1="102.19874"
+       y1="79.475281"
+       x2="102.19874"
+       y2="28.811798"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(0,-5)" />
+    <rect
+       x="-184.85254"
+       y="247.85162"
+       width="128.48495"
+       height="116.87986"
+       id="rect4304" />
+    <rect
+       x="-184.85254"
+       y="247.85162"
+       width="128.48495"
+       height="116.87986"
+       id="rect4310" />
+    <rect
+       x="-184.85254"
+       y="247.85162"
+       width="128.48495"
+       height="116.87986"
+       id="rect4316" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:url(#linearGradient2366);fill-opacity:1;stroke:none;stroke-width:1.49576;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1"
+       id="rect846"
+       width="105.93273"
+       height="30"
+       x="50"
+       y="45"
+       ry="0"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300" />
+    <rect
+       style="fill:#ecc8af;fill-opacity:1;stroke:none;stroke-width:1.05766;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1"
+       id="rect1148"
+       width="105.93273"
+       height="15"
+       x="50"
+       y="75"
+       ry="0"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300" />
+    <rect
+       style="fill:#c2f970;fill-opacity:1;stroke:none;stroke-width:1.93101;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1"
+       id="rect1168"
+       width="105.93273"
+       height="50"
+       x="50"
+       y="90"
+       ry="0"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300" />
+    <rect
+       style="fill:url(#linearGradient1928);fill-opacity:1;stroke:none;stroke-width:1.49576;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1"
+       id="rect1188"
+       width="105.93273"
+       height="30"
+       x="50"
+       y="140"
+       ry="0"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300" />
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,103.66761,-11.393529)"
+       id="text3286"
+       style="font-size:40px;line-height:1.25;font-family:'Andale Mono';-inkscape-font-specification:'Andale Mono';white-space:pre;shape-inside:url(#rect3288)"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300"><tspan
+         x="-184.85156"
+         y="283.93381"
+         id="tspan7786"><tspan
+           style="font-family:Nunito;-inkscape-font-specification:Nunito"
+           id="tspan7784">Si</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,103.66761,11.106471)"
+       id="text4302"
+       style="font-size:40px;line-height:1.25;font-family:'Andale Mono';-inkscape-font-specification:'Andale Mono';white-space:pre;shape-inside:url(#rect4304)"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300"><tspan
+         x="-184.85156"
+         y="283.93381"
+         id="tspan7792"><tspan
+           style="font-family:Nunito;-inkscape-font-specification:Nunito"
+           id="tspan7788">SiO</tspan><tspan
+           style="font-size:65%;baseline-shift:sub"
+           id="tspan7790">2</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,103.66761,43.606471)"
+       id="text4308"
+       style="font-size:40px;line-height:1.25;font-family:'Andale Mono';-inkscape-font-specification:'Andale Mono';white-space:pre;shape-inside:url(#rect4310)"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300"><tspan
+         x="-184.85156"
+         y="283.93381"
+         id="tspan7796"><tspan
+           style="font-family:Nunito;-inkscape-font-specification:Nunito"
+           id="tspan7794">Film</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,103.66761,83.606471)"
+       id="text4314"
+       style="font-size:40px;line-height:1.25;font-family:'Andale Mono';-inkscape-font-specification:'Andale Mono';white-space:pre;shape-inside:url(#rect4316)"
+       inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/easyreflectometryLib/docs/_static/polymer_film.png"
+       inkscape:export-xdpi="300"
+       inkscape:export-ydpi="300"><tspan
+         x="-184.85156"
+         y="283.93381"
+         id="tspan7804"><tspan
+           style="font-family:Nunito;-inkscape-font-specification:Nunito"
+           id="tspan7798">D</tspan><tspan
+           style="font-size:65%;baseline-shift:sub"
+           id="tspan7800">2</tspan><tspan
+           style="font-family:Nunito;-inkscape-font-specification:Nunito"
+           id="tspan7802">O</tspan></tspan></text>
+  </g>
+</svg>

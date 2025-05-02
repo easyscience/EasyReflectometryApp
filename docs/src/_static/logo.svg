@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1012 1012"
+   version="1.1"
+   id="svg943"
+   sodipodi:docname="logo.svg"
+   inkscape:version="1.1.1 (c3084ef, 2021-09-22)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview913"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     showgrid="false"
+     showguides="false"
+     inkscape:zoom="0.11439388"
+     inkscape:cx="2574.4384"
+     inkscape:cy="275.36438"
+     inkscape:window-width="2048"
+     inkscape:window-height="1235"
+     inkscape:window-x="0"
+     inkscape:window-y="23"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg943" />
+  <defs
+     id="defs919">
+    <rect
+       x="1203.0906"
+       y="-97.495183"
+       width="992.50096"
+       height="723.41426"
+       id="rect1811" />
+    <linearGradient
+       id="gradient-2"
+       gradientUnits="userSpaceOnUse"
+       x1="510"
+       y1="40"
+       x2="510"
+       y2="980"
+       gradientTransform="matrix(0.45547153,0,0,0.45547153,-1.0050934,-1.3825734)">
+      <stop
+         offset="0"
+         style="stop-color: rgb(152, 226, 255);"
+         id="stop898" />
+      <stop
+         offset="1"
+         style="stop-color: rgb(78, 193, 239);"
+         id="stop900" />
+    </linearGradient>
+    <radialGradient
+       id="gradient-3"
+       gradientUnits="userSpaceOnUse"
+       cx="845.138"
+       cy="475.138"
+       r="470"
+       gradientTransform="matrix(0.31728511,-0.43958468,0.36931818,0.2665679,-118.88227,319.14659)">
+      <stop
+         offset="0"
+         style="stop-color: rgb(0, 170, 237);"
+         id="stop903" />
+      <stop
+         offset="1"
+         style="stop-color: rgb(0, 145, 202);"
+         id="stop905" />
+    </radialGradient>
+  </defs>
+  <rect
+     style="fill:url(#gradient-3);fill-opacity:1;stroke:url(#gradient-2);stroke-width:31.4275px;stroke-linecap:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;paint-order:stroke markers"
+     id="rect949"
+     width="428.14264"
+     height="428.14325"
+     x="17.213768"
+     y="16.836288"
+     ry="65.592911"
+     inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/EasyReflectometryLib/docs/_static/logo.png"
+     inkscape:export-xdpi="300"
+     inkscape:export-ydpi="300" />
+  <path
+     style="fill:none;fill-opacity:1;stroke:#98e2ff;stroke-width:62.8551px;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+     d="M 76.425066,93.58825 H 120.9342 c 0,0 65.32099,274.63931 265.2115,274.63931"
+     id="path961"
+     inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/EasyReflectometryLib/docs/_static/logo.png"
+     inkscape:export-xdpi="300"
+     inkscape:export-ydpi="300" />
+  <path
+     style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:30.5166px;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+     d="M 76.425066,93.58825 H 120.9342 c 0,0 65.32099,274.63931 265.2115,274.63931"
+     id="path951"
+     inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/EasyReflectometryLib/docs/_static/logo.png"
+     inkscape:export-xdpi="300"
+     inkscape:export-ydpi="300" />
+  <text
+     xml:space="preserve"
+     id="text1809"
+     style="font-size:96px;line-height:1.25;font-family:'Andale Mono';-inkscape-font-specification:'Andale Mono';white-space:pre;shape-inside:url(#rect1811)"
+     transform="matrix(3.980455,0,0,3.980455,-4288.5816,407.87893)"
+     inkscape:export-filename="/Users/andrewmccluskey/software/easyScience/EasyReflectometryLib/docs/_static/logo.png"
+     inkscape:export-xdpi="300"
+     inkscape:export-ydpi="300"><tspan
+       x="1203.0898"
+       y="-10.898691"
+       id="tspan855"><tspan
+         style="font-family:Nunito;-inkscape-font-specification:Nunito"
+         id="tspan851">Easy</tspan><tspan
+         style="font-weight:bold;font-family:Nunito;-inkscape-font-specification:'Nunito Bold'"
+         id="tspan853">Reflectometry</tspan></tspan></text>
+</svg>

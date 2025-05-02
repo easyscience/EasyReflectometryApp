@@ -1,6 +1,6 @@
-# SPDX-FileCopyrightText: 2023 EasyReflectometry contributors <support@easyreflectometry.org>
+# SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
 # SPDX-License-Identifier: BSD-3-Clause
-# © 2021-2023 Contributors to the EasyReflectometry project <https://github.com/easyScience/EasyReflectometryApp>
+# © 2021-2025 Contributors to the EasyReflectometry project <https://github.com/easyScience/EasyReflectometryApp>
 
 __author__ = 'github.com/AndrewSazonov'
 __version__ = '0.0.1'
@@ -11,7 +11,6 @@ import shutil
 import subprocess
 import sys
 import zipfile
-from distutils import dir_util
 
 import requests
 import toml
@@ -218,7 +217,7 @@ def copyDir(source, destination):
         return
     try:
         message = f'copy dir {source} to {destination}'
-        dir_util.copy_tree(source, destination)
+        shutil.copytree(source, destination, dirs_exist_ok=True)
     except Exception as exception:
         printFailMessage(message, exception)
         sys.exit()

@@ -4,18 +4,20 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'EasyReflectometryApp'
-version = '1.0.0'
-release_data = '27 November 2024'
+version = '1.1.0'
+release_data = '01 May 2025'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
-    {name = "Andrew R. McCluskey", email = "andrew.mccluskey@ess.eu"}, 
-    {name = "Andrew Sazonov"}, 
+    {name = "Andrew R. McCluskey"}, 
+    {name = "Andrew Sazonov", email = "andrew.sazonov@ess.eu"}, 
     {name = "Simon Ward"},
-    {name = "Andreas Pedersen", email = "andreas.pedersen@ess.eu"}
+    {name = "Andreas Pedersen"},
+    {name = "Piotr Rozyczko", email = "piotr.rozyczko@ess.eu"},
 ]
 maintainers = [
-    {name = "Andrew R. McCluskey", email = "andrew.mccluskey@ess.eu"},
-    {name = "Andreas Pedersen", email = "andreas.pedersen@ess.eu"}
+    {name = "Andrew R. McCluskey"},
+    {name = "Andreas Pedersen"},
+    {name = "Piotr Rozyczko", email = "piotr.rozyczko@ess.eu"},
 ]
 license = {file = 'LICENSE.md'}
 classifiers = [
@@ -29,9 +31,9 @@ classifiers = [
 
 requires-python = '>=3.11'
 dependencies = [
-  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@develop',
+  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git',
   'easyreflectometry',
-  'PySide6',
+  'PySide6>=6.8,<6.9', # Issue with TableView formatting in 6.9,
   'toml',
 ]
 
@@ -40,6 +42,16 @@ ci = [
   'pyinstaller',
   'licensename',
   'dephell_licenses'
+]
+
+docs = [
+    "myst_parser==4.0.1",
+    "nbsphinx==0.9.7",
+    "sphinx_autodoc_typehints==3.0.1",
+    "sphinx_book_theme==1.1.4",
+    "sphinx-copybutton==0.5.2",
+    "toml==0.10.2",
+    "sphinx==8.1.3",
 ]
 
 [release]

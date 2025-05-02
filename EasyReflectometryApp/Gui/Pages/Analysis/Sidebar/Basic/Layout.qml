@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2023 EasyReflectometry contributors <support@easyreflectometry.org>
+// SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
 // SPDX-License-Identifier: BSD-3-Clause
-// © 2023 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+// © 2025 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
 

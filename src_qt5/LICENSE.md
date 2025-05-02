@@ -1,6 +1,6 @@
 BSD 3-Clause License
 
-Copyright (c) 2021-2023, European Spallation Source
+Copyright (c) 2021-2025, European Spallation Source
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
