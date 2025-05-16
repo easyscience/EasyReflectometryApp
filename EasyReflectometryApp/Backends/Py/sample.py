@@ -145,7 +145,6 @@ class Sample(QObject):
         self._project_lib.current_model_index = new_value
         self.modelsIndexChanged.emit()
         self.assembliesTableChanged.emit()
-        self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
 
     @Slot(str)
