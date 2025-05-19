@@ -41,7 +41,8 @@ dependencies = [
 ci = [
   'pyinstaller',
   'licensename',
-  'dephell_licenses'
+  'dephell_licenses',
+  'charset-normalizer<3.2',
 ]
 
 docs = [
