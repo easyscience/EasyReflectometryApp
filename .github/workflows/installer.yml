@@ -31,10 +31,10 @@ jobs:
       - name: Upgrade package installer for Python
         run: python -m pip install --upgrade pip
 
-      - name: Install Python dependences
-        run: |
-          python -m pip install flit
-          flit install --only-deps  # Install the dependencies, but not the EasyReflectometryApp package itself
+      # - name: Install Python dependences
+      #   run: |
+      #     python -m pip install flit
+      #     flit install --only-deps  # Install the dependencies, but not the EasyReflectometryApp package itself
 
       - name: Add extra info to pyproject.toml
         run: python utils.py --update
