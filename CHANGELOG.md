@@ -1,4 +1,5 @@
-# Version 1.1.0 (1 May 2025)
+# Version 1.1.1 (28 May 2025)
 
-New, updated documentation.
-Updated numpy and Qt6 versions.
+Fixed Apple Silicon installer.
+Fixed experimental data file parser.
+

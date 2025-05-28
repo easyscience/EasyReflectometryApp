@@ -3,6 +3,7 @@ from typing import Union
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
+from easyreflectometry.sample import Material
 
 
 class Layers:
@@ -42,7 +43,7 @@ class Layers:
 
     def add_new(self) -> None:
         if 'Si' not in [material.name for material in self._project_lib._materials]:
-            self._project_lib._materials.add_material('Si', 2.07, 0.0)
+            self._project_lib._materials.add_material(Material(name='Si', sld=2.07, isld=0.0))
         index_si = [material.name for material in self._project_lib._materials].index('Si')
         self._layers.add_layer()
         self._layers[-1].material = self._project_lib._materials[index_si]
