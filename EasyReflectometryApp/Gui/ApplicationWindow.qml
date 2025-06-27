@@ -20,7 +20,7 @@ EaComponents.ApplicationWindow {
         timer.triggered.connect(cb);
         timer.start();
     }
-
+    id: applicationWindow
     ///////////////////
     // APPLICATION BAR
     ///////////////////
