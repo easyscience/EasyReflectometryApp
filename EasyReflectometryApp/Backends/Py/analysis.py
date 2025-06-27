@@ -2,6 +2,7 @@ from typing import List
 from typing import Optional
 
 from easyreflectometry import Project as ProjectLib
+from PySide6 import QtWidgets
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
@@ -52,10 +53,53 @@ class Analysis(QObject):
 
     @Slot(None)
     def fittingStartStop(self) -> None:
+        # make sure we can run the fitting
+        if not self.prefitCheck():
+            return
         self._fitting_logic.start_stop()
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
         self.externalFittingChanged.emit()
+
+    def prefitCheck(self) -> bool:
+        """
+        Perform a pre-fit check to ensure that all parameters are set correctly.
+        Returns True if the check passes, False otherwise.
+        """
+        # 1. wrong bounds on parameters
+        for param in self.fitableParameters:
+            if not param['fit']:
+                continue
+            if param['min'] >= param['max']:
+                QtWidgets.QMessageBox.warning(
+                    None,
+                    "Invalid Parameter Bounds",
+                    f"Parameter '{param['name']}' has invalid bounds: "
+                    f"min ({param['min']}) must be less than max ({param['max']})."
+                )
+                return False
+
+        # 2. differential evolution needs finite bounds on all parameters
+        if 'differential_evolution' in self.minimizersAvailable[self.minimizerCurrentIndex]:
+            bad_params = []
+            for param in self.fitableParameters:
+                if not param['fit']:
+                    continue
+                if param['min'] == float('-inf') or param['max'] == float('inf'):
+                    bad_params.append(param['name'])
+            if bad_params:
+                joined = '\n' + ',\n'.join(bad_params) + '\n'
+                # Show a warning in a message box
+                QtWidgets.QMessageBox.warning(
+                    None,
+                    "Invalid Parameter Bounds",
+                    f"Parameters {joined} have infinite bounds, "
+                    "which is not allowed for differential evolution minimizer."
+                )
+
+                return False
+
+        return True
 
     ########################
     ## Calculators
