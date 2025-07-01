@@ -123,10 +123,10 @@ EaElements.GroupBox {
             id: tableView
             defaultInfoText: qsTr("No parameters found")
 
-            //maxRowCountShow: 7 +
-            //                Math.trunc((applicationWindow.height - EaStyle.Sizes.appWindowMinimumHeight) /
-            //                            EaStyle.Sizes.tableRowHeight)
-            
+            maxRowCountShow: 8 +
+                            Math.trunc((applicationWindow.height - EaStyle.Sizes.appWindowMinimumHeight) /
+                             EaStyle.Sizes.tableRowHeight)
+
             // Table model
             // We only use the length of the model object defined in backend logic and
             // directly access that model in every row using the TableView index property.

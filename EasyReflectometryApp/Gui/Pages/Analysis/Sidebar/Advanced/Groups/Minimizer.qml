@@ -25,7 +25,20 @@ EaElements.GroupBox {
                     text: qsTr("Minimizer")
                     color: EaStyle.Colors.themeForegroundMinor
                 }
-                currentIndex: Globals.BackendWrapper.analysisMinimizerCurrentIndex
+
+                // Use a Component.onCompleted handler to set the initial selection to "Bumps_simplex"
+                Component.onCompleted: {
+                    // Find the index of "Bumps_simplex" in the model
+                    for (let i = 0; i < model.length; i++) {
+                        if (model[i] === "Bumps_simplex") {
+                            currentIndex = i;
+                            Globals.BackendWrapper.analysisSetMinimizerCurrentIndex(i);
+                            break;
+                        }
+                    }
+                }
+
+                // Keep this binding for subsequent changes
                 onCurrentIndexChanged: Globals.BackendWrapper.analysisSetMinimizerCurrentIndex(currentIndex)
             }
 
