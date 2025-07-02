@@ -169,11 +169,9 @@ class Analysis(QObject):
     ## Parameters
     @Property('QVariantList', notify=parametersChanged)
     def fitableParameters(self) -> List[dict[str]]:
-        if self._chached_parameters is None:
-            #self._chached_parameters = self._parameters_logic.parameters
-            self._chached_parameters = [
-                param for param in self._parameters_logic.parameters if param['enabled']]
-            return self._chached_parameters
+        self._chached_parameters = [
+            param for param in self._parameters_logic.parameters if param['enabled']]
+        return self._chached_parameters
 
     @Property(int, notify=parametersIndexChanged)
     def currentParameterIndex(self) -> int:
