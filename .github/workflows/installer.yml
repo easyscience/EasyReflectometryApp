@@ -132,7 +132,7 @@ jobs:
 
       - name: Sign the binary using keypair alias
         if: |
-          runner.os == 'windows' && github.event_name == 'push'
+          runner.os == 'windows' && github.event_name == 'push' && env.BRANCH_NAME != 'master'
         run: |
            smctl sign --keypair-alias key_911959544 --input  ${{ env.SETUP_EXE_PATH }}
         shell: cmd
