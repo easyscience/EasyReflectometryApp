@@ -287,8 +287,10 @@ EaElements.GroupBox {
                 readOnly: true
                 width: EaStyle.Sizes.fontPixelSize * 6
                 text: {
-                    const value = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value
-                    const error = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].error
+                    const par_index = Globals.BackendWrapper.analysisCurrentParameterIndex
+                    const params = Globals.BackendWrapper.analysisFitableParameters
+                    const value = params[par_index] !== undefined ? params[par_index].value : 0
+                    const error = params[par_index] !== undefined ? params[par_index].error : 0
                     return EaLogic.Utils.toDefaultPrecision(slider.from)
                 }
             }
