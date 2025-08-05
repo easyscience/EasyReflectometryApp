@@ -151,6 +151,7 @@ class Sample(QObject):
     def setCurrentModelName(self, value: str) -> None:
         if self._models_logic.set_name_at_current_index(value):
             self.modelsTableChanged.emit()
+            self.modelsIndexChanged.emit()
 
     # Actions
     @Slot(str)

@@ -143,14 +143,14 @@ EaElements.GroupBox {
             header: EaComponents.TableViewHeader {
                 EaComponents.TableViewLabel {
                     width: EaStyle.Sizes.fontPixelSize * 2.5
-                    //text: qsTr("No.")
+                    text: qsTr("No.")
                 }
 
                 EaComponents.TableViewLabel {
                     flexibleWidth: true
                     horizontalAlignment: Text.AlignLeft
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("name")
+                    text: qsTr("Name")
                 }
 
                 EaComponents.TableViewLabel {
@@ -158,11 +158,11 @@ EaElements.GroupBox {
                     width: EaStyle.Sizes.fontPixelSize * 4.5
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("value")
+                    text: qsTr("Value")
                 }
 
                 EaComponents.TableViewLabel {
-                    width: EaStyle.Sizes.fontPixelSize * 3.0
+                    width: EaStyle.Sizes.fontPixelSize * 4.0
                     horizontalAlignment: Text.AlignLeft
                     //text: qsTr("units")
                 }
@@ -171,27 +171,27 @@ EaElements.GroupBox {
                     width: valueLabel.width
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("error")
+                    text: qsTr("Error")
                 }
 
                 EaComponents.TableViewLabel {
                     width: valueLabel.width
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("min")
+                    text: qsTr("Min")
                 }
 
                 EaComponents.TableViewLabel {
                     width: valueLabel.width
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("max")
+                    text: qsTr("Max")
                 }
 
                 EaComponents.TableViewLabel {
                     width: EaStyle.Sizes.fontPixelSize * 3.0
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("vary")
+                    text: qsTr("Fit")
                 }
             }
             // Header row
@@ -222,7 +222,7 @@ EaElements.GroupBox {
                 EaComponents.TableViewParameter {
                     id: valueColumn
                     selected: index === Globals.BackendWrapper.analysisCurrentParameterIndex
-                    text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].value)
+                    text: EaLogic.Utils.toMaxPrecision(Globals.BackendWrapper.analysisFitableParameters[index].value, 3)
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing (manual) 'value' field of fittable on Analysis page ***")
@@ -233,7 +233,18 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewLabel {
-                    text: Globals.BackendWrapper.analysisFitableParameters[index].units !== 'dimensionless' ? Globals.BackendWrapper.analysisFitableParameters[index].units : "" 
+                    text: {
+                        const unit = Globals.BackendWrapper.analysisFitableParameters[index].units
+                        if (unit !== undefined && unit !== 'dimensionless') {
+                            if (unit.endsWith('Å^2')) {
+                                '10⁻⁶Å⁻²'
+                            } else {
+                                unit
+                            }
+                        } else {
+                            ""
+                        }
+                    }
                     color: EaStyle.Colors.themeForegroundMinor
                 }
 
