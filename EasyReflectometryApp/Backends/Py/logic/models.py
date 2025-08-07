@@ -1,8 +1,8 @@
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
-from easyreflectometry.model import ModelCollection
 from easyreflectometry.model import Model
+from easyreflectometry.model import ModelCollection
 from easyreflectometry.model.resolution_functions import PercentageFwhm
 
 

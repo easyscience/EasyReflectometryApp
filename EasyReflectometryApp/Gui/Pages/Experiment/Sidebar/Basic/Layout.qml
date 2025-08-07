@@ -8,10 +8,10 @@ import "./Groups" as Groups
 
 
 EaComponents.SideBarColumn {
-    // Groups.ExperimentalDataExplorer{
-    //     enabled: Globals.BackendWrapper.analysisIsFitFinished
-    //     //enabled: true
-    // }
+    Groups.ExperimentalDataExplorer{
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+        //enabled: true
+    }
     Groups.ExperimentalData{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }

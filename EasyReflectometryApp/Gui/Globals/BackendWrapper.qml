@@ -102,6 +102,7 @@ QtObject {
 
     // Model
     readonly property var sampleModels: activeBackend.sample.models
+    readonly property var sampleModelNames: activeBackend.sample.modelsNames
     readonly property string sampleCurrentModelName: activeBackend.sample.currentModelName
 
     readonly property int sampleCurrentModelIndex: activeBackend.sample.currentModelIndex
@@ -193,6 +194,8 @@ QtObject {
     readonly property var analysisExperimentsAvailable: activeBackend.analysis.experimentsAvailable
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
+
+    function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
     
     readonly property var analysisCalculatorsAvailable: activeBackend.analysis.calculatorsAvailable
     readonly property int analysisCalculatorCurrentIndex: activeBackend.analysis.calculatorCurrentIndex

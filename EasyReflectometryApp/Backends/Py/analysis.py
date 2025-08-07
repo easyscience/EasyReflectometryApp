@@ -131,6 +131,10 @@ class Analysis(QObject):
     def setExperimentCurrentIndex(self, new_value: int) -> None:
         self._experiments_logic.set_current_index(new_value)
 
+    @Slot(int)
+    def setModelOnExperiment(self, new_value: int) -> None:
+        self._experiments_logic.set_model_on_experiment(new_value)
+
     ########################
     ## Minimizers
     @Property('QVariantList', notify=minimizerChanged)

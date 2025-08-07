@@ -54,6 +54,6 @@ class Experiment(QObject):
     # Actions
     @Slot(str)
     def load(self, path: str) -> None:
-        self._project_logic.load_experiment(IO.generalizePath(path))
+        self._project_logic.load_new_experiment(IO.generalizePath(path))
         self.experimentChanged.emit()
         self.externalExperimentChanged.emit()
