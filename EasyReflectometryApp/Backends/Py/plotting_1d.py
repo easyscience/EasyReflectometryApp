@@ -68,7 +68,7 @@ class Plotting1d(QObject):
     @property
     def experiment_data(self) -> DataSet1D:
         try:
-            data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_model_index)
+            data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
         except IndexError:
             data = DataSet1D(
                 name='Experiment Data empty',

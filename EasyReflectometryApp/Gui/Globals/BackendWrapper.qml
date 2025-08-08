@@ -184,7 +184,6 @@ QtObject {
     function experimentSetBackground(value) { activeBackend.experiment.setBackground(value) }
     readonly property var experimentResolution: activeBackend.experiment.resolution
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
-
     function experimentLoad(value) { activeBackend.experiment.load(value) }
 
 
@@ -194,6 +193,7 @@ QtObject {
     readonly property var analysisExperimentsAvailable: activeBackend.analysis.experimentsAvailable
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
+    function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
 
     function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
     

@@ -27,6 +27,7 @@ class Analysis(QObject):
     externalParametersChanged = Signal()
     externalCalculatorChanged = Signal()
     externalFittingChanged = Signal()
+    externalExperimentChanged = Signal()
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -129,11 +130,25 @@ class Analysis(QObject):
 
     @Slot(int)
     def setExperimentCurrentIndex(self, new_value: int) -> None:
-        self._experiments_logic.set_current_index(new_value)
+        if self._experiments_logic.set_current_index(new_value):
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
 
     @Slot(int)
     def setModelOnExperiment(self, new_value: int) -> None:
         self._experiments_logic.set_model_on_experiment(new_value)
+
+    @Slot(int)
+    def removeExperiment(self, index: int) -> None:
+        """
+        Remove the experiment at the given index.
+        """
+        if 0 <= index < len(self._experiments_logic.available()):
+            self._experiments_logic.remove_experiment(index)
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
+        else:
+            print(f"Experiment index {index} is out of range.")
 
     ########################
     ## Minimizers

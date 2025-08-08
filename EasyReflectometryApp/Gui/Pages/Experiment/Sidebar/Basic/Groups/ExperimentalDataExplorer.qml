@@ -93,18 +93,23 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewButton {
                     id: deleteRowColumn
-                    //headerText: "Del." //"\uf2ed"
                     fontIcon: "minus-circle"
                     ToolTip.text: qsTr("Remove this dataset")
-                    // onClicked: {
-                    //     ExGlobals.Constants.proxy.data.removeExperiment(dataTable.currentIndex)
-                    // }
+                    onClicked: {
+                        Globals.BackendWrapper.analysisRemoveExperiment(index)
+                    }
+                }
+                mouseArea.onPressed: {
+                    // Set the current experiment index in the backend
+                    if (Globals.BackendWrapper.analysisExperimentsCurrentIndex !== model.index) {
+                        Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+                    }
                 }
 
             }
-            onCurrentIndexChanged: {
-                Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(dataTable.currentIndex)
-            }
+            // onCurrentIndexChanged: {
+            //     Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+            // }
 
         }
     }

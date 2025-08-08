@@ -4,7 +4,6 @@ from easyreflectometry import Project as ProjectLib
 class Experiments:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
-        self._current_index = 0
 
     def available(self) -> list[str]:
         experiments_name = []
@@ -13,23 +12,21 @@ class Experiments:
             for ind in self._project_lib._experiments.keys():
                 exp = self._project_lib._experiments[ind]
                 experiments_name.append(exp.name)
-            #experiments_name.append(self._project_lib.experimental_data_for_model_at_index().name)
         except IndexError:
             pass
         return experiments_name
 
     def current_index(self) -> int:
-        return self._current_index
+        return self._project_lib._current_experiment_index
 
     def set_current_index(self, new_value: int) -> None:
-        if new_value != self._current_index:
-            new_value = self._current_index
-            print(new_value)
+        if new_value != self._project_lib._current_experiment_index:
+            self._project_lib._current_experiment_index = new_value
             return True
         return False
 
     def set_model_on_experiment(self, new_value: int) -> None:
-        exp = self._project_lib._experiments.get(self._current_index)
+        exp = self._project_lib._experiments.get(self._project_lib._current_experiment_index)
         models = self._project_lib._models
         if exp and models:
             try:
@@ -40,3 +37,15 @@ class Experiments:
         else:
             print("No experiment or models available to set on the experiment.")
         # self._project_lib.set_model_on_experiment(new_value)
+
+    def remove_experiment(self, index: int) -> None:
+        """
+        Remove the experiment at the given index.
+        """
+        if 0 <= index < len(self.available()):
+            del self._project_lib._experiments[index]
+            if self._project_lib._current_experiment_index >= index:
+                self._project_lib._current_experiment_index = \
+                max(0, self._project_lib._current_experiment_index - 1)
+        else:
+            print(f"Experiment index {index} is out of range.")

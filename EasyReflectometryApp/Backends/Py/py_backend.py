@@ -105,6 +105,8 @@ class PyBackend(QObject):
         self._analysis.externalParametersChanged.connect(self._relay_analysis_page)
         self._analysis.externalParametersChanged.connect(self._refresh_plots)
         self._analysis.externalFittingChanged.connect(self._refresh_plots)
+        self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
+        self._analysis.externalExperimentChanged.connect(self._refresh_plots)
 
     def _relay_project_page_name(self):
         self._status.statusChanged.emit()
