@@ -1,125 +1,141 @@
-// SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
-// SPDX-License-Identifier: BSD-3-Clause
-// © 2025 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+import QtQuick 2.14
+import QtQuick.Controls 2.14
 
-import QtQuick
-import QtQuick.Controls
-import QtQuick.Dialogs
+import easyApp.Gui.Style as EaStyle
+import easyApp.Gui.Elements as EaElements
+import easyApp.Gui.Components as EaComponents
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
-import EasyApp.Gui.Logic as EaLogic
-
+//import Gui.Globals 1.0 as ExGlobals
 import Gui.Globals as Globals
 
-
 EaElements.GroupBox {
-    collapsible: false
-    last: true
+    title: qsTr("Data Explorer")
+    visible: true
+    collapsed: false
+    Row {
+        spacing: EaStyle.Sizes.fontPixelSize
 
-    EaElements.ComboBox {
-        id: comboBox
+        EaComponents.TableView {
+            id: dataTable
+            defaultInfoText: qsTr("No Experiments Loaded")
+            model: Globals.BackendWrapper.analysisExperimentsAvailable.length
 
-        topInset: 0
-        bottomInset: 0
-
-        width: EaStyle.Sizes.sideBarContentWidth
-        anchors.bottomMargin: EaStyle.Sizes.fontPixelSize
-
-        textRole: "name"
-
-        model: Globals.BackendWrapper.analysisExperimentsAvailable.length
-        currentIndex: Globals.BackendWrapper.analysisExperimentsCurrentIndex
-        onActivated: Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(currentIndex)
-
-        // ComboBox delegate (popup rows)
-        delegate: ItemDelegate {
-            id: itemDelegate
-
-            width: parent.width
-            height: EaStyle.Sizes.tableRowHeight
-
-            highlighted: comboBox.highlightedIndex === index
-
-            // ComboBox delegate (popup rows) contentItem
-            contentItem: Item {
-                width: parent.width
-                height: parent.height
-
-                Row {
-                    height: parent.height
-                    spacing: EaStyle.Sizes.tableColumnSpacing
-
-                    EaComponents.TableViewLabel {
-                        text: index + 1
-                        color: EaStyle.Colors.themeForegroundMinor
-                    }
-
-                    EaComponents.TableViewButton {
-                        anchors.verticalCenter: parent.verticalCenter
-                        fontIcon: "microscope"
-                        ToolTip.text: qsTr("Measured pattern color")
-                        backgroundColor: "transparent"
-                        borderColor: "transparent"
-                        iconColor: EaStyle.Colors.chartForegroundsExtra[2]
-                    }
-
-                    EaComponents.TableViewParameter {
-                        enabled: false
-                        //text: comboBox.model[index]//.name.value
-                        text: Globals.BackendWrapper.analysisExperimentsAvailable[index]
-
-                    }
-                }
-            }
-            // ComboBox delegate (popup rows) contentItem
-
-            // ComboBox delegate (popup rows) background
-            background: Rectangle {
-                color: itemDelegate.highlighted ?
-                        EaStyle.Colors.tableHighlight :
-                        index % 2 ?
-                            EaStyle.Colors.themeBackgroundHovered2 :
-                            EaStyle.Colors.themeBackgroundHovered1
-            }
-            // ComboBox delegate (popup rows) background
-
-        }
-        // ComboBox delegate (popup rows)
-
-        // ComboBox (selected item) contentItem
-        contentItem: Item {
-            width: parent.width
-            height: parent.height
-
-            Row {
-                height: parent.height
-                spacing: EaStyle.Sizes.tableColumnSpacing
+            // Headers
+            header: EaComponents.TableViewHeader {
 
                 EaComponents.TableViewLabel {
-                    text: comboBox.currentIndex + 1
-                    color: EaStyle.Colors.themeForegroundMinor
+                    text: qsTr('No.')
+                    width: EaStyle.Sizes.fontPixelSize * 2.5
                 }
 
-                EaComponents.TableViewButton {
-                    anchors.verticalCenter: parent.verticalCenter
-                    fontIcon: "microscope"
-                    ToolTip.text: qsTr("Measured pattern color")
-                    backgroundColor: "transparent"
-                    borderColor: "transparent"
-                    iconColor: EaStyle.Colors.chartForegroundsExtra[2]
+                EaComponents.TableViewLabel {
+                    flexibleWidth: true
+                    horizontalAlignment: Text.AlignLeft
+                    text: qsTr('Name')
                 }
 
-                EaComponents.TableViewParameter {
-                    enabled: false
-                    text: typeof comboBox.model[comboBox.currentIndex] !== 'undefined' ?
-                        comboBox.model[comboBox.currentIndex].name.value :
-                        ''
+                EaComponents.TableViewLabel {
+                    width: EaStyle.Sizes.fontPixelSize * 9.5
+                    horizontalAlignment: Text.AlignHCenter
+                    text: "Model"
                 }
+
+                // Placeholder for row color
+                EaComponents.TableViewLabel {
+                    id: colorLab
+                    text: "Color"
+                    width: EaStyle.Sizes.fontPixelSize * 2.5
+                }
+
+            }
+
+            delegate: EaComponents.TableViewDelegate {
+                //property var dataModel: model
+
+                EaComponents.TableViewLabel {
+                    id: noLabel
+                    width: EaStyle.Sizes.fontPixelSize * 2.5
+                    text: index + 1
+                }
+
+                EaComponents.TableViewTextInput {
+                    horizontalAlignment: Text.AlignLeft
+                    id: labelLabel
+                    width: EaStyle.Sizes.fontPixelSize * 11
+                    text: index > -1 ? Globals.BackendWrapper.analysisExperimentsAvailable[index] : ""
+                }
+
+                EaComponents.TableViewLabel {
+                    id: modelAccess
+                    property string modelName: {
+                        if (Globals.BackendWrapper.modelForExperiment &&
+                            model.index < Globals.BackendWrapper.modelForExperiment.length) {
+                            return Globals.BackendWrapper.modelForExperiment[model.index] || ""
+                        }
+                        return ""
+                    }
+                    text: modelName
+
+                    // Force an update when experiments change
+                    Connections {
+                        target: Globals.BackendWrapper
+                        function onexperimentsChanged() {
+                            // Trigger property re-evaluation
+                            modelAccess.modelName = Qt.binding(function() {
+                                if (Globals.BackendWrapper.modelForExperiment &&
+                                    model.index < Globals.BackendWrapper.modelForExperiment.length) {
+                                    return Globals.BackendWrapper.modelForExperiment[model.index] || ""
+                                }
+                                return ""
+                            })
+                        }
+                    }
+                }
+
+                // Fix colorLabel similarly - though you need to get color from somewhere
+                EaComponents.TableViewLabel {
+                    id: colorLabel
+                    // You'll need a way to map model names to colors, or modify your Python code
+                    // to include color information
+                    backgroundColor: {
+                        var i = modelAccess.currentIndex || 0
+                        console.error("Current index:", i)
+                        console.error("Current model:", Globals.BackendWrapper.sampleModels[i])
+                        Globals.BackendWrapper.sampleModels[i].color || "lightgray"
+                    }
+                }
+
+                // EaComponents.TableViewLabel {
+                //     id: modelAccess
+                //     // model: Globals.BackendWrapper.modelForExperiment
+                //     text: {
+                //         return Globals.BackendWrapper.modelForExperiment[model.index] || ""
+                //     }
+                //     // Use Connections to force an update when experimentsChanged signal is emitted
+                //     Connections {
+                //         target: Globals.BackendWrapper
+                //         function onExperimentsChanged() {
+                //             // Force a re-evaluation of the text binding
+                //             modelAccess.text = Qt.binding(function() {
+                //                 return Globals.BackendWrapper.modelForExperiment[model.index] || ""
+                //             })
+                //         }
+                //     }
+                // }
+
+                // EaComponents.TableViewLabel {
+                //     id: colorLabel
+                //     backgroundColor:  {
+                //         //Globals.BackendWrapper.modelForExperiment[model.index].color
+                //         Globals.BackendWrapper.sampleModels[model.index].color
+                //     }
+                // }
+
+                mouseArea.onPressed: {
+                    Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+                }
+
             }
         }
-        // ComboBox (selected item) contentItem
     }
 }

@@ -14,14 +14,16 @@ import Gui.Globals as Globals
 
 EaComponents.SideBarColumn {
 
-    Groups.Experiments{}
+    Groups.Experiments{
+        enabled: true
+    }
 //        enabled: Globals.BackendWrapper.analysisIsFitFinished
 //    }
 
 //    EaElements.GroupBox {
 //        collapsible: false
 //        last: true
-//
+
 //        Loader { source: 'Experiments.qml' }
 //    }
 
@@ -35,6 +37,7 @@ EaComponents.SideBarColumn {
         Loader { source: 'Fittables.qml' }
     }
 */
+
     Groups.Fitting{}
 
 /*    EaElements.GroupBox {

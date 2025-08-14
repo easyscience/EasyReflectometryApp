@@ -132,11 +132,25 @@ class Analysis(QObject):
     def setExperimentCurrentIndex(self, new_value: int) -> None:
         if self._experiments_logic.set_current_index(new_value):
             self.experimentsChanged.emit()
-            self.externalExperimentChanged.emit()
+            #self.externalExperimentChanged.emit()
 
     @Slot(int)
     def setModelOnExperiment(self, new_value: int) -> None:
         self._experiments_logic.set_model_on_experiment(new_value)
+        self.experimentsChanged.emit()
+
+    # @Property(int, notify=experimentsChanged)
+    # def modelIndexOnExperiment(self) -> int:
+    #     return self._experiments_logic.model_index_on_experiment()
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def modelForExperiment(self) -> dict:
+        # return a dictionary of experiment -> model
+        mapped_models = []
+        experiments = self._experiments_logic._project_lib._experiments
+        for ind, exp in enumerate(experiments):
+            mapped_models.append(experiments[ind].model.name)
+        return mapped_models
 
     @Slot(int)
     def removeExperiment(self, index: int) -> None:

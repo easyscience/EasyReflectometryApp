@@ -25,6 +25,20 @@ class Experiments:
             return True
         return False
 
+    def model_on_experiment(self, experiment_index: int = -1) -> dict:
+        if experiment_index == -1:
+            experiment_index = self._project_lib._current_experiment_index
+        exp = self._project_lib._experiments.get(experiment_index)
+        if exp:
+            return exp.model
+        return {}
+
+    def model_index_on_experiment(self) -> int:
+        model = self.model_on_experiment()
+        if model:
+            return self._project_lib._models.index(model)
+        return -1
+
     def set_model_on_experiment(self, new_value: int) -> None:
         exp = self._project_lib._experiments.get(self._project_lib._current_experiment_index)
         models = self._project_lib._models
@@ -36,7 +50,7 @@ class Experiments:
                 print(f"Model index {new_value} is out of range for the current experiment.")
         else:
             print("No experiment or models available to set on the experiment.")
-        # self._project_lib.set_model_on_experiment(new_value)
+        pass
 
     def remove_experiment(self, index: int) -> None:
         """

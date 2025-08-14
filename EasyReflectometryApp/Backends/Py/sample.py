@@ -142,10 +142,11 @@ class Sample(QObject):
     # Setters
     @Slot(int)
     def setCurrentModelIndex(self, new_value: int) -> None:
-        self._project_lib.current_model_index = new_value
-        self.modelsIndexChanged.emit()
-        self.assembliesTableChanged.emit()
-        self.externalRefreshPlot.emit()
+        if self._project_lib.current_model_index != new_value:
+            self._project_lib.current_model_index = new_value
+            self.modelsIndexChanged.emit()
+            self.assembliesTableChanged.emit()
+            self.externalRefreshPlot.emit()
 
     @Slot(str)
     def setCurrentModelName(self, value: str) -> None:

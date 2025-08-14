@@ -196,6 +196,8 @@ QtObject {
     function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
 
     function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
+    readonly property var analysisModelOnExperiment: activeBackend.analysis.modelIndexOnExperiment
+    readonly property var modelForExperiment: activeBackend.analysis.modelForExperiment
     
     readonly property var analysisCalculatorsAvailable: activeBackend.analysis.calculatorsAvailable
     readonly property int analysisCalculatorCurrentIndex: activeBackend.analysis.calculatorCurrentIndex

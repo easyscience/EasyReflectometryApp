@@ -82,7 +82,9 @@ EaElements.GroupBox {
                         Globals.BackendWrapper.analysisSetModelOnExperiment(currentIndex)
                     }
                     Component.onCompleted: {
-                        currentIndex = 0//indexOfValue(Globals.BackendWrapper.sampleModels[index].name)
+                        Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+                        Globals.BackendWrapper.analysisSetModelOnExperiment(model.index)
+                        currentIndex = 0
                     }
                 }
 

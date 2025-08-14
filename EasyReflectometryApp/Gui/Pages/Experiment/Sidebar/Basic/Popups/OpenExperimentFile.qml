@@ -12,12 +12,11 @@ FileDialog{
 
     id: openExperimentFileDialog
 
-    fileMode: FileDialog.OpenFile
+    fileMode: FileDialog.OpenFiles
     nameFilters: [ 'Experiment files (*.dat *.txt *.ort)']
 
     onAccepted: {
-//        Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = true
-        Globals.BackendWrapper.experimentLoad(selectedFile)
+        Globals.BackendWrapper.experimentLoad(selectedFiles)
     }
 
     Component.onCompleted: {
