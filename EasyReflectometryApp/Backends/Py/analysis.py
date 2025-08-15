@@ -132,12 +132,18 @@ class Analysis(QObject):
     def setExperimentCurrentIndex(self, new_value: int) -> None:
         if self._experiments_logic.set_current_index(new_value):
             self.experimentsChanged.emit()
-            #self.externalExperimentChanged.emit()
+            self.externalExperimentChanged.emit()
 
     @Slot(int)
     def setModelOnExperiment(self, new_value: int) -> None:
         self._experiments_logic.set_model_on_experiment(new_value)
         self.experimentsChanged.emit()
+
+    @Slot(str)
+    def setExperimentName(self, new_name: str) -> None:
+        self._experiments_logic.set_experiment_name(new_name)
+        self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
 
     # @Property(int, notify=experimentsChanged)
     # def modelIndexOnExperiment(self) -> int:

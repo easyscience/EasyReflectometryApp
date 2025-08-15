@@ -25,6 +25,11 @@ class Experiments:
             return True
         return False
 
+    def set_experiment_name(self, new_name: str) -> None:
+        exp = self._project_lib._experiments.get(self._project_lib._current_experiment_index)
+        if exp:
+            exp.name = new_name
+
     def model_on_experiment(self, experiment_index: int = -1) -> dict:
         if experiment_index == -1:
             experiment_index = self._project_lib._current_experiment_index

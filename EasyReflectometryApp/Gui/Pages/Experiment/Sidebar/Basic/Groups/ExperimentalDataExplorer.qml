@@ -69,7 +69,7 @@ EaElements.GroupBox {
                     id: labelLabel
                     width: EaStyle.Sizes.fontPixelSize * 11
                     text: index > -1 ? Globals.BackendWrapper.analysisExperimentsAvailable[index] : ""
-                    //onEditingFinished: ExGlobals.Constants.proxy.data.setCurrentExperimentDatasetName(text)
+                    onEditingFinished: Globals.BackendWrapper.analysisSetExperimentName(text)
                 }
 
                 EaComponents.TableViewComboBox {

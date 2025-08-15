@@ -210,6 +210,7 @@ QtObject {
     readonly property var analysisFitableParameters: activeBackend.analysis.fitableParameters 
     readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
     function analysisSetCurrentParameterIndex(value) { activeBackend.analysis.setCurrentParameterIndex(value) }
+    function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
 
     // Minimizer
     readonly property var analysisMinimizerTolerance: activeBackend.analysis.minimizerTolerance
