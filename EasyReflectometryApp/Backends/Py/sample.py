@@ -147,6 +147,7 @@ class Sample(QObject):
             self.modelsIndexChanged.emit()
             self.assembliesTableChanged.emit()
             self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
 
     @Slot(str)
     def setCurrentModelName(self, value: str) -> None:

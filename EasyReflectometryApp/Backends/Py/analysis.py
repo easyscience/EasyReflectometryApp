@@ -202,6 +202,8 @@ class Analysis(QObject):
     ## Parameters
     @Property('QVariantList', notify=parametersChanged)
     def fitableParameters(self) -> List[dict[str]]:
+        if self._chached_parameters is not None:
+            return self._chached_parameters
         self._chached_parameters = [
             param for param in self._parameters_logic.parameters if param['enabled']]
         return self._chached_parameters
@@ -217,11 +219,13 @@ class Analysis(QObject):
 
     @Property(int, notify=parametersChanged)
     def freeParametersCount(self) -> int:
-        return self._parameters_logic.count_free_parameters()
+        result = self._parameters_logic.count_free_parameters()
+        return result
 
     @Property(int, notify=parametersChanged)
     def fixedParametersCount(self) -> int:
-        return self._parameters_logic.count_fixed_parameters()
+        result = self._parameters_logic.count_fixed_parameters()
+        return result
 
     @Property(int, notify=parametersChanged)
     def modelParametersCount(self) -> int:

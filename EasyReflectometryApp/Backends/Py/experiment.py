@@ -1,4 +1,3 @@
-from typing import List, Union
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
