@@ -87,7 +87,7 @@ EaElements.GroupBox {
             }
 
             EaElements.SideBarButton {
-                enabled: (modelView.currentIndex > 0) ? true : false //When item is selected
+                enabled: (modelView.currentIndex > -1) ? true : false //When item is selected
                 width: (EaStyle.Sizes.sideBarContentWidth - (2 * (EaStyle.Sizes.tableRowHeight + EaStyle.Sizes.fontPixelSize)) - EaStyle.Sizes.fontPixelSize) / 2
                 fontIcon: "clone"
                 text: qsTr("Duplicate model")

@@ -145,17 +145,34 @@ class Analysis(QObject):
         self.experimentsChanged.emit()
         self.externalExperimentChanged.emit()
 
-    # @Property(int, notify=experimentsChanged)
-    # def modelIndexOnExperiment(self) -> int:
-    #     return self._experiments_logic.model_index_on_experiment()
+    @Property(int, notify=experimentsChanged)
+    def modelIndexForExperiment(self) -> int:
+        # return the model index for the current experiment
+        models = self._experiments_logic._project_lib._models
+        experiments = self._experiments_logic._project_lib._experiments
+        index = self.experimentCurrentIndex
+        current_experiment = experiments[index] if 0 <= index < len(experiments) else None
+        if current_experiment is not None:
+            t = models.index(current_experiment.model)
+            return t
+        return -1
 
     @Property('QVariantList', notify=experimentsChanged)
-    def modelForExperiment(self) -> dict:
-        # return a dictionary of experiment -> model
+    def modelNamesForExperiment(self) -> list:
+        # return a list of model names for each experiment
         mapped_models = []
         experiments = self._experiments_logic._project_lib._experiments
         for ind, exp in enumerate(experiments):
             mapped_models.append(experiments[ind].model.name)
+        return mapped_models
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def modelColorsForExperiment(self) -> list:
+        # return a list of model colors for each experiment
+        mapped_models = []
+        experiments = self._experiments_logic._project_lib._experiments
+        for ind, exp in enumerate(experiments):
+            mapped_models.append(experiments[ind].model.color)
         return mapped_models
 
     @Slot(int)

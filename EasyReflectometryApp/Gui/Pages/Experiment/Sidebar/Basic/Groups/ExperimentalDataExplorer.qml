@@ -60,7 +60,6 @@ EaElements.GroupBox {
                 EaComponents.TableViewLabel {
                     id: noLabel
                     width: EaStyle.Sizes.fontPixelSize * 2.5
-                    //text: model.index ? model.index : ""
                     text: index + 1
                 }
 
@@ -76,7 +75,6 @@ EaElements.GroupBox {
                     id: modelAccess
                     horizontalAlignment: Text.AlignLeft
                     width: EaStyle.Sizes.sideBarContentWidth - (noLabel.width + deleteRowColumn.width + colorLabel.width + labelLabel.width + 5 * EaStyle.Sizes.tableColumnSpacing)
-                    //headerText: "Model"
                     model: Globals.BackendWrapper.sampleModelNames
                     onActivated: {
                         Globals.BackendWrapper.analysisSetModelOnExperiment(currentIndex)

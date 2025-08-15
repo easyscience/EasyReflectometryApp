@@ -5,7 +5,6 @@ import easyApp.Gui.Style as EaStyle
 import easyApp.Gui.Elements as EaElements
 import easyApp.Gui.Components as EaComponents
 
-//import Gui.Globals 1.0 as ExGlobals
 import Gui.Globals as Globals
 
 EaElements.GroupBox {
@@ -50,8 +49,6 @@ EaElements.GroupBox {
             }
 
             delegate: EaComponents.TableViewDelegate {
-                //property var dataModel: model
-
                 EaComponents.TableViewLabel {
                     id: noLabel
                     width: EaStyle.Sizes.fontPixelSize * 2.5
@@ -67,72 +64,22 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     id: modelAccess
-                    property string modelName: {
-                        if (Globals.BackendWrapper.modelForExperiment &&
-                            model.index < Globals.BackendWrapper.modelForExperiment.length) {
-                            return Globals.BackendWrapper.modelForExperiment[model.index] || ""
-                        }
-                        return ""
-                    }
-                    text: modelName
-
-                    // Force an update when experiments change
-                    Connections {
-                        target: Globals.BackendWrapper
-                        function onexperimentsChanged() {
-                            // Trigger property re-evaluation
-                            modelAccess.modelName = Qt.binding(function() {
-                                if (Globals.BackendWrapper.modelForExperiment &&
-                                    model.index < Globals.BackendWrapper.modelForExperiment.length) {
-                                    return Globals.BackendWrapper.modelForExperiment[model.index] || ""
-                                }
-                                return ""
-                            })
-                        }
+                    text: {
+                        return Globals.BackendWrapper.modelNamesForExperiment[model.index] || ""
                     }
                 }
 
-                // Fix colorLabel similarly - though you need to get color from somewhere
                 EaComponents.TableViewLabel {
                     id: colorLabel
-                    // You'll need a way to map model names to colors, or modify your Python code
-                    // to include color information
-                    backgroundColor: {
-                        var i = modelAccess.currentIndex || 0
-                        console.error("Current index:", i)
-                        console.error("Current model:", Globals.BackendWrapper.sampleModels[i])
-                        Globals.BackendWrapper.sampleModels[i].color || "lightgray"
+                    backgroundColor:  {
+                        Globals.BackendWrapper.modelColorsForExperiment[model.index]
                     }
                 }
-
-                // EaComponents.TableViewLabel {
-                //     id: modelAccess
-                //     // model: Globals.BackendWrapper.modelForExperiment
-                //     text: {
-                //         return Globals.BackendWrapper.modelForExperiment[model.index] || ""
-                //     }
-                //     // Use Connections to force an update when experimentsChanged signal is emitted
-                //     Connections {
-                //         target: Globals.BackendWrapper
-                //         function onExperimentsChanged() {
-                //             // Force a re-evaluation of the text binding
-                //             modelAccess.text = Qt.binding(function() {
-                //                 return Globals.BackendWrapper.modelForExperiment[model.index] || ""
-                //             })
-                //         }
-                //     }
-                // }
-
-                // EaComponents.TableViewLabel {
-                //     id: colorLabel
-                //     backgroundColor:  {
-                //         //Globals.BackendWrapper.modelForExperiment[model.index].color
-                //         Globals.BackendWrapper.sampleModels[model.index].color
-                //     }
-                // }
 
                 mouseArea.onPressed: {
                     Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+                    var modelIndexFromExperiment = Globals.BackendWrapper.analysisModelForExperiment
+                    Globals.BackendWrapper.sampleSetCurrentModelIndex(modelIndexFromExperiment)
                 }
 
             }
