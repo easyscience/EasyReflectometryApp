@@ -71,7 +71,6 @@ class Parameters:
 
     def set_current_parameter_fit(self, new_value: str) -> bool:
         parameters = self._project_lib.enabled_parameters
-        param = parameters[self._current_index]
         if bool(new_value) != parameters[self._current_index].free:
             parameters[self._current_index].free = bool(new_value)
             return True
