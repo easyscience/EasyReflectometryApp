@@ -42,6 +42,11 @@ Rectangle {
 
         calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
 
+        calcSerie.color: {
+            var idx = Globals.BackendWrapper.sampleCurrentModelIndex
+            Globals.BackendWrapper.sampleModels[idx].color
+        }
+
         // Tool buttons
         Row {
             id: toolButtons
@@ -151,7 +156,7 @@ Rectangle {
             Globals.BackendWrapper.plottingSetQtChartsSerieRef('samplePage',
                                                                'sampleSerie',
                                                                chartView.calcSerie)
-            Globals.BackendWrapper.plottingRefreshSample()                                                              
+            Globals.BackendWrapper.plottingRefreshSample()
         }
 
     }

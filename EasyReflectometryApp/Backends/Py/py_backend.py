@@ -130,6 +130,7 @@ class PyBackend(QObject):
         self._refresh_plots()
 
     def _relay_sample_page_sample_changed(self):
+        self._plotting.reset_data()
         self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
@@ -141,6 +142,7 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
 
     def _relay_analysis_page(self):
+        self._plotting.reset_data()
         self._status.statusChanged.emit()
         self._experiment.experimentChanged.emit()
         self._summary.summaryChanged.emit()

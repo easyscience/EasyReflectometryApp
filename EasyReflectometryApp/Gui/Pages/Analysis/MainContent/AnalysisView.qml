@@ -47,6 +47,10 @@ Rectangle {
         axisY.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
 
         calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
+        calcSerie.color: {
+            var idx = Globals.BackendWrapper.sampleCurrentModelIndex
+            Globals.BackendWrapper.sampleModels[idx].color
+        }
 
         // Tool buttons
         Row {
