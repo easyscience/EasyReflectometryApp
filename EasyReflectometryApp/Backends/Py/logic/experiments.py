@@ -63,6 +63,11 @@ class Experiments:
         """
         if 0 <= index < len(self.available()):
             del self._project_lib._experiments[index]
+            # readjust the dictionary keys for continuity
+            temp_experiments = self._project_lib._experiments.copy()
+            self._project_lib._experiments = {
+                i: exp for i, exp in enumerate(temp_experiments.values())
+            }
             if self._project_lib._current_experiment_index >= index:
                 self._project_lib._current_experiment_index = \
                 max(0, self._project_lib._current_experiment_index - 1)

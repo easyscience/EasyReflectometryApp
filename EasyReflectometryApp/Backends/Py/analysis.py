@@ -162,7 +162,7 @@ class Analysis(QObject):
         # return a list of model names for each experiment
         mapped_models = []
         experiments = self._experiments_logic._project_lib._experiments
-        for ind, exp in enumerate(experiments):
+        for ind in experiments:
             mapped_models.append(experiments[ind].model.name)
         return mapped_models
 
@@ -171,7 +171,7 @@ class Analysis(QObject):
         # return a list of model colors for each experiment
         mapped_models = []
         experiments = self._experiments_logic._project_lib._experiments
-        for ind, exp in enumerate(experiments):
+        for ind in experiments:
             mapped_models.append(experiments[ind].model.color)
         return mapped_models
 
