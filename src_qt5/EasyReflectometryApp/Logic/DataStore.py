@@ -7,7 +7,7 @@ import numpy as np
 from collections.abc import Sequence
 
 from easyscience.Objects.core import ComponentSerializer
-from easyscience.Utils.io.dict import DictSerializer
+from easyscience.utils.io.dict import DictSerializer
 from easyreflectometry.model import Model
 
 T = TypeVar('T')

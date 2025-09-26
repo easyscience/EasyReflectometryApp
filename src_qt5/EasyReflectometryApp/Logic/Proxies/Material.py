@@ -9,7 +9,7 @@ from PySide2.QtCore import Property
 from PySide2.QtCore import Slot
 
 from easyscience import global_object
-from easyscience.Utils.io.xml import XMLSerializer
+from easyscience.utils.io.xml import XMLSerializer
 
 from easyreflectometry.sample import MaterialCollection
 

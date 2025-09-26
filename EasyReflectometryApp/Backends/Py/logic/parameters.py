@@ -4,9 +4,9 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.utils import count_fixed_parameters
 from easyreflectometry.utils import count_free_parameters
 from easyscience import global_object
-from easyscience.Constraints import NumericConstraint
-from easyscience.Constraints import ObjConstraint
-from easyscience.Objects.variable import Parameter
+
+# from easyscience.Constraints import NumericConstraint
+from easyscience.variable import Parameter
 
 
 class Parameters:
@@ -90,20 +90,25 @@ class Parameters:
         dependent = self._project_lib.parameters[dependent_idx]
 
         if arithmetic_operator != '' and independent_idx > -1:
-            constaint = ObjConstraint(
-                dependent_obj=dependent, operator=str(float(value)) + arithmetic_operator, independent_obj=independent
-            )
+            dependent.make_dependent_on(
+                dependency_expression='a' + arithmetic_operator + 'b', dependency_map={'a': independent, 'b': float(value)})
+            # constaint = ObjConstraint(
+            #     dependent_obj=dependent, operator=str(float(value)) + arithmetic_operator, independent_obj=independent
+            # )
         elif arithmetic_operator == '' and independent_idx == -1:
             relational_operator = relational_operator.replace('=', '==')
             relational_operator = relational_operator.replace('&lt', '>')
             relational_operator = relational_operator.replace('&gt', '<')
-            constaint = NumericConstraint(dependent_obj=dependent, operator=relational_operator, value=float(value))
+
+            dependent.make_dependent_on(dependency_expression='a', dependency_map={'a': float(value)})
+
+            #constaint = NumericConstraint(dependent_obj=dependent, operator=relational_operator, value=float(value))
         else:
             print('Failed to add constraint: Unsupported type')
             return
         # print(c)
-        independent.user_constraints[dependent.name] = constaint
-        constaint()
+        # independent.user_constraints[dependent.name] = constaint
+        #constaint()
 
         print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
 
