@@ -31,6 +31,13 @@ jobs:
       - name: Upgrade package installer for Python
         run: python -m pip install --upgrade pip
 
+      - name: Install needed libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xfixes0 libxcb-shape0 libxcb-cursor0
+          sudo apt-get install libcairo2-dev pkg-config
+
       - name: Install Python dependences
         run: |
           python -m pip install flit
@@ -74,12 +81,12 @@ jobs:
         run: |
           echo "SETUP_EXE_PATH=$(python ${{ env.SCRIPTS_PATH }}/Config.py ${{ env.BRANCH_NAME }} ${{ matrix.os }} setup_exe_path)" >> $GITHUB_ENV
 
-      - name: Install needed libraries (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xfixes0 libxcb-shape0 libxcb-cursor0
-          sudo apt-get install libcairo2-dev pkg-config
+      # - name: Install needed libraries (Linux)
+      #   if: runner.os == 'Linux'
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xfixes0 libxcb-shape0 libxcb-cursor0
+      #     sudo apt-get install libcairo2-dev pkg-config
 
       # - name: Run app in testmode and quit
       #   shell: bash
