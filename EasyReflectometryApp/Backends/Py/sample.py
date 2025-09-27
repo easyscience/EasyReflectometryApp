@@ -422,17 +422,16 @@ class Sample(QObject):
 
     @Slot(str, str, str, str, str)
     def addConstraint(self, value1: str, value2: str, value3: str, value4: str, value5: str) -> None:
-        # dependent = self._project_lib.enabled_parameters[int(value1)]
-        # independent = self._project_lib.enabled_parameters[int(value5)]
         dependent = self._project_lib.parameters[int(value1)]
         independent = self._project_lib.parameters[int(value5)]
         relational_operator = value2
         arithmetic_operator = value4
         value = float(value3)
         expr = str(float(value)) + arithmetic_operator if arithmetic_operator != '' else relational_operator
-        expr += str(independent.name) if independent is not None else ''
+        expr += " a"
+        dependency_map = {'a': independent}
         dependent.make_dependent_on(
-            dependency_expression=expr
+            dependency_expression=expr, dependency_map=dependency_map
         )
         self.externalSampleChanged.emit()
 

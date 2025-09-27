@@ -35,11 +35,7 @@ EaElements.GroupBox {
                     currentIndex: -1
                     displayText: currentIndex === -1 ? "Select dependent parameter" : currentText
                     model: Globals.BackendWrapper.sampleParameterNames
-                    onCurrentIndexChanged: {
-                        independentPar.model = Globals.BackendWrapper.sampleParameterNames
-                        independentPar.model[currentIndex] = 'Dependent parameter'
-                        independentPar.currentIndex = -1
-                    }
+                    // Removed onCurrentIndexChanged handler to prevent circular updates
                 }
 
                 EaElements.ComboBox {
@@ -60,15 +56,11 @@ EaElements.GroupBox {
                     displayText: currentIndex === -1 ? "Numeric constrain or select independent parameter" : currentText
                     model: Globals.BackendWrapper.sampleParameterNames
                     onCurrentIndexChanged: {
-                        dependentPar.model = Globals.BackendWrapper.sampleParameterNames
                         if (currentIndex === -1){
-                            displayText: "Numeric constrain or select independent parameter"
                             arithmeticOperator.model = Globals.BackendWrapper.sampleArithmicOperators.slice(0,1)  // no arithmetic operators
                         }
                         else{
                             arithmeticOperator.model = Globals.BackendWrapper.sampleArithmicOperators.slice(1) // allow all arithmetic operators
-                            dependentPar.model[currentIndex] = 'Independent parameter'
-                        //arithmeticOperator.currentIndex = 0
                         }
                     }
                 }
