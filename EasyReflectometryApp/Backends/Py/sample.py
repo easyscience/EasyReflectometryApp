@@ -427,12 +427,32 @@ class Sample(QObject):
         relational_operator = value2
         arithmetic_operator = value4
         value = float(value3)
-        expr = str(float(value)) + arithmetic_operator if arithmetic_operator != '' else relational_operator
-        expr += " a"
-        dependency_map = {'a': independent}
-        dependent.make_dependent_on(
-            dependency_expression=expr, dependency_map=dependency_map
-        )
+        if arithmetic_operator == '':
+            if relational_operator == '=':
+                # simple parameter equality
+                # assign to the parameter and make it frozen
+                dependent.value = value
+                dependent.free = False
+                # here, we need to make the parameter "dependent" so it can't be changed in GUI
+                dependent._independent = False
+
+            elif relational_operator == '>':
+                # set the minimum value of the parameter
+                dependent.min = value
+                dependent.free = True
+
+            elif relational_operator == '<':
+                # set the maximum value of the parameter
+                dependent.max = value
+                dependent.free = True
+        else:
+            # make the parameter dependent on another parameter
+            # e.g. thickness = 2 * a + 5
+            expr = str(float(value)) + arithmetic_operator + " a"
+            dependency_map = {'a': independent}
+            dependent.make_dependent_on(
+                dependency_expression=expr, dependency_map=dependency_map
+            )
         self.externalSampleChanged.emit()
 
     # # #

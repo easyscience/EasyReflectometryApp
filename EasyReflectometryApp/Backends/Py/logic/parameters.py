@@ -128,6 +128,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_
                     'min': float(parameter.min),
                     'units': parameter.unit,
                     'fit': parameter.free,
+                    'independent': parameter.independent,
                 }
             )
     return parameter_list

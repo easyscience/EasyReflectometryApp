@@ -720,7 +720,7 @@ class ModelProxy(QObject):
                 self.currentLayersIndex].thickness.value == thickness:
             return
         self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[
-            self.currentLayersIndex].thickness = thickness
+            self.currentLayersIndex].thickness.value = thickness
         self.parent.layersChanged.emit()
 
     @Slot(float)
@@ -733,7 +733,7 @@ class ModelProxy(QObject):
         layer = self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[self.currentLayersIndex]
         if layer.roughness.value == roughness:
             return 
-        layer.roughness = roughness
+        layer.roughness.value = roughness
         self.parent.layersChanged.emit()
 
     @Slot(float)

@@ -216,11 +216,16 @@ EaElements.GroupBox {
                 EaComponents.TableViewLabel {
                     width: EaStyle.Sizes.fontPixelSize * 5
                     text: Globals.BackendWrapper.analysisFitableParameters[index].name
+                    color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                           Globals.BackendWrapper.analysisFitableParameters[index].independent  : true) ?
+                           EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
                     ToolTip.text: textFormat === Text.PlainText ? text : ''
                 }
 
                 EaComponents.TableViewParameter {
                     id: valueColumn
+                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
                     selected: index === Globals.BackendWrapper.analysisCurrentParameterIndex
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].value)
                     onEditingFinished: {
@@ -234,14 +239,21 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     text: Globals.BackendWrapper.analysisFitableParameters[index].units !== 'dimensionless' ? Globals.BackendWrapper.analysisFitableParameters[index].units : "" 
-                    color: EaStyle.Colors.themeForegroundMinor
+                    color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                           Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
+                           EaStyle.Colors.themeForegroundMinor : EaStyle.Colors.themeForegroundDisabled
                 }
 
                 EaComponents.TableViewLabel {
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].error)
+                    color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                           Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
+                           EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
                 }
 
                 EaComponents.TableViewParameter {
+                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
                     minored: true
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].min).replace('Infinity', 'inf')
                     onEditingFinished: {
@@ -253,6 +265,8 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewParameter {
+                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
                     minored: true
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].max).replace('Infinity', 'inf')
                     onEditingFinished: {
@@ -265,7 +279,9 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewCheckBox {
                     id: fitColumn
-                    enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length
+                    enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length &&
+                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
                     checked: Globals.BackendWrapper.analysisFitableParameters[index].fit
                     onToggled: {
                         console.debug("*** Editing 'fit' field of fittable on Analysis page ***")
@@ -298,7 +314,10 @@ EaElements.GroupBox {
             EaElements.Slider {
                 id: slider
 
-                enabled: !Globals.BackendWrapper.analysisFittingRunning
+                enabled: !Globals.BackendWrapper.analysisFittingRunning &&
+                         Globals.BackendWrapper.analysisFitableParameters.length > 0 &&
+                         (Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].independent !== undefined ?
+                          Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].independent : true)
                 width: tableView.width - EaStyle.Sizes.fontPixelSize * 14
 
                 stepSize: (to - from) / 20
