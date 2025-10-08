@@ -26,6 +26,7 @@ class Sample(QObject):
     layersIndexChanged = Signal()
 
     qRangeChanged = Signal()
+    constraintsChanged = Signal()
 
     externalRefreshPlot = Signal()
     externalSampleChanged = Signal()
@@ -420,10 +421,46 @@ class Sample(QObject):
     def arithmicOperators(self) -> list[str]:
         return self._parameters_logic.constraint_arithmetic()
 
+    @Property('QVariantList', notify=constraintsChanged)
+    def constraintsList(self) -> list[dict[str, str]]:
+        """Get the list of active constraints from dependent parameters."""
+        constraints = []
+        parameters = self._parameters_logic.parameters
+        for param in parameters:
+            if not param['independent']:
+                constraints.append({param['name']: param['dependency']})
+
+        return constraints
+
+    @Slot(int)
+    def removeConstraintByIndex(self, index: int) -> None:
+        """Remove constraint by index by making the parameter independent."""
+        constraints = self.constraintsList()
+        if 0 <= index < len(constraints):
+            # Find the parameter by name and make it independent
+            param_name = constraints[index]['dependentName']
+            for param in self._project_lib.parameters:
+                if param.name == param_name and not param.independent:
+                    param.make_independent()
+                    break
+            self.constraintsChanged.emit()
+            self.externalSampleChanged.emit()
+
+    @Slot(int, bool)
+    def toggleConstraintByIndex(self, index: int, enabled: bool) -> None:
+        """Toggle constraint by index (currently not fully supported by the Parameter class)."""
+        # Note: The current Parameter implementation doesn't support temporarily disabling constraints
+        # This would require additional functionality in the Parameter class
+        # For now, we'll just emit the signal to maintain UI consistency
+        self.constraintsChanged.emit()
+
     @Slot(str, str, str, str, str)
     def addConstraint(self, value1: str, value2: str, value3: str, value4: str, value5: str) -> None:
         dependent = self._project_lib.parameters[int(value1)]
-        independent = self._project_lib.parameters[int(value5)]
+        if value5 == '-1':
+            independent = None
+        else:
+            independent = self._project_lib.parameters[int(value5)]
         relational_operator = value2
         arithmetic_operator = value4
         value = float(value3)
@@ -453,7 +490,23 @@ class Sample(QObject):
             dependent.make_dependent_on(
                 dependency_expression=expr, dependency_map=dependency_map
             )
+        self.constraintsChanged.emit()
         self.externalSampleChanged.emit()
+
+    @Slot(str)
+    def removeConstraint(self, param_string: str) -> None:
+        """Remove constraint on parameter."""
+        try:
+            parameters = self._parameters_logic.parameters
+            for param in parameters:
+                if param['name'] == param_string:
+                    param_obj = next((p for p in self._project_lib.parameters if p.name == param_string), None)
+                    if param_obj and not param_obj.independent:
+                        param_obj.make_independent()
+                        self.constraintsChanged.emit()
+                        self.externalSampleChanged.emit()
+        except ValueError:
+            pass
 
     # # #
     # Q Range

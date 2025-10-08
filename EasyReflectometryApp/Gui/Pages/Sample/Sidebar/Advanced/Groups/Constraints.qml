@@ -1,6 +1,5 @@
 import QtQuick 2.13
 import QtQuick.Controls 2.13
-import QtQml.XmlListModel
 
 import easyApp.Gui.Style as EaStyle
 import easyApp.Gui.Elements as EaElements
@@ -19,7 +18,7 @@ EaElements.GroupBox {
         Column {
 
             EaElements.Label {
-                enabled: false
+                enabled: true
                 text: qsTr("Numeric or Parameter-Parameter constraint")
             }
 
@@ -97,10 +96,130 @@ EaElements.GroupBox {
                             arithmeticOperator.currentText.replace("\uf00d", "*").replace("\uf529", "/").replace("\uf067", "+").replace("\uf068", "-"),
                             independentPar.currentIndex
                         )
+
+                        // Reset form
                         independentPar.currentIndex = -1
                         dependentPar.currentIndex = -1
                         relationalOperator.currentIndex = 0
                         arithmeticOperator.currentIndex = 0
+                    }
+                }
+            }
+        }
+
+        // Constraints table to display existing constraints
+        Item {
+            height: EaStyle.Sizes.fontPixelSize * 0.5
+            width: 1
+        }
+
+        EaElements.Label {
+            enabled: true
+            text: qsTr("Active Constraints")
+        }
+
+        EaComponents.TableView {
+            id: constraintsTable
+            width: parent.width
+            height: Math.min(200, Math.max(60, Math.max(constraintsTable.contentHeight, constraintsTable.implicitHeight)))
+
+            defaultInfoText: qsTr("No Active Constraints")
+
+            // Table model - use backend data directly like other tables
+            property int refreshTrigger: 0
+            model: {
+                // Include refreshTrigger to force re-evaluation
+                refreshTrigger // This creates a dependency
+                return Globals.BackendWrapper.sampleConstraintsList.length
+            }
+
+            // No Component.onCompleted needed - table uses backend data directly
+
+            Connections {
+                target: Globals.BackendWrapper.activeBackend.sample
+                function onConstraintsChanged() {
+                    // Force table model to refresh by changing the trigger
+                    constraintsTable.refreshTrigger++
+                }
+            }
+
+            // Header row
+            header: EaComponents.TableViewHeader {
+
+                EaComponents.TableViewLabel {
+                    width: EaStyle.Sizes.fontPixelSize * 2.5
+                    color: EaStyle.Colors.themeForegroundMinor
+                    text: qsTr("No.")
+                }
+
+                EaComponents.TableViewLabel {
+                    id: dependentNameHeaderColumn
+                    width: EaStyle.Sizes.fontPixelSize * 12
+                    horizontalAlignment: Text.AlignLeft
+                    color: EaStyle.Colors.themeForegroundMinor
+                    text: qsTr("Parameter")
+                }
+
+                EaComponents.TableViewLabel {
+                    width: EaStyle.Sizes.fontPixelSize * 15
+                    horizontalAlignment: Text.AlignLeft
+                    color: EaStyle.Colors.themeForegroundMinor
+                    text: qsTr("Expression")
+                }
+
+                // Placeholder for row delete button
+                EaComponents.TableViewLabel {
+                    width: EaStyle.Sizes.tableRowHeight
+                }
+            }
+
+            // Table rows
+            delegate: EaComponents.TableViewDelegate {
+
+                EaComponents.TableViewLabel {
+                    id: numberColumn
+                    width: EaStyle.Sizes.fontPixelSize * 2.5
+                    text: index + 1
+                    color: EaStyle.Colors.themeForegroundMinor
+                }
+
+                EaComponents.TableViewLabel {
+                    id: dependentNameColumn
+                    width: EaStyle.Sizes.fontPixelSize * 12
+                    horizontalAlignment: Text.AlignLeft
+                    text: {
+                        const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                        return constraint ? Object.keys(constraint)[0] : ""
+                    }
+                    elide: Text.ElideRight
+                }
+
+                EaComponents.TableViewLabel {
+                    id: expressionColumn
+                    width: EaStyle.Sizes.fontPixelSize * 15
+                    horizontalAlignment: Text.AlignLeft
+                    text: {
+                        const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                        if (constraint) {
+                            const paramName = Object.keys(constraint)[0]
+                            return constraint[paramName]
+                        }
+                        return ""
+                    }
+                    elide: Text.ElideRight
+                }
+
+                EaComponents.TableViewButton {
+                    fontIcon: "minus-circle"
+                    ToolTip.text: qsTr("Remove this constraint")
+                    onClicked: {
+                        Globals.BackendWrapper.sampleRemoveConstraintByIndex(index)
+                    }
+                }
+
+                mouseArea.onPressed: {
+                    if (constraintsTable.currentIndex !== index) {
+                        constraintsTable.currentIndex = index
                     }
                 }
             }

@@ -113,22 +113,85 @@ class Parameters:
         print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
 
 
+# Original implementation (commented out for reference)
+# def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_name: str) -> list[dict[str, str]]:
+#     parameter_list = []
+#     for parameter in parameters:
+#         path = global_object.map.find_path(model_unique_name, parameter.unique_name)
+#         if 0 < len(path):
+#             name = f'{global_object.map.get_item_by_key(path[-2]).name} {global_object.map.get_item_by_key(path[-1]).name}'
+#             dependency_expression = ''
+#             if not parameter.independent:
+#                 dependent = None
+#                 if hasattr(parameter, 'dependency_map') and 'a' in parameter.dependency_map:
+#                     dependent = parameter.dependency_map['a']
+#                     dependency_expression = ''
+#                     # need to find out dependent parameter's full name based on its unique name
+#                     dep_path = global_object.map.find_path(model_unique_name, dependent.unique_name)
+#                     if 0 < len(dep_path):
+#                         dep_name = f'{global_object.map.get_item_by_key(dep_path[-2]).name} {global_object.map.get_item_by_key(dep_path[-1]).name}'  # noqa: E501
+#                         # replace 'a' with dep_name in the expression
+#                         dependency_expression = parameter.dependency_expression.replace('a', dep_name)
+#                 else:
+#                     # simple numerical dependency
+#                     dependency_expression = f'= {parameter.value}'
+#             parameter_list.append(
+#                 {
+#                     'name': name,
+#                     'value': float(parameter.value),
+#                     'error': float(parameter.variance),
+#                     'max': float(parameter.max),
+#                     'min': float(parameter.min),
+#                     'units': parameter.unit,
+#                     'fit': parameter.free,
+#                     'independent': parameter.independent,
+#                     'dependency': dependency_expression,
+#                 }
+#             )
+#     return parameter_list
+
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_name: str) -> list[dict[str, str]]:
+    """Convert parameters to list of dictionaries with simplified logic."""
+
+    def _get_parameter_display_name(param: Parameter) -> str:
+        """Extract display name from parameter path."""
+        path = global_object.map.find_path(model_unique_name, param.unique_name)
+        if len(path) >= 2:
+            parent_name = global_object.map.get_item_by_key(path[-2]).name
+            param_name = global_object.map.get_item_by_key(path[-1]).name
+            return f'{parent_name} {param_name}'
+        return param.name  # Fallback to parameter name
+
+    def _get_dependency_expression(param: Parameter) -> str:
+        """Get simplified dependency expression."""
+        if param.independent:
+            return ''
+
+        # Check if parameter has dependency map with 'a' key (parameter dependency)
+        if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
+            dependent_param = param.dependency_map['a']
+            dep_name = _get_parameter_display_name(dependent_param)
+            return param.dependency_expression.replace('a', dep_name)
+
+        # Simple numerical dependency
+        return f'= {param.value}'
+
     parameter_list = []
     for parameter in parameters:
-        path = global_object.map.find_path(model_unique_name, parameter.unique_name)
-        if 0 < len(path):
-            name = f'{global_object.map.get_item_by_key(path[-2]).name} {global_object.map.get_item_by_key(path[-1]).name}'
-            parameter_list.append(
-                {
-                    'name': name,
-                    'value': float(parameter.value),
-                    'error': float(parameter.variance),
-                    'max': float(parameter.max),
-                    'min': float(parameter.min),
-                    'units': parameter.unit,
-                    'fit': parameter.free,
-                    'independent': parameter.independent,
-                }
-            )
+        # Skip parameters not in the current model path
+        if not global_object.map.find_path(model_unique_name, parameter.unique_name):
+            continue
+
+        parameter_list.append({
+            'name': _get_parameter_display_name(parameter),
+            'value': float(parameter.value),
+            'error': float(parameter.variance),
+            'max': float(parameter.max),
+            'min': float(parameter.min),
+            'units': parameter.unit,
+            'fit': parameter.free,
+            'independent': parameter.independent,
+            'dependency': _get_dependency_expression(parameter),
+        })
+
     return parameter_list

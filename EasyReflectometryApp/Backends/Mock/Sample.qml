@@ -3,6 +3,8 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    // Signals to match the Python backend
+    signal constraintsChanged
     // MATERIALS
     readonly property int currentMaterialIndex: -1
 
@@ -271,11 +273,63 @@ QtObject {
         'parameter 2',
         'parameter 3'
     ]
-    readonly property var relationOperators: ['=', '&lt', '&gt']
+    readonly property var relationOperators: ['=', '<', '>']
     readonly property var arithmicOperators: ['', '*', '/', '+', '-']
+
+    // Mock constraints data - matches the new simplified format
+    property var constraintsList: [
+        {
+            dependentName: "Thickness Layer 1",
+            expression: "2.0 * parameter 2 + 1.5"
+        },
+        {
+            dependentName: "Roughness Layer 2",
+            expression: "parameter 1 / 3.14"
+        },
+        {
+            dependentName: "SLD Layer 3",
+            expression: "5.0"
+        }
+    ]
 
     function addConstraint(value1, value2, value3, value4, value5) {
         console.debug(`addConstraint ${value1} ${value2} ${value3} ${value4} ${value5}`)
+
+        // Create constraint object in the new simplified format
+        let expression = ""
+        if (value5 >= 0 && value5 < parameterNames.length) {
+            // Parameter-parameter constraint
+            expression = `${value3} ${value4} ${parameterNames[value5]}`
+        } else {
+            // Numeric constraint
+            expression = `= ${value3}`
+        }
+
+        const constraint = {
+            dependentName: parameterNames[value1] || "Unknown",
+            expression: expression
+        }
+
+        // Add to constraints list - need to reassign the array to trigger property change
+        var newConstraints = constraintsList.slice() // Create a copy
+        newConstraints.push(constraint)
+        constraintsList = newConstraints
+        constraintsChanged()
+    }
+
+    function removeConstraintByIndex(index) {
+        console.debug(`removeConstraintByIndex ${index}`)
+        if (index >= 0 && index < constraintsList.length) {
+            var newConstraints = constraintsList.slice() // Create a copy
+            newConstraints.splice(index, 1)
+            constraintsList = newConstraints
+            constraintsChanged()
+        }
+    }
+
+    function toggleConstraintByIndex(index, enabled) {
+        console.debug(`toggleConstraintByIndex ${index} ${enabled}`)
+        // In a real implementation, this would enable/disable the constraint
     }
 
     // Q Range

@@ -161,8 +161,11 @@ QtObject {
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
     readonly property var sampleRelationOperators: activeBackend.sample.relationOperators
     readonly property var sampleArithmicOperators: activeBackend.sample.arithmicOperators
+    readonly property var sampleConstraintsList: activeBackend.sample.constraintsList
 
     function sampleAddConstraint(value1, value2, value3, value4, value5) { activeBackend.sample.addConstraint(value1, value2, value3, value4, value5) }
+    function sampleRemoveConstraint(value) { activeBackend.sample.removeConstraint(value) }
+    function sampleToggleConstraintByIndex(index, enabled) { activeBackend.sample.toggleConstraintByIndex(index, enabled) }
 
     // Q range
     readonly property var sampleQMin: activeBackend.sample.q_min
