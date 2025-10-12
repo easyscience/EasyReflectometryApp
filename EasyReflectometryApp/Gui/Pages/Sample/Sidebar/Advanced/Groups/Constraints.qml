@@ -33,7 +33,7 @@ EaElements.GroupBox {
                     width: 359
                     currentIndex: -1
                     displayText: currentIndex === -1 ? "Select dependent parameter" : currentText
-                    model: Globals.BackendWrapper.sampleParameterNames
+                    model: Globals.BackendWrapper.sampleDepParameterNames
                     // Removed onCurrentIndexChanged handler to prevent circular updates
                 }
 
@@ -53,7 +53,9 @@ EaElements.GroupBox {
                     width: dependentPar.width
                     currentIndex: -1
                     displayText: currentIndex === -1 ? "Numeric constrain or select independent parameter" : currentText
-                    model: Globals.BackendWrapper.sampleParameterNames
+                    // let's avoid circular dependencies by not allowing to select dependent parameter here
+                    // model: Globals.BackendWrapper.sampleParameterNames
+                    model: Globals.BackendWrapper.sampleDepParameterNames
                     onCurrentIndexChanged: {
                         if (currentIndex === -1){
                             arithmeticOperator.model = Globals.BackendWrapper.sampleArithmicOperators.slice(0,1)  // no arithmetic operators
@@ -118,112 +120,138 @@ EaElements.GroupBox {
             text: qsTr("Active Constraints")
         }
 
-        EaComponents.TableView {
-            id: constraintsTable
+        Item {
+            id: constraintTableContainer
             width: parent.width
-            height: Math.min(200, Math.max(60, Math.max(constraintsTable.contentHeight, constraintsTable.implicitHeight)))
+            height: Math.min(200, Math.max(60, constraintsTable.height))
 
-            defaultInfoText: qsTr("No Active Constraints")
+            EaComponents.TableView {
+                id: constraintsTable
+                width: parent.width
+                height: Math.min(200, Math.max(60, Math.max(constraintsTable.contentHeight, constraintsTable.implicitHeight)))
 
-            // Table model - use backend data directly like other tables
-            property int refreshTrigger: 0
-            model: {
-                // Include refreshTrigger to force re-evaluation
-                refreshTrigger // This creates a dependency
-                return Globals.BackendWrapper.sampleConstraintsList.length
-            }
+                defaultInfoText: qsTr("No Active Constraints")
 
-            // No Component.onCompleted needed - table uses backend data directly
-
-            Connections {
-                target: Globals.BackendWrapper.activeBackend.sample
-                function onConstraintsChanged() {
-                    // Force table model to refresh by changing the trigger
-                    constraintsTable.refreshTrigger++
-                }
-            }
-
-            // Header row
-            header: EaComponents.TableViewHeader {
-
-                EaComponents.TableViewLabel {
-                    width: EaStyle.Sizes.fontPixelSize * 2.5
-                    color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("No.")
+                // Table model - use backend data directly like other tables
+                property int refreshTrigger: 0
+                model: {
+                    // Include refreshTrigger to force re-evaluation
+                    refreshTrigger // This creates a dependency
+                    return Globals.BackendWrapper.sampleConstraintsList.length
                 }
 
-                EaComponents.TableViewLabel {
-                    id: dependentNameHeaderColumn
-                    width: EaStyle.Sizes.fontPixelSize * 12
-                    horizontalAlignment: Text.AlignLeft
-                    color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("Parameter")
-                }
+                // No Component.onCompleted needed - table uses backend data directly
 
-                EaComponents.TableViewLabel {
-                    width: EaStyle.Sizes.fontPixelSize * 15
-                    horizontalAlignment: Text.AlignLeft
-                    color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("Expression")
-                }
-
-                // Placeholder for row delete button
-                EaComponents.TableViewLabel {
-                    width: EaStyle.Sizes.tableRowHeight
-                }
-            }
-
-            // Table rows
-            delegate: EaComponents.TableViewDelegate {
-
-                EaComponents.TableViewLabel {
-                    id: numberColumn
-                    width: EaStyle.Sizes.fontPixelSize * 2.5
-                    text: index + 1
-                    color: EaStyle.Colors.themeForegroundMinor
-                }
-
-                EaComponents.TableViewLabel {
-                    id: dependentNameColumn
-                    width: EaStyle.Sizes.fontPixelSize * 12
-                    horizontalAlignment: Text.AlignLeft
-                    text: {
-                        const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
-                        return constraint ? Object.keys(constraint)[0] : ""
+                Connections {
+                    target: Globals.BackendWrapper.activeBackend.sample
+                    function onConstraintsChanged() {
+                        // Force table model to refresh by changing the trigger
+                        constraintsTable.refreshTrigger++
                     }
-                    elide: Text.ElideRight
                 }
 
-                EaComponents.TableViewLabel {
-                    id: expressionColumn
-                    width: EaStyle.Sizes.fontPixelSize * 15
-                    horizontalAlignment: Text.AlignLeft
-                    text: {
-                        const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
-                        if (constraint) {
-                            const paramName = Object.keys(constraint)[0]
-                            return constraint[paramName]
+                // Header row
+                header: EaComponents.TableViewHeader {
+
+                    EaComponents.TableViewLabel {
+                        width: EaStyle.Sizes.fontPixelSize * 2.5
+                        text: qsTr("No.")
+                    }
+
+                    EaComponents.TableViewLabel {
+                        id: dependentNameHeaderColumn
+                        width: EaStyle.Sizes.fontPixelSize * 12
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Parameter")
+                    }
+
+                    EaComponents.TableViewLabel {
+                        width: EaStyle.Sizes.fontPixelSize * 19
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Expression")
+                    }
+
+                    // Placeholder for row delete button
+                    EaComponents.TableViewLabel {
+                        width: EaStyle.Sizes.tableRowHeight
+                    }
+                }
+
+                // Table rows
+                delegate: EaComponents.TableViewDelegate {
+
+                    EaComponents.TableViewLabel {
+                        id: numberColumn
+                        width: EaStyle.Sizes.fontPixelSize * 2.5
+                        text: index + 1
+                        color: EaStyle.Colors.themeForegroundMinor
+                    }
+
+                    EaComponents.TableViewLabel {
+                        id: dependentNameColumn
+                        width: EaStyle.Sizes.fontPixelSize * 12
+                        horizontalAlignment: Text.AlignLeft
+                        text: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            return constraint ? Object.keys(constraint)[0] : ""
                         }
-                        return ""
+                        elide: Text.ElideRight
                     }
-                    elide: Text.ElideRight
-                }
 
-                EaComponents.TableViewButton {
-                    fontIcon: "minus-circle"
-                    ToolTip.text: qsTr("Remove this constraint")
-                    onClicked: {
-                        Globals.BackendWrapper.sampleRemoveConstraintByIndex(index)
+                    EaComponents.TableViewLabel {
+                        id: expressionColumn
+                        width: EaStyle.Sizes.fontPixelSize * 15
+                        horizontalAlignment: Text.AlignLeft
+                        text: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            if (constraint) {
+                                const paramName = Object.keys(constraint)[0]
+                                return constraint[paramName]
+                            }
+                            return ""
+                        }
+                        elide: Text.ElideRight
+                    }
+
+                    // Placeholder for delete button space
+                    Item {
+                        width: EaStyle.Sizes.tableRowHeight
+                    }
+
+                    mouseArea.onPressed: {
+                        if (constraintsTable.currentIndex !== index) {
+                            constraintsTable.currentIndex = index
+                        }
                     }
                 }
+            }
 
-                mouseArea.onPressed: {
-                    if (constraintsTable.currentIndex !== index) {
-                        constraintsTable.currentIndex = index
+            // Delete buttons - separate from table content but positioned at row level
+            Column {
+                id: deleteButtonsColumn
+                anchors.right: parent.right
+                anchors.top: constraintsTable.top
+                anchors.topMargin: constraintsTable.headerItem ? constraintsTable.headerItem.height : 0
+                spacing: 0
+
+                Repeater {
+                    model: Globals.BackendWrapper.sampleConstraintsList.length
+
+                    EaElements.SideBarButton {
+                        width: 35
+                        height: EaStyle.Sizes.tableRowHeight
+                        fontIcon: "minus-circle"
+                        ToolTip.text: qsTr("Remove this constraint")
+
+                        onClicked: {
+                            Globals.BackendWrapper.sampleRemoveConstraintByIndex(index)
+                        }
                     }
                 }
             }
         }
+
+
     }
 }
     

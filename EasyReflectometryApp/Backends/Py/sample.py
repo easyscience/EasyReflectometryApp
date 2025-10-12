@@ -414,6 +414,10 @@ class Sample(QObject):
         return [parameter['name'] for parameter in self._parameters_logic.parameters]
 
     @Property('QVariantList', notify=layersChange)
+    def dependentParameterNames(self) -> list[dict[str, str]]:
+        return [parameter['name'] for parameter in self._parameters_logic.parameters if parameter['independent']]
+
+    @Property('QVariantList', notify=layersChange)
     def relationOperators(self) -> list[str]:
         return self._parameters_logic.constraint_relations()
 
@@ -433,18 +437,41 @@ class Sample(QObject):
         return constraints
 
     @Slot(int)
-    def removeConstraintByIndex(self, index: int) -> None:
+    def removeConstraintByIndex(self, index_str: str) -> None:
         """Remove constraint by index by making the parameter independent."""
-        constraints = self.constraintsList()
-        if 0 <= index < len(constraints):
-            # Find the parameter by name and make it independent
-            param_name = constraints[index]['dependentName']
-            for param in self._project_lib.parameters:
-                if param.name == param_name and not param.independent:
-                    param.make_independent()
-                    break
-            self.constraintsChanged.emit()
-            self.externalSampleChanged.emit()
+        try:
+            index = int(index_str)
+        except ValueError:
+            return
+
+        constraints_list = self.constraintsList
+        if index >= len(constraints_list):
+            return
+
+        param_name = list(constraints_list[index].keys())[0]
+        param_obj = self._find_parameter_object_by_name(param_name)
+
+        if param_obj is None or param_obj.independent:
+            return
+
+        self._make_parameter_independent(param_obj)
+        self.constraintsChanged.emit()
+        self.externalSampleChanged.emit()
+
+    def _find_parameter_object_by_name(self, param_name: str):
+        """Find parameter object by name."""
+        parameters = self._parameters_logic.parameters
+        for param in parameters:
+            if param['name'] == param_name:
+                return param['object']
+        return None
+
+    def _make_parameter_independent(self, param_obj) -> None:
+        """Make a parameter independent, handling different parameter types."""
+        try:
+            param_obj.make_independent()
+        except AttributeError:
+            param_obj._independent = True  # Fallback for custom ERL constraints
 
     @Slot(int, bool)
     def toggleConstraintByIndex(self, index: int, enabled: bool) -> None:
@@ -485,28 +512,14 @@ class Sample(QObject):
         else:
             # make the parameter dependent on another parameter
             # e.g. thickness = 2 * a + 5
-            expr = str(float(value)) + arithmetic_operator + " a"
+            expr = "a " + arithmetic_operator + str(float(value))
             dependency_map = {'a': independent}
             dependent.make_dependent_on(
                 dependency_expression=expr, dependency_map=dependency_map
             )
         self.constraintsChanged.emit()
         self.externalSampleChanged.emit()
-
-    @Slot(str)
-    def removeConstraint(self, param_string: str) -> None:
-        """Remove constraint on parameter."""
-        try:
-            parameters = self._parameters_logic.parameters
-            for param in parameters:
-                if param['name'] == param_string:
-                    param_obj = next((p for p in self._project_lib.parameters if p.name == param_string), None)
-                    if param_obj and not param_obj.independent:
-                        param_obj.make_independent()
-                        self.constraintsChanged.emit()
-                        self.externalSampleChanged.emit()
-        except ValueError:
-            pass
+        self.layersChange.emit()
 
     # # #
     # Q Range
