@@ -38,7 +38,7 @@ class Parameters:
         return count_fixed_parameters(self._project_lib)
 
     def set_current_parameter_value(self, new_value: str) -> bool:
-        parameters = self._project_lib.enabled_parameters
+        parameters = self._project_lib.parameters
         if float(new_value) != parameters[self._current_index].value:
             try:
                 parameters[self._current_index].value = float(new_value)
@@ -48,7 +48,7 @@ class Parameters:
         return False
 
     def set_current_parameter_min(self, new_value: str) -> bool:
-        parameters = self._project_lib.enabled_parameters
+        parameters = self._project_lib.parameters
         if float(new_value) != parameters[self._current_index].min:
             try:
                 parameters[self._current_index].min = float(new_value)
@@ -58,7 +58,7 @@ class Parameters:
         return False
 
     def set_current_parameter_max(self, new_value: str) -> bool:
-        parameters = self._project_lib.enabled_parameters
+        parameters = self._project_lib.parameters
         if float(new_value) != parameters[self._current_index].max:
             try:
                 parameters[self._current_index].max = float(new_value)
@@ -68,7 +68,7 @@ class Parameters:
         return False
 
     def set_current_parameter_fit(self, new_value: str) -> bool:
-        parameters = self._project_lib.enabled_parameters
+        parameters = self._project_lib.parameters
         if bool(new_value) != parameters[self._current_index].free:
             parameters[self._current_index].free = bool(new_value)
             return True
@@ -84,8 +84,8 @@ class Parameters:
     def add_constraint(
         self, dependent_idx: int, relational_operator: str, value: float, arithmetic_operator: str, independent_idx: int
     ) -> None:
-        independent = self._project_lib.enabled_parameters[independent_idx]
-        dependent = self._project_lib.enabled_parameters[dependent_idx]
+        independent = self._project_lib.parameters[independent_idx]
+        dependent = self._project_lib.parameters[dependent_idx]
 
         if arithmetic_operator != '' and independent_idx > -1:
             dependent.make_dependent_on(

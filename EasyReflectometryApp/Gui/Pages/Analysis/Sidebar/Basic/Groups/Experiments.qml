@@ -1,5 +1,5 @@
-import QtQuick 2.14
-import QtQuick.Controls 2.14
+import QtQuick
+import QtQuick.Controls
 
 import easyApp.Gui.Style as EaStyle
 import easyApp.Gui.Elements as EaElements

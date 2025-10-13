@@ -294,8 +294,6 @@ EaElements.GroupBox {
                     checked: Globals.BackendWrapper.analysisFitableParameters[index].fit
                     onToggled: {
                         console.debug("*** Editing 'fit' field of fittable on Analysis page ***")
-                        console.error("Toggling fit for parameter: " + Globals.BackendWrapper.analysisFitableParameters[index].name)
-                        console.error("New fit state: " + checkState)
                         Globals.BackendWrapper.analysisSetCurrentParameterFit(checkState)
                     }
                 }
