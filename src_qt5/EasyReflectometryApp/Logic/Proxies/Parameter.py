@@ -11,9 +11,9 @@ import numpy as np
 from easyscience.Constraints import ObjConstraint
 from easyscience.Constraints import NumericConstraint
 from easyscience.Constraints import FunctionalConstraint
-from easyscience.Utils.io.xml import XMLSerializer
+from easyscience.utils.io.xml import XMLSerializer
 from easyscience import global_object
-from easyscience.Utils.classTools import generatePath
+from easyscience.utils.classTools import generatePath
 
 
 class ParameterProxy(QObject):

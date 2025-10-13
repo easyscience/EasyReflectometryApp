@@ -6,7 +6,7 @@ from PySide2.QtCore import Property
 from PySide2.QtCore import Slot
 
 import numpy as np
-from easyscience.Utils.io.xml import XMLSerializer
+from easyscience.utils.io.xml import XMLSerializer
 
 
 class StateProxy(QObject):

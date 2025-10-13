@@ -26,6 +26,7 @@ class Sample(QObject):
     layersIndexChanged = Signal()
 
     qRangeChanged = Signal()
+    constraintsChanged = Signal()
 
     externalRefreshPlot = Signal()
     externalSampleChanged = Signal()
@@ -418,6 +419,10 @@ class Sample(QObject):
         return [parameter['name'] for parameter in self._parameters_logic.parameters]
 
     @Property('QVariantList', notify=layersChange)
+    def dependentParameterNames(self) -> list[dict[str, str]]:
+        return [parameter['name'] for parameter in self._parameters_logic.parameters if parameter['independent']]
+
+    @Property('QVariantList', notify=layersChange)
     def relationOperators(self) -> list[str]:
         return self._parameters_logic.constraint_relations()
 
@@ -425,16 +430,93 @@ class Sample(QObject):
     def arithmicOperators(self) -> list[str]:
         return self._parameters_logic.constraint_arithmetic()
 
+    @Property('QVariantList', notify=constraintsChanged)
+    def constraintsList(self) -> list[dict[str, str]]:
+        """Get the list of active constraints from dependent parameters."""
+        constraints = []
+        parameters = self._parameters_logic.parameters
+        for param in parameters:
+            if not param['independent']:
+                constraints.append({param['name']: param['dependency']})
+
+        return constraints
+
+    @Slot(int)
+    def removeConstraintByIndex(self, index_str: str) -> None:
+        """Remove constraint by index by making the parameter independent."""
+        try:
+            index = int(index_str)
+        except ValueError:
+            return
+
+        constraints_list = self.constraintsList
+        if index >= len(constraints_list):
+            return
+
+        param_name = list(constraints_list[index].keys())[0]
+        param_obj = self._find_parameter_object_by_name(param_name)
+
+        if param_obj is None or param_obj.independent:
+            return
+
+        self._make_parameter_independent(param_obj)
+        self.constraintsChanged.emit()
+        self.externalSampleChanged.emit()
+
+    def _find_parameter_object_by_name(self, param_name: str):
+        """Find parameter object by name."""
+        parameters = self._parameters_logic.parameters
+        for param in parameters:
+            if param['name'] == param_name:
+                return param['object']
+        return None
+
+    def _make_parameter_independent(self, param_obj) -> None:
+        """Make a parameter independent, handling different parameter types."""
+        try:
+            param_obj.make_independent()
+        except AttributeError:
+            param_obj._independent = True  # Fallback for custom ERL constraints
+
     @Slot(str, str, str, str, str)
     def addConstraint(self, value1: str, value2: str, value3: str, value4: str, value5: str) -> None:
-        self._parameters_logic.add_constraint(
-            dependent_idx=int(value1),
-            relational_operator=value2,
-            value=float(value3),
-            arithmetic_operator=value4,
-            independent_idx=int(value5),
-        )
+        dependent = self._project_lib.parameters[int(value1)]
+        if value5 == '-1':
+            independent = None
+        else:
+            independent = self._project_lib.parameters[int(value5)]
+        relational_operator = value2
+        arithmetic_operator = value4
+        value = float(value3)
+        if arithmetic_operator == '':
+            if relational_operator == '=':
+                # simple parameter equality
+                # assign to the parameter and make it frozen
+                dependent.value = value
+                dependent.free = False
+                # here, we need to make the parameter "dependent" so it can't be changed in GUI
+                dependent._independent = False
+
+            elif relational_operator == '>':
+                # set the minimum value of the parameter
+                dependent.min = value
+                dependent.free = True
+
+            elif relational_operator == '<':
+                # set the maximum value of the parameter
+                dependent.max = value
+                dependent.free = True
+        else:
+            # make the parameter dependent on another parameter
+            # e.g. thickness = 2 * a + 5
+            expr = "a " + arithmetic_operator + str(float(value))
+            dependency_map = {'a': independent}
+            dependent.make_dependent_on(
+                dependency_expression=expr, dependency_map=dependency_map
+            )
+        self.constraintsChanged.emit()
         self.externalSampleChanged.emit()
+        self.layersChange.emit()
 
     # # #
     # Q Range

@@ -1,6 +1,5 @@
 import QtQuick 2.13
 import QtQuick.Controls 2.13
-import QtQml.XmlListModel
 
 import easyApp.Gui.Style as EaStyle
 import easyApp.Gui.Elements as EaElements
@@ -19,7 +18,7 @@ EaElements.GroupBox {
         Column {
 
             EaElements.Label {
-                enabled: false
+                enabled: true
                 text: qsTr("Numeric or Parameter-Parameter constraint")
             }
 
@@ -34,12 +33,8 @@ EaElements.GroupBox {
                     width: 359
                     currentIndex: -1
                     displayText: currentIndex === -1 ? "Select dependent parameter" : currentText
-                    model: Globals.BackendWrapper.sampleParameterNames
-                    onCurrentIndexChanged: {
-                        independentPar.model = Globals.BackendWrapper.sampleParameterNames
-                        independentPar.model[currentIndex] = 'Dependent parameter'
-                        independentPar.currentIndex = -1
-                    }
+                    model: Globals.BackendWrapper.sampleDepParameterNames
+                    // Removed onCurrentIndexChanged handler to prevent circular updates
                 }
 
                 EaElements.ComboBox {
@@ -58,17 +53,15 @@ EaElements.GroupBox {
                     width: dependentPar.width
                     currentIndex: -1
                     displayText: currentIndex === -1 ? "Numeric constrain or select independent parameter" : currentText
-                    model: Globals.BackendWrapper.sampleParameterNames
+                    // let's avoid circular dependencies by not allowing to select dependent parameter here
+                    // model: Globals.BackendWrapper.sampleParameterNames
+                    model: Globals.BackendWrapper.sampleDepParameterNames
                     onCurrentIndexChanged: {
-                        dependentPar.model = Globals.BackendWrapper.sampleParameterNames
                         if (currentIndex === -1){
-                            displayText: "Numeric constrain or select independent parameter"
                             arithmeticOperator.model = Globals.BackendWrapper.sampleArithmicOperators.slice(0,1)  // no arithmetic operators
                         }
                         else{
                             arithmeticOperator.model = Globals.BackendWrapper.sampleArithmicOperators.slice(1) // allow all arithmetic operators
-                            dependentPar.model[currentIndex] = 'Independent parameter'
-                        //arithmeticOperator.currentIndex = 0
                         }
                     }
                 }
@@ -105,6 +98,8 @@ EaElements.GroupBox {
                             arithmeticOperator.currentText.replace("\uf00d", "*").replace("\uf529", "/").replace("\uf067", "+").replace("\uf068", "-"),
                             independentPar.currentIndex
                         )
+
+                        // Reset form
                         independentPar.currentIndex = -1
                         dependentPar.currentIndex = -1
                         relationalOperator.currentIndex = 0
@@ -113,6 +108,150 @@ EaElements.GroupBox {
                 }
             }
         }
+
+        // Constraints table to display existing constraints
+        Item {
+            height: EaStyle.Sizes.fontPixelSize * 0.5
+            width: 1
+        }
+
+        EaElements.Label {
+            enabled: true
+            text: qsTr("Active Constraints")
+        }
+
+        Item {
+            id: constraintTableContainer
+            width: parent.width
+            height: Math.min(200, Math.max(60, constraintsTable.height))
+
+            EaComponents.TableView {
+                id: constraintsTable
+                width: parent.width
+                height: Math.min(200, Math.max(60, Math.max(constraintsTable.contentHeight, constraintsTable.implicitHeight)))
+
+                defaultInfoText: qsTr("No Active Constraints")
+
+                // Table model - use backend data directly like other tables
+                property int refreshTrigger: 0
+                model: {
+                    // Include refreshTrigger to force re-evaluation
+                    refreshTrigger // This creates a dependency
+                    return Globals.BackendWrapper.sampleConstraintsList.length
+                }
+
+                // No Component.onCompleted needed - table uses backend data directly
+
+                Connections {
+                    target: Globals.BackendWrapper.activeBackend.sample
+                    function onConstraintsChanged() {
+                        // Force table model to refresh by changing the trigger
+                        constraintsTable.refreshTrigger++
+                    }
+                }
+
+                // Header row
+                header: EaComponents.TableViewHeader {
+
+                    EaComponents.TableViewLabel {
+                        width: EaStyle.Sizes.fontPixelSize * 2.5
+                        text: qsTr("No.")
+                    }
+
+                    EaComponents.TableViewLabel {
+                        id: dependentNameHeaderColumn
+                        width: EaStyle.Sizes.fontPixelSize * 12
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Parameter")
+                    }
+
+                    EaComponents.TableViewLabel {
+                        width: EaStyle.Sizes.fontPixelSize * 19
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Expression")
+                    }
+
+                    // Placeholder for row delete button
+                    EaComponents.TableViewLabel {
+                        width: EaStyle.Sizes.tableRowHeight
+                    }
+                }
+
+                // Table rows
+                delegate: EaComponents.TableViewDelegate {
+
+                    EaComponents.TableViewLabel {
+                        id: numberColumn
+                        width: EaStyle.Sizes.fontPixelSize * 2.5
+                        text: index + 1
+                        color: EaStyle.Colors.themeForegroundMinor
+                    }
+
+                    EaComponents.TableViewLabel {
+                        id: dependentNameColumn
+                        width: EaStyle.Sizes.fontPixelSize * 12
+                        horizontalAlignment: Text.AlignLeft
+                        text: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            return constraint ? Object.keys(constraint)[0] : ""
+                        }
+                        elide: Text.ElideRight
+                    }
+
+                    EaComponents.TableViewLabel {
+                        id: expressionColumn
+                        width: EaStyle.Sizes.fontPixelSize * 15
+                        horizontalAlignment: Text.AlignLeft
+                        text: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            if (constraint) {
+                                const paramName = Object.keys(constraint)[0]
+                                return constraint[paramName]
+                            }
+                            return ""
+                        }
+                        elide: Text.ElideRight
+                    }
+
+                    // Placeholder for delete button space
+                    Item {
+                        width: EaStyle.Sizes.tableRowHeight
+                    }
+
+                    mouseArea.onPressed: {
+                        if (constraintsTable.currentIndex !== index) {
+                            constraintsTable.currentIndex = index
+                        }
+                    }
+                }
+            }
+
+            // Delete buttons - separate from table content but positioned at row level
+            Column {
+                id: deleteButtonsColumn
+                anchors.right: parent.right
+                anchors.top: constraintsTable.top
+                anchors.topMargin: constraintsTable.headerItem ? constraintsTable.headerItem.height : 0
+                spacing: 0
+
+                Repeater {
+                    model: Globals.BackendWrapper.sampleConstraintsList.length
+
+                    EaElements.SideBarButton {
+                        width: 35
+                        height: EaStyle.Sizes.tableRowHeight
+                        fontIcon: "minus-circle"
+                        ToolTip.text: qsTr("Remove this constraint")
+
+                        onClicked: {
+                            Globals.BackendWrapper.sampleRemoveConstraintByIndex(index)
+                        }
+                    }
+                }
+            }
+        }
+
+
     }
 }
     
