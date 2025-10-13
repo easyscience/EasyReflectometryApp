@@ -4,9 +4,7 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.utils import count_fixed_parameters
 from easyreflectometry.utils import count_free_parameters
 from easyscience import global_object
-from easyscience.Constraints import NumericConstraint
-from easyscience.Constraints import ObjConstraint
-from easyscience.Objects.variable import Parameter
+from easyscience.variable import Parameter
 
 
 class Parameters:
@@ -90,39 +88,63 @@ class Parameters:
         dependent = self._project_lib.parameters[dependent_idx]
 
         if arithmetic_operator != '' and independent_idx > -1:
-            constaint = ObjConstraint(
-                dependent_obj=dependent, operator=str(float(value)) + arithmetic_operator, independent_obj=independent
-            )
+            dependent.make_dependent_on(
+                dependency_expression='a' + arithmetic_operator + 'b', dependency_map={'a': independent, 'b': float(value)})
         elif arithmetic_operator == '' and independent_idx == -1:
             relational_operator = relational_operator.replace('=', '==')
             relational_operator = relational_operator.replace('&lt', '>')
             relational_operator = relational_operator.replace('&gt', '<')
-            constaint = NumericConstraint(dependent_obj=dependent, operator=relational_operator, value=float(value))
+
+            dependent.make_dependent_on(dependency_expression='a', dependency_map={'a': float(value)})
         else:
             print('Failed to add constraint: Unsupported type')
             return
-        # print(c)
-        independent.user_constraints[dependent.name] = constaint
-        constaint()
 
         print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
 
-
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_name: str) -> list[dict[str, str]]:
+    """Convert parameters to list of dictionaries with simplified logic."""
+
+    def _get_parameter_display_name(param: Parameter) -> str:
+        """Extract display name from parameter path."""
+        path = global_object.map.find_path(model_unique_name, param.unique_name)
+        if len(path) >= 2:
+            parent_name = global_object.map.get_item_by_key(path[-2]).name
+            param_name = global_object.map.get_item_by_key(path[-1]).name
+            return f'{parent_name} {param_name}'
+        return param.name  # Fallback to parameter name
+
+    def _get_dependency_expression(param: Parameter) -> str:
+        """Get simplified dependency expression."""
+        if param.independent:
+            return ''
+
+        # Check if parameter has dependency map with 'a' key (parameter dependency)
+        if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
+            dependent_param = param.dependency_map['a']
+            dep_name = _get_parameter_display_name(dependent_param)
+            return param.dependency_expression.replace('a', dep_name)
+
+        # Simple numerical dependency
+        return f'= {param.value}'
+
     parameter_list = []
     for parameter in parameters:
-        path = global_object.map.find_path(model_unique_name, parameter.unique_name)
-        if 0 < len(path):
-            name = f'{global_object.map.get_item_by_key(path[-2]).name} {global_object.map.get_item_by_key(path[-1]).name}'
-            parameter_list.append(
-                {
-                    'name': name,
-                    'value': float(parameter.value),
-                    'error': float(parameter.variance),
-                    'max': float(parameter.max),
-                    'min': float(parameter.min),
-                    'units': parameter.unit,
-                    'fit': parameter.free,
-                }
-            )
+        # Skip parameters not in the current model path
+        if not global_object.map.find_path(model_unique_name, parameter.unique_name):
+            continue
+
+        parameter_list.append({
+            'name': _get_parameter_display_name(parameter),
+            'value': float(parameter.value),
+            'error': float(parameter.variance),
+            'max': float(parameter.max),
+            'min': float(parameter.min),
+            'units': parameter.unit,
+            'fit': parameter.free,
+            'independent': parameter.independent,
+            'dependency': _get_dependency_expression(parameter),
+            'object': parameter,  # Direct reference to the Parameter object
+        })
+
     return parameter_list
