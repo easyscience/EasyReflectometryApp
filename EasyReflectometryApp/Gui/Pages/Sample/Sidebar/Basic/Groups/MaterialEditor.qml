@@ -67,12 +67,12 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewTextInput {
-                    text: Number(Globals.BackendWrapper.sampleMaterials[index].sld).toFixed(2)
+                    text: Number(Globals.BackendWrapper.sampleMaterials[index].sld).toFixed(3)
                     onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialSld(text)
                 }
 
                 EaComponents.TableViewTextInput {
-                    text: Number(Globals.BackendWrapper.sampleMaterials[index].isld).toFixed(2)
+                    text: Number(Globals.BackendWrapper.sampleMaterials[index].isld).toFixed(3)
                     onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialISld(text)
                 }
 

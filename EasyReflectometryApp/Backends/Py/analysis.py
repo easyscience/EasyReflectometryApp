@@ -27,15 +27,16 @@ class Analysis(QObject):
     externalParametersChanged = Signal()
     externalCalculatorChanged = Signal()
     externalFittingChanged = Signal()
+    externalExperimentChanged = Signal()
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
-        self._paramters_logic = ParametersLogic(project_lib)
+        self._parameters_logic = ParametersLogic(project_lib)
         self._fitting_logic = FittingLogic(project_lib)
         self._calculators_logic = CalculatorsLogic(project_lib)
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
-        self._chached_paramters = None
+        self._chached_parameters = None
 
     ########################
     ## Fitting
@@ -129,7 +130,62 @@ class Analysis(QObject):
 
     @Slot(int)
     def setExperimentCurrentIndex(self, new_value: int) -> None:
-        self._experiments_logic.set_current_index(new_value)
+        if self._experiments_logic.set_current_index(new_value):
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
+
+    @Slot(int)
+    def setModelOnExperiment(self, new_value: int) -> None:
+        self._experiments_logic.set_model_on_experiment(new_value)
+        self.experimentsChanged.emit()
+
+    @Slot(str)
+    def setExperimentName(self, new_name: str) -> None:
+        self._experiments_logic.set_experiment_name(new_name)
+        self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
+
+    @Property(int, notify=experimentsChanged)
+    def modelIndexForExperiment(self) -> int:
+        # return the model index for the current experiment
+        models = self._experiments_logic._project_lib._models
+        experiments = self._experiments_logic._project_lib._experiments
+        index = self.experimentCurrentIndex
+        current_experiment = experiments[index] if 0 <= index < len(experiments) else None
+        if current_experiment is not None:
+            t = models.index(current_experiment.model)
+            return t
+        return -1
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def modelNamesForExperiment(self) -> list:
+        # return a list of model names for each experiment
+        mapped_models = []
+        experiments = self._experiments_logic._project_lib._experiments
+        for ind in experiments:
+            mapped_models.append(experiments[ind].model.name)
+        return mapped_models
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def modelColorsForExperiment(self) -> list:
+        # return a list of model colors for each experiment
+        mapped_models = []
+        experiments = self._experiments_logic._project_lib._experiments
+        for ind in experiments:
+            mapped_models.append(experiments[ind].model.color)
+        return mapped_models
+
+    @Slot(int)
+    def removeExperiment(self, index: int) -> None:
+        """
+        Remove the experiment at the given index.
+        """
+        if 0 <= index < len(self._experiments_logic.available()):
+            self._experiments_logic.remove_experiment(index)
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
+        else:
+            print(f"Experiment index {index} is out of range.")
 
     ########################
     ## Minimizers
@@ -169,26 +225,28 @@ class Analysis(QObject):
     ## Parameters
     @Property('QVariantList', notify=parametersChanged)
     def fitableParameters(self) -> List[dict[str]]:
-        if self._chached_paramters is None:
-            self._chached_paramters = self._paramters_logic.parameters
-        return self._chached_paramters
+        if self._chached_parameters is None:
+            self._chached_parameters = self._parameters_logic.parameters
+        return self._chached_parameters
 
     @Property(int, notify=parametersIndexChanged)
     def currentParameterIndex(self) -> int:
-        return self._paramters_logic.current_index()
+        return self._parameters_logic.current_index()
 
     @Slot(int)
     def setCurrentParameterIndex(self, new_value: int) -> None:
-        if self._paramters_logic.set_current_index(new_value):
+        if self._parameters_logic.set_current_index(new_value):
             self.parametersIndexChanged.emit()
 
     @Property(int, notify=parametersChanged)
     def freeParametersCount(self) -> int:
-        return self._paramters_logic.count_free_parameters()
+        result = self._parameters_logic.count_free_parameters()
+        return result
 
     @Property(int, notify=parametersChanged)
     def fixedParametersCount(self) -> int:
-        return self._paramters_logic.count_fixed_parameters()
+        result = self._parameters_logic.count_fixed_parameters()
+        return result
 
     @Property(int, notify=parametersChanged)
     def modelParametersCount(self) -> int:
@@ -200,25 +258,25 @@ class Analysis(QObject):
 
     @Slot(float)
     def setCurrentParameterValue(self, new_value: float) -> None:
-        if self._paramters_logic.set_current_parameter_value(new_value):
+        if self._parameters_logic.set_current_parameter_value(new_value):
             self._clearCacheAndEmitParametersChanged()
             self.externalParametersChanged.emit()
 
     @Slot(float)
     def setCurrentParameterMin(self, new_value: float) -> None:
-        if self._paramters_logic.set_current_parameter_min(new_value):
+        if self._parameters_logic.set_current_parameter_min(new_value):
             self._clearCacheAndEmitParametersChanged()
 
     @Slot(float)
     def setCurrentParameterMax(self, new_value: float) -> None:
-        if self._paramters_logic.set_current_parameter_max(new_value):
+        if self._parameters_logic.set_current_parameter_max(new_value):
             self._clearCacheAndEmitParametersChanged()
 
     @Slot(bool)
     def setCurrentParameterFit(self, new_value: bool) -> None:
-        if self._paramters_logic.set_current_parameter_fit(new_value):
+        if self._parameters_logic.set_current_parameter_fit(new_value):
             self._clearCacheAndEmitParametersChanged()
 
     def _clearCacheAndEmitParametersChanged(self):
-        self._chached_paramters = None
+        self._chached_parameters = None
         self.parametersChanged.emit()

@@ -1,6 +1,7 @@
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.model import Model
 from easyreflectometry.model import ModelCollection
 from easyreflectometry.model.resolution_functions import PercentageFwhm
 
@@ -73,33 +74,37 @@ class Models:
     def remove_at_index(self, value: str) -> None:
         self._models.pop(int(value))
 
-    def add_new(self) -> None:
-        self._models.add_model()
-        self._models[-1].sample.add_assembly()
-        self._models[-1].sample._enable_changes_to_outermost_layers()
+    def default_model_content(self, model: Model) -> None:
+        """Set the default content for a model."""
+        model.sample.add_assembly()
+        model.sample._enable_changes_to_outermost_layers()
 
-        self._models[-1].sample.data[0].layers.data[0].material = self._project_lib._materials[
+        model.sample.data[0].layers.data[0].material = self._project_lib._materials[
             self._project_lib.get_index_air()
         ]
-        self._models[-1].sample.data[0].layers.data[0].thickness.value = 0.0
-        self._models[-1].sample.data[0].layers.data[0].roughness.value = 0.0
-        self._models[-1].sample.data[0].name = 'Superphase'
+        model.sample.data[0].layers.data[0].thickness = 0.0
+        model.sample.data[0].layers.data[0].roughness = 0.0
+        model.sample.data[0].name = 'Superphase'
 
-        self._models[-1].sample.data[1].layers.data[0].material = self._project_lib._materials[
+        model.sample.data[1].layers.data[0].material = self._project_lib._materials[
             self._project_lib.get_index_sio2()
         ]
-        self._models[-1].sample.data[1].layers.data[0].thickness.value = 20.0
-        self._models[-1].sample.data[1].layers.data[0].roughness.value = 3.0
-        self._models[-1].sample.data[1].name = 'SiO2'
+        model.sample.data[1].layers.data[0].thickness = 20.0
+        model.sample.data[1].layers.data[0].roughness = 3.0
+        model.sample.data[1].name = 'SiO2'
 
-        self._models[-1].sample.data[2].layers.data[0].material = self._project_lib._materials[
+        model.sample.data[2].layers.data[0].material = self._project_lib._materials[
             self._project_lib.get_index_si()
         ]
-        self._models[-1].sample.data[2].name = 'Substrate'
-        self._models[-1].sample.data[2].layers.data[0].thickness.value = 0.0
-        self._models[-1].sample.data[2].layers.data[0].roughness.value = 1.2
+        model.sample.data[2].name = 'Substrate'
+        model.sample.data[2].layers.data[0].thickness = 0.0
+        model.sample.data[2].layers.data[0].roughness = 1.2
 
-        self._models[-1].sample._disable_changes_to_outermost_layers()
+        model.sample._disable_changes_to_outermost_layers()
+
+    def add_new(self) -> None:
+        self._models.add_model()
+        self.default_model_content(self._models[-1])
 
     def duplicate_selected_model(self) -> None:
         self._models.duplicate_model(self.index)

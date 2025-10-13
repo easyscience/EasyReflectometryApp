@@ -1,10 +1,11 @@
-import QtQuick
-import QtQuick.Controls
+import QtQuick 2.14
+import QtQuick.Controls 2.14
 
 import easyApp.Gui.Style as EaStyle
 import easyApp.Gui.Elements as EaElements
 import easyApp.Gui.Components as EaComponents
 
+//import Gui.Globals 1.0 as ExGlobals
 import Gui.Globals as Globals
 
 EaElements.GroupBox {
@@ -46,9 +47,16 @@ EaElements.GroupBox {
                     width: EaStyle.Sizes.fontPixelSize * 2.5
                 }
 
+                // Placeholder for row delete button
+                EaComponents.TableViewLabel {
+                    text: "Del."
+                    width: EaStyle.Sizes.tableRowHeight
+                }
             }
 
             delegate: EaComponents.TableViewDelegate {
+                //property var dataModel: model
+
                 EaComponents.TableViewLabel {
                     id: noLabel
                     width: EaStyle.Sizes.fontPixelSize * 2.5
@@ -60,29 +68,49 @@ EaElements.GroupBox {
                     id: labelLabel
                     width: EaStyle.Sizes.fontPixelSize * 11
                     text: index > -1 ? Globals.BackendWrapper.analysisExperimentsAvailable[index] : ""
+                    onEditingFinished: Globals.BackendWrapper.analysisSetExperimentName(text)
                 }
 
-                EaComponents.TableViewLabel {
+                EaComponents.TableViewComboBox {
                     id: modelAccess
-                    text: {
-                        return Globals.BackendWrapper.modelNamesForExperiment[model.index] || ""
+                    horizontalAlignment: Text.AlignLeft
+                    width: EaStyle.Sizes.sideBarContentWidth - (noLabel.width + deleteRowColumn.width + colorLabel.width + labelLabel.width + 5 * EaStyle.Sizes.tableColumnSpacing)
+                    model: Globals.BackendWrapper.sampleModelNames
+                    onActivated: {
+                        Globals.BackendWrapper.analysisSetModelOnExperiment(currentIndex)
+                    }
+                    Component.onCompleted: {
+                        Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+                        Globals.BackendWrapper.analysisSetModelOnExperiment(model.index)
+                        currentIndex = 0
                     }
                 }
 
                 EaComponents.TableViewLabel {
                     id: colorLabel
-                    backgroundColor:  {
-                        Globals.BackendWrapper.modelColorsForExperiment[model.index]
+                    backgroundColor: Globals.BackendWrapper.sampleModels[modelAccess.currentIndex].color
+                }
+
+                EaComponents.TableViewButton {
+                    id: deleteRowColumn
+                    fontIcon: "minus-circle"
+                    ToolTip.text: qsTr("Remove this dataset")
+                    onClicked: {
+                        Globals.BackendWrapper.analysisRemoveExperiment(index)
+                    }
+                }
+                mouseArea.onPressed: {
+                    // Set the current experiment index in the backend
+                    if (Globals.BackendWrapper.analysisExperimentsCurrentIndex !== model.index) {
+                        Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
                     }
                 }
 
-                mouseArea.onPressed: {
-                    Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
-                    var modelIndexFromExperiment = Globals.BackendWrapper.analysisModelForExperiment
-                    Globals.BackendWrapper.sampleSetCurrentModelIndex(modelIndexFromExperiment)
-                }
-
             }
+            // onCurrentIndexChanged: {
+            //     Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+            // }
+
         }
     }
 }

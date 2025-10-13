@@ -102,6 +102,7 @@ QtObject {
 
     // Model
     readonly property var sampleModels: activeBackend.sample.models
+    readonly property var sampleModelNames: activeBackend.sample.modelsNames
     readonly property string sampleCurrentModelName: activeBackend.sample.currentModelName
 
     readonly property int sampleCurrentModelIndex: activeBackend.sample.currentModelIndex
@@ -186,7 +187,6 @@ QtObject {
     function experimentSetBackground(value) { activeBackend.experiment.setBackground(value) }
     readonly property var experimentResolution: activeBackend.experiment.resolution
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
-
     function experimentLoad(value) { activeBackend.experiment.load(value) }
 
 
@@ -196,6 +196,12 @@ QtObject {
     readonly property var analysisExperimentsAvailable: activeBackend.analysis.experimentsAvailable
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
+    function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
+
+    function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
+    readonly property var analysisModelForExperiment: activeBackend.analysis.modelIndexForExperiment
+    readonly property var modelNamesForExperiment: activeBackend.analysis.modelNamesForExperiment
+    readonly property var modelColorsForExperiment: activeBackend.analysis.modelColorsForExperiment
     
     readonly property var analysisCalculatorsAvailable: activeBackend.analysis.calculatorsAvailable
     readonly property int analysisCalculatorCurrentIndex: activeBackend.analysis.calculatorCurrentIndex
@@ -208,6 +214,7 @@ QtObject {
     readonly property var analysisFitableParameters: activeBackend.analysis.fitableParameters 
     readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
     function analysisSetCurrentParameterIndex(value) { activeBackend.analysis.setCurrentParameterIndex(value) }
+    function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
 
     // Minimizer
     readonly property var analysisMinimizerTolerance: activeBackend.analysis.minimizerTolerance
@@ -269,6 +276,7 @@ QtObject {
     readonly property var plottingAnalysisMaxX: activeBackend.plotting.sampleMaxX
     readonly property var plottingAnalysisMinY: activeBackend.plotting.sampleMinY
     readonly property var plottingAnalysisMaxY: activeBackend.plotting.sampleMaxY
+    readonly property var calcSerieColor: activeBackend.plotting.calcSerieColor
 
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }

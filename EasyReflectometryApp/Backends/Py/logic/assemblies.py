@@ -61,10 +61,8 @@ class Assemblies:
             self.index = self.index + 1
 
     def set_name_at_current_index(self, new_value: str) -> None:
-        if self._assemblies[self.index].name != new_value:
-            self._assemblies[self.index].name = new_value
-            return True
-        return False
+        self._assemblies[self.index].name = new_value
+        return True
 
     def set_type_at_current_index(self, new_value: str) -> bool:
         if new_value == self._assemblies[self.index].type:

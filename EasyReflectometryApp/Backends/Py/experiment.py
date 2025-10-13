@@ -53,7 +53,14 @@ class Experiment(QObject):
 
     # Actions
     @Slot(str)
-    def load(self, path: str) -> None:
-        self._project_logic.load_experiment(IO.generalizePath(path))
-        self.experimentChanged.emit()
-        self.externalExperimentChanged.emit()
+    def load(self, paths: str) -> None:
+        # paths is a string containing paths separated by a comma.
+        # make a list out of it
+        if isinstance(paths, str):
+            paths = paths.split(',')
+
+        for path in paths:
+            self._project_logic.load_new_experiment(IO.generalizePath(path))
+            self.experimentChanged.emit()
+            self.externalExperimentChanged.emit()
+        pass # debug anchor

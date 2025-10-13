@@ -46,7 +46,7 @@ class Summary(QObject):
     def asHtml(self):
         return self._logic.as_html
 
-    @Property('QVariant')
+    @Property('QVariant', notify=summaryChanged)
     def exportFormats(self):
         return ['HTML', 'PDF']
 

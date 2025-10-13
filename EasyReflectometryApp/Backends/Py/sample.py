@@ -133,7 +133,7 @@ class Sample(QObject):
         return self._models_logic.index
 
     @Property('QVariantList', notify=modelsTableChanged)
-    def modelslNames(self) -> list[str]:
+    def modelsNames(self) -> list[str]:
         return self._models_logic.models_names
 
     @Property(str, notify=modelsIndexChanged)
@@ -143,15 +143,18 @@ class Sample(QObject):
     # Setters
     @Slot(int)
     def setCurrentModelIndex(self, new_value: int) -> None:
-        self._project_lib.current_model_index = new_value
-        self.modelsIndexChanged.emit()
-        self.assembliesTableChanged.emit()
-        self.externalRefreshPlot.emit()
+        if self._project_lib.current_model_index != new_value:
+            self._project_lib.current_model_index = new_value
+            self.modelsIndexChanged.emit()
+            self.assembliesTableChanged.emit()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
 
     @Slot(str)
     def setCurrentModelName(self, value: str) -> None:
         if self._models_logic.set_name_at_current_index(value):
             self.modelsTableChanged.emit()
+            self.modelsIndexChanged.emit()
 
     # Actions
     @Slot(str)
@@ -215,6 +218,8 @@ class Sample(QObject):
     def setCurrentAssemblyName(self, new_value: str) -> None:
         if self._assemblies_logic.set_name_at_current_index(new_value):
             self.assembliesTableChanged.emit()
+            self.materialsTableChanged.emit()
+            self.externalSampleChanged.emit()
 
     @Slot(str)
     def setCurrentAssemblyType(self, new_value: str) -> None:

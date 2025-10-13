@@ -23,6 +23,8 @@ class Plotting1d(QObject):
         self._project_lib = project_lib
         self._proxy = parent
         self._currentLib1d = 'QtCharts'
+        self._sample_data = {}
+        self._sld_data = {}
         self._chartRefs = {
             'QtCharts': {
                 'samplePage': {
@@ -41,34 +43,47 @@ class Plotting1d(QObject):
             }
         }
 
+    def reset_data(self):
+        self._sample_data = {}
+        self._sld_data = {}
+        console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
+
     @property
     def sample_data(self) -> DataSet1D:
+        idx = self._project_lib.current_model_index
+        if idx in self._sample_data and self._sample_data[idx] is not None:
+            return self._sample_data[idx]
         try:
-            data = self._project_lib.sample_data_for_model_at_index(self._project_lib.current_model_index)
+            data = self._project_lib.sample_data_for_model_at_index(idx)
         except IndexError:
             data = DataSet1D(
                 name='Sample Data empty',
                 x=np.empty(0),
                 y=np.empty(0),
             )
+        self._sample_data[idx] = data
         return data
 
     @property
     def sld_data(self) -> DataSet1D:
+        idx = self._project_lib.current_model_index
+        if idx in self._sld_data and self._sld_data[idx] is not None:
+            return self._sld_data[idx]
         try:
-            data = self._project_lib.sld_data_for_model_at_index(self._project_lib.current_model_index)
+            data = self._project_lib.sld_data_for_model_at_index(idx)
         except IndexError:
             data = DataSet1D(
                 name='SLD Data empty',
                 x=np.empty(0),
                 y=np.empty(0),
             )
+        self._sld_data[idx] = data
         return data
 
     @property
     def experiment_data(self) -> DataSet1D:
         try:
-            data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_model_index)
+            data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
         except IndexError:
             data = DataSet1D(
                 name='Experiment Data empty',
@@ -116,6 +131,11 @@ class Plotting1d(QObject):
     @Property('QVariant', notify=chartRefsChanged)
     def chartRefs(self):
         return self._chartRefs
+
+    @Property(str)
+    def calcSerieColor(self):
+        return '#00FF00'
+        #return self._calcSerieColor
 
     @Slot(str, str, 'QVariant')
     def setQtChartsSerieRef(self, page: str, serie: str, ref: QObject):

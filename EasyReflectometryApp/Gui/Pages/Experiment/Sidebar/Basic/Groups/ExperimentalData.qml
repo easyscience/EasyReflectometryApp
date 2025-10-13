@@ -11,6 +11,7 @@ EaElements.GroupBox {
     title: qsTr("Experimental data")
     collapsible: false
     enabled: Globals.Constants.proxy.fitter.isFitFinished
+
     Row {
         spacing: EaStyle.Sizes.fontPixelSize
 

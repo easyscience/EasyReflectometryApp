@@ -102,6 +102,9 @@ class Project:
     def load_experiment(self, path: str) -> None:
         self._project_lib.load_experiment_for_model_at_index(path, self._project_lib._current_model_index)
 
+    def load_new_experiment(self, path: str) -> None:
+        self._project_lib.load_new_experiment(path)
+
     def reset(self) -> None:
         self._project_lib.reset()
         self._project_lib.default_model()
