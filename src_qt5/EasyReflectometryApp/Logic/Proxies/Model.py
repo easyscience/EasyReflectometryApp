@@ -89,9 +89,6 @@ class ModelProxy(QObject):
             Multilayer(layers[2], name='Subphase')
         ]
         structure =  Sample(*items) 
-        structure[0].layers[0].thickness.enabled = False
-        structure[0].layers[0].roughness.enabled = False
-        structure[-1].layers[-1].thickness.enabled = False
         return structure
 
     def _defaultModel(self, structure: Sample, interface=None, name="Air-D2O-Si") -> Model:
@@ -288,9 +285,6 @@ class ModelProxy(QObject):
         self.parent._parameter_proxy._setParametersAsObj()
         if target_position != len(self._model[self.currentModelIndex].sample) - 1:
             new_items_list = []
-            self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = True
-            self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = True
-            self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = True
             for i, item in enumerate(self._model[self.currentModelIndex].sample):
                 if i == target_position:
                     new_items_list.append(
@@ -304,9 +298,6 @@ class ModelProxy(QObject):
             for i in range(len(new_items_list)):
                 self._model[self.currentModelIndex].add_assemblies(new_items_list[i])
             global_object.stack.enabled = True
-            self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = False
-            self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = False
-            self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = False
         self.itemsNameChanged.emit()
         self.parent.layersChanged.emit()
         self.parent.itemsChanged.emit()
@@ -572,9 +563,6 @@ class ModelProxy(QObject):
 
     @Slot()
     def addNewLayers(self):
-        self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = True
-        self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = True
-        self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = True
         try:
             self._model[self.currentModelIndex].sample[self.currentItemsIndex].add_layer(
                 Layer(
@@ -586,18 +574,12 @@ class ModelProxy(QObject):
             )
         except IndexError:
             self.addNewItems()
-        self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = False
-        self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = False
-        self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = False
         self.parent.layersChanged.emit()
 
     @Slot()
     def duplicateSelectedLayers(self):
         # This is a fix until deepcopy is worked out
         # Manual duplication instead of creating a copy
-        self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = True
-        self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = True
-        self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = True
         to_dup = self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[
             self.currentLayersIndex]
         self._model[self.currentModelIndex].sample[self.currentItemsIndex].add_layer(
@@ -608,9 +590,6 @@ class ModelProxy(QObject):
                 name=to_dup.name
                 )
             )
-        self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = False
-        self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = False
-        self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = False
         self.parent.layersChanged.emit()
 
     @Slot()
@@ -624,9 +603,6 @@ class ModelProxy(QObject):
         # approach for moving items around
         if old_index != 0:
             global_object.stack.enabled = False
-            self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = True
-            self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = True
-            self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = True
             for i, l in enumerate(layers):
                 if i == old_index - 1:
                     new_layers_list.append(layers[old_index])
@@ -639,9 +615,6 @@ class ModelProxy(QObject):
             for i in range(len(new_layers_list)):
                 item.add_layer(new_layers_list[i])
             global_object.stack.enabled = True
-            self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = False
-            self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = False
-            self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = False
             self.parent.layersChanged.emit()
 
     @Slot()
@@ -654,9 +627,6 @@ class ModelProxy(QObject):
         # not allow insertion or popping. In future, this could be replaced with the
         # approach for moving items around
         if old_index != len(layers):
-            self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = True
-            self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = True
-            self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = True
             global_object.stack.enabled = False
             for i, l in enumerate(layers):
                 if i == old_index:
@@ -670,9 +640,6 @@ class ModelProxy(QObject):
             for i in range(len(new_layers_list)):
                 item.add_layer(new_layers_list[i])
             global_object.stack.enabled = True
-            self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = False
-            self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = False
-            self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = False
             self.parent.layersChanged.emit()
 
     @Slot(str)
@@ -684,13 +651,7 @@ class ModelProxy(QObject):
         :type i: str
         """
         print(">>> Removing layer: ", i)
-        self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = True
-        self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = True
-        self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = True
         self._model[self.currentModelIndex].sample[self.currentItemsIndex].remove_layer(int(i))
-        self._model[self.currentModelIndex].sample[0].layers[0].thickness.enabled = False
-        self._model[self.currentModelIndex].sample[0].layers[0].roughness.enabled = False
-        self._model[self.currentModelIndex].sample[-1].layers[-1].thickness.enabled = False
         self.parent.layersChanged.emit()
 
     @Slot(str)
@@ -795,14 +756,10 @@ class ModelProxy(QObject):
             if item['name'] == x:
                 solvent = self._model[self.currentModelIndex].sample[i].layers[0]
         if solvent is None:
-            # self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[0].roughness.user_constraints[
-            # 'solvent_roughness'].enabled == False
             self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[0].roughness.make_independent()
         else:
-            solvent.roughness.enabled = True
             self._model[self.currentModelIndex].sample[self.currentItemsIndex].make_dependent_on(
                 dependency_expression='a', dependency_map={'a': solvent.roughness.value})
-            #self._model[self.currentModelIndex].sample[self.currentItemsIndex].constrain_solvent_roughness(solvent.roughness)
         self.parent.layersChanged.emit()
 
     # # #

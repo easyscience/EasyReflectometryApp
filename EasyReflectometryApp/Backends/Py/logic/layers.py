@@ -117,9 +117,7 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
             {
                 'label': layer.name,
                 'roughness': str(layer.roughness.value),
-                'roughness_enabled': str(layer.roughness.enabled),
                 'thickness': str(layer.thickness.value),
-                'thickness_enabled': str(layer.thickness.enabled),
                 'material': layer.material.name,
                 'formula': 'formula',
                 'apm': '0.1',

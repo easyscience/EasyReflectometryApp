@@ -32,7 +32,7 @@ classifiers = [
 requires-python = '>=3.11'
 dependencies = [
   'EasyApp @ git+https://github.com/EasyScience/EasyApp.git',
-  'easyreflectometry @ git+https://github.com/EasyScience/EasyReflectometryLib.git@pointwise_resolution',
+  'easyreflectometry @ git+https://github.com/EasyScience/EasyReflectometryLib.git@removed_enabled_attr',
   'PySide6>=6.8,<6.9', # Issue with TableView formatting in 6.9,
   'toml',
 ]
