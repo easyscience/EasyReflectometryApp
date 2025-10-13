@@ -473,14 +473,6 @@ class Sample(QObject):
         except AttributeError:
             param_obj._independent = True  # Fallback for custom ERL constraints
 
-    @Slot(int, bool)
-    def toggleConstraintByIndex(self, index: int, enabled: bool) -> None:
-        """Toggle constraint by index (currently not fully supported by the Parameter class)."""
-        # Note: The current Parameter implementation doesn't support temporarily disabling constraints
-        # This would require additional functionality in the Parameter class
-        # For now, we'll just emit the signal to maintain UI consistency
-        self.constraintsChanged.emit()
-
     @Slot(str, str, str, str, str)
     def addConstraint(self, value1: str, value2: str, value3: str, value4: str, value5: str) -> None:
         dependent = self._project_lib.parameters[int(value1)]

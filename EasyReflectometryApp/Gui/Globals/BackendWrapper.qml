@@ -166,7 +166,6 @@ QtObject {
 
     function sampleAddConstraint(value1, value2, value3, value4, value5) { activeBackend.sample.addConstraint(value1, value2, value3, value4, value5) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
-    function sampleToggleConstraintByIndex(index, enabled) { activeBackend.sample.toggleConstraintByIndex(index, enabled) }
 
     // Q range
     readonly property var sampleQMin: activeBackend.sample.q_min

@@ -4,8 +4,6 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.utils import count_fixed_parameters
 from easyreflectometry.utils import count_free_parameters
 from easyscience import global_object
-
-# from easyscience.Constraints import NumericConstraint
 from easyscience.variable import Parameter
 
 
@@ -92,63 +90,17 @@ class Parameters:
         if arithmetic_operator != '' and independent_idx > -1:
             dependent.make_dependent_on(
                 dependency_expression='a' + arithmetic_operator + 'b', dependency_map={'a': independent, 'b': float(value)})
-            # constaint = ObjConstraint(
-            #     dependent_obj=dependent, operator=str(float(value)) + arithmetic_operator, independent_obj=independent
-            # )
         elif arithmetic_operator == '' and independent_idx == -1:
             relational_operator = relational_operator.replace('=', '==')
             relational_operator = relational_operator.replace('&lt', '>')
             relational_operator = relational_operator.replace('&gt', '<')
 
             dependent.make_dependent_on(dependency_expression='a', dependency_map={'a': float(value)})
-
-            #constaint = NumericConstraint(dependent_obj=dependent, operator=relational_operator, value=float(value))
         else:
             print('Failed to add constraint: Unsupported type')
             return
-        # print(c)
-        # independent.user_constraints[dependent.name] = constaint
-        #constaint()
 
         print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
-
-
-# Original implementation (commented out for reference)
-# def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_name: str) -> list[dict[str, str]]:
-#     parameter_list = []
-#     for parameter in parameters:
-#         path = global_object.map.find_path(model_unique_name, parameter.unique_name)
-#         if 0 < len(path):
-#             name = f'{global_object.map.get_item_by_key(path[-2]).name} {global_object.map.get_item_by_key(path[-1]).name}'
-#             dependency_expression = ''
-#             if not parameter.independent:
-#                 dependent = None
-#                 if hasattr(parameter, 'dependency_map') and 'a' in parameter.dependency_map:
-#                     dependent = parameter.dependency_map['a']
-#                     dependency_expression = ''
-#                     # need to find out dependent parameter's full name based on its unique name
-#                     dep_path = global_object.map.find_path(model_unique_name, dependent.unique_name)
-#                     if 0 < len(dep_path):
-#                         dep_name = f'{global_object.map.get_item_by_key(dep_path[-2]).name} {global_object.map.get_item_by_key(dep_path[-1]).name}'  # noqa: E501
-#                         # replace 'a' with dep_name in the expression
-#                         dependency_expression = parameter.dependency_expression.replace('a', dep_name)
-#                 else:
-#                     # simple numerical dependency
-#                     dependency_expression = f'= {parameter.value}'
-#             parameter_list.append(
-#                 {
-#                     'name': name,
-#                     'value': float(parameter.value),
-#                     'error': float(parameter.variance),
-#                     'max': float(parameter.max),
-#                     'min': float(parameter.min),
-#                     'units': parameter.unit,
-#                     'fit': parameter.free,
-#                     'independent': parameter.independent,
-#                     'dependency': dependency_expression,
-#                 }
-#             )
-#     return parameter_list
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_name: str) -> list[dict[str, str]]:
     """Convert parameters to list of dictionaries with simplified logic."""

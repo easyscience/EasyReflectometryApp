@@ -327,11 +327,6 @@ QtObject {
         }
     }
 
-    function toggleConstraintByIndex(index, enabled) {
-        console.debug(`toggleConstraintByIndex ${index} ${enabled}`)
-        // In a real implementation, this would enable/disable the constraint
-    }
-
     // Q Range
     property double q_min: 4.
     property double q_max: 5.
