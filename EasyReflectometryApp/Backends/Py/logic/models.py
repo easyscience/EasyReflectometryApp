@@ -77,8 +77,6 @@ class Models:
     def default_model_content(self, model: Model) -> None:
         """Set the default content for a model."""
         model.sample.add_assembly()
-        model.sample._enable_changes_to_outermost_layers()
-
         model.sample.data[0].layers.data[0].material = self._project_lib._materials[
             self._project_lib.get_index_air()
         ]
@@ -99,8 +97,6 @@ class Models:
         model.sample.data[2].name = 'Substrate'
         model.sample.data[2].layers.data[0].thickness = 0.0
         model.sample.data[2].layers.data[0].roughness = 1.2
-
-        model.sample._disable_changes_to_outermost_layers()
 
     def add_new(self) -> None:
         self._models.add_model()

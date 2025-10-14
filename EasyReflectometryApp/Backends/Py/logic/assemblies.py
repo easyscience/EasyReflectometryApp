@@ -86,7 +86,6 @@ class Assemblies:
             new_assembly.name = self._assemblies[self.index].name
 
         self._assemblies[self.index] = new_assembly
-        self._project_lib._models[self._project_lib.current_model_index].sample._disable_changes_to_outermost_layers()
         return True
 
     # Only for repeating multilayer
