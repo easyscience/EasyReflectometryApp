@@ -144,6 +144,24 @@ Rectangle {
                     text: '━ Error'
                     color: chartView.measSerie.color
                 }
+                
+                // Show multi-experiment info if applicable
+                Rectangle {
+                    visible: (Globals.BackendWrapper.analysisExperimentsSelectedCount || 1) > 1
+                    width: parent.width - 2 * EaStyle.Sizes.fontPixelSize
+                    height: EaStyle.Sizes.fontPixelSize * 3
+                    color: "transparent"
+                    border.color: EaStyle.Colors.chartGridLine
+                    border.width: 1
+                    
+                    EaElements.Label {
+                        anchors.centerIn: parent
+                        text: qsTr("Multi-experiment view\n(%1 experiments)").arg(Globals.BackendWrapper.analysisExperimentsSelectedCount || 1)
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.8
+                        color: EaStyle.Colors.themeForegroundHovered
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
             }
         }
         // Legend

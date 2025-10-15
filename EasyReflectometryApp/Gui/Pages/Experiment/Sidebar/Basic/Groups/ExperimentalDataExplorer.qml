@@ -9,18 +9,100 @@ import easyApp.Gui.Components as EaComponents
 import Gui.Globals as Globals
 
 EaElements.GroupBox {
-    title: qsTr("Data Explorer")
+    title: selectedExperimentIndices.length <= 1 ? 
+           qsTr("Data Explorer") : 
+           qsTr("Data Explorer (%1 selected)").arg(selectedExperimentIndices.length)
     visible: true
     collapsed: false
-    Row {
-        spacing: EaStyle.Sizes.fontPixelSize
+    
+    // Property to track selected experiment indices for multi-selection
+    property var selectedExperimentIndices: []
+    
+    Column {
+        spacing: EaStyle.Sizes.fontPixelSize * 0.5
+        
+        // Multi-selection controls
+        Row {
+            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+            visible: Globals.BackendWrapper.analysisExperimentsAvailable.length > 1
+            
+            // Helper text for multi-selection
+            EaElements.Label {
+                text: qsTr("Ctrl+Click for multi-select")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.75
+                color: EaStyle.Colors.themeForegroundMinor
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            
+            // Select all button
+            EaElements.TabButton {
+                height: EaStyle.Sizes.fontPixelSize * 1.5
+                width: height * 2
+                borderColor: EaStyle.Colors.chartAxis
+                fontIcon: "check-double"
+                ToolTip.text: qsTr("Select all experiments")
+                onClicked: selectAllExperiments()
+                enabled: selectedExperimentIndices.length < Globals.BackendWrapper.analysisExperimentsAvailable.length
+            }
+            
+            // Clear selection button
+            EaElements.TabButton {
+                height: EaStyle.Sizes.fontPixelSize * 1.5
+                width: height * 2
+                borderColor: EaStyle.Colors.chartAxis
+                fontIcon: "times"
+                ToolTip.text: qsTr("Clear selection")
+                onClicked: {
+                    clearAllSelections()
+                    if (Globals.BackendWrapper.analysisExperimentsAvailable.length > 0) {
+                        selectSingleExperiment(0)
+                    }
+                }
+                enabled: selectedExperimentIndices.length > 1
+            }
+            
+            // Status indicator
+            EaElements.Label {
+                text: selectedExperimentIndices.length > 1 ? 
+                      qsTr("Selected: %1").arg(selectedExperimentIndices.map(i => i + 1).join(", ")) :
+                      ""
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
+                color: EaStyle.Colors.themeAccent
+                anchors.verticalCenter: parent.verticalCenter
+                visible: selectedExperimentIndices.length > 1
+            }
+        }
+        
+        Row {
+            spacing: EaStyle.Sizes.fontPixelSize
 
-        EaComponents.TableView {
-            id: dataTable
-            defaultInfoText: qsTr("No Experiments Loaded")
-            model: Globals.BackendWrapper.analysisExperimentsAvailable.length
-
-            // Headers
+            EaComponents.TableView {
+                id: dataTable
+                defaultInfoText: qsTr("No Experiments Loaded")
+                model: Globals.BackendWrapper.analysisExperimentsAvailable.length
+                
+                // Watch for model changes and update selection accordingly
+                onModelChanged: {
+                    if (model === 0) {
+                        clearAllSelections()
+                    } else {
+                        // Remove any selected indices that are now out of range
+                        var validSelection = []
+                        for (var i = 0; i < selectedExperimentIndices.length; i++) {
+                            if (selectedExperimentIndices[i] < model) {
+                                validSelection.push(selectedExperimentIndices[i])
+                            }
+                        }
+                        if (validSelection.length !== selectedExperimentIndices.length) {
+                            selectedExperimentIndices = validSelection
+                            if (validSelection.length === 0 && model > 0) {
+                                selectSingleExperiment(0)
+                            } else {
+                                updateBackendWithSelectedExperiments()
+                            }
+                        }
+                    }
+                }            // Headers
             header: EaComponents.TableViewHeader {
 
                 EaComponents.TableViewLabel {
@@ -56,11 +138,39 @@ EaElements.GroupBox {
 
             delegate: EaComponents.TableViewDelegate {
                 //property var dataModel: model
+                
+                // Property to track if this row is selected
+                property bool isSelected: {
+                    for (var i = 0; i < selectedExperimentIndices.length; i++) {
+                        if (selectedExperimentIndices[i] === index) {
+                            return true
+                        }
+                    }
+                    return false
+                }
 
                 EaComponents.TableViewLabel {
                     id: noLabel
                     width: EaStyle.Sizes.fontPixelSize * 2.5
                     text: index + 1
+                    
+                    // Selection background overlay - placed as child to avoid layout interference
+                    Rectangle {
+                        visible: isSelected
+                        anchors.fill: parent.parent
+                        color: EaStyle.Colors.themeForegroundHovered
+                        opacity: 0.2
+                        z: -1
+                        
+                        // Visual selection indicator bar
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 3
+                            height: parent.height * 0.8
+                            color: EaStyle.Colors.themeAccent
+                        }
+                    }
                 }
 
                 EaComponents.TableViewTextInput {
@@ -99,10 +209,14 @@ EaElements.GroupBox {
                         Globals.BackendWrapper.analysisRemoveExperiment(index)
                     }
                 }
-                mouseArea.onPressed: {
-                    // Set the current experiment index in the backend
-                    if (Globals.BackendWrapper.analysisExperimentsCurrentIndex !== model.index) {
-                        Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
+                mouseArea.onPressed: (mouse) => {
+                    // Handle multi-selection with Ctrl key
+                    if (mouse.modifiers & Qt.ControlModifier) {
+                        // Multi-selection mode: toggle selection of this experiment
+                        toggleExperimentSelection(index)
+                    } else {
+                        // Single selection mode: select only this experiment
+                        selectSingleExperiment(index)
                     }
                 }
 
@@ -111,6 +225,129 @@ EaElements.GroupBox {
             //     Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
             // }
 
+            }
+        }
+    }
+    
+    /*
+     * MULTI-EXPERIMENT SELECTION IMPLEMENTATION
+     * 
+     * This QML implementation provides the UI for selecting multiple experiments
+     * and concatenating their data for plotting. To complete the functionality,
+     * the following backend methods need to be implemented:
+     * 
+     * 1. Globals.BackendWrapper.analysisSetSelectedExperimentIndices(indices: list)
+     *    - Store the list of selected experiment indices
+     *    - Concatenate data from all selected experiments
+     *    - Update plotting data to show combined datasets
+     * 
+     * 2. Globals.BackendWrapper.analysisExperimentsSelectedCount (property)
+     *    - Return the count of currently selected experiments
+     *    - Used for UI feedback (legend, title, etc.)
+     * 
+     * 3. Backend plotting concatenation logic:
+     *    - Combine q-values, intensities, and errors from selected experiments
+     *    - Handle potential overlapping q-ranges appropriately
+     *    - Maintain proper error propagation for combined datasets
+     *    - Update plot bounds (min/max X/Y) for concatenated data
+     * 
+     * Current behavior:
+     * - Single selection works with existing backend
+     * - Multi-selection logs selected indices to console
+     * - Visual feedback works in UI (selection highlighting, counters)
+     */
+    
+    // Functions to handle multi-selection
+    function toggleExperimentSelection(experimentIndex) {
+        var currentSelection = selectedExperimentIndices.slice() // Create a copy
+        var indexPos = currentSelection.indexOf(experimentIndex)
+        
+        if (indexPos !== -1) {
+            // Remove from selection
+            currentSelection.splice(indexPos, 1)
+        } else {
+            // Add to selection
+            currentSelection.push(experimentIndex)
+        }
+        
+        selectedExperimentIndices = currentSelection
+        updateBackendWithSelectedExperiments()
+    }
+    
+    function selectSingleExperiment(experimentIndex) {
+        console.log("selectSingleExperiment called with index:", experimentIndex)
+        selectedExperimentIndices = [experimentIndex]
+        console.log("Updated selectedExperimentIndices to:", selectedExperimentIndices)
+        updateBackendWithSelectedExperiments()
+    }
+    
+    function updateBackendWithSelectedExperiments() {
+        if (selectedExperimentIndices.length === 0) {
+            return
+        }
+        
+        // If only one experiment is selected, use the existing single-selection logic
+        if (selectedExperimentIndices.length === 1) {
+            Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(selectedExperimentIndices[0])
+        } else {
+            // For multiple experiments, call the new backend method
+            console.log("Multi-experiment selection - checking backend method availability")
+            console.log("Backend wrapper analysis available:", typeof Globals.BackendWrapper.analysis)
+            console.log("analysisSetSelectedExperimentIndices available:", typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices)
+            
+            // Try multiple approaches to call the backend method
+            var methodCalled = false
+            
+            // Approach 1: Direct call to top-level method
+            if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
+                console.log("Approach 1: Calling analysisSetSelectedExperimentIndices with:", selectedExperimentIndices)
+                Globals.BackendWrapper.analysisSetSelectedExperimentIndices(selectedExperimentIndices)
+                methodCalled = true
+            }
+            
+            // Approach 2: Try through analysis object
+            if (!methodCalled && Globals.BackendWrapper.analysis && 
+                typeof Globals.BackendWrapper.analysis.setSelectedExperimentIndices === 'function') {
+                console.log("Approach 2: Calling through analysis object with:", selectedExperimentIndices)
+                Globals.BackendWrapper.analysis.setSelectedExperimentIndices(selectedExperimentIndices)
+                methodCalled = true
+            }
+            
+            if (methodCalled) {
+                console.log("Multi-experiment selection applied:", selectedExperimentIndices)
+            } else {
+                // Fallback: set the first selected experiment as current
+                Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(selectedExperimentIndices[0])
+                console.log("Multi-experiment selection - fallback to single selection")
+                console.log("Selected experiments:", selectedExperimentIndices)
+                console.log("Available backend methods:", Object.keys(Globals.BackendWrapper))
+            }
+        }
+    }
+    
+    function clearAllSelections() {
+        console.log("clearAllSelections called - clearing to empty array")
+        selectedExperimentIndices = []
+        // Notify backend that selection is cleared
+        if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
+            console.log("Calling backend with empty array to clear selection")
+            Globals.BackendWrapper.analysisSetSelectedExperimentIndices([])
+        }
+    }
+    
+    function selectAllExperiments() {
+        var allIndices = []
+        for (var i = 0; i < Globals.BackendWrapper.analysisExperimentsAvailable.length; i++) {
+            allIndices.push(i)
+        }
+        selectedExperimentIndices = allIndices
+        updateBackendWithSelectedExperiments()
+    }
+    
+    // Initialize with first experiment selected by default
+    Component.onCompleted: {
+        if (Globals.BackendWrapper.analysisExperimentsAvailable.length > 0) {
+            selectSingleExperiment(0)
         }
     }
 }

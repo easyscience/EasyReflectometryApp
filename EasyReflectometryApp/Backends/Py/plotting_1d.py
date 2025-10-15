@@ -17,6 +17,7 @@ class Plotting1d(QObject):
     sldChartRangesChanged = Signal()
     sampleChartRangesChanged = Signal()
     experimentChartRangesChanged = Signal()
+    experimentDataChanged = Signal()
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -83,8 +84,24 @@ class Plotting1d(QObject):
     @property
     def experiment_data(self) -> DataSet1D:
         try:
-            data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
-        except IndexError:
+            # Check if multi-experiment selection is enabled
+            if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
+                selected_indices = self._proxy._analysis._selected_experiment_indices
+                print(f"🔍 experiment_data property accessed, selected_indices: {selected_indices}")
+                if len(selected_indices) > 1:
+                    # Return concatenated data for multiple experiments
+                    print("   → Returning concatenated data for multiple experiments")
+                    return self._proxy._analysis.get_concatenated_experiment_data()
+                else:
+                    print(f"   → Single experiment mode, using index: {selected_indices[0] if selected_indices else 'current'}")
+            
+            # Default single experiment behavior
+            current_index = self._project_lib.current_experiment_index
+            print(f"   → Loading single experiment data for index: {current_index}")
+            data = self._project_lib.experimental_data_for_model_at_index(current_index)
+            print(f"   → Single experiment data loaded: {data.name}, {len(data.x)} points")
+        except IndexError as e:
+            print(f"   → IndexError in experiment_data: {e}")
             data = DataSet1D(
                 name='Experiment Data empty',
                 x=np.empty(0),
@@ -128,6 +145,28 @@ class Plotting1d(QObject):
     def sldMinY(self):
         return self.sld_data.y.min()
 
+    # Experiment ranges
+    @Property(float, notify=experimentChartRangesChanged)
+    def experimentMaxX(self):
+        data = self.experiment_data
+        return data.x.max() if data.x.size > 0 else 1.0
+
+    @Property(float, notify=experimentChartRangesChanged)
+    def experimentMinX(self):
+        data = self.experiment_data
+        return data.x.min() if data.x.size > 0 else 0.0
+
+    @Property(float, notify=experimentChartRangesChanged)
+    def experimentMaxY(self):
+        data = self.experiment_data
+        return np.log10(data.y.max()) if data.y.size > 0 else 1.0
+
+    @Property(float, notify=experimentChartRangesChanged)
+    def experimentMinY(self):
+        data = self.experiment_data
+        valid_y = data.y[data.y > 0] if data.y.size > 0 else np.array([1e-10])
+        return np.log10(valid_y.min()) if valid_y.size > 0 else -10.0
+
     @Property('QVariant', notify=chartRefsChanged)
     def chartRefs(self):
         return self._chartRefs
@@ -151,6 +190,10 @@ class Plotting1d(QObject):
 
     def refreshAnalysisPage(self):
         self.drawCalculatedAndMeasuredOnAnalysisChart()
+
+    def refreshExperimentRanges(self):
+        """Emit signal to update experiment chart ranges when selection changes."""
+        self.experimentChartRangesChanged.emit()
 
     @Slot()
     def drawCalculatedOnSampleChart(self):

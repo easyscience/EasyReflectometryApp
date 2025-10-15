@@ -2,6 +2,8 @@ from EasyApp.Logic.Logging import LoggerLevelHandler
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import Signal
+from PySide6.QtCore import Slot
 
 from .analysis import Analysis
 from .experiment import Experiment
@@ -14,6 +16,9 @@ from .summary import Summary
 
 
 class PyBackend(QObject):
+    # Signal for multi-experiment selection changes
+    multiExperimentSelectionChanged = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -25,12 +30,12 @@ class PyBackend(QObject):
         self._project = Project(self._project_lib)
         self._sample = Sample(self._project_lib)
         self._experiment = Experiment(self._project_lib)
-        self._analysis = Analysis(self._project_lib)
+        self._analysis = Analysis(self._project_lib, parent=self)
         self._summary = Summary(self._project_lib)
         self._status = Status(self._project_lib)
 
         # Plotting backend part
-        self._plotting = Plotting1d(self._project_lib)
+        self._plotting_1d = Plotting1d(self._project_lib, parent=self)
 
         self._logger = LoggerLevelHandler(self)
 
@@ -70,11 +75,41 @@ class PyBackend(QObject):
 
     @Property('QVariant', constant=True)
     def plotting(self) -> Plotting1d:
-        return self._plotting
+        return self._plotting_1d
 
     @Property('QVariant', constant=True)
     def logger(self):
         return self._logger
+
+    # Analysis properties and methods for multi-experiment selection
+    @Property(int, notify=multiExperimentSelectionChanged)
+    def analysisExperimentsSelectedCount(self) -> int:
+        """Return the count of currently selected experiments."""
+        return self._analysis.experimentsSelectedCount
+
+    @Property('QVariantList', notify=multiExperimentSelectionChanged)  
+    def analysisSelectedExperimentIndices(self) -> list:
+        """Return the list of selected experiment indices."""
+        return self._analysis.selectedExperimentIndices
+
+    @Slot('QVariantList')
+    def analysisSetSelectedExperimentIndices(self, indices) -> None:
+        """Set multiple selected experiment indices."""
+        print(f"PyBackend.analysisSetSelectedExperimentIndices called with: {indices}")
+        print(f"Type of indices: {type(indices)}")
+        
+        # Convert QVariantList to Python list if needed
+        python_indices = list(indices) if hasattr(indices, '__iter__') else []
+        print(f"Converted to Python list: {python_indices}")
+        
+        if hasattr(self._analysis, 'setSelectedExperimentIndices'):
+            self._analysis.setSelectedExperimentIndices(python_indices)
+            print("Successfully called analysis.setSelectedExperimentIndices")
+        else:
+            print("ERROR: analysis.setSelectedExperimentIndices method not found")
+        
+        # Emit our local signal to notify QML properties
+        self.multiExperimentSelectionChanged.emit()
 
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:
@@ -130,7 +165,7 @@ class PyBackend(QObject):
         self._refresh_plots()
 
     def _relay_sample_page_sample_changed(self):
-        self._plotting.reset_data()
+        self._plotting_1d.reset_data()
         self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
@@ -142,15 +177,15 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
 
     def _relay_analysis_page(self):
-        self._plotting.reset_data()
+        self._plotting_1d.reset_data()
         self._status.statusChanged.emit()
         self._experiment.experimentChanged.emit()
         self._summary.summaryChanged.emit()
 
     def _refresh_plots(self):
-        self._plotting.sampleChartRangesChanged.emit()
-        self._plotting.sldChartRangesChanged.emit()
-        self._plotting.experimentChartRangesChanged.emit()
-        self._plotting.refreshSamplePage()
-        self._plotting.refreshExperimentPage()
-        self._plotting.refreshAnalysisPage()
+        self._plotting_1d.sampleChartRangesChanged.emit()
+        self._plotting_1d.sldChartRangesChanged.emit()
+        self._plotting_1d.experimentChartRangesChanged.emit()
+        self._plotting_1d.refreshSamplePage()
+        self._plotting_1d.refreshExperimentPage()
+        self._plotting_1d.refreshAnalysisPage()

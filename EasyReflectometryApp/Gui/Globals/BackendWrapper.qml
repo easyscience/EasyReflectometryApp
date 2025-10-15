@@ -197,6 +197,11 @@ QtObject {
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
     function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
+    
+    // Multi-experiment selection support
+    readonly property int analysisExperimentsSelectedCount: activeBackend.analysis.experimentsSelectedCount
+    readonly property var analysisSelectedExperimentIndices: activeBackend.analysis.selectedExperimentIndices
+    function analysisSetSelectedExperimentIndices(value) { activeBackend.analysis.setSelectedExperimentIndices(value) }
 
     function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
     readonly property var analysisModelForExperiment: activeBackend.analysis.modelIndexForExperiment
@@ -267,10 +272,10 @@ QtObject {
     readonly property var plottingSampleMinY: activeBackend.plotting.sampleMinY
     readonly property var plottingSampleMaxY: activeBackend.plotting.sampleMaxY
 
-    readonly property var plottingExperimentMinX: activeBackend.plotting.sampleMinX
-    readonly property var plottingExperimentMaxX: activeBackend.plotting.sampleMaxX
-    readonly property var plottingExperimentMinY: activeBackend.plotting.sampleMinY
-    readonly property var plottingExperimentMaxY: activeBackend.plotting.sampleMaxY
+    readonly property var plottingExperimentMinX: activeBackend.plotting.experimentMinX
+    readonly property var plottingExperimentMaxX: activeBackend.plotting.experimentMaxX
+    readonly property var plottingExperimentMinY: activeBackend.plotting.experimentMinY
+    readonly property var plottingExperimentMaxY: activeBackend.plotting.experimentMaxY
 
     readonly property var plottingAnalysisMinX: activeBackend.plotting.sampleMinX
     readonly property var plottingAnalysisMaxX: activeBackend.plotting.sampleMaxX
