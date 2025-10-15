@@ -93,8 +93,9 @@ class Plotting1d(QObject):
                     print("   → Returning concatenated data for multiple experiments")
                     return self._proxy._analysis.get_concatenated_experiment_data()
                 else:
-                    print(f"   → Single experiment mode, using index: {selected_indices[0] if selected_indices else 'current'}")
-            
+                    print(f"   → Single experiment. Index: "
+                          f"{selected_indices[0] if selected_indices else 'current'}")
+
             # Default single experiment behavior
             current_index = self._project_lib.current_experiment_index
             print(f"   → Loading single experiment data for index: {current_index}")

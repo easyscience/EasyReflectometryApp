@@ -244,7 +244,7 @@ class Analysis(QObject):
             
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
-            print(f"✓ Multi-experiment selection updated and signals emitted")
+            print("✓ Multi-experiment selection updated and signals emitted")
         else:
             print("No change in selection - skipping update")
 
@@ -253,8 +253,8 @@ class Analysis(QObject):
         Concatenate data from all selected experiments.
         Returns a combined DataSet1D object.
         """
-        from easyreflectometry.data import DataSet1D
         import numpy as np
+        from easyreflectometry.data import DataSet1D
         
         if not self._selected_experiment_indices:
             return DataSet1D(name='No experiments selected', x=np.empty(0), y=np.empty(0), ye=np.empty(0), xe=np.empty(0))
@@ -282,7 +282,8 @@ class Analysis(QObject):
         
         x_sorted, y_sorted, ye_sorted, xe_sorted = zip(*combined_data) if combined_data else ([], [], [], [])
         
-        exp_names = [self._experiments_logic.available()[i] for i in self._selected_experiment_indices if i < len(self._experiments_logic.available())]
+        exp_names = [self._experiments_logic.available()[i] 
+                     for i in self._selected_experiment_indices if i < len(self._experiments_logic.available())]
         combined_name = f"Combined: {', '.join(exp_names)}"
         
         return DataSet1D(
