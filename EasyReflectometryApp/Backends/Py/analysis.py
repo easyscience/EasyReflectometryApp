@@ -155,6 +155,12 @@ class Analysis(QObject):
         self.experimentsChanged.emit()
         self.externalExperimentChanged.emit()
 
+    @Slot(int, str)
+    def setExperimentNameAtIndex(self, index: int, new_name: str) -> None:
+        self._experiments_logic.set_experiment_name_at_index(index, new_name)
+        self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
+
     @Property(int, notify=experimentsChanged)
     def modelIndexForExperiment(self) -> int:
         # return the model index for the current experiment

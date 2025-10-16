@@ -17,6 +17,8 @@ EaElements.GroupBox {
     
     // Property to track selected experiment indices for multi-selection
     property var selectedExperimentIndices: []
+    // Property to track if we were in multi-selection mode
+    property bool wasMultiSelected: false
     
     Column {
         spacing: EaStyle.Sizes.fontPixelSize * 0.5
@@ -178,7 +180,7 @@ EaElements.GroupBox {
                     id: labelLabel
                     width: EaStyle.Sizes.fontPixelSize * 11
                     text: index > -1 ? Globals.BackendWrapper.analysisExperimentsAvailable[index] : ""
-                    onEditingFinished: Globals.BackendWrapper.analysisSetExperimentName(text)
+                    onEditingFinished: Globals.BackendWrapper.analysisSetExperimentNameAtIndex(index, text)
                 }
 
                 EaComponents.TableViewComboBox {
@@ -269,7 +271,12 @@ EaElements.GroupBox {
             // Add to selection
             currentSelection.push(experimentIndex)
         }
-        
+
+        // Track if we now have multiple selections
+        if (currentSelection.length > 1) {
+            wasMultiSelected = true
+        }
+
         selectedExperimentIndices = currentSelection
         updateBackendWithSelectedExperiments()
     }
@@ -288,8 +295,26 @@ EaElements.GroupBox {
         
         // If only one experiment is selected, use the existing single-selection logic
         if (selectedExperimentIndices.length === 1) {
-            Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(selectedExperimentIndices[0])
+            var currentIndex = selectedExperimentIndices[0]
+
+            // If we were in multi-selection mode and now switching to single selection,
+            // force a plot refresh by toggling the current index
+            if (wasMultiSelected) {
+                console.log("Switching from multi-selection to single selection - forcing plot refresh")
+                // Force refresh by temporarily setting a different index and then back
+                var tempIndex = (currentIndex === 0) ? 1 : 0
+                if (tempIndex < Globals.BackendWrapper.analysisExperimentsAvailable.length) {
+                    Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(tempIndex)
+                }
+                Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(currentIndex)
+                wasMultiSelected = false
+            } else {
+                // Normal single selection
+                Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(currentIndex)
+            }
         } else {
+            // Mark that we're in multi-selection mode
+            wasMultiSelected = true
             // For multiple experiments, call the new backend method
             console.log("Multi-experiment selection - checking backend method availability")
             console.log("Backend wrapper analysis available:", typeof Globals.BackendWrapper.analysis)
@@ -327,6 +352,7 @@ EaElements.GroupBox {
     
     function clearAllSelections() {
         console.log("clearAllSelections called - clearing to empty array")
+        wasMultiSelected = false
         selectedExperimentIndices = []
         // Notify backend that selection is cleared
         if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
@@ -340,6 +366,7 @@ EaElements.GroupBox {
         for (var i = 0; i < Globals.BackendWrapper.analysisExperimentsAvailable.length; i++) {
             allIndices.push(i)
         }
+        wasMultiSelected = true
         selectedExperimentIndices = allIndices
         updateBackendWithSelectedExperiments()
     }
