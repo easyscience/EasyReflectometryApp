@@ -87,22 +87,13 @@ class Plotting1d(QObject):
             # Check if multi-experiment selection is enabled
             if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
                 selected_indices = self._proxy._analysis._selected_experiment_indices
-                print(f"🔍 experiment_data property accessed, selected_indices: {selected_indices}")
                 if len(selected_indices) > 1:
                     # Return concatenated data for multiple experiments
-                    print("   → Returning concatenated data for multiple experiments")
                     return self._proxy._analysis.get_concatenated_experiment_data()
-                else:
-                    print(f"   → Single experiment. Index: "
-                          f"{selected_indices[0] if selected_indices else 'current'}")
-
             # Default single experiment behavior
             current_index = self._project_lib.current_experiment_index
-            print(f"   → Loading single experiment data for index: {current_index}")
             data = self._project_lib.experimental_data_for_model_at_index(current_index)
-            print(f"   → Single experiment data loaded: {data.name}, {len(data.x)} points")
         except IndexError as e:
-            print(f"   → IndexError in experiment_data: {e}")
             data = DataSet1D(
                 name='Experiment Data empty',
                 x=np.empty(0),
