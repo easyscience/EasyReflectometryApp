@@ -139,6 +139,7 @@ Rectangle {
                 rightPadding: EaStyle.Sizes.fontPixelSize
                 topPadding: EaStyle.Sizes.fontPixelSize * 0.5
                 bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
+                spacing: EaStyle.Sizes.fontPixelSize * 0.25
 
                 EaElements.Label {
                     text: '━  I (Measured)'
@@ -147,6 +148,35 @@ Rectangle {
                 EaElements.Label {
                     text: '━ (calculated)'
                     color: chartView.calcSerie.color
+                }
+
+                EaElements.Label {
+                    readonly property var selectedIndices: Globals.BackendWrapper.analysisSelectedExperimentIndices || []
+
+                    visible: selectedIndices.length > 1
+                    text: qsTr('Selected: %1').arg(selectedIndices.map(index => index + 1).join(', '))
+                    color: EaStyle.Colors.themeAccent
+                    font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.85
+                    wrapMode: Text.NoWrap
+                    onSelectedIndicesChanged: console.debug('AnalysisView legend - selected count:', selectedIndices.length)
+                }
+
+                Rectangle {
+                    visible: (Globals.BackendWrapper.analysisExperimentsSelectedCount || 1) > 1
+                    width: parent.width - 2 * EaStyle.Sizes.fontPixelSize
+                    height: EaStyle.Sizes.fontPixelSize * 3
+                    color: "transparent"
+                    border.color: EaStyle.Colors.chartGridLine
+                    border.width: 1
+
+                    EaElements.Label {
+                        anchors.centerIn: parent
+                        text: qsTr("Multi-experiment view\n(%1 experiments)")
+                                  .arg(Globals.BackendWrapper.analysisExperimentsSelectedCount || 1)
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.8
+                        color: EaStyle.Colors.themeForegroundHovered
+                        horizontalAlignment: Text.AlignHCenter
+                    }
                 }
             }
         }
