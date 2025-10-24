@@ -1,10 +1,15 @@
+import re
+from typing import Any
 from typing import List
+from typing import Tuple
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.utils import count_fixed_parameters
 from easyreflectometry.utils import count_free_parameters
 from easyscience import global_object
 from easyscience.variable import Parameter
+
+RESERVED_ALIAS_NAMES = {'np', 'numpy', 'math', 'pi', 'e'}
 
 
 class Parameters:
@@ -21,6 +26,34 @@ class Parameters:
         return _from_parameters_to_list_of_dicts(
             self._project_lib.parameters, self._project_lib._models[self._project_lib.current_model_index].unique_name
         )
+
+    def constraint_context(self) -> list[dict[str, Any]]:
+        parameter_snapshot = self.parameters
+        context: list[dict[str, Any]] = []
+        for parameter in parameter_snapshot:
+            context.append({
+                'alias': parameter['alias'],
+                'display_name': parameter['display_name'],
+                'group': parameter.get('group', ''),
+                'independent': parameter['independent'],
+                'object': parameter['object'],
+            })
+        return context
+
+    def constraint_metadata(self) -> list[dict[str, Any]]:
+        context = self.constraint_context()
+        metadata: list[dict[str, Any]] = []
+        for entry in context:
+            if not entry['independent']:
+                continue
+            metadata.append({
+                'alias': entry['alias'],
+                'displayName': entry['display_name'],
+                'group': entry.get('group', ''),
+                'independent': entry['independent'],
+            })
+        metadata.sort(key=lambda item: item['displayName'])
+        return metadata
 
     def current_index(self) -> int:
         return self._current_index
@@ -75,8 +108,12 @@ class Parameters:
         return False
 
     ### Constraints
-    def constraint_relations(self) -> List[str]:
-        return ['=', '&lt', '&gt']
+    def constraint_relations(self) -> List[dict[str, str]]:
+        return [
+            {'value': '=', 'text': '='},
+            {'value': '>', 'text': '≥'},
+            {'value': '<', 'text': '≤'},
+        ]
 
     def constraint_arithmetic(self) -> List[str]:
         return ['', '*', '/', '+', '-']
@@ -102,17 +139,33 @@ class Parameters:
 
         print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
 
-def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_name: str) -> list[dict[str, str]]:
+def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_name: str) -> list[dict[str, Any]]:
     """Convert parameters to list of dictionaries with simplified logic."""
 
-    def _get_parameter_display_name(param: Parameter) -> str:
-        """Extract display name from parameter path."""
+    alias_registry: set[str] = set()
+
+    def _make_alias(name: str) -> str:
+        base = re.sub(r'[^0-9A-Za-z]+', '_', name).strip('_').lower()
+        if not base:
+            base = 'param'
+        if base[0].isdigit():
+            base = f'p_{base}'
+        alias = base
+        counter = 1
+        while alias in alias_registry or alias in RESERVED_ALIAS_NAMES:
+            alias = f'{base}_{counter}'
+            counter += 1
+        alias_registry.add(alias)
+        return alias
+
+    def _get_parameter_display_data(param: Parameter) -> Tuple[str, str]:
+        """Extract display name and group from parameter path."""
         path = global_object.map.find_path(model_unique_name, param.unique_name)
         if len(path) >= 2:
             parent_name = global_object.map.get_item_by_key(path[-2]).name
             param_name = global_object.map.get_item_by_key(path[-1]).name
-            return f'{parent_name} {param_name}'
-        return param.name  # Fallback to parameter name
+            return f'{parent_name} {param_name}', parent_name
+        return param.name, ''  # Fallback to parameter name without group
 
     def _get_dependency_expression(param: Parameter) -> str:
         """Get simplified dependency expression."""
@@ -122,7 +175,10 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_
         # Check if parameter has dependency map with 'a' key (parameter dependency)
         if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
             dependent_param = param.dependency_map['a']
-            dep_name = _get_parameter_display_name(dependent_param)
+            if isinstance(dependent_param, Parameter):
+                dep_name, _ = _get_parameter_display_data(dependent_param)
+            else:
+                dep_name = str(dependent_param)
             return param.dependency_expression.replace('a', dep_name)
 
         # Simple numerical dependency
@@ -134,8 +190,14 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_
         if not global_object.map.find_path(model_unique_name, parameter.unique_name):
             continue
 
+        display_name, group_name = _get_parameter_display_data(parameter)
+        alias = _make_alias(display_name or parameter.name)
         parameter_list.append({
-            'name': _get_parameter_display_name(parameter),
+            'name': display_name,
+            'display_name': display_name,
+            'group': group_name,
+            'alias': alias,
+            'unique_name': parameter.unique_name,
             'value': float(parameter.value),
             'error': float(parameter.variance),
             'max': float(parameter.max),

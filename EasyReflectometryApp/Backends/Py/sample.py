@@ -1,8 +1,19 @@
+import math
+import numbers
+import re
+from typing import Any
+from typing import Dict
+from typing import Tuple
+
+import numpy as np
+from asteval import Interpreter
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
+
+from easyscience.variable.descriptor_number import DescriptorNumber
 
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.layers import Layers as LayersLogic
@@ -10,6 +21,35 @@ from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
 from .logic.parameters import Parameters as ParametersLogic
 from .logic.project import Project as ProjectLogic
+
+_ASTEVAL_CONFIG = {
+    'import': False,
+    'importfrom': False,
+    'assert': False,
+    'augassign': False,
+    'delete': False,
+    'if': True,
+    'ifexp': True,
+    'for': False,
+    'formattedvalue': False,
+    'functiondef': False,
+    'print': False,
+    'raise': False,
+    'listcomp': False,
+    'dictcomp': False,
+    'setcomp': False,
+    'try': False,
+    'while': False,
+    'with': False,
+}
+
+_GLOBAL_SYMBOLS: Dict[str, Any] = {
+    'np': np,
+    'numpy': np,
+    'math': math,
+    'pi': math.pi,
+    'e': math.e,
+}
 
 
 class Sample(QObject):
@@ -42,6 +82,7 @@ class Sample(QObject):
         self._parameters_logic = ParametersLogic(project_lib)
 
         self._chached_layers = None
+        self._constraint_states: Dict[str, dict[str, Any]] = {}
 
         self.connect_logic()
 
@@ -414,6 +455,234 @@ class Sample(QObject):
     # # #
     # Constraints
     # # #
+    def _build_constraint_context(self) -> Tuple[list[dict[str, Any]], Dict[str, DescriptorNumber], Dict[str, str]]:
+        context = self._parameters_logic.constraint_context()
+        alias_lookup: Dict[str, DescriptorNumber] = {}
+        display_lookup: Dict[str, str] = {}
+        for entry in context:
+            alias_lookup[entry['alias']] = entry['object']
+            display_lookup[entry['alias']] = entry['display_name']
+        return context, alias_lookup, display_lookup
+
+    def _extract_dependency_map(
+        self,
+        expression: str,
+        alias_lookup: Dict[str, DescriptorNumber],
+    ) -> Dict[str, DescriptorNumber]:
+        used_aliases: Dict[str, DescriptorNumber] = {}
+        for alias, parameter in alias_lookup.items():
+            if not alias:
+                continue
+            pattern = rf'\b{re.escape(alias)}\b'
+            if re.search(pattern, expression):
+                used_aliases[alias] = parameter
+        return used_aliases
+
+    def _evaluate_constraint_expression(
+        self, expression: str, dependency_map: Dict[str, DescriptorNumber]
+    ) -> DescriptorNumber | numbers.Number:
+        interpreter = Interpreter(config=_ASTEVAL_CONFIG)
+        for name, value in _GLOBAL_SYMBOLS.items():
+            interpreter.symtable[name] = value
+            if isinstance(value, numbers.Number):
+                interpreter.readonly_symbols.add(name)
+        for alias, dependency in dependency_map.items():
+            interpreter.symtable[alias] = dependency
+            interpreter.readonly_symbols.add(alias)
+        result = interpreter.eval(expression, raise_errors=True)
+        return result
+
+    @staticmethod
+    def _to_float(value: DescriptorNumber | numbers.Number) -> float:
+        if isinstance(value, DescriptorNumber):
+            return float(value.value)
+        if isinstance(value, numbers.Number):
+            return float(value)
+        raise TypeError('Expression must evaluate to a numeric value.')
+
+    @staticmethod
+    def _pretty_expression(expression: str, alias_display: Dict[str, str]) -> str:
+        pretty_expression = expression
+        for alias in sorted(alias_display.keys(), key=len, reverse=True):
+            replacement = alias_display[alias]
+            if not replacement:
+                continue
+            pattern = rf'\b{re.escape(alias)}\b'
+            pretty_expression = re.sub(pattern, replacement, pretty_expression)
+        return pretty_expression
+
+    @staticmethod
+    def _sanitize_relation(operator: str) -> str:
+        mapping = {
+            '=': '=',
+            '==': '=',
+            '≡': '=',
+            '>': '>',
+            '≥': '>',
+            '&gt': '>',
+            '<': '<',
+            '≤': '<',
+            '&lt': '<',
+        }
+        return mapping.get(operator, '=')
+
+    @staticmethod
+    def _format_numeric(value: float) -> str:
+        return f'{value:.6g}'
+
+    def _prepare_constraint_instruction(
+        self,
+        dependent_index: int,
+        relation_operator: str,
+        expression: str,
+    ) -> dict[str, Any]:
+        if dependent_index < 0 or dependent_index >= len(self._project_lib.parameters):
+            raise ValueError('Select a dependent parameter before defining a constraint.')
+
+        relation = self._sanitize_relation(relation_operator)
+        expression_text = expression.strip()
+        if not expression_text:
+            raise ValueError('Expression cannot be empty.')
+
+        context, alias_lookup, display_lookup = self._build_constraint_context()
+        dependency_map = self._extract_dependency_map(expression_text, alias_lookup)
+
+        try:
+            evaluation_result = self._evaluate_constraint_expression(expression_text, dependency_map)
+        except NameError as error:
+            raise NameError(str(error).split('\n')[-1]) from None
+        except SyntaxError as error:
+            raise SyntaxError(str(error).split('\n')[-1]) from None
+        except Exception as error:
+            raise RuntimeError(str(error)) from None
+
+        pretty_expression = self._pretty_expression(expression_text, display_lookup)
+
+        if relation == '=':
+            if dependency_map:
+                if not isinstance(evaluation_result, DescriptorNumber):
+                    raise TypeError('Expressions referencing parameters must evaluate to a parameter quantity.')
+                return {
+                    'mode': 'dynamic',
+                    'expression': expression_text,
+                    'dependency_map': dependency_map,
+                    'pretty_expression': pretty_expression,
+                    'relation': relation,
+                }
+            numeric_value = self._to_float(evaluation_result)
+            return {
+                'mode': 'static',
+                'value': numeric_value,
+                'pretty_expression': self._format_numeric(numeric_value),
+                'relation': relation,
+            }
+
+        if dependency_map:
+            raise ValueError('Inequality constraints cannot reference other parameters.')
+
+        numeric_value = self._to_float(evaluation_result)
+        mode = 'lower_bound' if relation == '>' else 'upper_bound'
+        return {
+            'mode': mode,
+            'value': numeric_value,
+            'pretty_expression': self._format_numeric(numeric_value),
+            'relation': relation,
+        }
+
+    @staticmethod
+    def _ensure_parameter_independent(parameter: DescriptorNumber) -> None:
+        try:
+            parameter.make_independent()
+        except AttributeError:
+            parameter._independent = True
+
+    def _infer_constraint_state(
+        self,
+        parameter_obj: DescriptorNumber,
+        display_lookup: Dict[str, str],
+    ) -> dict[str, Any] | None:
+        if getattr(parameter_obj, 'independent', True):
+            return None
+
+        try:
+            raw_expression = parameter_obj.dependency_expression
+        except AttributeError:
+            value = float(parameter_obj.value)
+            formatted = self._format_numeric(value)
+            return {
+                'mode': 'static',
+                'relation': '=',
+                'expression': formatted,
+                'raw_expression': formatted,
+                'pretty_expression': formatted,
+                'value': value,
+            }
+
+        dependency_map = getattr(parameter_obj, 'dependency_map', {}) or {}
+        alias_display_subset = {
+            alias: display_lookup.get(alias, alias)
+            for alias in dependency_map.keys()
+        }
+        pretty_expression = self._pretty_expression(raw_expression, alias_display_subset)
+        return {
+            'mode': 'dynamic',
+            'relation': '=',
+            'expression': raw_expression,
+            'raw_expression': raw_expression,
+            'pretty_expression': pretty_expression,
+            'dependency_map': dependency_map,
+        }
+
+    def _resolve_constraint_state(
+        self,
+        parameter_obj: DescriptorNumber,
+        display_lookup: Dict[str, str],
+    ) -> dict[str, Any] | None:
+        unique_name = getattr(parameter_obj, 'unique_name', None)
+        if unique_name is not None:
+            stored = self._constraint_states.get(unique_name)
+            if stored is not None:
+                return stored
+        return self._infer_constraint_state(parameter_obj, display_lookup)
+
+    @staticmethod
+    def _capture_parameter_state(parameter: DescriptorNumber) -> dict[str, Any]:
+        state: dict[str, Any] = {
+            'value': float(parameter.value),
+            'free': bool(parameter.free),
+            'independent': getattr(parameter, 'independent', True),
+            '_independent': getattr(parameter, '_independent', True),
+        }
+        if hasattr(parameter, 'min'):
+            try:
+                state['min'] = float(parameter.min)
+            except Exception:  # noqa: BLE001
+                state['min'] = parameter.min
+        if hasattr(parameter, 'max'):
+            try:
+                state['max'] = float(parameter.max)
+            except Exception:  # noqa: BLE001
+                state['max'] = parameter.max
+        return state
+
+    @staticmethod
+    def _restore_parameter_state(parameter: DescriptorNumber, state: dict[str, Any]) -> None:
+        try:
+            parameter.make_independent()
+        except AttributeError:
+            parameter._independent = True
+
+        if 'value' in state and state['value'] is not None:
+            parameter.value = state['value']
+        if 'min' in state and state['min'] is not None:
+            parameter.min = state['min']
+        if 'max' in state and state['max'] is not None:
+            parameter.max = state['max']
+        if 'free' in state and state['free'] is not None:
+            parameter.free = state['free']
+        if '_independent' in state and state['_independent'] is not None:
+            parameter._independent = state['_independent']
+
     @Property('QVariantList', notify=layersChange)
     def parameterNames(self) -> list[dict[str, str]]:
         return [parameter['name'] for parameter in self._parameters_logic.parameters]
@@ -423,7 +692,11 @@ class Sample(QObject):
         return [parameter['name'] for parameter in self._parameters_logic.parameters if parameter['independent']]
 
     @Property('QVariantList', notify=layersChange)
-    def relationOperators(self) -> list[str]:
+    def constraintParametersMetadata(self) -> list[dict[str, Any]]:
+        return self._parameters_logic.constraint_metadata()
+
+    @Property('QVariantList', notify=layersChange)
+    def relationOperators(self) -> list[dict[str, str]]:
         return self._parameters_logic.constraint_relations()
 
     @Property('QVariantList', notify=layersChange)
@@ -432,36 +705,66 @@ class Sample(QObject):
 
     @Property('QVariantList', notify=constraintsChanged)
     def constraintsList(self) -> list[dict[str, str]]:
-        """Get the list of active constraints from dependent parameters."""
-        constraints = []
-        parameters = self._parameters_logic.parameters
-        for param in parameters:
-            if not param['independent']:
-                constraints.append({param['name']: param['dependency']})
+        """Get the list of active constraints with display metadata."""
+        constraints: list[dict[str, str]] = []
+        context, _, display_lookup = self._build_constraint_context()
+
+        for entry in context:
+            parameter_obj = entry['object']
+            state = self._resolve_constraint_state(parameter_obj, display_lookup)
+            if state is None:
+                continue
+
+            relation = state.get('relation', '=')
+            mode = state.get('mode', 'static')
+
+            if mode == 'dynamic':
+                expression_display = state.get('pretty_expression', state.get('expression', ''))
+                raw_expression = state.get('expression', expression_display)
+            else:
+                value = state.get('value', float(parameter_obj.value))
+                expression_display = state.get('pretty_expression', self._format_numeric(float(value)))
+                raw_expression = state.get('raw_expression', expression_display)
+
+            constraints.append({
+                'dependentName': entry['display_name'],
+                'expression': expression_display,
+                'rawExpression': raw_expression,
+                'relation': relation,
+                'type': mode,
+            })
 
         return constraints
 
     @Slot(int)
-    def removeConstraintByIndex(self, index_str: str) -> None:
+    def removeConstraintByIndex(self, index: int) -> None:
         """Remove constraint by index by making the parameter independent."""
-        try:
-            index = int(index_str)
-        except ValueError:
-            return
+        if not isinstance(index, int):
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                return
 
         constraints_list = self.constraintsList
         if index >= len(constraints_list):
             return
 
-        param_name = list(constraints_list[index].keys())[0]
+        param_name = constraints_list[index]['dependentName']
         param_obj = self._find_parameter_object_by_name(param_name)
 
-        if param_obj is None or param_obj.independent:
+        if param_obj is None:
             return
 
-        self._make_parameter_independent(param_obj)
+        unique_name = getattr(param_obj, 'unique_name', None)
+        state = self._constraint_states.pop(unique_name, None) if unique_name is not None else None
+
+        if state and 'previous' in state:
+            self._restore_parameter_state(param_obj, state['previous'])
+        else:
+            self._make_parameter_independent(param_obj)
         self.constraintsChanged.emit()
         self.externalSampleChanged.emit()
+        self.layersChange.emit()
 
     def _find_parameter_object_by_name(self, param_name: str):
         """Find parameter object by name."""
@@ -478,45 +781,90 @@ class Sample(QObject):
         except AttributeError:
             param_obj._independent = True  # Fallback for custom ERL constraints
 
-    @Slot(str, str, str, str, str)
-    def addConstraint(self, value1: str, value2: str, value3: str, value4: str, value5: str) -> None:
-        dependent = self._project_lib.parameters[int(value1)]
-        if value5 == '-1':
-            independent = None
-        else:
-            independent = self._project_lib.parameters[int(value5)]
-        relational_operator = value2
-        arithmetic_operator = value4
-        value = float(value3)
-        if arithmetic_operator == '':
-            if relational_operator == '=':
-                # simple parameter equality
-                # assign to the parameter and make it frozen
-                dependent.value = value
+    @Slot(int, str, str, result='QVariant')
+    def validateConstraintExpression(self, dependent_index: int, relation: str, expression: str):
+        try:
+            instruction = self._prepare_constraint_instruction(dependent_index, relation, expression)
+        except Exception as error:  # noqa: BLE001
+            return {'valid': False, 'message': str(error)}
+
+        return {
+            'valid': True,
+            'message': '',
+            'preview': instruction.get('pretty_expression', ''),
+            'relation': instruction.get('relation', '='),
+            'type': instruction.get('mode', ''),
+        }
+
+    @Slot(int, str, str, result='QVariant')
+    def addConstraint(self, dependent_index: int, relation: str, expression: str):
+        try:
+            instruction = self._prepare_constraint_instruction(dependent_index, relation, expression)
+        except Exception as error:  # noqa: BLE001
+            return {'success': False, 'message': str(error)}
+
+        dependent = self._project_lib.parameters[dependent_index]
+        previous_state = self._capture_parameter_state(dependent)
+        self._ensure_parameter_independent(dependent)
+
+        mode = instruction['mode']
+
+        try:
+            if mode == 'dynamic':
+                dependent.make_dependent_on(
+                    dependency_expression=instruction['expression'],
+                    dependency_map=instruction['dependency_map'],
+                )
+            elif mode == 'static':
+                dependent.value = instruction['value']
                 dependent.free = False
-                # here, we need to make the parameter "dependent" so it can't be changed in GUI
                 dependent._independent = False
-
-            elif relational_operator == '>':
-                # set the minimum value of the parameter
-                dependent.min = value
+            elif mode == 'lower_bound':
+                dependent.min = instruction['value']
                 dependent.free = True
-
-            elif relational_operator == '<':
-                # set the maximum value of the parameter
-                dependent.max = value
+            elif mode == 'upper_bound':
+                dependent.max = instruction['value']
                 dependent.free = True
-        else:
-            # make the parameter dependent on another parameter
-            # e.g. thickness = 2 * a + 5
-            expr = "a " + arithmetic_operator + str(float(value))
-            dependency_map = {'a': independent}
-            dependent.make_dependent_on(
-                dependency_expression=expr, dependency_map=dependency_map
-            )
+            else:
+                raise ValueError(f'Unsupported constraint mode: {mode}')
+        except Exception as error:  # noqa: BLE001
+            return {'success': False, 'message': str(error)}
+
+        unique_name = getattr(dependent, 'unique_name', None)
+        if unique_name is not None:
+            state: dict[str, Any] = {
+                'mode': mode,
+                'relation': instruction.get('relation', '='),
+                'previous': previous_state,
+            }
+            if mode == 'dynamic':
+                state.update({
+                    'expression': instruction.get('expression', ''),
+                    'raw_expression': instruction.get('expression', ''),
+                    'pretty_expression': instruction.get('pretty_expression', ''),
+                    'dependency_map': instruction.get('dependency_map', {}),
+                })
+            else:
+                value = instruction.get('value')
+                numeric = self._format_numeric(float(value)) if value is not None else ''
+                state.update({
+                    'value': value,
+                    'pretty_expression': instruction.get('pretty_expression', numeric),
+                    'raw_expression': numeric,
+                })
+            self._constraint_states[unique_name] = state
+
         self.constraintsChanged.emit()
         self.externalSampleChanged.emit()
         self.layersChange.emit()
+
+        return {
+            'success': True,
+            'message': '',
+            'preview': instruction.get('pretty_expression', ''),
+            'relation': instruction.get('relation', '='),
+            'type': mode,
+        }
 
     # # #
     # Q Range
