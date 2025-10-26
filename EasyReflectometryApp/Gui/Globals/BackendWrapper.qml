@@ -78,6 +78,7 @@ QtObject {
     function projectReset() { activeBackend.project.reset() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
+    function sampleFileLoad(value) { activeBackend.project.sampleLoad(value) }
 
 
     ///////////////

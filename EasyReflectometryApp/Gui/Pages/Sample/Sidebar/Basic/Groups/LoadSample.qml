@@ -23,7 +23,8 @@ EaElements.GroupBox {
         FileDialog {
             id: fileDialog
             title: qsTr("Select a sample file")
-            onAccepted: Globals.BackendWrapper.sampleFileLoad(fileDialog.fileUrl)
+            nameFilters: [ "ORT files (*.ort)", "ORSO files (*.orso)", "All files (*.*)" ]
+            onAccepted: Globals.BackendWrapper.sampleFileLoad(selectedFiles[0])
         }
     }
 }

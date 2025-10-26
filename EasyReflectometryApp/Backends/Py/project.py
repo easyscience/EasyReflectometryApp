@@ -1,5 +1,7 @@
 from EasyApp.Logic.Utils.Utils import generalizePath
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.orso_utils import load_orso_model
+from orsopy.fileio import orso
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
@@ -101,3 +103,12 @@ class Project(QObject):
         self.externalCreatedChanged.emit()
         self.externalNameChanged.emit()
         self.externalProjectReset.emit()
+
+    @Slot(str)
+    def sampleLoad(self, url: str) -> None:
+        # Load ORSO file content
+        orso_data = orso.load_orso(generalizePath(url))
+        # Load the sample model
+        sample = load_orso_model(orso_data)
+        # Set the sample in the project logic
+        pass
