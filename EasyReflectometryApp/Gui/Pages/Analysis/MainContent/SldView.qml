@@ -42,8 +42,14 @@ Rectangle {
 
         calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
         calcSerie.color: {
-            var idx = Globals.BackendWrapper.sampleCurrentModelIndex
-            Globals.BackendWrapper.sampleModels[idx].color
+            const models = Globals.BackendWrapper.sampleModels
+            const idx = Globals.BackendWrapper.sampleCurrentModelIndex
+
+            if (models && idx >= 0 && idx < models.length) {
+                return models[idx].color
+            }
+
+            return undefined
         }
 
 
