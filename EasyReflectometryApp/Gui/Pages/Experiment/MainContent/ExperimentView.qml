@@ -41,10 +41,60 @@ Rectangle {
                 return false
             }
         }
+        property bool useStaggeredPlotting: {
+            try {
+                return Globals.Variables.useStaggeredPlotting || false
+            } catch (e) {
+                return false
+            }
+        }
 
         // Watch for changes in multi-experiment mode
         onIsMultiExperimentModeChanged: {
             updateMultiExperimentSeries()
+        }
+
+        // Watch for changes in staggered plotting mode
+        onUseStaggeredPlottingChanged: {
+            console.log(`🔄 ExperimentView detected staggered mode change: ${useStaggeredPlotting}`)
+            console.log(`   Multi-experiment mode: ${isMultiExperimentMode}, Series count: ${multiExperimentSeries.length}`)
+            if (isMultiExperimentMode && multiExperimentSeries.length > 1) {
+                console.log(`📊 Refreshing ${multiExperimentSeries.length} series with staggered mode: ${useStaggeredPlotting}`)
+                // Re-populate all series with new staggering setting
+                for (var i = 0; i < multiExperimentSeries.length; i++) {
+                    populateExperimentSeries(multiExperimentSeries[i])
+                }
+                // Adjust Y-axis to fit all staggered experiments
+                adjustAxisForStaggering()
+            } else {
+                console.log(`   Skipping refresh - not in multi-experiment mode or insufficient series`)
+            }
+        }
+
+        function adjustAxisForStaggering() {
+            if (!useStaggeredPlotting || !isMultiExperimentMode || multiExperimentSeries.length <= 1) {
+                return
+            }
+
+            var allMinY = 1e10
+            var allMaxY = -1e10
+
+            // Find the bounds of all staggered series
+            for (var exp = 0; exp < multiExperimentSeries.length; exp++) {
+                var series = multiExperimentSeries[exp].measuredSerie
+                for (var i = 0; i < series.count; i++) {
+                    var point = series.at(i)
+                    allMinY = Math.min(allMinY, point.y)
+                    allMaxY = Math.max(allMaxY, point.y)
+                }
+            }
+
+            // Add 10% padding and apply to Y-axis
+            var padding = (allMaxY - allMinY) * 0.1
+            chartView.axisY.min = allMinY - padding
+            chartView.axisY.max = allMaxY + padding
+
+            console.log(`📏 Adjusted Y-axis for staggering: [${allMinY.toExponential(2)}, ${allMaxY.toExponential(2)}] with padding`)
         }
 
         // Watch for changes in experiment data  
@@ -187,15 +237,51 @@ Rectangle {
             seriesSet.errorUpperSerie.clear()
             seriesSet.errorLowerSerie.clear()
 
-            // Add data points
-            for (var i = 0; i < dataPoints.length; i++) {
-                var point = dataPoints[i]
-                seriesSet.measuredSerie.append(point.x, point.y)
-                seriesSet.errorUpperSerie.append(point.x, point.errorUpper)
-                seriesSet.errorLowerSerie.append(point.x, point.errorLower)
+            // Calculate staggering offset if enabled
+            var yOffset = 0
+            if (useStaggeredPlotting && isMultiExperimentMode && multiExperimentSeries.length > 1) {
+                var experimentIndex = seriesSet.expIndex
+                var totalExperiments = multiExperimentSeries.length
+
+                // Find the individual experiment's data range
+                var expMinY = 1e10
+                var expMaxY = -1e10
+
+                for (var j = 0; j < dataPoints.length; j++) {
+                    expMinY = Math.min(expMinY, dataPoints[j].y)
+                    expMaxY = Math.max(expMaxY, dataPoints[j].y)
+                }
+
+                var expDataRange = expMaxY - expMinY
+
+                // Use a much smaller staggering - just enough to separate the experiments visually
+                // Each experiment gets offset by 50% of its own data range
+                var offsetStep = expDataRange * 0.5
+                yOffset = experimentIndex * offsetStep
+
+                // Ensure we don't exceed reasonable bounds - limit total staggering to 2x original range
+                var maxTotalOffset = expDataRange * 2
+                var currentTotalOffset = (totalExperiments - 1) * offsetStep
+
+                if (currentTotalOffset > maxTotalOffset) {
+                    // Rescale all offsets proportionally to fit within bounds
+                    var scaleFactor = maxTotalOffset / currentTotalOffset
+                    yOffset = experimentIndex * offsetStep * scaleFactor
+                    console.log(`   📏 Rescaling stagger: factor=${scaleFactor.toFixed(3)}, totalOffset=${(currentTotalOffset * scaleFactor).toFixed(3)}`)
+                }
+
+                console.log(`   🔢 Experiment ${experimentIndex}/${totalExperiments}: offset=${yOffset.toFixed(6)}, expRange=[${expMinY.toExponential(2)}, ${expMaxY.toExponential(2)}]`)
             }
 
-            console.log(`   ✅ Added ${dataPoints.length} points to ${seriesSet.expName}`)
+            // Add data points with potential offset
+            for (var i = 0; i < dataPoints.length; i++) {
+                var point = dataPoints[i]
+                seriesSet.measuredSerie.append(point.x, point.y + yOffset)
+                seriesSet.errorUpperSerie.append(point.x, point.errorUpper + yOffset)
+                seriesSet.errorLowerSerie.append(point.x, point.errorLower + yOffset)
+            }
+
+            console.log(`   ✅ Added ${dataPoints.length} points to ${seriesSet.expName} ${useStaggeredPlotting ? '(staggered)' : '(normal)'}`)
         }
 
         // Tool buttons

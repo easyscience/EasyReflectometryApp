@@ -20,6 +20,14 @@ EaElements.GroupBox {
     // Property to track if we were in multi-selection mode
     property bool wasMultiSelected: false
     
+    // Watch for changes in selection to automatically disable staggered mode
+    onSelectedExperimentIndicesChanged: {
+        if (selectedExperimentIndices.length <= 1 && Globals.Variables.useStaggeredPlotting) {
+            console.log(`🔄 Selection changed to single experiment - disabling staggered plotting`)
+            Globals.Variables.useStaggeredPlotting = false
+        }
+    }
+    
     Column {
         spacing: EaStyle.Sizes.fontPixelSize * 0.5
         
@@ -74,7 +82,32 @@ EaElements.GroupBox {
                 visible: selectedExperimentIndices.length > 1
             }
         }
-        
+
+        // Staggered plotting toggle
+        Row {
+            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+            visible: selectedExperimentIndices.length > 1
+
+            EaElements.CheckBox {
+                id: staggeredPlottingCheckbox
+                enabled: selectedExperimentIndices.length > 1
+                checked: Globals.Variables.useStaggeredPlotting && selectedExperimentIndices.length > 1
+                text: qsTr("Staggered view")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.75
+                ToolTip.text: qsTr("Vertically offset experiment lines for easier comparison")
+                onCheckedChanged: {
+                    if (selectedExperimentIndices.length > 1) {
+                        Globals.Variables.useStaggeredPlotting = checked
+                        console.log(`📊 Staggered plotting mode changed to: ${checked}`)
+                        console.log(`🔄 Updating backend with multi-experiment selection`)
+                        updateBackendWithSelectedExperiments()
+                    } else {
+                        console.log(`⚠️ Single experiment mode - staggering not applicable`)
+                    }
+                }
+            }
+        }
+
         Row {
             spacing: EaStyle.Sizes.fontPixelSize
 
@@ -159,7 +192,7 @@ EaElements.GroupBox {
                     // Selection background overlay - placed as child to avoid layout interference
                     Rectangle {
                         visible: isSelected
-                        anchors.fill: parent.parent
+                        anchors.fill: parent
                         color: EaStyle.Colors.themeForegroundHovered
                         opacity: 0.2
                         z: -1

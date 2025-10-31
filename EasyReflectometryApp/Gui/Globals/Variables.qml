@@ -11,4 +11,5 @@ QtObject {
     property bool showLegendOnSamplePage: false
     property bool showLegendOnExperimentPage: false
     property bool showLegendOnAnalysisPage: false
+    property bool useStaggeredPlotting: false
 }
