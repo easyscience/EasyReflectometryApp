@@ -88,7 +88,7 @@ class Plotting1d(QObject):
             if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
                 selected_indices = self._proxy._analysis._selected_experiment_indices
                 if len(selected_indices) > 1:
-                    # Return concatenated data for multiple experiments
+                    # Return concatenated data for multiple experiments (legacy support)
                     return self._proxy._analysis.get_concatenated_experiment_data()
             # Default single experiment behavior
             current_index = self._project_lib.current_experiment_index
@@ -102,6 +102,26 @@ class Plotting1d(QObject):
                 xe=np.empty(0),
             )
         return data
+
+    @property
+    def is_multi_experiment_mode(self) -> bool:
+        """Check if multiple experiments are selected."""
+        try:
+            if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
+                return len(self._proxy._analysis._selected_experiment_indices) > 1
+        except Exception:
+            pass
+        return False
+
+    @property
+    def individual_experiment_data_list(self) -> list:
+        """Get individual experiment data for multi-experiment plotting."""
+        try:
+            if hasattr(self._proxy, '_analysis'):
+                return self._proxy._analysis.get_individual_experiment_data_list()
+        except Exception as e:
+            console.debug(f"Error getting individual experiment data: {e}")
+        return []
 
     # Sample
     @Property(float, notify=sampleChartRangesChanged)
@@ -168,10 +188,49 @@ class Plotting1d(QObject):
         return '#00FF00'
         #return self._calcSerieColor
 
+    @Property(bool, notify=experimentDataChanged)
+    def isMultiExperimentMode(self) -> bool:
+        """Return whether multiple experiments are selected for plotting."""
+        return self.is_multi_experiment_mode
+
+    @Property('QVariantList', notify=experimentDataChanged)
+    def individualExperimentDataList(self) -> list:
+        """Return list of individual experiment data for multi-experiment plotting."""
+        data_list = self.individual_experiment_data_list
+        # Convert to QML-friendly format
+        qml_data_list = []
+        for exp_data in data_list:
+            qml_data_list.append({
+                'name': exp_data['name'],
+                'color': exp_data['color'],
+                'index': exp_data['index'],
+                'hasData': exp_data['data'].x.size > 0
+            })
+        return qml_data_list
+
     @Slot(str, str, 'QVariant')
     def setQtChartsSerieRef(self, page: str, serie: str, ref: QObject):
         self._chartRefs['QtCharts'][page][serie] = ref
         console.debug(IO.formatMsg('sub', f'{serie} on {page}: {ref}'))
+
+    @Slot(int, result='QVariantList')
+    def getExperimentDataPoints(self, experiment_index: int) -> list:
+        """Get data points for a specific experiment for plotting."""
+        try:
+            data = self._project_lib.experimental_data_for_model_at_index(experiment_index)
+            points = []
+            for point in data.data_points():
+                if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
+                    points.append({
+                        'x': float(point[0]),
+                        'y': float(np.log10(point[1])),
+                        'errorUpper': float(np.log10(point[1] + np.sqrt(point[2]))),
+                        'errorLower': float(np.log10(max(point[1] - np.sqrt(point[2]), 1e-10)))  # Avoid log(0)
+                    })
+            return points
+        except Exception as e:
+            console.debug(f"Error getting experiment data points for index {experiment_index}: {e}")
+            return []
 
     def refreshSamplePage(self):
         self.drawCalculatedOnSampleChart()
@@ -217,7 +276,10 @@ class Plotting1d(QObject):
 
     def drawMeasuredOnExperimentChart(self):
         if PLOT_BACKEND == 'QtCharts':
-            self.qtchartsReplaceMeasuredOnExperimentChartAndRedraw()
+            if self.is_multi_experiment_mode:
+                self.qtchartsReplaceMultiExperimentChartAndRedraw()
+            else:
+                self.qtchartsReplaceMeasuredOnExperimentChartAndRedraw()
 
     def qtchartsReplaceMeasuredOnExperimentChartAndRedraw(self):
         series_measured = self._chartRefs['QtCharts']['experimentPage']['measuredSerie']
@@ -234,7 +296,23 @@ class Plotting1d(QObject):
                 series_error_lower.append(point[0], np.log10(point[1] - np.sqrt(point[2])))
                 nr_points = nr_points + 1
 
-        console.debug(IO.formatMsg('sub', 'Measurede curve', f'{nr_points} points', 'on experiment page', 'replaced'))
+        console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on experiment page', 'replaced'))
+
+    def qtchartsReplaceMultiExperimentChartAndRedraw(self):
+        """Draw multiple experiment series with distinct colors."""
+        console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines'))
+
+        # Clear default series but don't use them for multi-experiment mode
+        if 'measuredSerie' in self._chartRefs['QtCharts']['experimentPage']:
+            self._chartRefs['QtCharts']['experimentPage']['measuredSerie'].clear()
+        if 'errorUpperSerie' in self._chartRefs['QtCharts']['experimentPage']:
+            self._chartRefs['QtCharts']['experimentPage']['errorUpperSerie'].clear()
+        if 'errorLowerSerie' in self._chartRefs['QtCharts']['experimentPage']:
+            self._chartRefs['QtCharts']['experimentPage']['errorLowerSerie'].clear()
+
+        # Individual experiment series are managed by QML
+        # This method is called to trigger the refresh, actual drawing is handled by QML
+        self.experimentDataChanged.emit()
 
     def drawCalculatedAndMeasuredOnAnalysisChart(self):
         if PLOT_BACKEND == 'QtCharts':

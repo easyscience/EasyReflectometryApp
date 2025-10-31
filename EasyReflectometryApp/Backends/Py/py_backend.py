@@ -111,6 +111,24 @@ class PyBackend(QObject):
         # Emit our local signal to notify QML properties
         self.multiExperimentSelectionChanged.emit()
 
+    # Plotting properties for multi-experiment support
+    @Property(bool, notify=multiExperimentSelectionChanged)
+    def plottingIsMultiExperimentMode(self) -> bool:
+        """Return whether multiple experiments are selected for plotting."""
+        return self._plotting_1d.isMultiExperimentMode
+
+    @Property('QVariantList', notify=multiExperimentSelectionChanged)
+    def plottingIndividualExperimentDataList(self) -> list:
+        """Return list of individual experiment data for multi-experiment plotting."""
+        return self._plotting_1d.individualExperimentDataList
+
+    @Slot(int, result='QVariantList')
+    def plottingGetExperimentDataPoints(self, experiment_index: int) -> list:
+        """Get data points for a specific experiment for plotting."""
+        return self._plotting_1d.getExperimentDataPoints(experiment_index)
+
+
+
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:
         self._connect_project_page()
@@ -129,6 +147,8 @@ class PyBackend(QObject):
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)
         self._sample.externalRefreshPlot.connect(self._refresh_plots)
         self._sample.modelsTableChanged.connect(self._analysis.parametersChanged)
+        # Connect sample changes to multi-experiment selection signal
+        self._sample.modelsTableChanged.connect(self.multiExperimentSelectionChanged)
 
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
@@ -142,6 +162,8 @@ class PyBackend(QObject):
         self._analysis.externalFittingChanged.connect(self._refresh_plots)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
+        # Connect multi-experiment selection changes
+        self._analysis.experimentsChanged.connect(self.multiExperimentSelectionChanged)
 
     def _relay_project_page_name(self):
         self._status.statusChanged.emit()
@@ -189,3 +211,5 @@ class PyBackend(QObject):
         self._plotting_1d.refreshSamplePage()
         self._plotting_1d.refreshExperimentPage()
         self._plotting_1d.refreshAnalysisPage()
+        # Emit signal for multi-experiment changes
+        self.multiExperimentSelectionChanged.emit()

@@ -39,6 +39,8 @@ class Analysis(QObject):
         self._chached_parameters = None
         # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
         self._selected_experiment_indices = []
+        # Initialize selected experiments after construction to avoid binding loops
+        self._initialize_selected_experiments()
 
     def _initialize_selected_experiments(self) -> None:
         """Initialize selected experiment indices after object construction to avoid binding loops."""
@@ -286,6 +288,57 @@ class Analysis(QObject):
             ye=np.array(ye_sorted),
             xe=np.array(xe_sorted)
         )
+
+    def get_individual_experiment_data_list(self):
+        """
+        Get individual experiment data for each selected experiment.
+        Returns a list of dictionaries with data, name, and color for each experiment.
+        """
+        import numpy as np
+        from easyreflectometry.data import DataSet1D
+
+        if not self._selected_experiment_indices:
+            return []
+
+        experiment_data_list = []
+
+        # Define a color palette for experiments
+        color_palette = [
+            '#1f77b4',  # Blue
+            '#ff7f0e',  # Orange
+            '#2ca02c',  # Green
+            '#d62728',  # Red
+            '#9467bd',  # Purple
+            '#8c564b',  # Brown
+            '#e377c2',  # Pink
+            '#7f7f7f',  # Gray
+            '#bcbd22',  # Olive
+            '#17becf'   # Cyan
+        ]
+
+        for idx, exp_idx in enumerate(self._selected_experiment_indices):
+            try:
+                data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                if data.x.size > 0:  # Only include non-empty datasets
+                    exp_name = self._experiments_logic.available()[exp_idx] if exp_idx < len(self._experiments_logic.available()) else f"Experiment {exp_idx + 1}"
+                    color = color_palette[idx % len(color_palette)]
+
+                    experiment_data_list.append({
+                        'data': data,
+                        'name': exp_name,
+                        'color': color,
+                        'index': exp_idx
+                    })
+            except (IndexError, AttributeError) as e:
+                print(f"Error accessing experiment {exp_idx}: {e}")
+                continue
+
+        return experiment_data_list
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def selectedExperimentDataList(self) -> List[dict]:
+        """Return individual experiment data for plotting separate lines."""
+        return self.get_individual_experiment_data_list()
 
     def _refresh_plotting_system(self) -> None:
         """Refresh the plotting system when experiment selection changes."""

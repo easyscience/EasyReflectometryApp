@@ -199,9 +199,27 @@ QtObject {
     function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
     
     // Multi-experiment selection support
-    readonly property int analysisExperimentsSelectedCount: activeBackend.analysis.experimentsSelectedCount
-    readonly property var analysisSelectedExperimentIndices: activeBackend.analysis.selectedExperimentIndices
-    function analysisSetSelectedExperimentIndices(value) { activeBackend.analysis.setSelectedExperimentIndices(value) }
+    readonly property int analysisExperimentsSelectedCount: {
+        try {
+            return activeBackend.analysisExperimentsSelectedCount || 1
+        } catch (e) {
+            return 1
+        }
+    }
+    readonly property var analysisSelectedExperimentIndices: {
+        try {
+            return activeBackend.analysisSelectedExperimentIndices || []
+        } catch (e) {
+            return []
+        }
+    }
+    function analysisSetSelectedExperimentIndices(value) {
+        try {
+            activeBackend.analysisSetSelectedExperimentIndices(value)
+        } catch (e) {
+            console.warn("Failed to set selected experiment indices:", e)
+        }
+    }
 
     function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
     readonly property var analysisModelForExperiment: activeBackend.analysis.modelIndexForExperiment
@@ -287,4 +305,27 @@ QtObject {
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }
+
+    // Multi-experiment plotting support
+    readonly property bool plottingIsMultiExperimentMode: {
+        try {
+            return activeBackend.plottingIsMultiExperimentMode || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var plottingIndividualExperimentDataList: {
+        try {
+            return activeBackend.plottingIndividualExperimentDataList || []
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetExperimentDataPoints(index) {
+        try {
+            return activeBackend.plottingGetExperimentDataPoints(index)
+        } catch (e) {
+            return []
+        }
+    }
 }
