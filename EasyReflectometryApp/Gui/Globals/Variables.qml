@@ -12,4 +12,5 @@ QtObject {
     property bool showLegendOnExperimentPage: false
     property bool showLegendOnAnalysisPage: false
     property bool useStaggeredPlotting: false
+    property double staggeringFactor: 0.5
 }

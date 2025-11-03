@@ -48,6 +48,13 @@ Rectangle {
                 return false
             }
         }
+        property double staggeringFactor: {
+            try {
+                return Globals.Variables.staggeringFactor !== undefined ? Globals.Variables.staggeringFactor : 0.5
+            } catch (e) {
+                return 0.5
+            }
+        }
 
         // Watch for changes in multi-experiment mode
         onIsMultiExperimentModeChanged: {
@@ -56,10 +63,10 @@ Rectangle {
 
         // Watch for changes in staggered plotting mode
         onUseStaggeredPlottingChanged: {
-            console.log(`🔄 ExperimentView detected staggered mode change: ${useStaggeredPlotting}`)
-            console.log(`   Multi-experiment mode: ${isMultiExperimentMode}, Series count: ${multiExperimentSeries.length}`)
+            // console.log(`🔄 ExperimentView detected staggered mode change: ${useStaggeredPlotting}`)
+            // console.log(`   Multi-experiment mode: ${isMultiExperimentMode}, Series count: ${multiExperimentSeries.length}`)
             if (isMultiExperimentMode && multiExperimentSeries.length > 1) {
-                console.log(`📊 Refreshing ${multiExperimentSeries.length} series with staggered mode: ${useStaggeredPlotting}`)
+                // console.log(`📊 Refreshing ${multiExperimentSeries.length} series with staggered mode: ${useStaggeredPlotting}`)
                 // Re-populate all series with new staggering setting
                 for (var i = 0; i < multiExperimentSeries.length; i++) {
                     populateExperimentSeries(multiExperimentSeries[i])
@@ -68,6 +75,35 @@ Rectangle {
                 adjustAxisForStaggering()
             } else {
                 console.log(`   Skipping refresh - not in multi-experiment mode or insufficient series`)
+            }
+        }
+
+        // Watch for changes in staggering factor
+        onStaggeringFactorChanged: {
+            // console.log(`🔄 ExperimentView detected staggering factor change: ${staggeringFactor.toFixed(2)}`)
+            if (useStaggeredPlotting && isMultiExperimentMode && multiExperimentSeries.length > 1) {
+                // console.log(`📊 Refreshing ${multiExperimentSeries.length} series with new factor`)
+                // Re-populate all series with new staggering factor
+                for (var i = 0; i < multiExperimentSeries.length; i++) {
+                    populateExperimentSeries(multiExperimentSeries[i])
+                }
+                // Adjust Y-axis to fit all staggered experiments
+                adjustAxisForStaggering()
+            }
+        }
+
+        // Additional watcher directly on Globals.Variables.staggeringFactor
+        Connections {
+            target: Globals.Variables
+            function onStaggeringFactorChanged() {
+                // console.log(`🔄 Direct watcher: Globals.Variables.staggeringFactor changed to ${Globals.Variables.staggeringFactor}`)
+                if (chartView.useStaggeredPlotting && chartView.isMultiExperimentMode && chartView.multiExperimentSeries.length > 1) {
+                    // console.log(`📊 Forcing refresh of ${chartView.multiExperimentSeries.length} series`)
+                    for (var i = 0; i < chartView.multiExperimentSeries.length; i++) {
+                        chartView.populateExperimentSeries(chartView.multiExperimentSeries[i])
+                    }
+                    chartView.adjustAxisForStaggering()
+                }
             }
         }
 
@@ -94,7 +130,7 @@ Rectangle {
             chartView.axisY.min = allMinY - padding
             chartView.axisY.max = allMaxY + padding
 
-            console.log(`📏 Adjusted Y-axis for staggering: [${allMinY.toExponential(2)}, ${allMaxY.toExponential(2)}] with padding`)
+            // console.log(`📏 Adjusted Y-axis for staggering: [${allMinY.toExponential(2)}, ${allMaxY.toExponential(2)}] with padding`)
         }
 
         // Watch for changes in experiment data  
@@ -131,13 +167,13 @@ Rectangle {
 
         // Multi-experiment series management
         function updateMultiExperimentSeries() {
-            console.log("🔄 Updating multi-experiment series...")
+            // console.log("🔄 Updating multi-experiment series...")
 
             // Clear existing multi-experiment series
             clearMultiExperimentSeries()
 
             if (!isMultiExperimentMode) {
-                console.log("   Single experiment mode - showing default series")
+                // console.log("   Single experiment mode - showing default series")
                 // Show default series for single experiment
                 measured.visible = true
                 errorUpper.visible = true
@@ -152,7 +188,7 @@ Rectangle {
 
             // Get experiment data list
             var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
-            console.log(`   Creating series for ${experimentDataList.length} experiments`)
+            // console.log(`   Creating series for ${experimentDataList.length} experiments`)
 
             // Create series for each experiment
             for (var i = 0; i < experimentDataList.length; i++) {
@@ -181,7 +217,7 @@ Rectangle {
         }
 
         function createExperimentSeries(expIndex, expName, color) {
-            console.log(`   📊 Creating series for experiment ${expIndex}: ${expName} (${color})`)
+            // console.log(`   📊 Creating series for experiment ${expIndex}: ${expName} (${color})`)
 
             // Create measured data series
             var measuredSerie = chartView.createSeries(ChartView.SeriesTypeLine, 
@@ -227,8 +263,6 @@ Rectangle {
         }
 
         function populateExperimentSeries(seriesSet) {
-            console.log(`   📈 Populating data for experiment ${seriesSet.expIndex}`)
-
             // Get data points from backend
             var dataPoints = Globals.BackendWrapper.plottingGetExperimentDataPoints(seriesSet.expIndex)
 
@@ -254,23 +288,22 @@ Rectangle {
 
                 var expDataRange = expMaxY - expMinY
 
-                // Use a much smaller staggering - just enough to separate the experiments visually
-                // Each experiment gets offset by 50% of its own data range
-                var offsetStep = expDataRange * 0.5
+                // Use staggering factor to control offset
+                // Factor ranges from 0 (no staggering) to 5.0 (maximum staggering)
+                // Each experiment gets offset proportional to the staggering factor
+                var offsetStep = expDataRange * 0.5 * staggeringFactor
                 yOffset = experimentIndex * offsetStep
 
                 // Ensure we don't exceed reasonable bounds - limit total staggering to 2x original range
-                var maxTotalOffset = expDataRange * 2
+                var maxTotalOffset = expDataRange * 5
                 var currentTotalOffset = (totalExperiments - 1) * offsetStep
 
                 if (currentTotalOffset > maxTotalOffset) {
                     // Rescale all offsets proportionally to fit within bounds
                     var scaleFactor = maxTotalOffset / currentTotalOffset
                     yOffset = experimentIndex * offsetStep * scaleFactor
-                    console.log(`   📏 Rescaling stagger: factor=${scaleFactor.toFixed(3)}, totalOffset=${(currentTotalOffset * scaleFactor).toFixed(3)}`)
                 }
 
-                console.log(`   🔢 Experiment ${experimentIndex}/${totalExperiments}: offset=${yOffset.toFixed(6)}, expRange=[${expMinY.toExponential(2)}, ${expMaxY.toExponential(2)}]`)
             }
 
             // Add data points with potential offset
@@ -280,8 +313,6 @@ Rectangle {
                 seriesSet.errorUpperSerie.append(point.x, point.errorUpper + yOffset)
                 seriesSet.errorLowerSerie.append(point.x, point.errorLower + yOffset)
             }
-
-            console.log(`   ✅ Added ${dataPoints.length} points to ${seriesSet.expName} ${useStaggeredPlotting ? '(staggered)' : '(normal)'}`)
         }
 
         // Tool buttons
@@ -454,7 +485,7 @@ Rectangle {
                                                                measured)
 
             // Initialize multi-experiment support
-            console.log("🚀 ExperimentView initialized - checking multi-experiment mode...")
+            // console.log("🚀 ExperimentView initialized - checking multi-experiment mode...")
             updateMultiExperimentSeries()
         }
 

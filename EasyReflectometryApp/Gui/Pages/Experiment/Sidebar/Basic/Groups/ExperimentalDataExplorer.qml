@@ -106,6 +106,26 @@ EaElements.GroupBox {
                     }
                 }
             }
+
+            // Staggering distance slider
+            EaElements.Slider {
+                id: staggeringSlider
+                width: EaStyle.Sizes.fontPixelSize * 6
+                anchors.verticalCenter: parent.verticalCenter
+                from: 0.0
+                to: 5.0
+                value: Globals.Variables.staggeringFactor !== undefined ? Globals.Variables.staggeringFactor : 0.5
+                stepSize: 0.05
+                enabled: staggeredPlottingCheckbox.checked && selectedExperimentIndices.length > 1
+                ToolTip.text: "Adjust staggering distance (" + Number(value).toFixed(2) + ")"
+                ToolTip.visible: hovered
+
+                onValueChanged: {
+                    // Always update the global variable to trigger watchers
+                    Globals.Variables.staggeringFactor = value
+                    // console.log(`📏 Staggering factor changed to: ${value.toFixed(2)}`)
+                }
+            }
         }
 
         Row {
@@ -315,9 +335,9 @@ EaElements.GroupBox {
     }
     
     function selectSingleExperiment(experimentIndex) {
-        console.log("selectSingleExperiment called with index:", experimentIndex)
+        // console.log("selectSingleExperiment called with index:", experimentIndex)
         selectedExperimentIndices = [experimentIndex]
-        console.log("Updated selectedExperimentIndices to:", selectedExperimentIndices)
+        // console.log("Updated selectedExperimentIndices to:", selectedExperimentIndices)
         updateBackendWithSelectedExperiments()
     }
     
@@ -333,7 +353,7 @@ EaElements.GroupBox {
             // If we were in multi-selection mode and now switching to single selection,
             // force a plot refresh by toggling the current index
             if (wasMultiSelected) {
-                console.log("Switching from multi-selection to single selection - forcing plot refresh")
+                // console.log("Switching from multi-selection to single selection - forcing plot refresh")
                 // Force refresh by temporarily setting a different index and then back
                 var tempIndex = (currentIndex === 0) ? 1 : 0
                 if (tempIndex < Globals.BackendWrapper.analysisExperimentsAvailable.length) {
@@ -349,16 +369,16 @@ EaElements.GroupBox {
             // Mark that we're in multi-selection mode
             wasMultiSelected = true
             // For multiple experiments, call the new backend method
-            console.log("Multi-experiment selection - checking backend method availability")
-            console.log("Backend wrapper analysis available:", typeof Globals.BackendWrapper.analysis)
-            console.log("analysisSetSelectedExperimentIndices available:", typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices)
+            // console.log("Multi-experiment selection - checking backend method availability")
+            // console.log("Backend wrapper analysis available:", typeof Globals.BackendWrapper.analysis)
+            // console.log("analysisSetSelectedExperimentIndices available:", typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices)
             
             // Try multiple approaches to call the backend method
             var methodCalled = false
             
             // Approach 1: Direct call to top-level method
             if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
-                console.log("Approach 1: Calling analysisSetSelectedExperimentIndices with:", selectedExperimentIndices)
+                // console.log("Approach 1: Calling analysisSetSelectedExperimentIndices with:", selectedExperimentIndices)
                 Globals.BackendWrapper.analysisSetSelectedExperimentIndices(selectedExperimentIndices)
                 methodCalled = true
             }
@@ -366,7 +386,7 @@ EaElements.GroupBox {
             // Approach 2: Try through analysis object
             if (!methodCalled && Globals.BackendWrapper.analysis && 
                 typeof Globals.BackendWrapper.analysis.setSelectedExperimentIndices === 'function') {
-                console.log("Approach 2: Calling through analysis object with:", selectedExperimentIndices)
+                // console.log("Approach 2: Calling through analysis object with:", selectedExperimentIndices)
                 Globals.BackendWrapper.analysis.setSelectedExperimentIndices(selectedExperimentIndices)
                 methodCalled = true
             }
@@ -378,7 +398,7 @@ EaElements.GroupBox {
                 Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(selectedExperimentIndices[0])
                 console.log("Multi-experiment selection - fallback to single selection")
                 console.log("Selected experiments:", selectedExperimentIndices)
-                console.log("Available backend methods:", Object.keys(Globals.BackendWrapper))
+                // console.log("Available backend methods:", Object.keys(Globals.BackendWrapper))
             }
         }
     }
@@ -389,7 +409,7 @@ EaElements.GroupBox {
         selectedExperimentIndices = []
         // Notify backend that selection is cleared
         if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
-            console.log("Calling backend with empty array to clear selection")
+            // console.log("Calling backend with empty array to clear selection")
             Globals.BackendWrapper.analysisSetSelectedExperimentIndices([])
         }
     }
