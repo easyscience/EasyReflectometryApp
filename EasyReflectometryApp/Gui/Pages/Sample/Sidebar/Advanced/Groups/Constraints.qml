@@ -8,7 +8,7 @@ import Gui.Globals as Globals
 
 EaElements.GroupBox {
     id: constraintsGroup
-    title: qsTr("Sample constraints")
+    title: qsTr("Single constraints")
     enabled: true
     last: false
 
@@ -75,6 +75,14 @@ EaElements.GroupBox {
                 expressionPreview = ""
                 lastConstraintType = ""
                 validationMessage = result && result.message ? result.message : qsTr("Expression is not valid.")
+                // Debug: show available parameters when validation fails
+                if (result && result.message && result.message.includes("not defined")) {
+                    console.log("Available constraint parameters:")
+                    const params = Globals.BackendWrapper.sampleConstraintParametersMetadata
+                    for (let i = 0; i < params.length; i++) {
+                        console.log(`  ${params[i].alias}: ${params[i].displayName}`)
+                    }
+                }
             }
         } else {
             expressionValid = true

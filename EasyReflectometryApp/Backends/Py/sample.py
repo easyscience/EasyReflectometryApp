@@ -460,8 +460,10 @@ class Sample(QObject):
         alias_lookup: Dict[str, DescriptorNumber] = {}
         display_lookup: Dict[str, str] = {}
         for entry in context:
-            alias_lookup[entry['alias']] = entry['object']
-            display_lookup[entry['alias']] = entry['display_name']
+            alias = entry['alias']
+            if alias:  # Only add non-empty aliases
+                alias_lookup[alias] = entry['object']
+                display_lookup[alias] = entry['display_name']
         return context, alias_lookup, display_lookup
 
     def _extract_dependency_map(
@@ -479,17 +481,33 @@ class Sample(QObject):
         return used_aliases
 
     def _evaluate_constraint_expression(
-        self, expression: str, dependency_map: Dict[str, DescriptorNumber]
+        self, expression: str, dependency_map: Dict[str, DescriptorNumber], 
+        all_aliases: Dict[str, DescriptorNumber] | None = None
     ) -> DescriptorNumber | numbers.Number:
+        """Evaluate constraint expression with all available parameter aliases in scope."""
         interpreter = Interpreter(config=_ASTEVAL_CONFIG)
+
+        # Add global symbols (numpy, etc.)
         for name, value in _GLOBAL_SYMBOLS.items():
             interpreter.symtable[name] = value
             if isinstance(value, numbers.Number):
                 interpreter.readonly_symbols.add(name)
-        for alias, dependency in dependency_map.items():
+
+        # Add ALL parameter aliases to the symbol table (not just dependencies)
+        # This allows validation to work even if we haven't detected the parameter yet
+        aliases_to_add = all_aliases if all_aliases is not None else dependency_map
+        for alias, dependency in aliases_to_add.items():
             interpreter.symtable[alias] = dependency
             interpreter.readonly_symbols.add(alias)
-        result = interpreter.eval(expression, raise_errors=True)
+
+        try:
+            result = interpreter.eval(expression, raise_errors=True)
+        except Exception as e:
+            # Provide helpful error message showing available aliases
+            if 'not defined' in str(e):
+                available = ', '.join(sorted(aliases_to_add.keys())[:10])  # Show first 10
+                raise NameError(f"{str(e)}\nAvailable aliases: {available}...") from None
+            raise
         return result
 
     @staticmethod
@@ -548,7 +566,10 @@ class Sample(QObject):
         dependency_map = self._extract_dependency_map(expression_text, alias_lookup)
 
         try:
-            evaluation_result = self._evaluate_constraint_expression(expression_text, dependency_map)
+            # Pass all available aliases so validation can check any parameter reference
+            evaluation_result = self._evaluate_constraint_expression(
+                expression_text, dependency_map, all_aliases=alias_lookup
+            )
         except NameError as error:
             raise NameError(str(error).split('\n')[-1]) from None
         except SyntaxError as error:

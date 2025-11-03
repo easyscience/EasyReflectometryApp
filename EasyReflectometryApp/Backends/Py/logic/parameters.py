@@ -44,8 +44,9 @@ class Parameters:
         context = self.constraint_context()
         metadata: list[dict[str, Any]] = []
         for entry in context:
-            if not entry['independent']:
-                continue
+            # Include ALL parameters (both independent and dependent) for constraint expressions
+            # if not entry['independent']:
+            #     continue
             metadata.append({
                 'alias': entry['alias'],
                 'displayName': entry['display_name'],
