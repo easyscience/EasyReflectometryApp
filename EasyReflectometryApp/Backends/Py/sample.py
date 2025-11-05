@@ -155,6 +155,7 @@ class Sample(QObject):
         if self._models_logic.set_name_at_current_index(value):
             self.modelsTableChanged.emit()
             self.modelsIndexChanged.emit()
+            self._clearCacheAndEmitLayersChanged()
 
     # Actions
     @Slot(str)
