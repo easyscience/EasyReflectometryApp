@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import QtCharts
 
 import EasyApp.Gui.Style as EaStyle
@@ -19,15 +20,16 @@ Rectangle {
 
     color: EaStyle.Colors.chartBackground
 
-    Column {
+    SplitView {
         anchors.fill: parent
-        spacing: 0
+        orientation: Qt.Vertical
 
         // Sample Chart (2/3 height)
         Rectangle {
             id: sampleContainer
-            width: parent.width
-            height: parent.height * 0.67
+            SplitView.fillHeight: true
+            SplitView.preferredHeight: parent.height * 0.67
+            SplitView.minimumHeight: 100
             color: EaStyle.Colors.chartBackground
 
             EaCharts.QtCharts1dMeasVsCalc {
@@ -191,8 +193,9 @@ Rectangle {
         // SLD Chart (1/3 height)
         Rectangle {
             id: sldContainer
-            width: parent.width
-            height: parent.height * 0.33
+            SplitView.fillHeight: true
+            SplitView.preferredHeight: parent.height * 0.33
+            SplitView.minimumHeight: 80
             color: EaStyle.Colors.chartBackground
 
             EaCharts.QtCharts1dMeasVsCalc {
