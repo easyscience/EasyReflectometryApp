@@ -159,6 +159,7 @@ QtObject {
     function sampleSetCurrentLayerSolvation(value) { activeBackend.sample.setCurrentLayerSolvation(value) }
 
     // Constraints
+    readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
     readonly property var sampleDepParameterNames: activeBackend.sample.dependentParameterNames
     readonly property var sampleRelationOperators: activeBackend.sample.relationOperators
@@ -234,8 +235,10 @@ QtObject {
     readonly property int analysisMinimizerCurrentIndex: activeBackend.analysis.minimizerCurrentIndex
     function analysisSetMinimizerCurrentIndex(value) { activeBackend.analysis.setMinimizerCurrentIndex(value) }
 
-    readonly property var analysisFitableParameters: activeBackend.analysis.fitableParameters 
+    readonly property var analysisFitableParameters: activeBackend.analysis.enabledParameters
     readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
+    readonly property var analysisEnabledParameters: activeBackend.analysis.enabledParameters
+
     function analysisSetCurrentParameterIndex(value) { activeBackend.analysis.setCurrentParameterIndex(value) }
     function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
     function analysisSetExperimentNameAtIndex(index, value) { activeBackend.analysis.setExperimentNameAtIndex(index, value) }

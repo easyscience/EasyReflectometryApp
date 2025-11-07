@@ -144,6 +144,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], model_unique_
             'fit': parameter.free,
             'independent': parameter.independent,
             'dependency': _get_dependency_expression(parameter),
+            'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
             'object': parameter,  # Direct reference to the Parameter object
         })
 

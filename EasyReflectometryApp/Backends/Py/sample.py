@@ -166,6 +166,7 @@ class Sample(QObject):
     @Slot()
     def addNewModel(self) -> None:
         self._models_logic.add_new()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
         self.materialsTableChanged.emit()
 
@@ -420,8 +421,24 @@ class Sample(QObject):
         return [parameter['name'] for parameter in self._parameters_logic.parameters]
 
     @Property('QVariantList', notify=layersChange)
-    def dependentParameterNames(self) -> list[dict[str, str]]:
-        return [parameter['name'] for parameter in self._parameters_logic.parameters if parameter['independent']]
+    def enabledParameterNames(self) -> list[str]:
+        enabled_param_names = []
+        for parameter in self._parameters_logic.parameters:
+            if hasattr(parameter['object'], 'enabled') and parameter['object'].enabled == False:
+                continue
+            enabled_param_names.append(parameter['name'])
+        return enabled_param_names
+
+    @Property('QVariantList', notify=layersChange)
+    def dependentParameterNames(self) -> list[str]:
+        dep_param_names = []
+        for parameter in self._parameters_logic.parameters:
+            if not parameter['independent']:
+                continue
+            if hasattr(parameter['object'], 'enabled') and parameter['object'].enabled == False:
+                continue
+            dep_param_names.append(parameter['name'])
+        return dep_param_names
 
     @Property('QVariantList', notify=layersChange)
     def relationOperators(self) -> list[str]:

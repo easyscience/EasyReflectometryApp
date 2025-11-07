@@ -7,6 +7,8 @@ from easyreflectometry import Project as ProjectLib
 class Project:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
+        self._project_lib.default_model()
+        self._update_enablement_of_fixed_layers_for_model(0)
 
     @property
     def created(self) -> bool:
@@ -83,6 +85,12 @@ class Project:
         except IndexError:
             pass
         return experimental_data
+
+    def _update_enablement_of_fixed_layers_for_model(self, index: int) -> None:
+        sample = self._project_lib.models[index].sample
+        sample[0].layers[0].thickness.enabled = False
+        sample[0].layers[0].roughness.enabled = False
+        sample[-1].layers[-1].thickness.enabled = False
 
     def info(self) -> dict:
         info = copy(self._project_lib._info)

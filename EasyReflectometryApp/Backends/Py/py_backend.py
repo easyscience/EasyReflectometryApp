@@ -23,7 +23,6 @@ class PyBackend(QObject):
         super().__init__(parent)
 
         self._project_lib = ProjectLib()
-        self._project_lib.default_model()
 
         # Page and Status bar backend parts
         self._home = Home()
