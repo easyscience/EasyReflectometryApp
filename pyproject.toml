@@ -31,7 +31,7 @@ classifiers = [
 
 requires-python = '>=3.11'
 dependencies = [
-  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@unpinned_pyside6',
+  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@develop',
   'easyreflectometry @ git+https://github.com/EasyScience/EasyReflectometryLib.git@orso_models',
   'PySide6',
   'toml',
