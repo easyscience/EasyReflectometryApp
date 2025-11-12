@@ -105,6 +105,9 @@ class Project:
     def load_new_experiment(self, path: str) -> None:
         self._project_lib.load_new_experiment(path)
 
+    def set_sample_from_orso(self, sample) -> None:
+        self._project_lib.set_sample_from_orso(sample)
+
     def reset(self) -> None:
         self._project_lib.reset()
         self._project_lib.default_model()

@@ -111,4 +111,7 @@ class Project(QObject):
         # Load the sample model
         sample = load_orso_model(orso_data)
         # Set the sample in the project logic
-        pass
+        self._logic.set_sample_from_orso(sample)
+        # notify listeners
+        self.externalProjectLoaded.emit()
+
