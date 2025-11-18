@@ -31,6 +31,7 @@ class Analysis(QObject):
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
+        self._project_lib = project_lib
         self._parameters_logic = ParametersLogic(project_lib)
         self._fitting_logic = FittingLogic(project_lib)
         self._calculators_logic = CalculatorsLogic(project_lib)
@@ -151,6 +152,7 @@ class Analysis(QObject):
     def setModelOnExperiment(self, new_value: int) -> None:
         self._experiments_logic.set_model_on_experiment(new_value)
         self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
 
     @Slot(str)
     def setExperimentName(self, new_name: str) -> None:
@@ -233,6 +235,7 @@ class Analysis(QObject):
             # Update current experiment index to first selected (or 0 if no selection)
             if valid_indices:
                 self._experiments_logic.set_current_index(valid_indices[0])
+                self._project_lib.current_experiment_index = valid_indices[0]
             elif len(self._experiments_logic.available()) > 0:
                 # If no selection but experiments available, default to first experiment
                 self._experiments_logic.set_current_index(0)
