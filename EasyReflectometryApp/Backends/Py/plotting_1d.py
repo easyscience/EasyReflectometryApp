@@ -93,7 +93,7 @@ class Plotting1d(QObject):
             # Default single experiment behavior
             current_index = self._project_lib.current_experiment_index
             data = self._project_lib.experimental_data_for_model_at_index(current_index)
-        except IndexError as e:
+        except IndexError:
             data = DataSet1D(
                 name='Experiment Data empty',
                 x=np.empty(0),
@@ -110,7 +110,8 @@ class Plotting1d(QObject):
             if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
                 return len(self._proxy._analysis._selected_experiment_indices) > 1
         except Exception:
-            pass
+            # log the exception for debugging purposes
+            console.debug("Exception occurred while checking multi-experiment mode")
         return False
 
     @property

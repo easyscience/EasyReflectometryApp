@@ -230,7 +230,7 @@ class Analysis(QObject):
         valid_indices = [i for i in indices if 0 <= i < available_count]
 
         if valid_indices != self._selected_experiment_indices:
-            previous_selection = self._selected_experiment_indices.copy()
+            # previous_selection = self._selected_experiment_indices.copy()
             self._selected_experiment_indices = valid_indices
             # Update current experiment index to first selected (or 0 if no selection)
             if valid_indices:
@@ -298,8 +298,6 @@ class Analysis(QObject):
         Get individual experiment data for each selected experiment.
         Returns a list of dictionaries with data, name, and color for each experiment.
         """
-        import numpy as np
-        from easyreflectometry.data import DataSet1D
 
         if not self._selected_experiment_indices:
             return []
@@ -324,7 +322,8 @@ class Analysis(QObject):
             try:
                 data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
                 if data.x.size > 0:  # Only include non-empty datasets
-                    exp_name = self._experiments_logic.available()[exp_idx] if exp_idx < len(self._experiments_logic.available()) else f"Experiment {exp_idx + 1}"
+                    exp_name = self._experiments_logic.available()[exp_idx] if \
+                        exp_idx < len(self._experiments_logic.available()) else f"Experiment {exp_idx + 1}"
                     color = color_palette[idx % len(color_palette)]
 
                     experiment_data_list.append({
@@ -410,7 +409,7 @@ class Analysis(QObject):
         #import time
         #t0 = time.time()
         for parameter in self._parameters_logic.parameters:
-            if parameter['enabled'] == False:
+            if not parameter['enabled']:
                 continue
             enabled_parameters.append(parameter)
         #t1 = time.time()

@@ -424,7 +424,7 @@ class Sample(QObject):
     def enabledParameterNames(self) -> list[str]:
         enabled_param_names = []
         for parameter in self._parameters_logic.parameters:
-            if hasattr(parameter['object'], 'enabled') and parameter['object'].enabled == False:
+            if hasattr(parameter['object'], 'enabled') and not parameter['object'].enabled:
                 continue
             enabled_param_names.append(parameter['name'])
         return enabled_param_names
@@ -435,7 +435,7 @@ class Sample(QObject):
         for parameter in self._parameters_logic.parameters:
             if not parameter['independent']:
                 continue
-            if hasattr(parameter['object'], 'enabled') and parameter['object'].enabled == False:
+            if hasattr(parameter['object'], 'enabled') and not parameter['object'].enabled:
                 continue
             dep_param_names.append(parameter['name'])
         return dep_param_names

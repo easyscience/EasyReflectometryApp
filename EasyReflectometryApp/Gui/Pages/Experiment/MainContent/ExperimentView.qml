@@ -57,16 +57,18 @@ Rectangle {
         }
 
         // Watch for changes in multi-experiment mode
-        onIsMultiExperimentModeChanged: {
-            updateMultiExperimentSeries()
-        }
+        // onIsMultiExperimentModeChanged: {
+        //     // Don't update here - wait for experimentDataChanged signal
+        //     // which fires after backend has prepared the data
+        //     console.log(`Multi-experiment mode changed to: ${isMultiExperimentMode}`)
+        // }
 
         // Watch for changes in staggered plotting mode
         onUseStaggeredPlottingChanged: {
-            // console.log(`🔄 ExperimentView detected staggered mode change: ${useStaggeredPlotting}`)
-            // console.log(`   Multi-experiment mode: ${isMultiExperimentMode}, Series count: ${multiExperimentSeries.length}`)
+            // console.log(`ExperimentView detected staggered mode change: ${useStaggeredPlotting}`)
+            // console.log(`Multi-experiment mode: ${isMultiExperimentMode}, Series count: ${multiExperimentSeries.length}`)
             if (isMultiExperimentMode && multiExperimentSeries.length > 1) {
-                // console.log(`📊 Refreshing ${multiExperimentSeries.length} series with staggered mode: ${useStaggeredPlotting}`)
+                // console.log(`Refreshing ${multiExperimentSeries.length} series with staggered mode: ${useStaggeredPlotting}`)
                 // Re-populate all series with new staggering setting
                 for (var i = 0; i < multiExperimentSeries.length; i++) {
                     populateExperimentSeries(multiExperimentSeries[i])
@@ -80,9 +82,9 @@ Rectangle {
 
         // Watch for changes in staggering factor
         onStaggeringFactorChanged: {
-            // console.log(`🔄 ExperimentView detected staggering factor change: ${staggeringFactor.toFixed(2)}`)
+            // console.log(`ExperimentView detected staggering factor change: ${staggeringFactor.toFixed(2)}`)
             if (useStaggeredPlotting && isMultiExperimentMode && multiExperimentSeries.length > 1) {
-                // console.log(`📊 Refreshing ${multiExperimentSeries.length} series with new factor`)
+                // console.log(`Refreshing ${multiExperimentSeries.length} series with new factor`)
                 // Re-populate all series with new staggering factor
                 for (var i = 0; i < multiExperimentSeries.length; i++) {
                     populateExperimentSeries(multiExperimentSeries[i])
@@ -96,9 +98,9 @@ Rectangle {
         Connections {
             target: Globals.Variables
             function onStaggeringFactorChanged() {
-                // console.log(`🔄 Direct watcher: Globals.Variables.staggeringFactor changed to ${Globals.Variables.staggeringFactor}`)
+                // console.log(`Direct watcher: Globals.Variables.staggeringFactor changed to ${Globals.Variables.staggeringFactor}`)
                 if (chartView.useStaggeredPlotting && chartView.isMultiExperimentMode && chartView.multiExperimentSeries.length > 1) {
-                    // console.log(`📊 Forcing refresh of ${chartView.multiExperimentSeries.length} series`)
+                    // console.log(`Forcing refresh of ${chartView.multiExperimentSeries.length} series`)
                     for (var i = 0; i < chartView.multiExperimentSeries.length; i++) {
                         chartView.populateExperimentSeries(chartView.multiExperimentSeries[i])
                     }
@@ -133,19 +135,14 @@ Rectangle {
             // console.log(`📏 Adjusted Y-axis for staggering: [${allMinY.toExponential(2)}, ${allMaxY.toExponential(2)}] with padding`)
         }
 
-        // Watch for changes in experiment data  
+        // Watch for changes in multi-experiment selection
         Connections {
-            target: {
-                try {
-                    return Globals.BackendWrapper.plotting || null
-                } catch (e) {
-                    return null
-                }
-            }
-            function onExperimentDataChanged() {
-                if (chartView.isMultiExperimentMode) {
-                    updateMultiExperimentSeries()
-                }
+            target: Globals.BackendWrapper.activeBackend
+            function onMultiExperimentSelectionChanged() {
+                // Update series when selection changes
+                // The function will handle showing/hiding appropriate series
+                console.log("Multi-experiment selection changed - updating series")
+                chartView.updateMultiExperimentSeries()
             }
         }
         
@@ -167,13 +164,13 @@ Rectangle {
 
         // Multi-experiment series management
         function updateMultiExperimentSeries() {
-            // console.log("🔄 Updating multi-experiment series...")
+            // console.log("Updating multi-experiment series...")
+            // console.log(`   isMultiExperimentMode: ${isMultiExperimentMode}`)
 
             // Clear existing multi-experiment series
             clearMultiExperimentSeries()
 
             if (!isMultiExperimentMode) {
-                // console.log("   Single experiment mode - showing default series")
                 // Show default series for single experiment
                 measured.visible = true
                 errorUpper.visible = true
@@ -181,14 +178,21 @@ Rectangle {
                 return
             }
 
-            // Hide default series in multi-experiment mode
+            // Get experiment data list
+            var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
+            // If no data available yet, keep default series visible as fallback
+            if (experimentDataList.length === 0) {
+                console.log("No experiment data available - keeping default series visible")
+                measured.visible = true
+                errorUpper.visible = true
+                errorLower.visible = true
+                return
+            }
+
+            // Hide default series in multi-experiment mode (only after we have data)
             measured.visible = false
             errorUpper.visible = false
             errorLower.visible = false
-
-            // Get experiment data list
-            var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
-            // console.log(`   Creating series for ${experimentDataList.length} experiments`)
 
             // Create series for each experiment
             for (var i = 0; i < experimentDataList.length; i++) {
@@ -217,7 +221,7 @@ Rectangle {
         }
 
         function createExperimentSeries(expIndex, expName, color) {
-            // console.log(`   📊 Creating series for experiment ${expIndex}: ${expName} (${color})`)
+            // console.log(` Creating series for experiment ${expIndex}: ${expName} (${color})`)
 
             // Create measured data series
             var measuredSerie = chartView.createSeries(ChartView.SeriesTypeLine, 
@@ -485,7 +489,7 @@ Rectangle {
                                                                measured)
 
             // Initialize multi-experiment support
-            // console.log("🚀 ExperimentView initialized - checking multi-experiment mode...")
+            // console.log("ExperimentView initialized - checking multi-experiment mode...")
             updateMultiExperimentSeries()
         }
 

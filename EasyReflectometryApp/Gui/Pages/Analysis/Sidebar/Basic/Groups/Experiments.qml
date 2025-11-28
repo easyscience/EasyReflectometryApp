@@ -222,7 +222,7 @@ EaElements.GroupBox {
     function clearAllSelections() {
         wasMultiSelected = false
         selectedExperimentIndices = []
-        Globals.BackendWrapper.analysisSetSelectedExperimentIndices([])
+        // Don't send empty array to backend - let subsequent selection handle it
     }
 
     function updateBackendWithSelectedExperiments() {
@@ -230,6 +230,7 @@ EaElements.GroupBox {
             return
         }
 
+        // console.log(`📊 Updating backend with selection: [${selectedExperimentIndices.join(', ')}]`)
         Globals.BackendWrapper.analysisSetSelectedExperimentIndices(selectedExperimentIndices)
 
         var primaryIndex = selectedExperimentIndices[0]

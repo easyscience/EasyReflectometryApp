@@ -8,9 +8,9 @@ from pathlib import Path
 from EasyApp.Logic.Logging import console
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import qInstallMessageHandler
+from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQml import qmlRegisterSingletonType
-from PySide6.QtGui import QIcon
 
 try:  # Running locally
     from Backends.Py import PyBackend
