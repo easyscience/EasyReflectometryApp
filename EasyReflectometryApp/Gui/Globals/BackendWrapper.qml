@@ -166,8 +166,10 @@ QtObject {
     readonly property var sampleRelationOperators: activeBackend.sample.relationOperators
     readonly property var sampleArithmicOperators: activeBackend.sample.arithmicOperators
     readonly property var sampleConstraintsList: activeBackend.sample.constraintsList
+    readonly property var sampleConstraintParametersMetadata: activeBackend.sample.constraintParametersMetadata
 
-    function sampleAddConstraint(value1, value2, value3, value4, value5) { activeBackend.sample.addConstraint(value1, value2, value3, value4, value5) }
+    function sampleValidateConstraintExpression(index, relation, expression) { return activeBackend.sample.validateConstraintExpression(index, relation, expression) }
+    function sampleAddConstraint(index, relation, expression) { return activeBackend.sample.addConstraint(index, relation, expression) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
 
     // Q range

@@ -273,48 +273,86 @@ QtObject {
         'parameter 2',
         'parameter 3'
     ]
-    readonly property var relationOperators: ['=', '<', '>']
+    readonly property var relationOperators: [
+        { value: '=', text: '=' },
+        { value: '>', text: '≥' },
+        { value: '<', text: '≤' }
+    ]
     readonly property var arithmicOperators: ['', '*', '/', '+', '-']
+    readonly property var constraintParametersMetadata: [
+        { alias: 'parameter_1', displayName: 'parameter 1', independent: true },
+        { alias: 'parameter_2', displayName: 'parameter 2', independent: true },
+        { alias: 'parameter_3', displayName: 'parameter 3', independent: true }
+    ]
 
-    // Mock constraints data - matches the new simplified format
+    // Mock constraints data - matches the structured format expected by the UI
     property var constraintsList: [
         {
-            dependentName: "Thickness Layer 1",
-            expression: "2.0 * parameter 2 + 1.5"
+            dependentName: 'Thickness Layer 1',
+            expression: 'parameter 2 * 0.5 + 1.5',
+            rawExpression: 'parameter_2 * 0.5 + 1.5',
+            relation: '=',
+            type: 'expression'
         },
         {
-            dependentName: "Roughness Layer 2",
-            expression: "parameter 1 / 3.14"
+            dependentName: 'Roughness Layer 2',
+            expression: 'parameter 1 / 3.14',
+            rawExpression: 'parameter_1 / 3.14',
+            relation: '=',
+            type: 'expression'
         },
         {
-            dependentName: "SLD Layer 3",
-            expression: "5.0"
+            dependentName: 'SLD Layer 3',
+            expression: '5.0',
+            rawExpression: '5.0',
+            relation: '=',
+            type: 'static'
         }
     ]
 
-    function addConstraint(value1, value2, value3, value4, value5) {
-        console.debug(`addConstraint ${value1} ${value2} ${value3} ${value4} ${value5}`)
+    function validateConstraintExpression(dependentIndex, relation, expression) {
+        if (dependentIndex < 0 || dependentIndex >= parameterNames.length) {
+            return { valid: false, message: 'Select a dependent parameter first.' }
+        }
+        const expr = expression !== undefined && expression !== null ? String(expression).trim() : ''
+        if (expr.length === 0) {
+            return { valid: false, message: 'Expression cannot be empty.' }
+        }
+        return {
+            valid: true,
+            message: '',
+            preview: expr,
+            relation: relation,
+            type: relation === '=' ? 'expression' : (relation === '>' ? 'lower_bound' : 'upper_bound')
+        }
+    }
 
-        // Create constraint object in the new simplified format
-        let expression = ""
-        if (value5 >= 0 && value5 < parameterNames.length) {
-            // Parameter-parameter constraint
-            expression = `${value3} ${value4} ${parameterNames[value5]}`
-        } else {
-            // Numeric constraint
-            expression = `= ${value3}`
+    function addConstraint(dependentIndex, relation, expression) {
+        const validation = validateConstraintExpression(dependentIndex, relation, expression)
+        if (!validation.valid) {
+            return { success: false, message: validation.message }
         }
 
         const constraint = {
-            dependentName: parameterNames[value1] || "Unknown",
-            expression: expression
+            dependentName: parameterNames[dependentIndex] || 'Unknown parameter',
+            expression: validation.preview,
+            rawExpression: expression,
+            relation: relation,
+            type: validation.type
         }
 
-        // Add to constraints list - need to reassign the array to trigger property change
-        var newConstraints = constraintsList.slice() // Create a copy
+        var newConstraints = constraintsList.slice()
         newConstraints.push(constraint)
         constraintsList = newConstraints
         constraintsChanged()
+
+        return {
+            success: true,
+            message: '',
+            preview: validation.preview,
+            relation: relation,
+            type: validation.type
+        }
     }
 
     function removeConstraintByIndex(index) {

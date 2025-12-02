@@ -15,6 +15,10 @@ EaComponents.SideBarColumn {
     Groups.Constraints{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
+    Groups.ModelConstraints{
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+    }
+
 /*
     property int independentParCurrentIndex: 0
     property int dependentParCurrentIndex: 0
