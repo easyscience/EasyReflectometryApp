@@ -331,4 +331,11 @@ QtObject {
             return []
         }
     }
+    function plottingGetAnalysisDataPoints(index) {
+        try {
+            return activeBackend.plottingGetAnalysisDataPoints(index)
+        } catch (e) {
+            return []
+        }
+    }
 }

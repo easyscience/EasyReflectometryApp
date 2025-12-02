@@ -110,8 +110,7 @@ class Plotting1d(QObject):
             if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
                 return len(self._proxy._analysis._selected_experiment_indices) > 1
         except Exception:
-            # log the exception for debugging purposes
-            console.debug("Exception occurred while checking multi-experiment mode")
+            pass
         return False
 
     @property
@@ -233,6 +232,54 @@ class Plotting1d(QObject):
             console.debug(f"Error getting experiment data points for index {experiment_index}: {e}")
             return []
 
+    @Slot(int, result='QVariantList')
+    def getAnalysisDataPoints(self, experiment_index: int) -> list:
+        """Get measured and calculated data points for a specific experiment for analysis plotting."""
+        try:
+            # Get measured experimental data
+            exp_data = self._project_lib.experimental_data_for_model_at_index(experiment_index)
+
+            # Get the model index for this experiment - it may be different from experiment_index
+            # When multiple experiments share the same model
+            model_index = 0
+            if hasattr(exp_data, 'model') and exp_data.model is not None:
+                # Find the model index in the models collection
+                for idx, model in enumerate(self._project_lib.models):
+                    if model is exp_data.model:
+                        model_index = idx
+                        break
+            else:
+                # Fallback: use experiment_index if it's within model range, else 0
+                model_index = experiment_index if experiment_index < len(self._project_lib.models) else 0
+
+            # Get the q values from the experimental data for calculating the model
+            q_values = exp_data.x
+            # Filter to q range
+            mask = (q_values >= self._project_lib.q_min) & (q_values <= self._project_lib.q_max)
+            q_filtered = q_values[mask]
+
+            # Get calculated model data at the same q points using the correct model index
+            calc_data = self._project_lib.sample_data_for_model_at_index(model_index, q_filtered)
+
+            points = []
+            exp_points = list(exp_data.data_points())
+            calc_y = calc_data.y
+
+            calc_idx = 0
+            for point in exp_points:
+                if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
+                    calc_y_val = calc_y[calc_idx] if calc_idx < len(calc_y) else point[1]
+                    points.append({
+                        'x': float(point[0]),
+                        'measured': float(np.log10(point[1])),
+                        'calculated': float(np.log10(calc_y_val)),
+                    })
+                    calc_idx += 1
+            return points
+        except Exception as e:
+            console.debug(f"Error getting analysis data points for index {experiment_index}: {e}")
+            return []
+
     def refreshSamplePage(self):
         self.drawCalculatedOnSampleChart()
         self.drawCalculatedOnSldChart()
@@ -317,7 +364,24 @@ class Plotting1d(QObject):
 
     def drawCalculatedAndMeasuredOnAnalysisChart(self):
         if PLOT_BACKEND == 'QtCharts':
-            self.qtchartsReplaceCalculatedAndMeasuredOnAnalysisChartAndRedraw()
+            if self.is_multi_experiment_mode:
+                self.qtchartsReplaceMultiExperimentAnalysisChartAndRedraw()
+            else:
+                self.qtchartsReplaceCalculatedAndMeasuredOnAnalysisChartAndRedraw()
+
+    def qtchartsReplaceMultiExperimentAnalysisChartAndRedraw(self):
+        """Clear default series and let QML handle multi-experiment drawing on analysis page."""
+        console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines on analysis page'))
+
+        # Clear default series but don't use them for multi-experiment mode
+        if 'measuredSerie' in self._chartRefs['QtCharts']['analysisPage']:
+            self._chartRefs['QtCharts']['analysisPage']['measuredSerie'].clear()
+        if 'calculatedSerie' in self._chartRefs['QtCharts']['analysisPage']:
+            self._chartRefs['QtCharts']['analysisPage']['calculatedSerie'].clear()
+
+        # Individual experiment series are managed by QML
+        # This method is called to trigger the refresh, actual drawing is handled by QML
+        self.experimentDataChanged.emit()
 
     def qtchartsReplaceCalculatedAndMeasuredOnAnalysisChartAndRedraw(self):
         series_measured = self._chartRefs['QtCharts']['analysisPage']['measuredSerie']
