@@ -116,6 +116,12 @@ class Project:
     def set_sample_from_orso(self, sample) -> None:
         self._project_lib.set_sample_from_orso(sample)
 
+    def add_sample_from_orso(self, sample) -> None:
+        """Add a new model with the given sample to the existing model collection."""
+        self._project_lib.add_sample_from_orso(sample)
+        new_model_index = len(self._project_lib.models) - 1
+        self._update_enablement_of_fixed_layers_for_model(new_model_index)
+
     def reset(self) -> None:
         self._project_lib.reset()
         self._project_lib.default_model()

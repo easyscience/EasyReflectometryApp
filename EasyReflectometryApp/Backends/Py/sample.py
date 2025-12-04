@@ -8,12 +8,11 @@ from typing import Tuple
 import numpy as np
 from asteval import Interpreter
 from easyreflectometry import Project as ProjectLib
+from easyscience.variable.descriptor_number import DescriptorNumber
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
-
-from easyscience.variable.descriptor_number import DescriptorNumber
 
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.layers import Layers as LayersLogic
