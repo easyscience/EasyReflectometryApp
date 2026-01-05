@@ -40,6 +40,7 @@ class Plotting1d(QObject):
                 'analysisPage': {
                     'calculatedSerie': None,
                     'measuredSerie': None,
+                    'sldSerie': None,
                 },
             }
         }
@@ -314,13 +315,25 @@ class Plotting1d(QObject):
             self.qtchartsReplaceCalculatedOnSldChartAndRedraw()
 
     def qtchartsReplaceCalculatedOnSldChartAndRedraw(self):
+        # Draw on sample page
         series = self._chartRefs['QtCharts']['samplePage']['sldSerie']
-        series.clear()
-        nr_points = 0
-        for point in self.sld_data.data_points():
-            series.append(point[0], point[1])
-            nr_points = nr_points + 1
-        console.debug(IO.formatMsg('sub', 'Sld curve', f'{nr_points} points', 'on sample page', 'replaced'))
+        if series is not None:
+            series.clear()
+            nr_points = 0
+            for point in self.sld_data.data_points():
+                series.append(point[0], point[1])
+                nr_points = nr_points + 1
+            console.debug(IO.formatMsg('sub', 'Sld curve', f'{nr_points} points', 'on sample page', 'replaced'))
+
+        # Draw on analysis page
+        analysis_series = self._chartRefs['QtCharts']['analysisPage']['sldSerie']
+        if analysis_series is not None:
+            analysis_series.clear()
+            nr_points = 0
+            for point in self.sld_data.data_points():
+                analysis_series.append(point[0], point[1])
+                nr_points = nr_points + 1
+            console.debug(IO.formatMsg('sub', 'Sld curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
     def drawMeasuredOnExperimentChart(self):
         if PLOT_BACKEND == 'QtCharts':

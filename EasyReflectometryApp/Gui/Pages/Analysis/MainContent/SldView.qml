@@ -158,8 +158,8 @@ Rectangle {
 
         // Data is set in python backend (plotting_1d.py)
         Component.onCompleted: {
-            Globals.References.pages.sample.mainContent.sldView = chartView
-            Globals.BackendWrapper.plottingSetQtChartsSerieRef('samplePage',
+            Globals.References.pages.analysis.mainContent.sldView = chartView
+            Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                'sldSerie',
                                                                chartView.calcSerie)
             Globals.BackendWrapper.plottingRefreshSLD()
