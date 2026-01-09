@@ -97,6 +97,7 @@ Rectangle {
                 // Tool buttons
                 Row {
                     id: sampleToolButtons
+                    z: 1  // Keep buttons above MouseAreas
 
                     x: sampleChartView.plotArea.x + sampleChartView.plotArea.width - width
                     y: sampleChartView.plotArea.y - height - EaStyle.Sizes.fontPixelSize
@@ -124,7 +125,7 @@ Rectangle {
                         borderColor: EaStyle.Colors.chartAxis
                         fontIcon: "comment-alt"
                         ToolTip.text: qsTr("Show coordinates tooltip on hover")
-                        onClicked: sampleChartView.allowHover = !sampleChartView.allowHover
+                        onClicked: sampleChartView.allowHover = checked
                     }
 
                     Item { height: 1; width: 0.5 * EaStyle.Sizes.fontPixelSize }  // spacer
@@ -138,8 +139,8 @@ Rectangle {
                         fontIcon: "arrows-alt"
                         ToolTip.text: qsTr("Enable pan")
                         onClicked: {
-                            sampleChartView.allowZoom = !sampleChartView.allowZoom
-                            sldChartView.allowZoom = sampleChartView.allowZoom
+                            sampleChartView.allowZoom = !checked
+                            sldChartView.allowZoom = !checked
                         }
                     }
 
@@ -152,8 +153,8 @@ Rectangle {
                         fontIcon: "expand"
                         ToolTip.text: qsTr("Enable box zoom")
                         onClicked: {
-                            sampleChartView.allowZoom = !sampleChartView.allowZoom
-                            sldChartView.allowZoom = sampleChartView.allowZoom
+                            sampleChartView.allowZoom = checked
+                            sldChartView.allowZoom = checked
                         }
                     }
 
@@ -206,15 +207,114 @@ Rectangle {
                     textFormat: Text.RichText
                 }
 
-                Component.onCompleted: {
-                    Globals.References.pages.sample.mainContent.sampleView = sampleChartView
+                // Zoom rectangle
+                Rectangle {
+                    id: sampleRecZoom
+
+                    property int xScaleZoom: 0
+                    property int yScaleZoom: 0
+
+                    visible: false
+                    transform: Scale {
+                        origin.x: 0
+                        origin.y: 0
+                        xScale: sampleRecZoom.xScaleZoom
+                        yScale: sampleRecZoom.yScaleZoom
+                    }
+                    border.color: EaStyle.Colors.appBorder
+                    border.width: 1
+                    opacity: 0.9
+                    color: "transparent"
+
+                    Rectangle {
+                        anchors.fill: parent
+                        opacity: 0.5
+                        color: sampleRecZoom.border.color
+                    }
                 }
 
-                // Sync X-axis with SLD chart
-                Connections {
-                    target: sampleAxisX
-                    function onMinChanged() { syncXAxes() }
-                    function onMaxChanged() { syncXAxes() }
+                // Zoom with left mouse button
+                MouseArea {
+                    id: sampleZoomMouseArea
+
+                    enabled: sampleChartView.allowZoom
+                    anchors.fill: sampleChartView
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: {
+                        sampleRecZoom.x = mouseX
+                        sampleRecZoom.y = mouseY
+                        sampleRecZoom.visible = true
+                    }
+                    onMouseXChanged: {
+                        if (mouseX > sampleRecZoom.x) {
+                            sampleRecZoom.xScaleZoom = 1
+                            sampleRecZoom.width = Math.min(mouseX, sampleChartView.width) - sampleRecZoom.x
+                        } else {
+                            sampleRecZoom.xScaleZoom = -1
+                            sampleRecZoom.width = sampleRecZoom.x - Math.max(mouseX, 0)
+                        }
+                    }
+                    onMouseYChanged: {
+                        if (mouseY > sampleRecZoom.y) {
+                            sampleRecZoom.yScaleZoom = 1
+                            sampleRecZoom.height = Math.min(mouseY, sampleChartView.height) - sampleRecZoom.y
+                        } else {
+                            sampleRecZoom.yScaleZoom = -1
+                            sampleRecZoom.height = sampleRecZoom.y - Math.max(mouseY, 0)
+                        }
+                    }
+                    onReleased: {
+                        const x = Math.min(sampleRecZoom.x, mouseX) - sampleChartView.anchors.leftMargin
+                        const y = Math.min(sampleRecZoom.y, mouseY) - sampleChartView.anchors.topMargin
+                        const width = sampleRecZoom.width
+                        const height = sampleRecZoom.height
+                        sampleChartView.zoomIn(Qt.rect(x, y, width, height))
+                        sampleRecZoom.visible = false
+                    }
+                }
+
+                // Pan with left mouse button
+                MouseArea {
+                    property real pressedX
+                    property real pressedY
+                    property int threshold: 1
+
+                    enabled: !sampleZoomMouseArea.enabled
+                    anchors.fill: sampleChartView
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: {
+                        pressedX = mouseX
+                        pressedY = mouseY
+                    }
+                    onMouseXChanged: Qt.callLater(update)
+                    onMouseYChanged: Qt.callLater(update)
+
+                    function update() {
+                        const dx = mouseX - pressedX
+                        const dy = mouseY - pressedY
+                        pressedX = mouseX
+                        pressedY = mouseY
+
+                        if (dx > threshold)
+                            sampleChartView.scrollLeft(dx)
+                        else if (dx < -threshold)
+                            sampleChartView.scrollRight(-dx)
+                        if (dy > threshold)
+                            sampleChartView.scrollUp(dy)
+                        else if (dy < -threshold)
+                            sampleChartView.scrollDown(-dy)
+                    }
+                }
+
+                // Reset axes with right mouse button
+                MouseArea {
+                    anchors.fill: sampleChartView
+                    acceptedButtons: Qt.RightButton
+                    onClicked: sampleChartView.resetAxes()
+                }
+
+                Component.onCompleted: {
+                    Globals.References.pages.sample.mainContent.sampleView = sampleChartView
                 }
             }
         }
@@ -315,6 +415,112 @@ Rectangle {
 
                     arrowLength: 0
                     textFormat: Text.RichText
+                }
+
+                // Zoom rectangle
+                Rectangle {
+                    id: sldRecZoom
+
+                    property int xScaleZoom: 0
+                    property int yScaleZoom: 0
+
+                    visible: false
+                    transform: Scale {
+                        origin.x: 0
+                        origin.y: 0
+                        xScale: sldRecZoom.xScaleZoom
+                        yScale: sldRecZoom.yScaleZoom
+                    }
+                    border.color: EaStyle.Colors.appBorder
+                    border.width: 1
+                    opacity: 0.9
+                    color: "transparent"
+
+                    Rectangle {
+                        anchors.fill: parent
+                        opacity: 0.5
+                        color: sldRecZoom.border.color
+                    }
+                }
+
+                // Zoom with left mouse button
+                MouseArea {
+                    id: sldZoomMouseArea
+
+                    enabled: sldChartView.allowZoom
+                    anchors.fill: sldChartView
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: {
+                        sldRecZoom.x = mouseX
+                        sldRecZoom.y = mouseY
+                        sldRecZoom.visible = true
+                    }
+                    onMouseXChanged: {
+                        if (mouseX > sldRecZoom.x) {
+                            sldRecZoom.xScaleZoom = 1
+                            sldRecZoom.width = Math.min(mouseX, sldChartView.width) - sldRecZoom.x
+                        } else {
+                            sldRecZoom.xScaleZoom = -1
+                            sldRecZoom.width = sldRecZoom.x - Math.max(mouseX, 0)
+                        }
+                    }
+                    onMouseYChanged: {
+                        if (mouseY > sldRecZoom.y) {
+                            sldRecZoom.yScaleZoom = 1
+                            sldRecZoom.height = Math.min(mouseY, sldChartView.height) - sldRecZoom.y
+                        } else {
+                            sldRecZoom.yScaleZoom = -1
+                            sldRecZoom.height = sldRecZoom.y - Math.max(mouseY, 0)
+                        }
+                    }
+                    onReleased: {
+                        const x = Math.min(sldRecZoom.x, mouseX) - sldChartView.anchors.leftMargin
+                        const y = Math.min(sldRecZoom.y, mouseY) - sldChartView.anchors.topMargin
+                        const width = sldRecZoom.width
+                        const height = sldRecZoom.height
+                        sldChartView.zoomIn(Qt.rect(x, y, width, height))
+                        sldRecZoom.visible = false
+                    }
+                }
+
+                // Pan with left mouse button
+                MouseArea {
+                    property real pressedX
+                    property real pressedY
+                    property int threshold: 1
+
+                    enabled: !sldZoomMouseArea.enabled
+                    anchors.fill: sldChartView
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: {
+                        pressedX = mouseX
+                        pressedY = mouseY
+                    }
+                    onMouseXChanged: Qt.callLater(update)
+                    onMouseYChanged: Qt.callLater(update)
+
+                    function update() {
+                        const dx = mouseX - pressedX
+                        const dy = mouseY - pressedY
+                        pressedX = mouseX
+                        pressedY = mouseY
+
+                        if (dx > threshold)
+                            sldChartView.scrollLeft(dx)
+                        else if (dx < -threshold)
+                            sldChartView.scrollRight(-dx)
+                        if (dy > threshold)
+                            sldChartView.scrollUp(dy)
+                        else if (dy < -threshold)
+                            sldChartView.scrollDown(-dy)
+                    }
+                }
+
+                // Reset axes with right mouse button
+                MouseArea {
+                    anchors.fill: sldChartView
+                    acceptedButtons: Qt.RightButton
+                    onClicked: sldChartView.resetAxes()
                 }
 
                 Component.onCompleted: {
@@ -425,14 +631,5 @@ Rectangle {
         tooltip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
         tooltip.parent = chart
         tooltip.visible = state
-    }
-
-    function syncXAxes() {
-        // Keep both charts' X axes synchronized
-        if (sampleAxisX.min !== sldAxisX.min ||
-            sampleAxisX.max !== sldAxisX.max) {
-            sldAxisX.min = sampleAxisX.min
-            sldAxisX.max = sampleAxisX.max
-        }
     }
 }
