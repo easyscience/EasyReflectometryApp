@@ -18,6 +18,7 @@ class Plotting1d(QObject):
     sampleChartRangesChanged = Signal()
     experimentChartRangesChanged = Signal()
     experimentDataChanged = Signal()
+    samplePageDataChanged = Signal()  # Signal for QML to refresh sample page charts
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -127,36 +128,96 @@ class Plotting1d(QObject):
     # Sample
     @Property(float, notify=sampleChartRangesChanged)
     def sampleMaxX(self):
-        return self.sample_data.x.max()
+        return self._get_all_models_sample_range()[1]
 
     @Property(float, notify=sampleChartRangesChanged)
     def sampleMinX(self):
-        return self.sample_data.x.min()
+        return self._get_all_models_sample_range()[0]
 
     @Property(float, notify=sampleChartRangesChanged)
     def sampleMaxY(self):
-        return np.log10(self.sample_data.y.max())
+        return self._get_all_models_sample_range()[3]
 
     @Property(float, notify=sampleChartRangesChanged)
     def sampleMinY(self):
-        return np.log10(self.sample_data.y.min())
+        return self._get_all_models_sample_range()[2]
+
+    def _get_all_models_sample_range(self):
+        """Get combined X/Y ranges for all models' sample data."""
+        min_x, max_x = float('inf'), float('-inf')
+        min_y, max_y = float('inf'), float('-inf')
+
+        for idx in range(len(self._project_lib.models)):
+            try:
+                data = self._project_lib.sample_data_for_model_at_index(idx)
+                if data.x.size > 0:
+                    min_x = min(min_x, data.x.min())
+                    max_x = max(max_x, data.x.max())
+                if data.y.size > 0:
+                    valid_y = data.y[data.y > 0]
+                    if valid_y.size > 0:
+                        min_y = min(min_y, np.log10(valid_y.min()))
+                        max_y = max(max_y, np.log10(valid_y.max()))
+            except (IndexError, ValueError):
+                continue
+
+        # Fallback to current model if no valid data found
+        if min_x == float('inf'):
+            min_x = self.sample_data.x.min() if self.sample_data.x.size > 0 else 0.0
+        if max_x == float('-inf'):
+            max_x = self.sample_data.x.max() if self.sample_data.x.size > 0 else 1.0
+        if min_y == float('inf'):
+            min_y = np.log10(self.sample_data.y.min()) if self.sample_data.y.size > 0 else -10.0
+        if max_y == float('-inf'):
+            max_y = np.log10(self.sample_data.y.max()) if self.sample_data.y.size > 0 else 0.0
+
+        return (min_x, max_x, min_y, max_y)
 
     # SLD
     @Property(float, notify=sldChartRangesChanged)
     def sldMaxX(self):
-        return self.sld_data.x.max()
+        return self._get_all_models_sld_range()[1]
 
     @Property(float, notify=sldChartRangesChanged)
     def sldMinX(self):
-        return self.sld_data.x.min()
+        return self._get_all_models_sld_range()[0]
 
     @Property(float, notify=sldChartRangesChanged)
     def sldMaxY(self):
-        return self.sld_data.y.max()
+        return self._get_all_models_sld_range()[3]
 
     @Property(float, notify=sldChartRangesChanged)
     def sldMinY(self):
-        return self.sld_data.y.min()
+        return self._get_all_models_sld_range()[2]
+
+    def _get_all_models_sld_range(self):
+        """Get combined X/Y ranges for all models' SLD data."""
+        min_x, max_x = float('inf'), float('-inf')
+        min_y, max_y = float('inf'), float('-inf')
+
+        for idx in range(len(self._project_lib.models)):
+            try:
+                data = self._project_lib.sld_data_for_model_at_index(idx)
+                if data.x.size > 0:
+                    min_x = min(min_x, data.x.min())
+                    max_x = max(max_x, data.x.max())
+                if data.y.size > 0:
+                    min_y = min(min_y, data.y.min())
+                    max_y = max(max_y, data.y.max())
+            except (IndexError, ValueError):
+                continue
+
+        # Fallback to current model if no valid data found
+        if min_x == float('inf'):
+            min_x = self.sld_data.x.min() if self.sld_data.x.size > 0 else 0.0
+        if max_x == float('-inf'):
+            max_x = self.sld_data.x.max() if self.sld_data.x.size > 0 else 1.0
+        if min_y == float('inf'):
+            min_y = self.sld_data.y.min() if self.sld_data.y.size > 0 else -1.0
+        if max_y == float('-inf'):
+            max_y = self.sld_data.y.max() if self.sld_data.y.size > 0 else 1.0
+
+        return (min_x, max_x, min_y, max_y)
 
     # Experiment ranges
     @Property(float, notify=experimentChartRangesChanged)
@@ -213,6 +274,51 @@ class Plotting1d(QObject):
     def setQtChartsSerieRef(self, page: str, serie: str, ref: QObject):
         self._chartRefs['QtCharts'][page][serie] = ref
         console.debug(IO.formatMsg('sub', f'{serie} on {page}: {ref}'))
+
+    @Slot(int, result='QVariantList')
+    def getSampleDataPointsForModel(self, model_index: int) -> list:
+        """Get sample data points for a specific model for plotting."""
+        try:
+            data = self._project_lib.sample_data_for_model_at_index(model_index)
+            points = []
+            for point in data.data_points():
+                points.append({
+                    'x': float(point[0]),
+                    'y': float(np.log10(point[1])) if point[1] > 0 else -10.0
+                })
+            return points
+        except Exception as e:
+            console.debug(f'Error getting sample data points for model {model_index}: {e}')
+            return []
+
+    @Slot(int, result='QVariantList')
+    def getSldDataPointsForModel(self, model_index: int) -> list:
+        """Get SLD data points for a specific model for plotting."""
+        try:
+            data = self._project_lib.sld_data_for_model_at_index(model_index)
+            points = []
+            for point in data.data_points():
+                points.append({
+                    'x': float(point[0]),
+                    'y': float(point[1])
+                })
+            return points
+        except Exception as e:
+            console.debug(f'Error getting SLD data points for model {model_index}: {e}')
+            return []
+
+    @Slot(int, result=str)
+    def getModelColor(self, model_index: int) -> str:
+        """Get the color for a specific model."""
+        try:
+            return str(self._project_lib.models[model_index].color)
+        except (IndexError, AttributeError):
+            return '#000000'
+
+    @Property(int, notify=sampleChartRangesChanged)
+    def modelCount(self) -> int:
+        """Return the number of models."""
+        return len(self._project_lib.models)
 
     @Slot(int, result='QVariantList')
     def getExperimentDataPoints(self, experiment_index: int) -> list:
@@ -282,8 +388,13 @@ class Plotting1d(QObject):
             return []
 
     def refreshSamplePage(self):
-        self.drawCalculatedOnSampleChart()
-        self.drawCalculatedOnSldChart()
+        # Clear cached data so it gets recalculated
+        self._sample_data = {}
+        self._sld_data = {}
+        # Emit signals to update ranges and trigger QML refresh
+        self.sampleChartRangesChanged.emit()
+        self.sldChartRangesChanged.emit()
+        self.samplePageDataChanged.emit()
 
     def refreshExperimentPage(self):
         self.drawMeasuredOnExperimentChart()

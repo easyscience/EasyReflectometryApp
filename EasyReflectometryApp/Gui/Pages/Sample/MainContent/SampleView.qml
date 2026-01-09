@@ -19,32 +19,65 @@ Rectangle {
 
     color: EaStyle.Colors.chartBackground
 
-    EaCharts.QtCharts1dMeasVsCalc {
+    // Track model count changes to refresh charts
+    property int modelCount: Globals.BackendWrapper.sampleModels.length
+
+    // Store dynamically created series
+    property var sampleSeries: []
+
+    ChartView {
         id: chartView
 
+        anchors.fill: parent
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
+        anchors.margins: -12
 
-        useOpenGL: EaGlobals.Vars.useOpenGL
-        
+        antialiasing: true
+        legend.visible: false
+        backgroundRoundness: 0
+        backgroundColor: EaStyle.Colors.chartBackground
+        plotAreaColor: EaStyle.Colors.chartPlotAreaBackground
+
+        property bool allowZoom: true
+        property bool allowHover: true
+
         property double xRange: Globals.BackendWrapper.plottingSampleMaxX - Globals.BackendWrapper.plottingSampleMinX
-        axisX.title: "q (Å⁻¹)"
-        axisX.min: Globals.BackendWrapper.plottingSampleMinX - xRange * 0.01
-        axisX.max: Globals.BackendWrapper.plottingSampleMaxX + xRange * 0.01
-        axisX.minAfterReset: Globals.BackendWrapper.plottingSampleMinX - xRange * 0.01
-        axisX.maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + xRange * 0.01
+
+        ValueAxis {
+            id: axisX
+            titleText: "q (Å⁻¹)"
+            min: Globals.BackendWrapper.plottingSampleMinX - chartView.xRange * 0.01
+            max: Globals.BackendWrapper.plottingSampleMaxX + chartView.xRange * 0.01
+            property double minAfterReset: Globals.BackendWrapper.plottingSampleMinX - chartView.xRange * 0.01
+            property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + chartView.xRange * 0.01
+            color: EaStyle.Colors.chartAxis
+            gridLineColor: EaStyle.Colors.chartGridLine
+            minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+            labelsColor: EaStyle.Colors.chartLabels
+            titleBrush: EaStyle.Colors.chartLabels
+        }
 
         property double yRange: Globals.BackendWrapper.plottingSampleMaxY - Globals.BackendWrapper.plottingSampleMinY
-        axisY.title: "Log10 R(q)"
-        axisY.min: Globals.BackendWrapper.plottingSampleMinY - yRange * 0.01
-        axisY.max: Globals.BackendWrapper.plottingSampleMaxY + yRange * 0.01
-        axisY.minAfterReset: Globals.BackendWrapper.plottingSampleMinY - yRange * 0.01
-        axisY.maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + yRange * 0.01
 
-        calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
+        ValueAxis {
+            id: axisY
+            titleText: "Log10 R(q)"
+            min: Globals.BackendWrapper.plottingSampleMinY - chartView.yRange * 0.01
+            max: Globals.BackendWrapper.plottingSampleMaxY + chartView.yRange * 0.01
+            property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - chartView.yRange * 0.01
+            property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + chartView.yRange * 0.01
+            color: EaStyle.Colors.chartAxis
+            gridLineColor: EaStyle.Colors.chartGridLine
+            minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+            labelsColor: EaStyle.Colors.chartLabels
+            titleBrush: EaStyle.Colors.chartLabels
+        }
 
-        calcSerie.color: {
-            var idx = Globals.BackendWrapper.sampleCurrentModelIndex
-            Globals.BackendWrapper.sampleModels[idx].color
+        function resetAxes() {
+            axisX.min = axisX.minAfterReset
+            axisX.max = axisX.maxAfterReset
+            axisY.min = axisY.minAfterReset
+            axisY.max = axisY.maxAfterReset
         }
 
         // Tool buttons
@@ -115,11 +148,10 @@ Rectangle {
             }
 
         }
-        // Tool buttons
 
-        // Legend
+        // Legend showing all models
         Rectangle {
-            visible: Globals.Variables.showLegendOnExperimentPage
+            visible: Globals.Variables.showLegendOnSamplePage
 
             x: chartView.plotArea.x + chartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
             y: chartView.plotArea.y + EaStyle.Sizes.fontPixelSize
@@ -135,13 +167,15 @@ Rectangle {
                 topPadding: EaStyle.Sizes.fontPixelSize * 0.5
                 bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
 
-                EaElements.Label {
-                    text: '━  I (sample)'
-                    color: chartView.calcSerie.color
+                Repeater {
+                    model: container.modelCount
+                    EaElements.Label {
+                        text: '━  ' + Globals.BackendWrapper.sampleModels[index].label
+                        color: Globals.BackendWrapper.sampleModels[index].color
+                    }
                 }
             }
         }
-        // Legend
 
         EaElements.ToolTip {
             id: dataToolTip
@@ -150,15 +184,62 @@ Rectangle {
             textFormat: Text.RichText
         }
 
-        // Data is set in python backend (plotting_1d.py)
         Component.onCompleted: {
             Globals.References.pages.sample.mainContent.sampleView = chartView
-            Globals.BackendWrapper.plottingSetQtChartsSerieRef('samplePage',
-                                                               'sampleSerie',
-                                                               chartView.calcSerie)
-            Globals.BackendWrapper.plottingRefreshSample()
+        }
+    }
+
+    // Create series dynamically when model count changes
+    onModelCountChanged: {
+        Qt.callLater(recreateAllSeries)
+    }
+
+    // Refresh all chart series when data changes
+    Connections {
+        target: Globals.BackendWrapper
+        function onSamplePageDataChanged() {
+            refreshAllCharts()
+        }
+    }
+
+    Component.onCompleted: {
+        Qt.callLater(recreateAllSeries)
+    }
+
+    function recreateAllSeries() {
+        // Remove old series
+        for (let i = 0; i < sampleSeries.length; i++) {
+            if (sampleSeries[i]) {
+                chartView.removeSeries(sampleSeries[i])
+            }
+        }
+        sampleSeries = []
+
+        // Create new series for each model
+        const models = Globals.BackendWrapper.sampleModels
+        for (let k = 0; k < models.length; k++) {
+            const line = chartView.createSeries(ChartView.SeriesTypeLine, models[k].label, axisX, axisY)
+            line.color = models[k].color
+            line.width = 2
+            line.useOpenGL = EaGlobals.Vars.useOpenGL
+            sampleSeries.push(line)
         }
 
+        refreshAllCharts()
+    }
+
+    function refreshAllCharts() {
+        const models = Globals.BackendWrapper.sampleModels
+        for (let i = 0; i < sampleSeries.length && i < models.length; i++) {
+            const series = sampleSeries[i]
+            if (series) {
+                series.clear()
+                const points = Globals.BackendWrapper.plottingGetSampleDataPointsForModel(i)
+                for (let p = 0; p < points.length; p++) {
+                    series.append(points[p].x, points[p].y)
+                }
+            }
+        }
     }
 
     // Logic

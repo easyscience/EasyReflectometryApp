@@ -19,39 +19,66 @@ Rectangle {
 
     color: EaStyle.Colors.chartBackground
 
-    EaCharts.QtCharts1dMeasVsCalc {
+    // Track model count changes to refresh charts
+    property int modelCount: Globals.BackendWrapper.sampleModels.length
+
+    // Store dynamically created series
+    property var sldSeries: []
+
+    ChartView {
         id: chartView
 
+        anchors.fill: parent
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
+        anchors.margins: -12
 
-        useOpenGL: EaGlobals.Vars.useOpenGL
+        antialiasing: true
+        legend.visible: false
+        backgroundRoundness: 0
+        backgroundColor: EaStyle.Colors.chartBackground
+        plotAreaColor: EaStyle.Colors.chartPlotAreaBackground
+
+        property bool allowZoom: true
+        property bool allowHover: true
 
         property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
-        axisX.title: "z (Å)"
-        axisX.min: Globals.BackendWrapper.plottingSldMinX - xRange * 0.01
-        axisX.max: Globals.BackendWrapper.plottingSldMaxX + xRange * 0.01
-        axisX.minAfterReset: Globals.BackendWrapper.plottingSldMinX - xRange * 0.01
-        axisX.maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + xRange * 0.01
 
-        property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
-        axisY.title: "SLD (10⁻⁶Å⁻²)"
-        axisY.min: Globals.BackendWrapper.plottingSldMinY - yRange * 0.01
-        axisY.max: Globals.BackendWrapper.plottingSldMaxY + yRange * 0.01
-        axisY.minAfterReset: Globals.BackendWrapper.plottingSldMinY - yRange * 0.01
-        axisY.maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + yRange * 0.01
-
-        calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
-        calcSerie.color: {
-            const models = Globals.BackendWrapper.sampleModels
-            const idx = Globals.BackendWrapper.sampleCurrentModelIndex
-
-            if (models && idx >= 0 && idx < models.length) {
-                return models[idx].color
-            }
-
-            return undefined
+        ValueAxis {
+            id: axisX
+            titleText: "z (Å)"
+            min: Globals.BackendWrapper.plottingSldMinX - chartView.xRange * 0.01
+            max: Globals.BackendWrapper.plottingSldMaxX + chartView.xRange * 0.01
+            property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - chartView.xRange * 0.01
+            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + chartView.xRange * 0.01
+            color: EaStyle.Colors.chartAxis
+            gridLineColor: EaStyle.Colors.chartGridLine
+            minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+            labelsColor: EaStyle.Colors.chartLabels
+            titleBrush: EaStyle.Colors.chartLabels
         }
 
+        property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
+
+        ValueAxis {
+            id: axisY
+            titleText: "SLD (10⁻⁶ Å⁻²)"
+            min: Globals.BackendWrapper.plottingSldMinY - chartView.yRange * 0.01
+            max: Globals.BackendWrapper.plottingSldMaxY + chartView.yRange * 0.01
+            property double minAfterReset: Globals.BackendWrapper.plottingSldMinY - chartView.yRange * 0.01
+            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + chartView.yRange * 0.01
+            color: EaStyle.Colors.chartAxis
+            gridLineColor: EaStyle.Colors.chartGridLine
+            minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+            labelsColor: EaStyle.Colors.chartLabels
+            titleBrush: EaStyle.Colors.chartLabels
+        }
+
+        function resetAxes() {
+            axisX.min = axisX.minAfterReset
+            axisX.max = axisX.maxAfterReset
+            axisY.min = axisY.minAfterReset
+            axisY.max = axisY.maxAfterReset
+        }
 
         // Tool buttons
         Row {
@@ -121,11 +148,10 @@ Rectangle {
             }
 
         }
-        // Tool buttons
 
-        // Legend
+        // Legend showing all models
         Rectangle {
-            visible: Globals.Variables.showLegendOnExperimentPage
+            visible: Globals.Variables.showLegendOnSamplePage
 
             x: chartView.plotArea.x + chartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
             y: chartView.plotArea.y + EaStyle.Sizes.fontPixelSize
@@ -141,13 +167,15 @@ Rectangle {
                 topPadding: EaStyle.Sizes.fontPixelSize * 0.5
                 bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
 
-                EaElements.Label {
-                    text: '━  SLD'
-                    color: chartView.calcSerie.color
+                Repeater {
+                    model: container.modelCount
+                    EaElements.Label {
+                        text: '━  SLD ' + Globals.BackendWrapper.sampleModels[index].label
+                        color: Globals.BackendWrapper.sampleModels[index].color
+                    }
                 }
             }
         }
-        // Legend
 
         EaElements.ToolTip {
             id: dataToolTip
@@ -156,18 +184,65 @@ Rectangle {
             textFormat: Text.RichText
         }
 
-        // Data is set in python backend (plotting_1d.py)
         Component.onCompleted: {
             Globals.References.pages.sample.mainContent.sldView = chartView
-            Globals.BackendWrapper.plottingSetQtChartsSerieRef('samplePage',
-                                                               'sldSerie',
-                                                               chartView.calcSerie)
-            Globals.BackendWrapper.plottingRefreshSLD()
+        }
+    }
+
+    // Create series dynamically when model count changes
+    onModelCountChanged: {
+        Qt.callLater(recreateAllSeries)
+    }
+
+    // Refresh all chart series when data changes
+    Connections {
+        target: Globals.BackendWrapper
+        function onSamplePageDataChanged() {
+            refreshAllCharts()
+        }
+    }
+
+    Component.onCompleted: {
+        Qt.callLater(recreateAllSeries)
+    }
+
+    function recreateAllSeries() {
+        // Remove old series
+        for (let i = 0; i < sldSeries.length; i++) {
+            if (sldSeries[i]) {
+                chartView.removeSeries(sldSeries[i])
+            }
+        }
+        sldSeries = []
+
+        // Create new series for each model
+        const models = Globals.BackendWrapper.sampleModels
+        for (let k = 0; k < models.length; k++) {
+            const line = chartView.createSeries(ChartView.SeriesTypeLine, models[k].label, axisX, axisY)
+            line.color = models[k].color
+            line.width = 2
+            line.useOpenGL = EaGlobals.Vars.useOpenGL
+            sldSeries.push(line)
+        }
+
+        refreshAllCharts()
+    }
+
+    function refreshAllCharts() {
+        const models = Globals.BackendWrapper.sampleModels
+        for (let i = 0; i < sldSeries.length && i < models.length; i++) {
+            const series = sldSeries[i]
+            if (series) {
+                series.clear()
+                const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(i)
+                for (let p = 0; p < points.length; p++) {
+                    series.append(points[p].x, points[p].y)
+                }
+            }
         }
     }
 
     // Logic
-
     function showMainTooltip(chart, point, state) {
         if (!chartView.allowHover) {
             return

@@ -312,6 +312,44 @@ QtObject {
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }
 
+    // Multi-model sample page plotting support
+    readonly property int plottingModelCount: activeBackend.plotting.modelCount
+    function plottingGetSampleDataPointsForModel(index) {
+        try {
+            return activeBackend.plotting.getSampleDataPointsForModel(index)
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetSldDataPointsForModel(index) {
+        try {
+            return activeBackend.plotting.getSldDataPointsForModel(index)
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetModelColor(index) {
+        try {
+            return activeBackend.plotting.getModelColor(index)
+        } catch (e) {
+            return '#000000'
+        }
+    }
+
+    // Signal for sample page data changes - forward from backend
+    signal samplePageDataChanged()
+
+    // Connect to backend signal (called from Component.onCompleted in QML items)
+    function connectSamplePageDataChanged() {
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.samplePageDataChanged) {
+            activeBackend.plotting.samplePageDataChanged.connect(samplePageDataChanged)
+        }
+    }
+
+    Component.onCompleted: {
+        connectSamplePageDataChanged()
+    }
+
     // Multi-experiment plotting support
     readonly property bool plottingIsMultiExperimentMode: {
         try {

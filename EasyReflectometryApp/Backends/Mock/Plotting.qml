@@ -21,6 +21,10 @@ QtObject {
     property double analysisMinY: -40.
     property double analysisMaxY: 40.
 
+    property int modelCount: 1
+
+    signal samplePageDataChanged()
+
     function setQtChartsSerieRef(value1, value2, value3) {
         console.debug(`setQtChartsSerieRef ${value1}, ${value2}, ${value3}`)
     }
@@ -31,6 +35,21 @@ QtObject {
 
     function drawCalculatedOnSldChart(){
         console.debug(`drawCalculatedOnSldChart`)
+    }
+
+    function getSampleDataPointsForModel(index) {
+        console.debug(`getSampleDataPointsForModel ${index}`)
+        return []
+    }
+
+    function getSldDataPointsForModel(index) {
+        console.debug(`getSldDataPointsForModel ${index}`)
+        return []
+    }
+
+    function getModelColor(index) {
+        console.debug(`getModelColor ${index}`)
+        return '#0000FF'
     }
 
 }
