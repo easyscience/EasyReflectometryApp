@@ -76,7 +76,7 @@ class Models:
 
     def default_model_content(self, model: Model) -> None:
         """Set the default content for a model."""
-        model.sample.add_assembly()
+        model.add_assemblies()
         model.sample.data[0].layers.data[0].material = self._project_lib._materials[
             self._project_lib.get_index_air()
         ]
@@ -87,7 +87,7 @@ class Models:
         model.sample.data[1].layers.data[0].material = self._project_lib._materials[
             self._project_lib.get_index_sio2()
         ]
-        model.sample.data[1].layers.data[0].thickness = 20.0
+        model.sample.data[1].layers.data[0].thickness = 100.0
         model.sample.data[1].layers.data[0].roughness = 3.0
         model.sample.data[1].name = 'SiO2'
 

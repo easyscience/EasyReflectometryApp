@@ -367,6 +367,8 @@ Rectangle {
             sampleLine.color = models[k].color
             sampleLine.width = 2
             sampleLine.useOpenGL = EaGlobals.Vars.useOpenGL
+            // Connect hovered signal for tooltip
+            sampleLine.hovered.connect((point, state) => showMainTooltip(sampleChartView, sampleDataToolTip, point, state))
             sampleSeries.push(sampleLine)
 
             // Create SLD series
@@ -374,6 +376,8 @@ Rectangle {
             sldLine.color = models[k].color
             sldLine.width = 2
             sldLine.useOpenGL = EaGlobals.Vars.useOpenGL
+            // Connect hovered signal for tooltip
+            sldLine.hovered.connect((point, state) => showMainTooltip(sldChartView, sldDataToolTip, point, state))
             sldSeries.push(sldLine)
         }
 

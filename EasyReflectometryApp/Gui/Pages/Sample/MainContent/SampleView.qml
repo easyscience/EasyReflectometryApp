@@ -222,6 +222,8 @@ Rectangle {
             line.color = models[k].color
             line.width = 2
             line.useOpenGL = EaGlobals.Vars.useOpenGL
+            // Connect hovered signal for tooltip
+            line.hovered.connect((point, state) => showMainTooltip(chartView, point, state))
             sampleSeries.push(line)
         }
 
