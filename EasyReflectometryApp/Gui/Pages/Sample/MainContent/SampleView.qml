@@ -46,8 +46,7 @@ Rectangle {
         ValueAxis {
             id: axisX
             titleText: "q (Å⁻¹)"
-            min: Globals.BackendWrapper.plottingSampleMinX - chartView.xRange * 0.01
-            max: Globals.BackendWrapper.plottingSampleMaxX + chartView.xRange * 0.01
+            // min/max set imperatively to avoid binding reset during zoom
             property double minAfterReset: Globals.BackendWrapper.plottingSampleMinX - chartView.xRange * 0.01
             property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + chartView.xRange * 0.01
             color: EaStyle.Colors.chartAxis
@@ -55,6 +54,10 @@ Rectangle {
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
             labelsColor: EaStyle.Colors.chartLabels
             titleBrush: EaStyle.Colors.chartLabels
+            Component.onCompleted: {
+                min = minAfterReset
+                max = maxAfterReset
+            }
         }
 
         property double yRange: Globals.BackendWrapper.plottingSampleMaxY - Globals.BackendWrapper.plottingSampleMinY
@@ -62,8 +65,7 @@ Rectangle {
         ValueAxis {
             id: axisY
             titleText: "Log10 R(q)"
-            min: Globals.BackendWrapper.plottingSampleMinY - chartView.yRange * 0.01
-            max: Globals.BackendWrapper.plottingSampleMaxY + chartView.yRange * 0.01
+            // min/max set imperatively to avoid binding reset during zoom
             property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - chartView.yRange * 0.01
             property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + chartView.yRange * 0.01
             color: EaStyle.Colors.chartAxis
@@ -71,6 +73,10 @@ Rectangle {
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
             labelsColor: EaStyle.Colors.chartLabels
             titleBrush: EaStyle.Colors.chartLabels
+            Component.onCompleted: {
+                min = minAfterReset
+                max = maxAfterReset
+            }
         }
 
         function resetAxes() {

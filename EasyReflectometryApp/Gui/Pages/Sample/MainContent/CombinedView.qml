@@ -60,8 +60,7 @@ Rectangle {
                 ValueAxis {
                     id: sampleAxisX
                     titleText: "q (Å⁻¹)"
-                    min: Globals.BackendWrapper.plottingSampleMinX - sampleChartView.xRange * 0.01
-                    max: Globals.BackendWrapper.plottingSampleMaxX + sampleChartView.xRange * 0.01
+                    // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSampleMinX - sampleChartView.xRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + sampleChartView.xRange * 0.01
                     color: EaStyle.Colors.chartAxis
@@ -69,6 +68,10 @@ Rectangle {
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
                     labelsColor: EaStyle.Colors.chartLabels
                     titleBrush: EaStyle.Colors.chartLabels
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
                 }
 
                 property double yRange: Globals.BackendWrapper.plottingSampleMaxY - Globals.BackendWrapper.plottingSampleMinY
@@ -76,8 +79,7 @@ Rectangle {
                 ValueAxis {
                     id: sampleAxisY
                     titleText: "Log10 R(q)"
-                    min: Globals.BackendWrapper.plottingSampleMinY - sampleChartView.yRange * 0.01
-                    max: Globals.BackendWrapper.plottingSampleMaxY + sampleChartView.yRange * 0.01
+                    // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - sampleChartView.yRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + sampleChartView.yRange * 0.01
                     color: EaStyle.Colors.chartAxis
@@ -85,6 +87,10 @@ Rectangle {
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
                     labelsColor: EaStyle.Colors.chartLabels
                     titleBrush: EaStyle.Colors.chartLabels
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
                 }
 
                 function resetAxes() {
@@ -348,8 +354,7 @@ Rectangle {
                 ValueAxis {
                     id: sldAxisX
                     titleText: "z (Å)"
-                    min: Globals.BackendWrapper.plottingSldMinX - sldChartView.xRange * 0.01
-                    max: Globals.BackendWrapper.plottingSldMaxX + sldChartView.xRange * 0.01
+                    // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - sldChartView.xRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + sldChartView.xRange * 0.01
                     color: EaStyle.Colors.chartAxis
@@ -357,6 +362,10 @@ Rectangle {
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
                     labelsColor: EaStyle.Colors.chartLabels
                     titleBrush: EaStyle.Colors.chartLabels
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
                 }
 
                 property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
@@ -364,8 +373,7 @@ Rectangle {
                 ValueAxis {
                     id: sldAxisY
                     titleText: "SLD (10⁻⁶Å⁻²)"
-                    min: Globals.BackendWrapper.plottingSldMinY - sldChartView.yRange * 0.01
-                    max: Globals.BackendWrapper.plottingSldMaxY + sldChartView.yRange * 0.01
+                    // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSldMinY - sldChartView.yRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + sldChartView.yRange * 0.01
                     color: EaStyle.Colors.chartAxis
@@ -373,6 +381,10 @@ Rectangle {
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
                     labelsColor: EaStyle.Colors.chartLabels
                     titleBrush: EaStyle.Colors.chartLabels
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
                 }
 
                 function resetAxes() {
