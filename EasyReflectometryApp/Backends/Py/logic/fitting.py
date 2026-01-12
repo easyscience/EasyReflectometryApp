@@ -33,6 +33,6 @@ class Fitting:
             self._running = True
             self._finished = False
             exp_data = self._project_lib.experimental_data_for_model_at_index(0)
-            self._result = self._project_lib._fitter.fit_single_data_set_1d(exp_data)
+            self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
             self._running = False
             self._finished = True
