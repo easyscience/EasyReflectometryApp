@@ -301,7 +301,11 @@ EaElements.GroupBox {
                     checked: Globals.BackendWrapper.analysisFitableParameters[index].fit
                     onToggled: {
                         console.debug("*** Editing 'fit' field of fittable on Analysis page ***")
-                        Globals.BackendWrapper.analysisSetCurrentParameterFit(checkState)
+                        // Ensure this row is selected before toggling the fit value
+                        if (Globals.BackendWrapper.analysisCurrentParameterIndex !== index) {
+                            Globals.BackendWrapper.analysisSetCurrentParameterIndex(index)
+                        }
+                        Globals.BackendWrapper.analysisSetCurrentParameterFit(checked)
                     }
                 }
             }

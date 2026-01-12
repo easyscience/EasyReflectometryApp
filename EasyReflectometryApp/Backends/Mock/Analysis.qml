@@ -22,6 +22,7 @@ QtObject {
     readonly property bool fittingRunning: false
     property bool showFitResultsDialog: false
     readonly property bool fitSuccess: true
+    readonly property string fitErrorMessage: ''
     readonly property int fitNumRefinedParams: 3
     readonly property real fitChi2: 1.2345
 

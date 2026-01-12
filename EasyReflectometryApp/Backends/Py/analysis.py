@@ -79,6 +79,10 @@ class Analysis(QObject):
     def fitSuccess(self) -> bool:
         return self._fitting_logic.fit_success
 
+    @Property(str, notify=fittingChanged)
+    def fitErrorMessage(self) -> str:
+        return self._fitting_logic.fit_error_message
+
     @Property(int, notify=fittingChanged)
     def fitNumRefinedParams(self) -> int:
         return self._fitting_logic.fit_n_pars
@@ -488,4 +492,5 @@ class Analysis(QObject):
 
     def _clearCacheAndEmitParametersChanged(self):
         self._chached_parameters = None
+        self._chached_enabled_parameters = None
         self.parametersChanged.emit()

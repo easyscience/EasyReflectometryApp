@@ -2,6 +2,7 @@ from typing import Optional
 
 from easyreflectometry import Project as ProjectLib
 from easyscience.fitting import FitResults
+from easyscience.fitting.minimizers.utils import FitError
 
 
 class Fitting:
@@ -11,6 +12,7 @@ class Fitting:
         self._finished = True
         self._result: Optional[FitResults] = None
         self._show_results_dialog = False
+        self._fit_error_message: Optional[str] = None
 
     @property
     def status(self) -> str:
@@ -42,6 +44,10 @@ class Fitting:
         return self._result.success
 
     @property
+    def fit_error_message(self) -> str:
+        return self._fit_error_message or ''
+
+    @property
     def fit_n_pars(self) -> int:
         if self._result is None:
             return 0
@@ -65,8 +71,21 @@ class Fitting:
             self._running = True
             self._finished = False
             self._show_results_dialog = False
-            exp_data = self._project_lib.experimental_data_for_model_at_index(0)
-            self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
-            self._running = False
-            self._finished = True
-            self._show_results_dialog = True
+            self._fit_error_message = None
+            try:
+                exp_data = self._project_lib.experimental_data_for_model_at_index(0)
+                self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
+            except FitError as e:
+                # Handle fit failure - create a failed result
+                self._result = None
+                self._fit_error_message = str(e)
+                print(f'Fit failed: {e}')
+            except Exception as e:
+                # Handle any other unexpected exceptions
+                self._result = None
+                self._fit_error_message = str(e)
+                print(f'Unexpected error during fit: {e}')
+            finally:
+                self._running = False
+                self._finished = True
+                self._show_results_dialog = True

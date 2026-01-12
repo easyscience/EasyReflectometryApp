@@ -71,40 +71,60 @@ class Parameters:
     def count_fixed_parameters(self) -> int:
         return count_fixed_parameters(self._project_lib)
 
+    def _get_enabled_parameters(self) -> List[Parameter]:
+        """Return only enabled parameters from the project, filtered the same way as the parameters property."""
+        # Use the parameters property which already filters by model path, then filter by enabled
+        return [p['object'] for p in self.parameters if p.get('enabled', True)]
+
+    def _get_current_parameter(self) -> Parameter:
+        """Get the current parameter from enabled parameters list."""
+        enabled_params = self._get_enabled_parameters()
+        if 0 <= self._current_index < len(enabled_params):
+            return enabled_params[self._current_index]
+        return None
+
     def set_current_parameter_value(self, new_value: str) -> bool:
-        parameters = self._project_lib.parameters
-        if float(new_value) != parameters[self._current_index].value:
+        parameter = self._get_current_parameter()
+        if parameter is None:
+            return False
+        if float(new_value) != parameter.value:
             try:
-                parameters[self._current_index].value = float(new_value)
+                parameter.value = float(new_value)
             except ValueError:
                 pass
             return True
         return False
 
     def set_current_parameter_min(self, new_value: str) -> bool:
-        parameters = self._project_lib.parameters
-        if float(new_value) != parameters[self._current_index].min:
+        parameter = self._get_current_parameter()
+        if parameter is None:
+            return False
+        if float(new_value) != parameter.min:
             try:
-                parameters[self._current_index].min = float(new_value)
+                parameter.min = float(new_value)
             except ValueError:
                 pass
             return True
         return False
 
     def set_current_parameter_max(self, new_value: str) -> bool:
-        parameters = self._project_lib.parameters
-        if float(new_value) != parameters[self._current_index].max:
+        parameter = self._get_current_parameter()
+        if parameter is None:
+            return False
+        if float(new_value) != parameter.max:
             try:
-                parameters[self._current_index].max = float(new_value)
+                parameter.max = float(new_value)
             except ValueError:
                 pass
             return True
         return False
 
-    def set_current_parameter_fit(self, new_value: str) -> bool:
-        parameters = self._project_lib.parameters
-        if bool(new_value) != parameters[self._current_index].free:
-            parameters[self._current_index].free = bool(new_value)
+    def set_current_parameter_fit(self, new_value: bool) -> bool:
+        parameter = self._get_current_parameter()
+        if parameter is None:
+            return False
+        if bool(new_value) != parameter.free:
+            parameter.free = bool(new_value)
             return True
         return False
 

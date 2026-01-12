@@ -17,7 +17,7 @@ EaElements.Dialog {
     id: dialog
 
     visible: Globals.BackendWrapper.analysisShowFitResultsDialog
-    title: qsTr("Refinement Results")
+    title: Globals.BackendWrapper.analysisFitSuccess ? qsTr("Refinement Results") : qsTr("Refinement Failed")
     standardButtons: Dialog.Ok
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -39,11 +39,21 @@ EaElements.Dialog {
         }
 
         EaElements.Label {
+            visible: Globals.BackendWrapper.analysisFitSuccess
             text: "Num. refined parameters: " + Globals.BackendWrapper.analysisFitNumRefinedParams
         }
 
         EaElements.Label {
+            visible: Globals.BackendWrapper.analysisFitSuccess
             text: "Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
+        }
+
+        EaElements.Label {
+            visible: !Globals.BackendWrapper.analysisFitSuccess && Globals.BackendWrapper.analysisFitErrorMessage !== ""
+            text: "Error: " + Globals.BackendWrapper.analysisFitErrorMessage
+            wrapMode: Text.WordWrap
+            width: Math.min(implicitWidth, EaStyle.Sizes.sideBarContentWidth * 1.5)
+            color: EaStyle.Colors.red
         }
     }
 
