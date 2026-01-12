@@ -20,6 +20,10 @@ QtObject {
     readonly property string fittingStatus: ''//undefined  //'Success'
     readonly property bool isFitFinished: true
     readonly property bool fittingRunning: false
+    property bool showFitResultsDialog: false
+    readonly property bool fitSuccess: true
+    readonly property int fitNumRefinedParams: 3
+    readonly property real fitChi2: 1.2345
 
     // Parameters
     property int currentParameterIndex: 0
@@ -99,5 +103,9 @@ QtObject {
     //Actions
     function fittingStartStop() {
         console.debug('fittingStartStop')
+    }
+    function setShowFitResultsDialog(value) {
+        showFitResultsDialog = value
+        console.debug(`setShowFitResultsDialog ${value}`)
     }
 }

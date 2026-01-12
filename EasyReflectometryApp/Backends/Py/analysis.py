@@ -66,6 +66,27 @@ class Analysis(QObject):
     def isFitFinished(self) -> bool:
         return self._fitting_logic.fit_finished
 
+    @Property(bool, notify=fittingChanged)
+    def showFitResultsDialog(self) -> bool:
+        return self._fitting_logic.show_results_dialog
+
+    @Slot(bool)
+    def setShowFitResultsDialog(self, value: bool) -> None:
+        self._fitting_logic.show_results_dialog = value
+        self.fittingChanged.emit()
+
+    @Property(bool, notify=fittingChanged)
+    def fitSuccess(self) -> bool:
+        return self._fitting_logic.fit_success
+
+    @Property(int, notify=fittingChanged)
+    def fitNumRefinedParams(self) -> int:
+        return self._fitting_logic.fit_n_pars
+
+    @Property(float, notify=fittingChanged)
+    def fitChi2(self) -> float:
+        return self._fitting_logic.fit_chi2
+
     @Slot(None)
     def fittingStartStop(self) -> None:
         # make sure we can run the fitting

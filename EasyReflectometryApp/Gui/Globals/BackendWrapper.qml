@@ -256,7 +256,12 @@ QtObject {
     readonly property string analysisFittingStatus: activeBackend.analysis.fittingStatus
     readonly property bool analysisFittingRunning: activeBackend.analysis.fittingRunning
     readonly property bool analysisIsFitFinished: activeBackend.analysis.isFitFinished
+    readonly property bool analysisShowFitResultsDialog: activeBackend.analysis.showFitResultsDialog
+    readonly property bool analysisFitSuccess: activeBackend.analysis.fitSuccess
+    readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
+    readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
+    function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
 
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount

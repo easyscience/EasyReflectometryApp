@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 import EasyApp.Gui.Globals as EaGlobals
 import EasyApp.Gui.Style as EaStyle
@@ -15,25 +16,34 @@ import Gui.Globals as Globals
 EaElements.Dialog {
     id: dialog
 
-    visible: Globals.BackendWrapper.analysisFittingStatus
-    title: qsTr("Fit status")
+    visible: Globals.BackendWrapper.analysisShowFitResultsDialog
+    title: qsTr("Refinement Results")
     standardButtons: Dialog.Ok
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+    onAccepted: {
+        Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
+    }
+
+    onClosed: {
+        Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
+    }
 
     Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.fitStatusDialogOkButton = okButtonRef()
 
-    EaElements.Label {
-        text: {
-            if ( Globals.BackendWrapper.analysisFittingStatus === 'Success') {
-                return 'Optimization finished successfully.'
-            } else if (Globals.BackendWrapper.analysisFittingStatus === 'Failure') {
-                return 'Optimization failed.'
-            } else if (Globals.BackendWrapper.analysisFittingStatus  === 'Aborted') {
-                return 'Optimization aborted.'
-            } else if (Globals.BackendWrapper.analysisFittingStatus  === 'No free params') {
-                return 'Nothing to vary. Allow some parameters to be free.'
-            } else {
-                return ''
-            }
+    Column {
+        spacing: EaStyle.Sizes.fontPixelSize * 0.5
+
+        EaElements.Label {
+            text: "Success: " + Globals.BackendWrapper.analysisFitSuccess
+        }
+
+        EaElements.Label {
+            text: "Num. refined parameters: " + Globals.BackendWrapper.analysisFitNumRefinedParams
+        }
+
+        EaElements.Label {
+            text: "Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
         }
     }
 
