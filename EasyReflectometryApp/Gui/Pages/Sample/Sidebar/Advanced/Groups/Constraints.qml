@@ -198,6 +198,20 @@ EaElements.GroupBox {
                 constraintsGroup.insertAlias(currentValue)
                 Qt.callLater(() => parameterInsert.currentIndex = -1)
             }
+
+            delegate: EaElements.MenuItem {
+                width: parameterInsert.width
+                height: EaStyle.Sizes.comboBoxHeight
+                text: {
+                    const entry = parameterInsert.model[index]
+                    if (!entry) return ""
+                    const alias = entry.alias || ""
+                    const name = entry.displayName || alias
+                    return alias ? name + " (" + alias + ")" : name
+                }
+                highlighted: parameterInsert.highlightedIndex === index
+                hoverEnabled: parameterInsert.hoverEnabled
+            }
         }
 
         EaElements.Label {

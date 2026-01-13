@@ -382,15 +382,6 @@ Rectangle {
                     // Initialize multi-experiment support
                     updateMultiExperimentSeries()
                 }
-
-                // Sync X-axis with SLD chart
-                onAxisXChanged: syncXAxes()
-
-                Connections {
-                    target: analysisChartView.axisX
-                    function onMinChanged() { syncXAxes() }
-                    function onMaxChanged() { syncXAxes() }
-                }
             }
         }
 
@@ -491,14 +482,5 @@ Rectangle {
         tooltip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
         tooltip.parent = chart
         tooltip.visible = state
-    }
-
-    function syncXAxes() {
-        // Keep both charts' X axes synchronized
-        if (analysisChartView.axisX.min !== sldChartView.axisX.min ||
-            analysisChartView.axisX.max !== sldChartView.axisX.max) {
-            sldChartView.axisX.min = analysisChartView.axisX.min
-            sldChartView.axisX.max = analysisChartView.axisX.max
-        }
     }
 }
