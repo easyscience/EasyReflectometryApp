@@ -43,12 +43,35 @@ Rectangle {
 
         property double xRange: Globals.BackendWrapper.plottingSampleMaxX - Globals.BackendWrapper.plottingSampleMinX
 
+        // Logarithmic axis control
+        property bool useLogQAxis: Globals.Variables.logarithmicQAxis
+
         ValueAxis {
             id: axisX
+            visible: !chartView.useLogQAxis
             titleText: "q (Å⁻¹)"
             // min/max set imperatively to avoid binding reset during zoom
             property double minAfterReset: Globals.BackendWrapper.plottingSampleMinX - chartView.xRange * 0.01
             property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + chartView.xRange * 0.01
+            color: EaStyle.Colors.chartAxis
+            gridLineColor: EaStyle.Colors.chartGridLine
+            minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+            labelsColor: EaStyle.Colors.chartLabels
+            titleBrush: EaStyle.Colors.chartLabels
+            Component.onCompleted: {
+                min = minAfterReset
+                max = maxAfterReset
+            }
+        }
+
+        LogValueAxis {
+            id: axisXLog
+            visible: chartView.useLogQAxis
+            titleText: "q (Å⁻¹)"
+            // min/max set for log scale - ensure positive values
+            property double minAfterReset: Math.max(Globals.BackendWrapper.plottingSampleMinX, 1e-6)
+            property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX * 1.1
+            base: 10
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -80,10 +103,21 @@ Rectangle {
         }
 
         function resetAxes() {
-            axisX.min = axisX.minAfterReset
-            axisX.max = axisX.maxAfterReset
+            if (useLogQAxis) {
+                axisXLog.min = axisXLog.minAfterReset
+                axisXLog.max = axisXLog.maxAfterReset
+            } else {
+                axisX.min = axisX.minAfterReset
+                axisX.max = axisX.maxAfterReset
+            }
             axisY.min = axisY.minAfterReset
             axisY.max = axisY.maxAfterReset
+        }
+
+        // Handle logarithmic axis changes
+        onUseLogQAxisChanged: {
+            Qt.callLater(recreateAllSeries)
+            Qt.callLater(resetAxes)
         }
 
         // Tool buttons
@@ -328,10 +362,13 @@ Rectangle {
         }
         sampleSeries = []
 
+        // Determine which x-axis to use based on log setting
+        const xAxisToUse = chartView.useLogQAxis ? axisXLog : axisX
+
         // Create new series for each model
         const models = Globals.BackendWrapper.sampleModels
         for (let k = 0; k < models.length; k++) {
-            const line = chartView.createSeries(ChartView.SeriesTypeLine, models[k].label, axisX, axisY)
+            const line = chartView.createSeries(ChartView.SeriesTypeLine, models[k].label, xAxisToUse, axisY)
             line.color = models[k].color
             line.width = 2
             line.useOpenGL = EaGlobals.Vars.useOpenGL

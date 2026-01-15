@@ -43,12 +43,16 @@ Rectangle {
 
         property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
 
+        // Reverse axis logic
+        property bool reverseZAxis: Globals.Variables.reverseSldZAxis
+
         ValueAxis {
             id: axisX
             titleText: "z (Å)"
             // min/max set imperatively to avoid binding reset during zoom
             property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - chartView.xRange * 0.01
             property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + chartView.xRange * 0.01
+            reverse: chartView.reverseZAxis
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine

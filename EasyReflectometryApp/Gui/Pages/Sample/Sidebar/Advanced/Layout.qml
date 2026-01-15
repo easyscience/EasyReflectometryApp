@@ -12,6 +12,8 @@ EaComponents.SideBarColumn {
     Groups.QRange{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
+    Groups.PlotControl{
+    }
     Groups.Constraints{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }

@@ -57,12 +57,35 @@ Rectangle {
 
                 property double xRange: Globals.BackendWrapper.plottingSampleMaxX - Globals.BackendWrapper.plottingSampleMinX
 
+                // Logarithmic axis control
+                property bool useLogQAxis: Globals.Variables.logarithmicQAxis
+
                 ValueAxis {
                     id: sampleAxisX
+                    visible: !sampleChartView.useLogQAxis
                     titleText: "q (Å⁻¹)"
                     // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSampleMinX - sampleChartView.xRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + sampleChartView.xRange * 0.01
+                    color: EaStyle.Colors.chartAxis
+                    gridLineColor: EaStyle.Colors.chartGridLine
+                    minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+                    labelsColor: EaStyle.Colors.chartLabels
+                    titleBrush: EaStyle.Colors.chartLabels
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
+                }
+
+                LogValueAxis {
+                    id: sampleAxisXLog
+                    visible: sampleChartView.useLogQAxis
+                    titleText: "q (Å⁻¹)"
+                    // min/max set for log scale - ensure positive values
+                    property double minAfterReset: Math.max(Globals.BackendWrapper.plottingSampleMinX, 1e-6)
+                    property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX * 1.1
+                    base: 10
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -94,10 +117,21 @@ Rectangle {
                 }
 
                 function resetAxes() {
-                    sampleAxisX.min = sampleAxisX.minAfterReset
-                    sampleAxisX.max = sampleAxisX.maxAfterReset
+                    if (useLogQAxis) {
+                        sampleAxisXLog.min = sampleAxisXLog.minAfterReset
+                        sampleAxisXLog.max = sampleAxisXLog.maxAfterReset
+                    } else {
+                        sampleAxisX.min = sampleAxisX.minAfterReset
+                        sampleAxisX.max = sampleAxisX.maxAfterReset
+                    }
                     sampleAxisY.min = sampleAxisY.minAfterReset
                     sampleAxisY.max = sampleAxisY.maxAfterReset
+                }
+
+                // Handle logarithmic axis changes
+                onUseLogQAxisChanged: {
+                    Qt.callLater(container.recreateAllSeries)
+                    Qt.callLater(resetAxes)
                 }
 
                 // Tool buttons
@@ -351,12 +385,16 @@ Rectangle {
 
                 property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
 
+                // Reverse axis logic
+                property bool reverseZAxis: Globals.Variables.reverseSldZAxis
+
                 ValueAxis {
                     id: sldAxisX
                     titleText: "z (Å)"
                     // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - sldChartView.xRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + sldChartView.xRange * 0.01
+                    reverse: sldChartView.reverseZAxis
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -577,11 +615,14 @@ Rectangle {
         }
         sldSeries = []
 
+        // Determine which x-axis to use for sample chart based on log setting
+        const sampleXAxisToUse = sampleChartView.useLogQAxis ? sampleAxisXLog : sampleAxisX
+
         // Create new series for each model
         const models = Globals.BackendWrapper.sampleModels
         for (let k = 0; k < models.length; k++) {
             // Create sample series
-            const sampleLine = sampleChartView.createSeries(ChartView.SeriesTypeLine, models[k].label, sampleAxisX, sampleAxisY)
+            const sampleLine = sampleChartView.createSeries(ChartView.SeriesTypeLine, models[k].label, sampleXAxisToUse, sampleAxisY)
             sampleLine.color = models[k].color
             sampleLine.width = 2
             sampleLine.useOpenGL = EaGlobals.Vars.useOpenGL
