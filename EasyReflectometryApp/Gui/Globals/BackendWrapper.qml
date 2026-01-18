@@ -171,6 +171,7 @@ QtObject {
     function sampleValidateConstraintExpression(index, relation, expression) { return activeBackend.sample.validateConstraintExpression(index, relation, expression) }
     function sampleAddConstraint(index, relation, expression) { return activeBackend.sample.addConstraint(index, relation, expression) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
+    function sampleConstrainModelsParameters(modelIndices) { activeBackend.sample.constrainModelsParameters(modelIndices) }
 
     // Q range
     readonly property var sampleQMin: activeBackend.sample.q_min

@@ -904,6 +904,128 @@ class Sample(QObject):
             'type': mode,
         }
 
+    @Slot('QVariantList')
+    def constrainModelsParameters(self, model_indices: list) -> None:
+        """Constrain matching parameters across selected models.
+
+        For each parameter in the models (except the first one), find the corresponding
+        parameter in the first model and create a constraint to make them equal.
+
+        :param model_indices: List of model indices to constrain together.
+        """
+        if len(model_indices) < 2:
+            return
+
+        # Sort indices to ensure consistent ordering - first model becomes the reference
+        model_indices = sorted([int(idx) for idx in model_indices])
+
+        # Validate indices
+        num_models = len(self._project_lib._models)
+        for idx in model_indices:
+            if idx < 0 or idx >= num_models:
+                print(f'Invalid model index: {idx}')
+                return
+
+        # Get the reference model (first in the sorted list)
+        reference_model_idx = model_indices[0]
+        reference_model = self._project_lib._models[reference_model_idx]
+
+        # Build a map of parameter paths to parameters for the reference model
+        # The path is relative to the model (sample/assembly/layer structure)
+        reference_params_map = self._build_model_parameters_map(reference_model)
+
+        # For each other model, find matching parameters and constrain them
+        constraints_added = 0
+        for model_idx in model_indices[1:]:
+            model = self._project_lib._models[model_idx]
+            model_params_map = self._build_model_parameters_map(model)
+
+            for param_path, dependent_param in model_params_map.items():
+                if param_path in reference_params_map:
+                    reference_param = reference_params_map[param_path]
+
+                    # Skip if already constrained
+                    if not getattr(dependent_param, 'independent', True):
+                        continue
+
+                    # Skip if it's the same parameter object
+                    if dependent_param.unique_name == reference_param.unique_name:
+                        continue
+
+                    try:
+                        # Capture previous state for undo capability
+                        previous_state = self._capture_parameter_state(dependent_param)
+
+                        # Create a constraint: dependent = reference
+                        dependent_param.make_dependent_on(
+                            dependency_expression='a',
+                            dependency_map={'a': reference_param},
+                        )
+
+                        # Store constraint state for display
+                        unique_name = getattr(dependent_param, 'unique_name', None)
+                        if unique_name is not None:
+                            # Get display name for the reference parameter
+                            _, _, display_lookup = self._build_constraint_context()
+                            ref_display = self._get_parameter_display_name(reference_param)
+
+                            self._constraint_states[unique_name] = {
+                                'mode': 'dynamic',
+                                'relation': '=',
+                                'previous': previous_state,
+                                'expression': 'a',
+                                'raw_expression': 'a',
+                                'pretty_expression': ref_display,
+                                'dependency_map': {'a': reference_param},
+                            }
+
+                        constraints_added += 1
+                    except Exception as e:  # noqa: BLE001
+                        print(f'Failed to constrain parameter {param_path}: {e}')
+                        continue
+
+        if constraints_added > 0:
+            self.constraintsChanged.emit()
+            self.externalSampleChanged.emit()
+            self.layersChange.emit()
+
+    def _build_model_parameters_map(self, model) -> Dict[str, DescriptorNumber]:
+        """Build a map of relative parameter paths to parameter objects for a model.
+
+        The path structure is: assembly_name/layer_name/param_name
+        This allows matching parameters across models with the same structure.
+        """
+        params_map: Dict[str, DescriptorNumber] = {}
+
+        # Get parameters from model structure
+        for assembly_idx, assembly in enumerate(model.sample):
+            assembly_name = assembly.name
+            for layer_idx, layer in enumerate(assembly.layers):
+                layer_name = layer.name
+                # Get layer parameters
+                for param in layer.get_parameters():
+                    param_name = param.name
+                    # Create a structural path that's independent of model name
+                    path_key = f'{assembly_idx}/{layer_idx}/{param_name}'
+                    params_map[path_key] = param
+
+        return params_map
+
+    def _get_parameter_display_name(self, param: DescriptorNumber) -> str:
+        """Get a display name for a parameter."""
+        try:
+            from easyscience import global_object
+            # Try to find the parameter's path in the global object map
+            for model in self._project_lib._models:
+                path = global_object.map.find_path(model.unique_name, param.unique_name)
+                if path and len(path) >= 2:
+                    parent_name = global_object.map.get_item_by_key(path[-2]).name
+                    param_name = global_object.map.get_item_by_key(path[-1]).name
+                    return f'{parent_name} {param_name}'
+        except Exception:  # noqa: BLE001
+            pass
+        return param.name
+
     # # #
     # Q Range
     # # #
