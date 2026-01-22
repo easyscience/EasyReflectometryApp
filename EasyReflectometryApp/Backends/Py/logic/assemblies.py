@@ -72,8 +72,7 @@ class Assemblies:
             new_assembly = Multilayer()
             new_assembly.layers[0].material = self._assemblies[self.index].layers.data[0].material
         elif new_value == 'Repeating Multi-layer':
-            new_assembly = RepeatingMultilayer(repetitions=1,
-                                               name = new_value)
+            new_assembly = RepeatingMultilayer(repetitions=1, name=new_value)
             new_assembly.layers[0].material = self._assemblies[self.index].layers.data[0].material
         elif new_value == 'Surfactant Layer':
             index_air = self._project_lib.get_index_air()

@@ -57,9 +57,9 @@ class Experiments:
                 model = models[new_value]
                 exp.model = model
             except IndexError:
-                print(f"Model index {new_value} is out of range for the current experiment.")
+                print(f'Model index {new_value} is out of range for the current experiment.')
         else:
-            print("No experiment or models available to set on the experiment.")
+            print('No experiment or models available to set on the experiment.')
         pass
 
     def remove_experiment(self, index: int) -> None:
@@ -70,11 +70,8 @@ class Experiments:
             del self._project_lib._experiments[index]
             # readjust the dictionary keys for continuity
             temp_experiments = self._project_lib._experiments.copy()
-            self._project_lib._experiments = {
-                i: exp for i, exp in enumerate(temp_experiments.values())
-            }
+            self._project_lib._experiments = {i: exp for i, exp in enumerate(temp_experiments.values())}
             if self._project_lib._current_experiment_index >= index:
-                self._project_lib._current_experiment_index = \
-                max(0, self._project_lib._current_experiment_index - 1)
+                self._project_lib._current_experiment_index = max(0, self._project_lib._current_experiment_index - 1)
         else:
-            print(f"Experiment index {index} is out of range.")
+            print(f'Experiment index {index} is out of range.')

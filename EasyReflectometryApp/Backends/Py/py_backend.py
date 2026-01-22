@@ -86,7 +86,7 @@ class PyBackend(QObject):
         """Return the count of currently selected experiments."""
         return self._analysis.experimentsSelectedCount
 
-    @Property('QVariantList', notify=multiExperimentSelectionChanged)  
+    @Property('QVariantList', notify=multiExperimentSelectionChanged)
     def analysisSelectedExperimentIndices(self) -> list:
         """Return the list of selected experiment indices."""
         return self._analysis.selectedExperimentIndices
@@ -94,19 +94,19 @@ class PyBackend(QObject):
     @Slot('QVariantList')
     def analysisSetSelectedExperimentIndices(self, indices) -> None:
         """Set multiple selected experiment indices."""
-        print(f"PyBackend.analysisSetSelectedExperimentIndices called with: {indices}")
-        print(f"Type of indices: {type(indices)}")
-        
+        print(f'PyBackend.analysisSetSelectedExperimentIndices called with: {indices}')
+        print(f'Type of indices: {type(indices)}')
+
         # Convert QVariantList to Python list if needed
         python_indices = list(indices) if hasattr(indices, '__iter__') else []
-        print(f"Converted to Python list: {python_indices}")
-        
+        print(f'Converted to Python list: {python_indices}')
+
         if hasattr(self._analysis, 'setSelectedExperimentIndices'):
             self._analysis.setSelectedExperimentIndices(python_indices)
-            print("Successfully called analysis.setSelectedExperimentIndices")
+            print('Successfully called analysis.setSelectedExperimentIndices')
         else:
-            print("ERROR: analysis.setSelectedExperimentIndices method not found")
-        
+            print('ERROR: analysis.setSelectedExperimentIndices method not found')
+
         # Emit our local signal to notify QML properties
         self.multiExperimentSelectionChanged.emit()
 
@@ -130,8 +130,6 @@ class PyBackend(QObject):
     def plottingGetAnalysisDataPoints(self, experiment_index: int) -> list:
         """Get measured and calculated data points for a specific experiment for analysis plotting."""
         return self._plotting_1d.getAnalysisDataPoints(experiment_index)
-
-
 
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:

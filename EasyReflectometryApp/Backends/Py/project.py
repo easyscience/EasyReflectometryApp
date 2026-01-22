@@ -114,4 +114,3 @@ class Project(QObject):
         self._logic.add_sample_from_orso(sample)
         # notify listeners
         self.externalProjectLoaded.emit()
-

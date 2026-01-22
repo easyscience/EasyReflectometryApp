@@ -111,7 +111,7 @@ class Plotting1d(QObject):
         try:
             if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
                 return len(self._proxy._analysis._selected_experiment_indices) > 1
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         return False
 
@@ -122,7 +122,7 @@ class Plotting1d(QObject):
             if hasattr(self._proxy, '_analysis'):
                 return self._proxy._analysis.get_individual_experiment_data_list()
         except Exception as e:
-            console.debug(f"Error getting individual experiment data: {e}")
+            console.debug(f'Error getting individual experiment data: {e}')
         return []
 
     # Sample
@@ -248,7 +248,7 @@ class Plotting1d(QObject):
     @Property(str)
     def calcSerieColor(self):
         return '#00FF00'
-        #return self._calcSerieColor
+        # return self._calcSerieColor
 
     @Property(bool, notify=experimentDataChanged)
     def isMultiExperimentMode(self) -> bool:
@@ -262,12 +262,14 @@ class Plotting1d(QObject):
         # Convert to QML-friendly format
         qml_data_list = []
         for exp_data in data_list:
-            qml_data_list.append({
-                'name': exp_data['name'],
-                'color': exp_data['color'],
-                'index': exp_data['index'],
-                'hasData': exp_data['data'].x.size > 0
-            })
+            qml_data_list.append(
+                {
+                    'name': exp_data['name'],
+                    'color': exp_data['color'],
+                    'index': exp_data['index'],
+                    'hasData': exp_data['data'].x.size > 0,
+                }
+            )
         return qml_data_list
 
     @Slot(str, str, 'QVariant')
@@ -282,10 +284,7 @@ class Plotting1d(QObject):
             data = self._project_lib.sample_data_for_model_at_index(model_index)
             points = []
             for point in data.data_points():
-                points.append({
-                    'x': float(point[0]),
-                    'y': float(np.log10(point[1])) if point[1] > 0 else -10.0
-                })
+                points.append({'x': float(point[0]), 'y': float(np.log10(point[1])) if point[1] > 0 else -10.0})
             return points
         except Exception as e:
             console.debug(f'Error getting sample data points for model {model_index}: {e}')
@@ -298,10 +297,7 @@ class Plotting1d(QObject):
             data = self._project_lib.sld_data_for_model_at_index(model_index)
             points = []
             for point in data.data_points():
-                points.append({
-                    'x': float(point[0]),
-                    'y': float(point[1])
-                })
+                points.append({'x': float(point[0]), 'y': float(point[1])})
             return points
         except Exception as e:
             console.debug(f'Error getting SLD data points for model {model_index}: {e}')
@@ -328,15 +324,17 @@ class Plotting1d(QObject):
             points = []
             for point in data.data_points():
                 if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                    points.append({
-                        'x': float(point[0]),
-                        'y': float(np.log10(point[1])),
-                        'errorUpper': float(np.log10(point[1] + np.sqrt(point[2]))),
-                        'errorLower': float(np.log10(max(point[1] - np.sqrt(point[2]), 1e-10)))  # Avoid log(0)
-                    })
+                    points.append(
+                        {
+                            'x': float(point[0]),
+                            'y': float(np.log10(point[1])),
+                            'errorUpper': float(np.log10(point[1] + np.sqrt(point[2]))),
+                            'errorLower': float(np.log10(max(point[1] - np.sqrt(point[2]), 1e-10))),  # Avoid log(0)
+                        }
+                    )
             return points
         except Exception as e:
-            console.debug(f"Error getting experiment data points for index {experiment_index}: {e}")
+            console.debug(f'Error getting experiment data points for index {experiment_index}: {e}')
             return []
 
     @Slot(int, result='QVariantList')
@@ -376,15 +374,17 @@ class Plotting1d(QObject):
             for point in exp_points:
                 if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
                     calc_y_val = calc_y[calc_idx] if calc_idx < len(calc_y) else point[1]
-                    points.append({
-                        'x': float(point[0]),
-                        'measured': float(np.log10(point[1])),
-                        'calculated': float(np.log10(calc_y_val)),
-                    })
+                    points.append(
+                        {
+                            'x': float(point[0]),
+                            'measured': float(np.log10(point[1])),
+                            'calculated': float(np.log10(calc_y_val)),
+                        }
+                    )
                     calc_idx += 1
             return points
         except Exception as e:
-            console.debug(f"Error getting analysis data points for index {experiment_index}: {e}")
+            console.debug(f'Error getting analysis data points for index {experiment_index}: {e}')
             return []
 
     def refreshSamplePage(self):

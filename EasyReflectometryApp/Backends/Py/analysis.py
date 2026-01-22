@@ -113,9 +113,9 @@ class Analysis(QObject):
             if param['min'] >= param['max']:
                 QtWidgets.QMessageBox.warning(
                     None,
-                    "Invalid Parameter Bounds",
+                    'Invalid Parameter Bounds',
                     f"Parameter '{param['name']}' has invalid bounds: "
-                    f"min ({param['min']}) must be less than max ({param['max']})."
+                    f'min ({param["min"]}) must be less than max ({param["max"]}).',
                 )
                 return False
 
@@ -132,9 +132,8 @@ class Analysis(QObject):
                 # Show a warning in a message box
                 QtWidgets.QMessageBox.warning(
                     None,
-                    "Invalid Parameter Bounds",
-                    f"Parameters {joined} have infinite bounds, "
-                    "which is not allowed for differential evolution minimizer."
+                    'Invalid Parameter Bounds',
+                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.',
                 )
 
                 return False
@@ -231,7 +230,7 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
         else:
-            print(f"Experiment index {index} is out of range.")
+            print(f'Experiment index {index} is out of range.')
 
     ########################
     ## Multi-experiment selection support
@@ -294,7 +293,7 @@ class Analysis(QObject):
                     all_ye.extend(data.ye if hasattr(data, 'ye') and data.ye.size > 0 else np.zeros_like(data.y))
                     all_xe.extend(data.xe if hasattr(data, 'xe') and data.xe.size > 0 else np.zeros_like(data.x))
             except (IndexError, AttributeError) as e:
-                print(f"Error accessing experiment {exp_idx}: {e}")
+                print(f'Error accessing experiment {exp_idx}: {e}')
                 continue
 
         if not all_x:
@@ -306,16 +305,15 @@ class Analysis(QObject):
 
         x_sorted, y_sorted, ye_sorted, xe_sorted = zip(*combined_data) if combined_data else ([], [], [], [])
 
-        exp_names = [self._experiments_logic.available()[i] 
-                     for i in self._selected_experiment_indices if i < len(self._experiments_logic.available())]
-        combined_name = f"Combined: {', '.join(exp_names)}"
+        exp_names = [
+            self._experiments_logic.available()[i]
+            for i in self._selected_experiment_indices
+            if i < len(self._experiments_logic.available())
+        ]
+        combined_name = f'Combined: {", ".join(exp_names)}'
 
         return DataSet1D(
-            name=combined_name,
-            x=np.array(x_sorted),
-            y=np.array(y_sorted),
-            ye=np.array(ye_sorted),
-            xe=np.array(xe_sorted)
+            name=combined_name, x=np.array(x_sorted), y=np.array(y_sorted), ye=np.array(ye_sorted), xe=np.array(xe_sorted)
         )
 
     def get_individual_experiment_data_list(self):
@@ -340,25 +338,23 @@ class Analysis(QObject):
             '#e377c2',  # Pink
             '#7f7f7f',  # Gray
             '#bcbd22',  # Olive
-            '#17becf'   # Cyan
+            '#17becf',  # Cyan
         ]
 
         for idx, exp_idx in enumerate(self._selected_experiment_indices):
             try:
                 data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
                 if data.x.size > 0:  # Only include non-empty datasets
-                    exp_name = self._experiments_logic.available()[exp_idx] if \
-                        exp_idx < len(self._experiments_logic.available()) else f"Experiment {exp_idx + 1}"
+                    exp_name = (
+                        self._experiments_logic.available()[exp_idx]
+                        if exp_idx < len(self._experiments_logic.available())
+                        else f'Experiment {exp_idx + 1}'
+                    )
                     color = color_palette[idx % len(color_palette)]
 
-                    experiment_data_list.append({
-                        'data': data,
-                        'name': exp_name,
-                        'color': color,
-                        'index': exp_idx
-                    })
+                    experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
             except (IndexError, AttributeError) as e:
-                print(f"Error accessing experiment {exp_idx}: {e}")
+                print(f'Error accessing experiment {exp_idx}: {e}')
                 continue
 
         return experiment_data_list
@@ -373,8 +369,8 @@ class Analysis(QObject):
         try:
             if hasattr(self.parent(), '_plotting_1d'):
                 plotting = self.parent()._plotting_1d
-                print("📊 Refreshing plotting system...")
-                print(f"   Current selection: {self._selected_experiment_indices}")
+                print('📊 Refreshing plotting system...')
+                print(f'   Current selection: {self._selected_experiment_indices}')
 
                 # Emit signals to refresh experiment data and ranges
                 plotting.experimentDataChanged.emit()
@@ -382,7 +378,7 @@ class Analysis(QObject):
                 plotting.refreshExperimentPage()
                 plotting.refreshExperimentRanges()
         except Exception as e:
-            print(f"❌ Error refreshing plotting system: {e}")
+            print(f'❌ Error refreshing plotting system: {e}')
 
     ########################
     ## Minimizers
@@ -431,14 +427,14 @@ class Analysis(QObject):
         if self._chached_enabled_parameters is not None:
             return self._chached_enabled_parameters
         enabled_parameters = []
-        #import time
-        #t0 = time.time()
+        # import time
+        # t0 = time.time()
         for parameter in self._parameters_logic.parameters:
             if not parameter['enabled']:
                 continue
             enabled_parameters.append(parameter)
-        #t1 = time.time()
-        #print(f"Enabled parameters computation time: {t1 - t0:.4f} seconds")
+        # t1 = time.time()
+        # print(f"Enabled parameters computation time: {t1 - t0:.4f} seconds")
         self._chached_enabled_parameters = enabled_parameters
         return enabled_parameters
 

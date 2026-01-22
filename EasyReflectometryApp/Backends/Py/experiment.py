@@ -63,4 +63,4 @@ class Experiment(QObject):
             self._project_logic.load_new_experiment(IO.generalizePath(path))
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
-        pass # debug anchor
+        pass  # debug anchor

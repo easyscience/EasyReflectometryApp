@@ -483,8 +483,10 @@ class Sample(QObject):
         return used_aliases
 
     def _evaluate_constraint_expression(
-        self, expression: str, dependency_map: Dict[str, DescriptorNumber], 
-        all_aliases: Dict[str, DescriptorNumber] | None = None
+        self,
+        expression: str,
+        dependency_map: Dict[str, DescriptorNumber],
+        all_aliases: Dict[str, DescriptorNumber] | None = None,
     ) -> DescriptorNumber | numbers.Number:
         """Evaluate constraint expression with all available parameter aliases in scope."""
         interpreter = Interpreter(config=_ASTEVAL_CONFIG)
@@ -508,7 +510,7 @@ class Sample(QObject):
             # Provide helpful error message showing available aliases
             if 'not defined' in str(e):
                 available = ', '.join(sorted(aliases_to_add.keys())[:10])  # Show first 10
-                raise NameError(f"{str(e)}\nAvailable aliases: {available}...") from None
+                raise NameError(f'{str(e)}\nAvailable aliases: {available}...') from None
             raise
         return result
 
@@ -569,9 +571,7 @@ class Sample(QObject):
 
         try:
             # Pass all available aliases so validation can check any parameter reference
-            evaluation_result = self._evaluate_constraint_expression(
-                expression_text, dependency_map, all_aliases=alias_lookup
-            )
+            evaluation_result = self._evaluate_constraint_expression(expression_text, dependency_map, all_aliases=alias_lookup)
         except NameError as error:
             raise NameError(str(error).split('\n')[-1]) from None
         except SyntaxError as error:
@@ -642,10 +642,7 @@ class Sample(QObject):
             }
 
         dependency_map = getattr(parameter_obj, 'dependency_map', {}) or {}
-        alias_display_subset = {
-            alias: display_lookup.get(alias, alias)
-            for alias in dependency_map.keys()
-        }
+        alias_display_subset = {alias: display_lookup.get(alias, alias) for alias in dependency_map.keys()}
         pretty_expression = self._pretty_expression(raw_expression, alias_display_subset)
         return {
             'mode': 'dynamic',
@@ -768,13 +765,15 @@ class Sample(QObject):
             # Use model-prefixed display name if available (from constrainModelsParameters)
             dependent_display = state.get('dependent_display', entry['display_name'])
 
-            constraints.append({
-                'dependentName': dependent_display,
-                'expression': expression_display,
-                'rawExpression': raw_expression,
-                'relation': relation,
-                'type': mode,
-            })
+            constraints.append(
+                {
+                    'dependentName': dependent_display,
+                    'expression': expression_display,
+                    'rawExpression': raw_expression,
+                    'relation': relation,
+                    'type': mode,
+                }
+            )
 
         return constraints
 
@@ -830,6 +829,7 @@ class Sample(QObject):
 
         # Try stripping model prefix (e.g., 'M2 SiO2 sld' -> 'SiO2 sld')
         import re
+
         prefix_match = re.match(r'^M\d+\s+(.+)$', param_name)
         if prefix_match:
             stripped_name = prefix_match.group(1)
@@ -903,20 +903,24 @@ class Sample(QObject):
                 'previous': previous_state,
             }
             if mode == 'dynamic':
-                state.update({
-                    'expression': instruction.get('expression', ''),
-                    'raw_expression': instruction.get('expression', ''),
-                    'pretty_expression': instruction.get('pretty_expression', ''),
-                    'dependency_map': instruction.get('dependency_map', {}),
-                })
+                state.update(
+                    {
+                        'expression': instruction.get('expression', ''),
+                        'raw_expression': instruction.get('expression', ''),
+                        'pretty_expression': instruction.get('pretty_expression', ''),
+                        'dependency_map': instruction.get('dependency_map', {}),
+                    }
+                )
             else:
                 value = instruction.get('value')
                 numeric = self._format_numeric(float(value)) if value is not None else ''
-                state.update({
-                    'value': value,
-                    'pretty_expression': instruction.get('pretty_expression', numeric),
-                    'raw_expression': numeric,
-                })
+                state.update(
+                    {
+                        'value': value,
+                        'pretty_expression': instruction.get('pretty_expression', numeric),
+                        'raw_expression': numeric,
+                    }
+                )
             self._constraint_states[unique_name] = state
 
         self.constraintsChanged.emit()
@@ -1028,9 +1032,9 @@ class Sample(QObject):
 
         # Get parameters from model structure
         for assembly_idx, assembly in enumerate(model.sample):
-            assembly_name = assembly.name
+            # assembly_name = assembly.name
             for layer_idx, layer in enumerate(assembly.layers):
-                layer_name = layer.name
+                # layer_name = layer.name
                 # Get layer parameters
                 for param in layer.get_parameters():
                     param_name = param.name
@@ -1050,6 +1054,7 @@ class Sample(QObject):
         display_name = param.name  # Fallback
         try:
             from easyscience import global_object
+
             # Try to find the parameter's path in the global object map
             for model in self._project_lib._models:
                 path = global_object.map.find_path(model.unique_name, param.unique_name)
@@ -1058,7 +1063,7 @@ class Sample(QObject):
                     param_name = global_object.map.get_item_by_key(path[-1]).name
                     display_name = f'{parent_name} {param_name}'
                     break
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: S110
             pass
 
         if model_index is not None:

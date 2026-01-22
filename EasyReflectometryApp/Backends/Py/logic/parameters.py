@@ -23,21 +23,21 @@ class Parameters:
 
     @property
     def parameters(self) -> list[dict[str, Any]]:
-        return _from_parameters_to_list_of_dicts(
-            self._project_lib.parameters, self._project_lib._models
-        )
+        return _from_parameters_to_list_of_dicts(self._project_lib.parameters, self._project_lib._models)
 
     def constraint_context(self) -> list[dict[str, Any]]:
         parameter_snapshot = self.parameters
         context: list[dict[str, Any]] = []
         for parameter in parameter_snapshot:
-            context.append({
-                'alias': parameter['alias'],
-                'display_name': parameter['display_name'],
-                'group': parameter.get('group', ''),
-                'independent': parameter['independent'],
-                'object': parameter['object'],
-            })
+            context.append(
+                {
+                    'alias': parameter['alias'],
+                    'display_name': parameter['display_name'],
+                    'group': parameter.get('group', ''),
+                    'independent': parameter['independent'],
+                    'object': parameter['object'],
+                }
+            )
         return context
 
     def constraint_metadata(self) -> list[dict[str, Any]]:
@@ -47,12 +47,14 @@ class Parameters:
             # Include ALL parameters (both independent and dependent) for constraint expressions
             # if not entry['independent']:
             #     continue
-            metadata.append({
-                'alias': entry['alias'],
-                'displayName': entry['display_name'],
-                'group': entry.get('group', ''),
-                'independent': entry['independent'],
-            })
+            metadata.append(
+                {
+                    'alias': entry['alias'],
+                    'displayName': entry['display_name'],
+                    'group': entry.get('group', ''),
+                    'independent': entry['independent'],
+                }
+            )
         metadata.sort(key=lambda item: item['displayName'])
         return metadata
 
@@ -147,7 +149,8 @@ class Parameters:
 
         if arithmetic_operator != '' and independent_idx > -1:
             dependent.make_dependent_on(
-                dependency_expression='a' + arithmetic_operator + 'b', dependency_map={'a': independent, 'b': float(value)})
+                dependency_expression='a' + arithmetic_operator + 'b', dependency_map={'a': independent, 'b': float(value)}
+            )
         elif arithmetic_operator == '' and independent_idx == -1:
             relational_operator = relational_operator.replace('=', '==')
             relational_operator = relational_operator.replace('&lt', '>')
@@ -159,6 +162,7 @@ class Parameters:
             return
 
         print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
+
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:
     """Convert parameters to list of dictionaries with simplified logic.
@@ -245,22 +249,24 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                 prefixed_display_name = display_name
 
             alias = _make_alias(prefixed_display_name or parameter.name)
-            parameter_list.append({
-                'name': prefixed_display_name,
-                'display_name': prefixed_display_name,
-                'group': group_name,
-                'alias': alias,
-                'unique_name': parameter.unique_name,
-                'value': float(parameter.value),
-                'error': float(parameter.variance),
-                'max': float(parameter.max),
-                'min': float(parameter.min),
-                'units': parameter.unit,
-                'fit': parameter.free,
-                'independent': parameter.independent,
-                'dependency': _get_dependency_expression(parameter, model_unique_name),
-                'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
-                'object': parameter,  # Direct reference to the Parameter object
-            })
+            parameter_list.append(
+                {
+                    'name': prefixed_display_name,
+                    'display_name': prefixed_display_name,
+                    'group': group_name,
+                    'alias': alias,
+                    'unique_name': parameter.unique_name,
+                    'value': float(parameter.value),
+                    'error': float(parameter.variance),
+                    'max': float(parameter.max),
+                    'min': float(parameter.min),
+                    'units': parameter.unit,
+                    'fit': parameter.free,
+                    'independent': parameter.independent,
+                    'dependency': _get_dependency_expression(parameter, model_unique_name),
+                    'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
+                    'object': parameter,  # Direct reference to the Parameter object
+                }
+            )
 
     return parameter_list
