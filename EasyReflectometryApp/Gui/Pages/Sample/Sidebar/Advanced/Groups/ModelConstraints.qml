@@ -10,7 +10,7 @@ EaElements.GroupBox {
     id: modelConstraintsGroup
     title: qsTr("Model constraints")
     enabled: true
-    last: false
+    last: true
 
     property var selectedModelIndices: []
     property int selectedModelsCount: selectedModelIndices.length
@@ -140,12 +140,12 @@ EaElements.GroupBox {
         Item {
             id: modelConstraintsTableContainer
             width: parent.width
-            height: Math.min(200, Math.max(60, modelConstraintsTable.height))
+            height: modelConstraintsTable.height
 
             EaComponents.TableView {
                 id: modelConstraintsTable
                 width: parent.width
-                height: Math.min(200, Math.max(60, Math.max(modelConstraintsTable.contentHeight, modelConstraintsTable.implicitHeight)))
+                maxRowCountShow: 1000
 
                 defaultInfoText: qsTr("No Model Constraints")
 
@@ -196,8 +196,6 @@ EaElements.GroupBox {
                             return constraint.dependentName + ' ' + prefix + constraint.expression
                         }
                         elide: Text.ElideRight
-                        ToolTip.visible: hovered && Globals.BackendWrapper.sampleConstraintsList[index] && Globals.BackendWrapper.sampleConstraintsList[index].rawExpression
-                        ToolTip.text: Globals.BackendWrapper.sampleConstraintsList[index] ? Globals.BackendWrapper.sampleConstraintsList[index].rawExpression : ""
                     }
 
                     // Placeholder for delete button space

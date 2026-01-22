@@ -60,6 +60,8 @@ class Layers:
         index_si = [material.name for material in self._project_lib._materials].index('Si')
         self._layers.add_layer()
         self._layers[-1].material = self._project_lib._materials[index_si]
+        # Set layer name based on material name
+        self._layers[-1].name = self._project_lib._materials[index_si].name + ' Layer'
 
     def duplicate_selected(self) -> None:
         self._layers.duplicate_layer(self.index)
@@ -95,6 +97,8 @@ class Layers:
     def set_material_at_current_index(self, new_value: int) -> bool:
         if self._layers[self.index].material != self._project_lib._materials[new_value]:
             self._layers[self.index].material = self._project_lib._materials[new_value]
+            # Update layer name based on material name
+            self._layers[self.index].name = self._project_lib._materials[new_value].name + ' Layer'
             return True
         return False
 

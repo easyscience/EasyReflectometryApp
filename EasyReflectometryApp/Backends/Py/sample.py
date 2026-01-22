@@ -213,6 +213,7 @@ class Sample(QObject):
     @Slot()
     def duplicateSelectedModel(self) -> None:
         self._models_logic.duplicate_selected_model()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
 
     @Slot()
@@ -764,8 +765,11 @@ class Sample(QObject):
                 expression_display = state.get('pretty_expression', self._format_numeric(float(value)))
                 raw_expression = state.get('raw_expression', expression_display)
 
+            # Use model-prefixed display name if available (from constrainModelsParameters)
+            dependent_display = state.get('dependent_display', entry['display_name'])
+
             constraints.append({
-                'dependentName': entry['display_name'],
+                'dependentName': dependent_display,
                 'expression': expression_display,
                 'rawExpression': raw_expression,
                 'relation': relation,
@@ -805,11 +809,34 @@ class Sample(QObject):
         self.layersChange.emit()
 
     def _find_parameter_object_by_name(self, param_name: str):
-        """Find parameter object by name."""
+        """Find parameter object by name.
+
+        Handles both regular names ('SiO2 sld') and model-prefixed names ('M2 SiO2 sld').
+        """
         parameters = self._parameters_logic.parameters
+
+        # Direct match by display name
         for param in parameters:
             if param['name'] == param_name:
                 return param['object']
+
+        # Check constraint states for model-prefixed dependent_display
+        for unique_name, state in self._constraint_states.items():
+            if state.get('dependent_display') == param_name:
+                # Find the parameter by unique_name
+                for param in parameters:
+                    if param.get('unique_name') == unique_name:
+                        return param['object']
+
+        # Try stripping model prefix (e.g., 'M2 SiO2 sld' -> 'SiO2 sld')
+        import re
+        prefix_match = re.match(r'^M\d+\s+(.+)$', param_name)
+        if prefix_match:
+            stripped_name = prefix_match.group(1)
+            for param in parameters:
+                if param['name'] == stripped_name:
+                    return param['object']
+
         return None
 
     def _make_parameter_independent(self, param_obj) -> None:
@@ -965,9 +992,10 @@ class Sample(QObject):
                         # Store constraint state for display
                         unique_name = getattr(dependent_param, 'unique_name', None)
                         if unique_name is not None:
-                            # Get display name for the reference parameter
-                            _, _, display_lookup = self._build_constraint_context()
-                            ref_display = self._get_parameter_display_name(reference_param)
+                            # Get display names with model prefix for clarity
+                            # e.g., "M2 SiO2 sld = M1 SiO2 sld"
+                            ref_display = self._get_parameter_display_name(reference_param, reference_model_idx)
+                            dep_display = self._get_parameter_display_name(dependent_param, model_idx)
 
                             self._constraint_states[unique_name] = {
                                 'mode': 'dynamic',
@@ -977,6 +1005,7 @@ class Sample(QObject):
                                 'raw_expression': 'a',
                                 'pretty_expression': ref_display,
                                 'dependency_map': {'a': reference_param},
+                                'dependent_display': dep_display,
                             }
 
                         constraints_added += 1
@@ -1011,8 +1040,14 @@ class Sample(QObject):
 
         return params_map
 
-    def _get_parameter_display_name(self, param: DescriptorNumber) -> str:
-        """Get a display name for a parameter."""
+    def _get_parameter_display_name(self, param: DescriptorNumber, model_index: int | None = None) -> str:
+        """Get a display name for a parameter.
+
+        :param param: The parameter to get the display name for.
+        :param model_index: Optional model index to prefix the display name with (e.g., 'M1').
+        :return: Display name, optionally prefixed with model identifier.
+        """
+        display_name = param.name  # Fallback
         try:
             from easyscience import global_object
             # Try to find the parameter's path in the global object map
@@ -1021,10 +1056,14 @@ class Sample(QObject):
                 if path and len(path) >= 2:
                     parent_name = global_object.map.get_item_by_key(path[-2]).name
                     param_name = global_object.map.get_item_by_key(path[-1]).name
-                    return f'{parent_name} {param_name}'
+                    display_name = f'{parent_name} {param_name}'
+                    break
         except Exception:  # noqa: BLE001
             pass
-        return param.name
+
+        if model_index is not None:
+            return f'M{model_index + 1} {display_name}'
+        return display_name
 
     # # #
     # Q Range
