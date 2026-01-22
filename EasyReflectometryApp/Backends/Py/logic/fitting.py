@@ -17,7 +17,7 @@ class Fitting:
     @property
     def status(self) -> str:
         if self._result is None:
-            return False
+            return ''
         else:
             return self._result.success
 
@@ -73,6 +73,7 @@ class Fitting:
             self._show_results_dialog = False
             self._fit_error_message = None
             try:
+                # This needs extension to support multiple data sets
                 exp_data = self._project_lib.experimental_data_for_model_at_index(0)
                 self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
             except FitError as e:

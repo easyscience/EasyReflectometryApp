@@ -59,7 +59,6 @@ class Minimizers:
             return False
         if new_value != self._multi_fitter.tolerance:
             self._multi_fitter.tolerance = new_value
-            print(new_value)
             return True
         return False
 
@@ -68,6 +67,5 @@ class Minimizers:
             return False
         if new_value != self._multi_fitter.max_evaluations:
             self._multi_fitter.max_evaluations = new_value
-            print(new_value)
             return True
         return False

@@ -465,7 +465,7 @@ class Plotting1d(QObject):
             if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
                 series_measured.append(point[0], np.log10(point[1]))
                 series_error_upper.append(point[0], np.log10(point[1] + np.sqrt(point[2])))
-                series_error_lower.append(point[0], np.log10(point[1] - np.sqrt(point[2])))
+                series_error_lower.append(point[0], np.log10(max(point[1] - np.sqrt(point[2]), 1e-10)))
                 nr_points = nr_points + 1
 
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on experiment page', 'replaced'))

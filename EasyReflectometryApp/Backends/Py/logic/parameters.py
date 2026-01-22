@@ -61,7 +61,7 @@ class Parameters:
     def current_index(self) -> int:
         return self._current_index
 
-    def set_current_index(self, new_value: int) -> None:
+    def set_current_index(self, new_value: int) -> bool:
         if new_value != self._current_index:
             self._current_index = new_value
             return True

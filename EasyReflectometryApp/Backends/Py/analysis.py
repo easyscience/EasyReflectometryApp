@@ -366,19 +366,9 @@ class Analysis(QObject):
 
     def _refresh_plotting_system(self) -> None:
         """Refresh the plotting system when experiment selection changes."""
-        try:
-            if hasattr(self.parent(), '_plotting_1d'):
-                plotting = self.parent()._plotting_1d
-                print('📊 Refreshing plotting system...')
-                print(f'   Current selection: {self._selected_experiment_indices}')
-
-                # Emit signals to refresh experiment data and ranges
-                plotting.experimentDataChanged.emit()
-                plotting.experimentChartRangesChanged.emit()
-                plotting.refreshExperimentPage()
-                plotting.refreshExperimentRanges()
-        except Exception as e:
-            print(f'❌ Error refreshing plotting system: {e}')
+        # Emit signal to notify parent/listeners that experiment selection changed
+        # Parent (PyBackend) connects this signal to plotting refresh
+        self.experimentsChanged.emit()
 
     ########################
     ## Minimizers
