@@ -8,6 +8,7 @@ from pathlib import Path
 from EasyApp.Logic.Logging import console
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import qInstallMessageHandler
+from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQml import qmlRegisterSingletonType
 
@@ -41,6 +42,8 @@ if __name__ == '__main__':
 
     engine = QQmlApplicationEngine()
     console.debug(f'QML application engine created {engine}')
+
+    app.setWindowIcon(QIcon(str(CURRENT_DIR / 'Gui' / 'Resources' / 'Logo' / 'App.svg')))
 
     engine.rootContext().setContextProperty('isTestMode', args.testmode)
 

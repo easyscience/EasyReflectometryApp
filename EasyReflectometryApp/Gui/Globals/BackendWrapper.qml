@@ -78,6 +78,7 @@ QtObject {
     function projectReset() { activeBackend.project.reset() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
+    function sampleFileLoad(value) { activeBackend.project.sampleLoad(value) }
 
 
     ///////////////
@@ -159,14 +160,18 @@ QtObject {
     function sampleSetCurrentLayerSolvation(value) { activeBackend.sample.setCurrentLayerSolvation(value) }
 
     // Constraints
+    readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
     readonly property var sampleDepParameterNames: activeBackend.sample.dependentParameterNames
     readonly property var sampleRelationOperators: activeBackend.sample.relationOperators
     readonly property var sampleArithmicOperators: activeBackend.sample.arithmicOperators
     readonly property var sampleConstraintsList: activeBackend.sample.constraintsList
+    readonly property var sampleConstraintParametersMetadata: activeBackend.sample.constraintParametersMetadata
 
-    function sampleAddConstraint(value1, value2, value3, value4, value5) { activeBackend.sample.addConstraint(value1, value2, value3, value4, value5) }
+    function sampleValidateConstraintExpression(index, relation, expression) { return activeBackend.sample.validateConstraintExpression(index, relation, expression) }
+    function sampleAddConstraint(index, relation, expression) { return activeBackend.sample.addConstraint(index, relation, expression) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
+    function sampleConstrainModelsParameters(modelIndices) { activeBackend.sample.constrainModelsParameters(modelIndices) }
 
     // Q range
     readonly property var sampleQMin: activeBackend.sample.q_min
@@ -197,6 +202,29 @@ QtObject {
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
     function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
+    
+    // Multi-experiment selection support
+    readonly property int analysisExperimentsSelectedCount: {
+        try {
+            return activeBackend.analysisExperimentsSelectedCount || 1
+        } catch (e) {
+            return 1
+        }
+    }
+    readonly property var analysisSelectedExperimentIndices: {
+        try {
+            return activeBackend.analysisSelectedExperimentIndices || []
+        } catch (e) {
+            return []
+        }
+    }
+    function analysisSetSelectedExperimentIndices(value) {
+        try {
+            activeBackend.analysisSetSelectedExperimentIndices(value)
+        } catch (e) {
+            console.warn("Failed to set selected experiment indices:", e)
+        }
+    }
 
     function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
     readonly property var analysisModelForExperiment: activeBackend.analysis.modelIndexForExperiment
@@ -211,10 +239,13 @@ QtObject {
     readonly property int analysisMinimizerCurrentIndex: activeBackend.analysis.minimizerCurrentIndex
     function analysisSetMinimizerCurrentIndex(value) { activeBackend.analysis.setMinimizerCurrentIndex(value) }
 
-    readonly property var analysisFitableParameters: activeBackend.analysis.fitableParameters 
+    readonly property var analysisFitableParameters: activeBackend.analysis.enabledParameters
     readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
+    readonly property var analysisEnabledParameters: activeBackend.analysis.enabledParameters
+
     function analysisSetCurrentParameterIndex(value) { activeBackend.analysis.setCurrentParameterIndex(value) }
     function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
+    function analysisSetExperimentNameAtIndex(index, value) { activeBackend.analysis.setExperimentNameAtIndex(index, value) }
 
     // Minimizer
     readonly property var analysisMinimizerTolerance: activeBackend.analysis.minimizerTolerance
@@ -226,7 +257,13 @@ QtObject {
     readonly property string analysisFittingStatus: activeBackend.analysis.fittingStatus
     readonly property bool analysisFittingRunning: activeBackend.analysis.fittingRunning
     readonly property bool analysisIsFitFinished: activeBackend.analysis.isFitFinished
+    readonly property bool analysisShowFitResultsDialog: activeBackend.analysis.showFitResultsDialog
+    readonly property bool analysisFitSuccess: activeBackend.analysis.fitSuccess
+    readonly property string analysisFitErrorMessage: activeBackend.analysis.fitErrorMessage
+    readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
+    readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
+    function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
 
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount
@@ -267,10 +304,10 @@ QtObject {
     readonly property var plottingSampleMinY: activeBackend.plotting.sampleMinY
     readonly property var plottingSampleMaxY: activeBackend.plotting.sampleMaxY
 
-    readonly property var plottingExperimentMinX: activeBackend.plotting.sampleMinX
-    readonly property var plottingExperimentMaxX: activeBackend.plotting.sampleMaxX
-    readonly property var plottingExperimentMinY: activeBackend.plotting.sampleMinY
-    readonly property var plottingExperimentMaxY: activeBackend.plotting.sampleMaxY
+    readonly property var plottingExperimentMinX: activeBackend.plotting.experimentMinX
+    readonly property var plottingExperimentMaxX: activeBackend.plotting.experimentMaxX
+    readonly property var plottingExperimentMinY: activeBackend.plotting.experimentMinY
+    readonly property var plottingExperimentMaxY: activeBackend.plotting.experimentMaxY
 
     readonly property var plottingAnalysisMinX: activeBackend.plotting.sampleMinX
     readonly property var plottingAnalysisMaxX: activeBackend.plotting.sampleMaxX
@@ -281,4 +318,72 @@ QtObject {
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }
+
+    // Multi-model sample page plotting support
+    readonly property int plottingModelCount: activeBackend.plotting.modelCount
+    function plottingGetSampleDataPointsForModel(index) {
+        try {
+            return activeBackend.plotting.getSampleDataPointsForModel(index)
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetSldDataPointsForModel(index) {
+        try {
+            return activeBackend.plotting.getSldDataPointsForModel(index)
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetModelColor(index) {
+        try {
+            return activeBackend.plotting.getModelColor(index)
+        } catch (e) {
+            return '#000000'
+        }
+    }
+
+    // Signal for sample page data changes - forward from backend
+    signal samplePageDataChanged()
+
+    // Connect to backend signal (called from Component.onCompleted in QML items)
+    function connectSamplePageDataChanged() {
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.samplePageDataChanged) {
+            activeBackend.plotting.samplePageDataChanged.connect(samplePageDataChanged)
+        }
+    }
+
+    Component.onCompleted: {
+        connectSamplePageDataChanged()
+    }
+
+    // Multi-experiment plotting support
+    readonly property bool plottingIsMultiExperimentMode: {
+        try {
+            return activeBackend.plottingIsMultiExperimentMode || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var plottingIndividualExperimentDataList: {
+        try {
+            return activeBackend.plottingIndividualExperimentDataList || []
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetExperimentDataPoints(index) {
+        try {
+            return activeBackend.plottingGetExperimentDataPoints(index)
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetAnalysisDataPoints(index) {
+        try {
+            return activeBackend.plottingGetAnalysisDataPoints(index)
+        } catch (e) {
+            return []
+        }
+    }
 }

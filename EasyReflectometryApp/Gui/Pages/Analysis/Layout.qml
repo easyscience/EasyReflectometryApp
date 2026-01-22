@@ -15,17 +15,12 @@ EaComponents.ContentPage {
 
     mainView: EaComponents.MainContent {
         tabs: [
-            EaElements.TabButton { text: qsTr('Reflectivity') },
-            EaElements.TabButton { text: qsTr('SLD') }
+            EaElements.TabButton { text: qsTr('Reflectivity') }
        ]
 
         items: [
             Loader {
-                source: `MainContent/AnalysisView.qml`
-                onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
-            },
-            Loader {
-                source: `MainContent/SldView.qml`
+                source: `MainContent/CombinedView.qml`
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             }
         ]

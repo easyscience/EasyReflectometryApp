@@ -42,8 +42,14 @@ Rectangle {
 
         calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
         calcSerie.color: {
-            var idx = Globals.BackendWrapper.sampleCurrentModelIndex
-            Globals.BackendWrapper.sampleModels[idx].color
+            const models = Globals.BackendWrapper.sampleModels
+            const idx = Globals.BackendWrapper.sampleCurrentModelIndex
+
+            if (models && idx >= 0 && idx < models.length) {
+                return models[idx].color
+            }
+
+            return undefined
         }
 
 
@@ -152,8 +158,8 @@ Rectangle {
 
         // Data is set in python backend (plotting_1d.py)
         Component.onCompleted: {
-            Globals.References.pages.sample.mainContent.sldView = chartView
-            Globals.BackendWrapper.plottingSetQtChartsSerieRef('samplePage',
+            Globals.References.pages.analysis.mainContent.sldView = chartView
+            Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                'sldSerie',
                                                                chartView.calcSerie)
             Globals.BackendWrapper.plottingRefreshSLD()

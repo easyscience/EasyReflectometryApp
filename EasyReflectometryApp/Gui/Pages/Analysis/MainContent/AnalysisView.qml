@@ -23,7 +23,6 @@ Rectangle {
 
         property alias calculated: chartView.calcSerie
         property alias measured: chartView.measSerie
-//        property alias errorLower: chartView.bkgSerie
         bkgSerie.color: measSerie.color
         measSerie.width: 1
         bkgSerie.width: 1
@@ -31,6 +30,31 @@ Rectangle {
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
         useOpenGL: EaGlobals.Vars.useOpenGL
+
+        // Multi-experiment support
+        property var multiExperimentSeries: []
+        property bool isMultiExperimentMode: {
+            try {
+                return Globals.BackendWrapper.plottingIsMultiExperimentMode || false
+            } catch (e) {
+                return false
+            }
+        }
+
+        // Watch for changes in multi-experiment mode property
+        onIsMultiExperimentModeChanged: {
+            console.log("Analysis: isMultiExperimentMode changed to: " + isMultiExperimentMode)
+            updateMultiExperimentSeries()
+        }
+
+        // Watch for changes in multi-experiment selection
+        Connections {
+            target: Globals.BackendWrapper.activeBackend
+            function onMultiExperimentSelectionChanged() {
+                console.log("Analysis: Multi-experiment selection changed - updating series")
+                chartView.updateMultiExperimentSeries()
+            }
+        }
         
         property double xRange: Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
         axisX.title: "q (Å⁻¹)"
@@ -48,8 +72,122 @@ Rectangle {
 
         calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
         calcSerie.color: {
-            var idx = Globals.BackendWrapper.sampleCurrentModelIndex
-            Globals.BackendWrapper.sampleModels[idx].color
+            const models = Globals.BackendWrapper.sampleModels
+            const idx = Globals.BackendWrapper.sampleCurrentModelIndex
+
+            if (models && idx >= 0 && idx < models.length) {
+                return models[idx].color
+            }
+
+            return undefined
+        }
+
+        // Multi-experiment series management
+        function updateMultiExperimentSeries() {
+            console.log("Analysis: updateMultiExperimentSeries called, isMultiExperimentMode=" + isMultiExperimentMode)
+
+            // Clear existing multi-experiment series
+            clearMultiExperimentSeries()
+
+            if (!isMultiExperimentMode) {
+                // Show default series for single experiment
+                console.log("Analysis: Single experiment mode - showing default series")
+                measured.visible = true
+                calculated.visible = true
+                return
+            }
+
+            // Get experiment data list
+            var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
+            console.log("Analysis: experimentDataList length=" + experimentDataList.length)
+
+            // If no data available yet, keep default series visible as fallback
+            if (experimentDataList.length === 0) {
+                console.log("Analysis: No experiment data available - keeping default series visible")
+                measured.visible = true
+                calculated.visible = true
+                return
+            }
+
+            // Hide default series in multi-experiment mode (only after we have data)
+            measured.visible = false
+            calculated.visible = false
+            console.log("Analysis: Hidden default series, creating " + experimentDataList.length + " experiment series")
+
+            // Create series for each experiment
+            for (var i = 0; i < experimentDataList.length; i++) {
+                var expData = experimentDataList[i]
+                console.log("Analysis: Creating series for experiment " + expData.index + " (" + expData.name + ") with color " + expData.color)
+                if (expData.hasData) {
+                    createExperimentSeries(expData.index, expData.name, expData.color)
+                }
+            }
+        }
+
+        function clearMultiExperimentSeries() {
+            // Remove all dynamically created series
+            for (var i = 0; i < multiExperimentSeries.length; i++) {
+                var seriesSet = multiExperimentSeries[i]
+                if (seriesSet.measuredSerie) {
+                    chartView.removeSeries(seriesSet.measuredSerie)
+                }
+                if (seriesSet.calculatedSerie) {
+                    chartView.removeSeries(seriesSet.calculatedSerie)
+                }
+            }
+            multiExperimentSeries = []
+        }
+
+        function createExperimentSeries(expIndex, expName, color) {
+            // Create measured data series
+            var measuredSerie = chartView.createSeries(ChartView.SeriesTypeLine, 
+                                                     `${expName} - Measured`, 
+                                                     chartView.axisX, chartView.axisY)
+            measuredSerie.color = color
+            measuredSerie.width = 1
+            measuredSerie.capStyle = Qt.RoundCap
+            measuredSerie.useOpenGL = chartView.useOpenGL
+
+            // Create calculated data series (slightly different style)
+            var calculatedSerie = chartView.createSeries(ChartView.SeriesTypeLine,
+                                                        `${expName} - Calculated`,
+                                                        chartView.axisX, chartView.axisY)
+            calculatedSerie.color = color
+            calculatedSerie.width = 2
+            calculatedSerie.capStyle = Qt.RoundCap
+            calculatedSerie.useOpenGL = chartView.useOpenGL
+
+            // Store references
+            var seriesSet = {
+                measuredSerie: measuredSerie,
+                calculatedSerie: calculatedSerie,
+                expIndex: expIndex,
+                expName: expName,
+                color: color
+            }
+            multiExperimentSeries.push(seriesSet)
+
+            // Populate with data
+            populateExperimentSeries(seriesSet)
+        }
+
+        function populateExperimentSeries(seriesSet) {
+            // Get data points from backend (includes both measured and calculated)
+            var dataPoints = Globals.BackendWrapper.plottingGetAnalysisDataPoints(seriesSet.expIndex)
+            console.log("Analysis: populateExperimentSeries for exp " + seriesSet.expIndex + " got " + dataPoints.length + " points")
+
+            // Clear existing points
+            seriesSet.measuredSerie.clear()
+            seriesSet.calculatedSerie.clear()
+
+            // Add data points
+            for (var i = 0; i < dataPoints.length; i++) {
+                var point = dataPoints[i]
+                seriesSet.measuredSerie.append(point.x, point.measured)
+                seriesSet.calculatedSerie.append(point.x, point.calculated)
+            }
+
+            console.log("Analysis: Added " + dataPoints.length + " points to series for " + seriesSet.expName)
         }
 
         // Tool buttons
@@ -139,14 +277,69 @@ Rectangle {
                 rightPadding: EaStyle.Sizes.fontPixelSize
                 topPadding: EaStyle.Sizes.fontPixelSize * 0.5
                 bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
+                spacing: EaStyle.Sizes.fontPixelSize * 0.25
 
+                // Single experiment legend
                 EaElements.Label {
+                    visible: !chartView.isMultiExperimentMode
                     text: '━  I (Measured)'
                     color: chartView.measSerie.color
                 }
                 EaElements.Label {
-                    text: '━ (calculated)'
+                    visible: !chartView.isMultiExperimentMode
+                    text: '━ (Calculated)'
                     color: chartView.calcSerie.color
+                }
+
+                // Multi-experiment legend
+                Column {
+                    visible: chartView.isMultiExperimentMode
+                    spacing: EaStyle.Sizes.fontPixelSize * 0.2
+
+                    EaElements.Label {
+                        text: qsTr("Multi-experiment view:")
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                        font.bold: true
+                        color: EaStyle.Colors.themeForeground
+                    }
+
+                    Repeater {
+                        model: chartView.isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentDataList : []
+                        delegate: Row {
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.3
+
+                            Rectangle {
+                                width: EaStyle.Sizes.fontPixelSize * 0.8
+                                height: 3
+                                color: modelData.color || "#1f77b4"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            EaElements.Label {
+                                text: modelData.name || `Exp ${index + 1}`
+                                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.8
+                                color: EaStyle.Colors.themeForeground
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width - 2 * EaStyle.Sizes.fontPixelSize
+                        height: 1
+                        color: EaStyle.Colors.chartGridLine
+                    }
+
+                    EaElements.Label {
+                        text: qsTr("━ Measured (thin)")
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
+                        color: EaStyle.Colors.themeForegroundMinor
+                    }
+                    EaElements.Label {
+                        text: qsTr("━ Calculated (thick)")
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
+                        color: EaStyle.Colors.themeForegroundMinor
+                    }
                 }
             }
         }
@@ -168,6 +361,16 @@ Rectangle {
             Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                'calculatedSerie',
                                                                calculated)
+
+            // Initialize multi-experiment support
+            updateMultiExperimentSeries()
+        }
+
+        // Update series when chart becomes visible
+        onVisibleChanged: {
+            if (visible && isMultiExperimentMode) {
+                updateMultiExperimentSeries()
+            }
         }
     }
 

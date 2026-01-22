@@ -31,12 +31,26 @@ class Analysis(QObject):
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
+        self._project_lib = project_lib
         self._parameters_logic = ParametersLogic(project_lib)
         self._fitting_logic = FittingLogic(project_lib)
         self._calculators_logic = CalculatorsLogic(project_lib)
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
         self._chached_parameters = None
+        self._chached_enabled_parameters = None
+        # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
+        self._selected_experiment_indices = []
+        # Initialize selected experiments after construction to avoid binding loops
+        self._initialize_selected_experiments()
+
+    def _initialize_selected_experiments(self) -> None:
+        """Initialize selected experiment indices after object construction to avoid binding loops."""
+        available_experiments = self._experiments_logic.available()
+        if len(available_experiments) > 0:
+            self._selected_experiment_indices = [0]
+        else:
+            self._selected_experiment_indices = []
 
     ########################
     ## Fitting
@@ -51,6 +65,31 @@ class Analysis(QObject):
     @Property(bool, notify=fittingChanged)
     def isFitFinished(self) -> bool:
         return self._fitting_logic.fit_finished
+
+    @Property(bool, notify=fittingChanged)
+    def showFitResultsDialog(self) -> bool:
+        return self._fitting_logic.show_results_dialog
+
+    @Slot(bool)
+    def setShowFitResultsDialog(self, value: bool) -> None:
+        self._fitting_logic.show_results_dialog = value
+        self.fittingChanged.emit()
+
+    @Property(bool, notify=fittingChanged)
+    def fitSuccess(self) -> bool:
+        return self._fitting_logic.fit_success
+
+    @Property(str, notify=fittingChanged)
+    def fitErrorMessage(self) -> str:
+        return self._fitting_logic.fit_error_message
+
+    @Property(int, notify=fittingChanged)
+    def fitNumRefinedParams(self) -> int:
+        return self._fitting_logic.fit_n_pars
+
+    @Property(float, notify=fittingChanged)
+    def fitChi2(self) -> float:
+        return self._fitting_logic.fit_chi2
 
     @Slot(None)
     def fittingStartStop(self) -> None:
@@ -74,9 +113,9 @@ class Analysis(QObject):
             if param['min'] >= param['max']:
                 QtWidgets.QMessageBox.warning(
                     None,
-                    "Invalid Parameter Bounds",
+                    'Invalid Parameter Bounds',
                     f"Parameter '{param['name']}' has invalid bounds: "
-                    f"min ({param['min']}) must be less than max ({param['max']})."
+                    f'min ({param["min"]}) must be less than max ({param["max"]}).',
                 )
                 return False
 
@@ -93,9 +132,8 @@ class Analysis(QObject):
                 # Show a warning in a message box
                 QtWidgets.QMessageBox.warning(
                     None,
-                    "Invalid Parameter Bounds",
-                    f"Parameters {joined} have infinite bounds, "
-                    "which is not allowed for differential evolution minimizer."
+                    'Invalid Parameter Bounds',
+                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.',
                 )
 
                 return False
@@ -138,10 +176,17 @@ class Analysis(QObject):
     def setModelOnExperiment(self, new_value: int) -> None:
         self._experiments_logic.set_model_on_experiment(new_value)
         self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
 
     @Slot(str)
     def setExperimentName(self, new_name: str) -> None:
         self._experiments_logic.set_experiment_name(new_name)
+        self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
+
+    @Slot(int, str)
+    def setExperimentNameAtIndex(self, index: int, new_name: str) -> None:
+        self._experiments_logic.set_experiment_name_at_index(index, new_name)
         self.experimentsChanged.emit()
         self.externalExperimentChanged.emit()
 
@@ -185,7 +230,145 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
         else:
-            print(f"Experiment index {index} is out of range.")
+            print(f'Experiment index {index} is out of range.')
+
+    ########################
+    ## Multi-experiment selection support
+    # (Initialize selected experiments in the existing __init__ method)
+
+    @Property(int, notify=experimentsChanged)
+    def experimentsSelectedCount(self) -> int:
+        """Return the count of currently selected experiments."""
+        return len(self._selected_experiment_indices)
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def selectedExperimentIndices(self) -> List[int]:
+        """Return the list of selected experiment indices."""
+        return self._selected_experiment_indices
+
+    @Slot('QVariantList')
+    def setSelectedExperimentIndices(self, indices: List[int]) -> None:
+        """Set multiple selected experiment indices."""
+        # Validate indices
+        available_count = len(self._experiments_logic.available())
+        valid_indices = [i for i in indices if 0 <= i < available_count]
+
+        if valid_indices != self._selected_experiment_indices:
+            # previous_selection = self._selected_experiment_indices.copy()
+            self._selected_experiment_indices = valid_indices
+            # Update current experiment index to first selected (or 0 if no selection)
+            if valid_indices:
+                self._experiments_logic.set_current_index(valid_indices[0])
+                self._project_lib.current_experiment_index = valid_indices[0]
+            elif len(self._experiments_logic.available()) > 0:
+                # If no selection but experiments available, default to first experiment
+                self._experiments_logic.set_current_index(0)
+                self._selected_experiment_indices = [0]  # Auto-select first experiment
+
+            # Always trigger plotting refresh when selection changes
+            self._refresh_plotting_system()
+
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
+
+    def get_concatenated_experiment_data(self):
+        """
+        Concatenate data from all selected experiments.
+        Returns a combined DataSet1D object.
+        """
+        import numpy as np
+        from easyreflectometry.data import DataSet1D
+
+        if not self._selected_experiment_indices:
+            return DataSet1D(name='No experiments selected', x=np.empty(0), y=np.empty(0), ye=np.empty(0), xe=np.empty(0))
+
+        all_x, all_y, all_ye, all_xe = [], [], [], []
+
+        for exp_idx in self._selected_experiment_indices:
+            try:
+                data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                if data.x.size > 0:  # Only include non-empty datasets
+                    all_x.extend(data.x)
+                    all_y.extend(data.y)
+                    all_ye.extend(data.ye if hasattr(data, 'ye') and data.ye.size > 0 else np.zeros_like(data.y))
+                    all_xe.extend(data.xe if hasattr(data, 'xe') and data.xe.size > 0 else np.zeros_like(data.x))
+            except (IndexError, AttributeError) as e:
+                print(f'Error accessing experiment {exp_idx}: {e}')
+                continue
+
+        if not all_x:
+            return DataSet1D(name='No valid experiment data', x=np.empty(0), y=np.empty(0), ye=np.empty(0), xe=np.empty(0))
+
+        # Sort by x values to maintain proper order
+        combined_data = list(zip(all_x, all_y, all_ye, all_xe))
+        combined_data.sort(key=lambda item: item[0])
+
+        x_sorted, y_sorted, ye_sorted, xe_sorted = zip(*combined_data) if combined_data else ([], [], [], [])
+
+        exp_names = [
+            self._experiments_logic.available()[i]
+            for i in self._selected_experiment_indices
+            if i < len(self._experiments_logic.available())
+        ]
+        combined_name = f'Combined: {", ".join(exp_names)}'
+
+        return DataSet1D(
+            name=combined_name, x=np.array(x_sorted), y=np.array(y_sorted), ye=np.array(ye_sorted), xe=np.array(xe_sorted)
+        )
+
+    def get_individual_experiment_data_list(self):
+        """
+        Get individual experiment data for each selected experiment.
+        Returns a list of dictionaries with data, name, and color for each experiment.
+        """
+
+        if not self._selected_experiment_indices:
+            return []
+
+        experiment_data_list = []
+
+        # Define a color palette for experiments
+        color_palette = [
+            '#1f77b4',  # Blue
+            '#ff7f0e',  # Orange
+            '#2ca02c',  # Green
+            '#d62728',  # Red
+            '#9467bd',  # Purple
+            '#8c564b',  # Brown
+            '#e377c2',  # Pink
+            '#7f7f7f',  # Gray
+            '#bcbd22',  # Olive
+            '#17becf',  # Cyan
+        ]
+
+        for idx, exp_idx in enumerate(self._selected_experiment_indices):
+            try:
+                data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                if data.x.size > 0:  # Only include non-empty datasets
+                    exp_name = (
+                        self._experiments_logic.available()[exp_idx]
+                        if exp_idx < len(self._experiments_logic.available())
+                        else f'Experiment {exp_idx + 1}'
+                    )
+                    color = color_palette[idx % len(color_palette)]
+
+                    experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
+            except (IndexError, AttributeError) as e:
+                print(f'Error accessing experiment {exp_idx}: {e}')
+                continue
+
+        return experiment_data_list
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def selectedExperimentDataList(self) -> List[dict]:
+        """Return individual experiment data for plotting separate lines."""
+        return self.get_individual_experiment_data_list()
+
+    def _refresh_plotting_system(self) -> None:
+        """Refresh the plotting system when experiment selection changes."""
+        # Emit signal to notify parent/listeners that experiment selection changed
+        # Parent (PyBackend) connects this signal to plotting refresh
+        self.experimentsChanged.emit()
 
     ########################
     ## Minimizers
@@ -228,6 +411,22 @@ class Analysis(QObject):
         if self._chached_parameters is None:
             self._chached_parameters = self._parameters_logic.parameters
         return self._chached_parameters
+
+    @Property('QVariantList', notify=parametersChanged)
+    def enabledParameters(self) -> list[dict[str]]:
+        if self._chached_enabled_parameters is not None:
+            return self._chached_enabled_parameters
+        enabled_parameters = []
+        # import time
+        # t0 = time.time()
+        for parameter in self._parameters_logic.parameters:
+            if not parameter['enabled']:
+                continue
+            enabled_parameters.append(parameter)
+        # t1 = time.time()
+        # print(f"Enabled parameters computation time: {t1 - t0:.4f} seconds")
+        self._chached_enabled_parameters = enabled_parameters
+        return enabled_parameters
 
     @Property(int, notify=parametersIndexChanged)
     def currentParameterIndex(self) -> int:
@@ -279,4 +478,5 @@ class Analysis(QObject):
 
     def _clearCacheAndEmitParametersChanged(self):
         self._chached_parameters = None
+        self._chached_enabled_parameters = None
         self.parametersChanged.emit()

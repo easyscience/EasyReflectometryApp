@@ -76,34 +76,41 @@ class Models:
 
     def default_model_content(self, model: Model) -> None:
         """Set the default content for a model."""
-        model.sample.add_assembly()
-        model.sample.data[0].layers.data[0].material = self._project_lib._materials[
-            self._project_lib.get_index_air()
-        ]
+        model.add_assemblies()
+        # Superphase (Air layer)
+        air_material = self._project_lib._materials[self._project_lib.get_index_air()]
+        model.sample.data[0].layers.data[0].material = air_material
         model.sample.data[0].layers.data[0].thickness = 0.0
         model.sample.data[0].layers.data[0].roughness = 0.0
+        model.sample.data[0].layers.data[0].name = air_material.name + ' Layer'
         model.sample.data[0].name = 'Superphase'
 
-        model.sample.data[1].layers.data[0].material = self._project_lib._materials[
-            self._project_lib.get_index_sio2()
-        ]
-        model.sample.data[1].layers.data[0].thickness = 20.0
+        # Middle layer (SiO2)
+        sio2_material = self._project_lib._materials[self._project_lib.get_index_sio2()]
+        model.sample.data[1].layers.data[0].material = sio2_material
+        model.sample.data[1].layers.data[0].thickness = 100.0
         model.sample.data[1].layers.data[0].roughness = 3.0
+        model.sample.data[1].layers.data[0].name = sio2_material.name + ' Layer'
         model.sample.data[1].name = 'SiO2'
 
-        model.sample.data[2].layers.data[0].material = self._project_lib._materials[
-            self._project_lib.get_index_si()
-        ]
+        # Subphase (Si substrate)
+        si_material = self._project_lib._materials[self._project_lib.get_index_si()]
+        model.sample.data[2].layers.data[0].material = si_material
         model.sample.data[2].name = 'Substrate'
+        model.sample.data[2].layers.data[0].name = si_material.name + ' Layer'
         model.sample.data[2].layers.data[0].thickness = 0.0
         model.sample.data[2].layers.data[0].roughness = 1.2
 
     def add_new(self) -> None:
         self._models.add_model()
         self.default_model_content(self._models[-1])
+        # Update index to point to the new model
+        self.index = len(self._models) - 1
 
     def duplicate_selected_model(self) -> None:
         self._models.duplicate_model(self.index)
+        # Update index to point to the duplicated model
+        self.index = len(self._models) - 1
 
     def move_selected_up(self) -> None:
         if self.index > 0:

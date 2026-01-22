@@ -18,11 +18,18 @@ EaElements.GroupBox {
     //title: qsTr("Parameters")
     collapsible: false
     last: true
+    readonly property var backend: Globals.BackendWrapper
 
     Column {
         id: fittables
         property int selectedParamIndex: Globals.BackendWrapper.analysisCurrentParameterIndex
+        property bool bulkUpdatingSelection: false
+        property real fitColumnWidth: EaStyle.Sizes.fontPixelSize * 3.0
+        property alias parameterSlider: slider
         onSelectedParamIndexChanged: {
+            if (bulkUpdatingSelection) {
+                return
+            }
             updateSliderLimits()
             updateSliderValue()
         }
@@ -189,7 +196,7 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewLabel {
-                    width: EaStyle.Sizes.fontPixelSize * 3.0
+                    width: fittables.fitColumnWidth
                     color: EaStyle.Colors.themeForegroundMinor
                     text: qsTr("Fit")
                 }
@@ -294,13 +301,47 @@ EaElements.GroupBox {
                     checked: Globals.BackendWrapper.analysisFitableParameters[index].fit
                     onToggled: {
                         console.debug("*** Editing 'fit' field of fittable on Analysis page ***")
-                        Globals.BackendWrapper.analysisSetCurrentParameterFit(checkState)
+                        // Ensure this row is selected before toggling the fit value
+                        if (Globals.BackendWrapper.analysisCurrentParameterIndex !== index) {
+                            Globals.BackendWrapper.analysisSetCurrentParameterIndex(index)
+                        }
+                        Globals.BackendWrapper.analysisSetCurrentParameterFit(checked)
                     }
                 }
             }
             // Table content row
         }
         // Table
+
+        Item {
+            id: fitAllContainer
+            visible: Globals.BackendWrapper.analysisFitableParameters.length
+            width: tableView.width
+            height: EaStyle.Sizes.tableRowHeight
+
+            EaComponents.TableViewLabel {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.right: fitAllCheckBox.left
+                anchors.rightMargin: EaStyle.Sizes.fontPixelSize * 0.5
+                text: qsTr("Select All")
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideNone
+            }
+
+            EaComponents.TableViewCheckBox {
+                id: fitAllCheckBox
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: Math.max(tableView.width - fittables.fitColumnWidth, 0)
+                enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length &&
+                         Globals.BackendWrapper.analysisFitableParameters.length
+                checked: allFittablesSelected()
+                onToggled: {
+                    setAllFittablesFit(checked)
+                }
+            }
+        }
 
         // Parameter change slider
         Row {
@@ -357,27 +398,97 @@ EaElements.GroupBox {
             }
         }
     }
+
     // Logic
 
     function updateSliderValue() {
-        const value = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value
-        slider.value = EaLogic.Utils.toDefaultPrecision(value)
+        if (!backend.analysisFitableParameters.length) {
+            return
+        }
+        const currentIndex = backend.analysisCurrentParameterIndex
+        if (currentIndex < 0 || currentIndex >= backend.analysisFitableParameters.length) {
+            return
+        }
+        const value = backend.analysisFitableParameters[currentIndex].value
+        fittables.parameterSlider.value = EaLogic.Utils.toDefaultPrecision(value)
     }
 
     function updateSliderLimits() {
-        var from = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value * 0.9
-        var to = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value * 1.1
+        if (!backend.analysisFitableParameters.length) {
+            return
+        }
+        const currentIndex = backend.analysisCurrentParameterIndex
+        if (currentIndex < 0 || currentIndex >= backend.analysisFitableParameters.length) {
+            return
+        }
+        var from = backend.analysisFitableParameters[currentIndex].value * 0.9
+        var to = backend.analysisFitableParameters[currentIndex].value * 1.1
         if (from === 0 && to === 0) {
             to = 0.1
         }
-        if (Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].max < to) {
-            to = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].max
+        if (backend.analysisFitableParameters[currentIndex].max < to) {
+            to = backend.analysisFitableParameters[currentIndex].max
         }
-        if (Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].min > from) {
-            from = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].min
+        if (backend.analysisFitableParameters[currentIndex].min > from) {
+            from = backend.analysisFitableParameters[currentIndex].min
         }
-        slider.from = EaLogic.Utils.toDefaultPrecision(from)
-        slider.to = EaLogic.Utils.toDefaultPrecision(to)
+        fittables.parameterSlider.from = EaLogic.Utils.toDefaultPrecision(from)
+        fittables.parameterSlider.to = EaLogic.Utils.toDefaultPrecision(to)
+    }
+
+    function allFittablesSelected() {
+        const params = backend.analysisFitableParameters
+        if (!params || !params.length) {
+            return false
+        }
+        for (let i = 0; i < params.length; i++) {
+            const parameter = params[i]
+            const independent = parameter.independent !== undefined ? parameter.independent : true
+            if (!independent) {
+                continue
+            }
+            if (!parameter.fit) {
+                return false
+            }
+        }
+        return true
+    }
+
+    function setAllFittablesFit(enable) {
+        const params = backend.analysisFitableParameters
+        if (!params || !params.length) {
+            return
+        }
+        const originalIndex = backend.analysisCurrentParameterIndex
+        var hasChanges = false
+        const targetFit = !!enable
+        fittables.bulkUpdatingSelection = true
+        try {
+            for (let i = 0; i < params.length; i++) {
+                const parameter = params[i]
+                const independent = parameter.independent !== undefined ? parameter.independent : true
+                if (!independent) {
+                    continue
+                }
+                if (!!parameter.fit === targetFit) {
+                    continue
+                }
+                backend.analysisSetCurrentParameterIndex(i)
+                backend.analysisSetCurrentParameterFit(targetFit)
+                hasChanges = true
+            }
+        } finally {
+            const paramsLength = params.length
+            if (paramsLength) {
+                const targetIndex = originalIndex >= 0 && originalIndex < paramsLength ? originalIndex : Math.min(Math.max(originalIndex, 0), paramsLength - 1)
+                backend.analysisSetCurrentParameterIndex(targetIndex)
+            }
+            fittables.bulkUpdatingSelection = false
+        }
+        if (hasChanges) {
+            updateSliderLimits()
+            updateSliderValue()
+        }
     }
 }
 

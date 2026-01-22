@@ -4,6 +4,7 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
 from easyreflectometry.sample import Material
+from easyreflectometry.sample import Sample
 
 
 class Layers:
@@ -11,12 +12,24 @@ class Layers:
         self._project_lib = project_lib
 
     @property
+    def _sample(self) -> Sample:
+        return self._project_lib._models[self._project_lib.current_model_index].sample
+
+    @property
     def _layers(self) -> LayerCollection:
-        return (
-            self._project_lib._models[self._project_lib.current_model_index]
-            .sample[self._project_lib.current_assembly_index]
-            .layers
-        )
+        return self._sample[self._project_lib.current_assembly_index].layers
+
+    @property
+    def _assembly_type(self) -> str:
+        """Determine if current assembly is superphase, subphase, or regular."""
+        current_index = self._project_lib.current_assembly_index
+        total_assemblies = len(self._sample)
+        if current_index == 0:
+            return 'superphase'
+        elif current_index == total_assemblies - 1:
+            return 'subphase'
+        else:
+            return 'regular'
 
     @property
     def index(self) -> int:
@@ -32,7 +45,7 @@ class Layers:
 
     @property
     def layers(self) -> list[dict[str, str]]:
-        return _from_layers_collection_to_list_of_dicts(self._layers)
+        return _from_layers_collection_to_list_of_dicts(self._layers, self._assembly_type)
 
     @property
     def layers_names(self) -> list[str]:
@@ -47,6 +60,8 @@ class Layers:
         index_si = [material.name for material in self._project_lib._materials].index('Si')
         self._layers.add_layer()
         self._layers[-1].material = self._project_lib._materials[index_si]
+        # Set layer name based on material name
+        self._layers[-1].name = self._project_lib._materials[index_si].name + ' Layer'
 
     def duplicate_selected(self) -> None:
         self._layers.duplicate_layer(self.index)
@@ -82,6 +97,8 @@ class Layers:
     def set_material_at_current_index(self, new_value: int) -> bool:
         if self._layers[self.index].material != self._project_lib._materials[new_value]:
             self._layers[self.index].material = self._project_lib._materials[new_value]
+            # Update layer name based on material name
+            self._layers[self.index].name = self._project_lib._materials[new_value].name + ' Layer'
             return True
         return False
 
@@ -110,7 +127,28 @@ class Layers:
         return False
 
 
-def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection) -> list[dict[str, str]]:
+def _from_layers_collection_to_list_of_dicts(
+    layers_collection: LayerCollection, assembly_type: str = 'regular'
+) -> list[dict[str, str]]:
+    """Convert layers collection to list of dicts.
+
+    :param layers_collection: The collection of layers.
+    :param assembly_type: Type of assembly - 'superphase', 'subphase', or 'regular'.
+        - superphase: Neither thickness nor roughness should be editable
+        - subphase: Only roughness should be editable
+        - regular: Both thickness and roughness should be editable
+    """
+    # Determine enabled states based on assembly type
+    if assembly_type == 'superphase':
+        thickness_enabled = 'False'
+        roughness_enabled = 'False'
+    elif assembly_type == 'subphase':
+        thickness_enabled = 'False'
+        roughness_enabled = 'True'
+    else:  # regular
+        thickness_enabled = 'True'
+        roughness_enabled = 'True'
+
     layers_list = []
     for layer in layers_collection:
         layers_list.append(
@@ -124,6 +162,8 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
                 'solvent': 'solvent',
                 'solvation': '0.2',
                 'apm_enabled': 'True',
+                'thickness_enabled': thickness_enabled,
+                'roughness_enabled': roughness_enabled,
             }
         )
         if isinstance(layer, LayerAreaPerMolecule):
