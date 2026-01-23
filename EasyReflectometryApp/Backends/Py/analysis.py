@@ -123,9 +123,7 @@ class Analysis(QObject):
         self.fittingChanged.emit()
 
         # Prepare fit data for all experiments
-        fitter, x_data, y_data, weights, method = self._fitting_logic.prepare_threaded_fit(
-            self._minimizers_logic
-        )
+        fitter, x_data, y_data, weights, method = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
 
         if fitter is None:
             # Error already set in fitting logic

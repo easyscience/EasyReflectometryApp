@@ -1,6 +1,6 @@
+from typing import TYPE_CHECKING
 from typing import List
 from typing import Optional
-from typing import TYPE_CHECKING
 
 from easyreflectometry import Project as ProjectLib
 from easyscience.fitting import FitResults
