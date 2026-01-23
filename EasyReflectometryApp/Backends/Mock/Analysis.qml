@@ -26,6 +26,12 @@ QtObject {
     readonly property int fitNumRefinedParams: 3
     readonly property real fitChi2: 1.2345
 
+    // Fit failure signal (mirrors Python backend)
+    signal fitFailed(string message)
+
+    // Stop fit signal (mirrors Python backend)
+    signal stopFit()
+
     // Parameters
     property int currentParameterIndex: 0
     readonly property int modelParametersCount: 10

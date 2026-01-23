@@ -264,6 +264,10 @@ QtObject {
     readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
+    function analysisStopFit() { activeBackend.analysis.stopFit() }
+
+    // Fit failure signal - forwarded from backend
+    signal analysisFitFailed(string message)
 
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount
