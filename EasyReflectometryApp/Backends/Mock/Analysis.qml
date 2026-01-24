@@ -25,6 +25,7 @@ QtObject {
     readonly property string fitErrorMessage: ''
     readonly property int fitNumRefinedParams: 3
     readonly property real fitChi2: 1.2345
+    readonly property var fitResults: ({ success: true, nvarys: 3, chi2: 1.2345 })
 
     // Fit failure signal (mirrors Python backend)
     signal fitFailed(string message)

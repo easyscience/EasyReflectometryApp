@@ -47,6 +47,9 @@ class Fitting:
 
     @property
     def fit_success(self) -> bool:
+        """Return True if all fits succeeded."""
+        if self._results:
+            return all(r.success for r in self._results)
         if self._result is None:
             return False
         return self._result.success
@@ -145,12 +148,21 @@ class Fitting:
 
     @property
     def fit_n_pars(self) -> int:
+        """Return total number of refined parameters across all fits."""
+        if self._results:
+            return sum(r.n_pars for r in self._results)
         if self._result is None:
             return 0
         return self._result.n_pars
 
     @property
     def fit_chi2(self) -> float:
+        """Return total chi-squared across all fits."""
+        if self._results:
+            try:
+                return float(sum(r.chi2 for r in self._results))
+            except (ValueError, TypeError):
+                return 0.0
         if self._result is None:
             return 0.0
         try:

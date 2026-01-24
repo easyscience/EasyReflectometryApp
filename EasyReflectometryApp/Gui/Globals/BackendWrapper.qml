@@ -262,6 +262,7 @@ QtObject {
     readonly property string analysisFitErrorMessage: activeBackend.analysis.fitErrorMessage
     readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
     readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
+    readonly property var analysisFitResults: activeBackend.analysis.fitResults
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
     function analysisStopFit() { activeBackend.analysis.stopFit() }

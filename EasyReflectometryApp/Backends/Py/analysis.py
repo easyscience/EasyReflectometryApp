@@ -98,6 +98,15 @@ class Analysis(QObject):
     def fitChi2(self) -> float:
         return self._fitting_logic.fit_chi2
 
+    @Property('QVariant', notify=fittingChanged)
+    def fitResults(self) -> dict:
+        """Return fit results as a dict for QML consumption."""
+        return {
+            'success': self._fitting_logic.fit_success,
+            'nvarys': self._fitting_logic.fit_n_pars,
+            'chi2': self._fitting_logic.fit_chi2,
+        }
+
     @Slot(None)
     def fittingStartStop(self) -> None:
         # If already running, stop the fit
