@@ -87,6 +87,58 @@ Rectangle {
                     onTriggered: analysisChartView.resetAxes()
                 }
 
+                // Background reference line series
+                LineSeries {
+                    id: backgroundRefLine
+                    axisX: analysisChartView.axisX
+                    axisY: analysisChartView.axisY
+                    useOpenGL: analysisChartView.useOpenGL
+                    color: "#888888"
+                    width: 1
+                    style: Qt.DashLine
+                    visible: Globals.BackendWrapper.plottingBkgShown
+                }
+
+                // Scale reference line series
+                LineSeries {
+                    id: scaleRefLine
+                    axisX: analysisChartView.axisX
+                    axisY: analysisChartView.axisY
+                    useOpenGL: analysisChartView.useOpenGL
+                    color: "#666666"
+                    width: 1
+                    style: Qt.DotLine
+                    visible: Globals.BackendWrapper.plottingScaleShown
+                }
+
+                // Update reference lines when visibility changes
+                Connections {
+                    target: Globals.BackendWrapper.activeBackend.plotting
+                    function onReferenceLineVisibilityChanged() {
+                        analysisChartView.updateReferenceLines()
+                    }
+                }
+
+                function updateReferenceLines() {
+                    // Update background line
+                    backgroundRefLine.clear()
+                    if (Globals.BackendWrapper.plottingBkgShown) {
+                        var bkgData = Globals.BackendWrapper.plottingGetBackgroundData()
+                        for (var i = 0; i < bkgData.length; i++) {
+                            backgroundRefLine.append(bkgData[i].x, bkgData[i].y)
+                        }
+                    }
+
+                    // Update scale line
+                    scaleRefLine.clear()
+                    if (Globals.BackendWrapper.plottingScaleShown) {
+                        var scaleData = Globals.BackendWrapper.plottingGetScaleData()
+                        for (var j = 0; j < scaleData.length; j++) {
+                            scaleRefLine.append(scaleData[j].x, scaleData[j].y)
+                        }
+                    }
+                }
+
                 // Multi-experiment series management
                 function updateMultiExperimentSeries() {
                     // Always get the latest value from backend
@@ -399,6 +451,9 @@ Rectangle {
 
                     // Initialize multi-experiment support
                     updateMultiExperimentSeries()
+                    
+                    // Initialize reference lines
+                    updateReferenceLines()
                 }
             }
         }

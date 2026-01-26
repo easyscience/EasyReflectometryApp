@@ -94,4 +94,23 @@ QtObject {
         referenceLineVisibilityChanged()
     }
 
+    // Reference line data accessors (mock implementation)
+    function getBackgroundData() {
+        if (!bkgShown) return []
+        // Return mock horizontal line at background level
+        return [
+            { 'x': 0.01, 'y': -7.0 },
+            { 'x': 0.30, 'y': -7.0 }
+        ]
+    }
+
+    function getScaleData() {
+        if (!scaleShown) return []
+        // Return mock horizontal line at scale level (log10(1.0) = 0)
+        return [
+            { 'x': 0.01, 'y': 0.0 },
+            { 'x': 0.30, 'y': 0.0 }
+        ]
+    }
+
 }

@@ -346,6 +346,22 @@ QtObject {
     function plottingFlipScaleShown() { activeBackend.plotting.flipScaleShown() }
     function plottingFlipBkgShown() { activeBackend.plotting.flipBkgShown() }
 
+    // Reference line data accessors
+    function plottingGetBackgroundData() {
+        try {
+            return activeBackend.plotting.getBackgroundData()
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetScaleData() {
+        try {
+            return activeBackend.plotting.getScaleData()
+        } catch (e) {
+            return []
+        }
+    }
+
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }

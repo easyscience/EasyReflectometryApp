@@ -138,6 +138,75 @@ class Plotting1d(QObject):
         self._bkg_shown = not self._bkg_shown
         self.referenceLineVisibilityChanged.emit()
 
+    @Slot(result='QVariantList')
+    def getBackgroundData(self) -> list:
+        """Return background reference line data for plotting.
+
+        Returns a horizontal line at the model's background value.
+        """
+        if not self._bkg_shown:
+            return []
+        try:
+            model = self._project_lib.models[self._project_lib.current_model_index]
+            exp_data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
+            if exp_data.x is None or len(exp_data.x) == 0:
+                return []
+            x = exp_data.x
+            bkg_value = model.background.value
+            # For log scale plotting, convert background value
+            bkg_log = float(np.log10(bkg_value)) if bkg_value > 0 else -10.0
+            # Apply R×q⁴ transformation if enabled
+            if self._plot_rq4:
+                # For background, we need to transform: bkg * q^4
+                return [
+                    {'x': float(x[0]), 'y': float(np.log10(bkg_value * x[0] ** 4)) if bkg_value * x[0] ** 4 > 0 else -10.0},
+                    {'x': float(x[-1]), 'y': float(np.log10(bkg_value * x[-1] ** 4)) if bkg_value * x[-1] ** 4 > 0 else -10.0},
+                ]
+            else:
+                return [{'x': float(x[0]), 'y': bkg_log}, {'x': float(x[-1]), 'y': bkg_log}]
+        except (IndexError, AttributeError, TypeError) as e:
+            console.debug(f'Error getting background data: {e}')
+            return []
+
+    @Slot(result='QVariantList')
+    def getScaleData(self) -> list:
+        """Return scale reference line data for plotting.
+
+        Returns a horizontal line at the model's scale value.
+        Note: Scale is a multiplicative factor, typically close to 1.0.
+        For reflectometry plots, the scale line at y=scale (log10) shows
+        where R=scale, i.e., where the reflectivity equals the scale factor.
+        """
+        if not self._scale_shown:
+            return []
+        try:
+            model = self._project_lib.models[self._project_lib.current_model_index]
+            exp_data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
+            if exp_data.x is None or len(exp_data.x) == 0:
+                return []
+            x = exp_data.x
+            scale_value = model.scale.value
+            # For log scale plotting, convert scale value
+            scale_log = float(np.log10(scale_value)) if scale_value > 0 else 0.0
+            # Apply R×q⁴ transformation if enabled
+            if self._plot_rq4:
+                # For scale, we need to transform: scale * q^4
+                return [
+                    {
+                        'x': float(x[0]),
+                        'y': float(np.log10(scale_value * x[0] ** 4)) if scale_value * x[0] ** 4 > 0 else -10.0,
+                    },
+                    {
+                        'x': float(x[-1]),
+                        'y': float(np.log10(scale_value * x[-1] ** 4)) if scale_value * x[-1] ** 4 > 0 else -10.0,
+                    },
+                ]
+            else:
+                return [{'x': float(x[0]), 'y': scale_log}, {'x': float(x[-1]), 'y': scale_log}]
+        except (IndexError, AttributeError, TypeError) as e:
+            console.debug(f'Error getting scale data: {e}')
+            return []
+
     @property
     def sample_data(self) -> DataSet1D:
         idx = self._project_lib.current_model_index
