@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING
 from typing import List
 from typing import Optional
@@ -8,6 +9,9 @@ from easyscience.fitting.minimizers.utils import FitError
 
 if TYPE_CHECKING:
     from .minimizers import Minimizers
+
+
+logger = logging.getLogger(__name__)
 
 
 class Fitting:
@@ -69,6 +73,7 @@ class Fitting:
         :param error_message: The error message describing the failure.
         """
         self._result = None
+        self._results = []
         self._fit_error_message = error_message
         self._running = False
         self._finished = True
@@ -77,6 +82,8 @@ class Fitting:
     def stop_fit(self) -> None:
         """Request fitting to stop and clean up state."""
         self._stop_requested = True
+        self._result = None
+        self._results = []
         self._running = False
         self._finished = True
         self._fit_cancelled = True
@@ -116,18 +123,20 @@ class Fitting:
                 self._show_results_dialog = True
                 return None, None, None, None, None
 
+            experiment_indices = range(len(experiments))
+
             # Create MultiFitter with all models
-            models = [experiments[idx].model for idx in experiments]
+            models = [experiments[idx].model for idx in experiment_indices]
             multi_fitter = MultiFitter(*models)
 
             # Prepare data arrays for all experiments
-            x_data = [experiments[idx].x for idx in experiments]
-            y_data = [experiments[idx].y for idx in experiments]
+            x_data = [experiments[idx].x for idx in experiment_indices]
+            y_data = [experiments[idx].y for idx in experiment_indices]
 
             # Validate error values before computing weights to avoid division by zero
             import numpy as np
 
-            for idx in experiments:
+            for idx in experiment_indices:
                 ye = experiments[idx].ye
                 if np.any(ye == 0):
                     exp_name = experiments[idx].name if hasattr(experiments[idx], 'name') else f'index {idx}'
@@ -137,7 +146,7 @@ class Fitting:
                     self._show_results_dialog = True
                     return None, None, None, None, None
 
-            weights = [1.0 / experiments[idx].ye for idx in experiments]
+            weights = [1.0 / experiments[idx].ye for idx in experiment_indices]
 
             # Method is optional in fit() - pass None to use minimizer's default
             method = None
@@ -149,7 +158,7 @@ class Fitting:
             self._running = False
             self._finished = True
             self._show_results_dialog = True
-            print(f'Error preparing threaded fit: {e}')
+            logger.exception('Error preparing threaded fit')
             return None, None, None, None, None
 
     def on_fit_finished(self, results: List[FitResults]) -> None:
@@ -166,7 +175,7 @@ class Fitting:
         if isinstance(results, list) and len(results) > 0:
             # For multi-experiment fits, store the list; use first for single-result properties
             self._results = results
-            self._result = results[0] if len(results) == 1 else results[0]
+            self._result = results[0]
         else:
             self._result = results
             self._results = [results] if results else []

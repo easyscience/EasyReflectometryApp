@@ -128,6 +128,8 @@ class Analysis(QObject):
         self._fitting_logic.prepare_for_threaded_fit()
         self.fittingChanged.emit()
 
+        # TODO: Thread-safety: prevent model/parameter edits during fitting or snapshot state before starting the worker.
+
         # Prepare fit data for all experiments
         fitter, x_data, y_data, weights, method = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
 
@@ -144,10 +146,13 @@ class Analysis(QObject):
             method_name='fit',
             args=(x_data, y_data),
             kwargs={'weights': weights, 'method': method},
+            parent=self,
         )
         self._fitter_thread.setTerminationEnabled(True)
         self._fitter_thread.finished.connect(self._on_fit_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
+        self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
 
     @Slot(list)
@@ -175,6 +180,7 @@ class Analysis(QObject):
         self._fitting_logic.stop_fit()
         if self._fitter_thread is not None:
             self._fitter_thread.stop()
+            self._fitter_thread.deleteLater()
             self._fitter_thread = None
         self.fittingChanged.emit()
         self.externalFittingChanged.emit()

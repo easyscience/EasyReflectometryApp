@@ -79,6 +79,7 @@ class FitterWorker(QThread):
         This method is called automatically when start() is invoked.
         Results are emitted via the finished or failed signals.
         """
+        # TODO: Thread-safety: fitting uses shared model state; consider snapshotting or blocking edits during execution.
         # Check if stop was requested before starting
         if self._stop_requested:
             self.failed.emit('Fitting cancelled before start')

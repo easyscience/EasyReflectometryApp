@@ -270,6 +270,14 @@ QtObject {
     // Fit failure signal - forwarded from backend
     signal analysisFitFailed(string message)
 
+    // Connect backend fitFailed signal to QML signal
+    property var _fitFailedConnection: {
+        if (activeBackend && activeBackend.analysis && activeBackend.analysis.fitFailed) {
+            activeBackend.analysis.fitFailed.connect(analysisFitFailed)
+        }
+        return null
+    }
+
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount
     readonly property int analysisFixedParametersCount: activeBackend.analysis.fixedParametersCount
