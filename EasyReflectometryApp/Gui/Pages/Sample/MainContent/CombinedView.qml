@@ -101,7 +101,7 @@ Rectangle {
 
                 ValueAxis {
                     id: sampleAxisY
-                    titleText: "Log10 R(q)"
+                    titleText: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
                     // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - sampleChartView.yRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + sampleChartView.yRange * 0.01

@@ -224,7 +224,7 @@ Rectangle {
         axisX.maxAfterReset: Globals.BackendWrapper.plottingExperimentMaxX + xRange * 0.01
 
         property double yRange: Globals.BackendWrapper.plottingExperimentMaxY - Globals.BackendWrapper.plottingExperimentMinY
-        axisY.title: "Log10 R(q)"
+        axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
         axisY.min: Globals.BackendWrapper.plottingExperimentMinY - yRange * 0.01
         axisY.max: Globals.BackendWrapper.plottingExperimentMaxY + yRange * 0.01
         axisY.minAfterReset: Globals.BackendWrapper.plottingExperimentMinY - yRange * 0.01
