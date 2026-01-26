@@ -262,8 +262,21 @@ QtObject {
     readonly property string analysisFitErrorMessage: activeBackend.analysis.fitErrorMessage
     readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
     readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
+    readonly property var analysisFitResults: activeBackend.analysis.fitResults
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
+    function analysisStopFit() { activeBackend.analysis.stopFit() }
+
+    // Fit failure signal - forwarded from backend
+    signal analysisFitFailed(string message)
+
+    // Connect backend fitFailed signal to QML signal
+    property var _fitFailedConnection: {
+        if (activeBackend && activeBackend.analysis && activeBackend.analysis.fitFailed) {
+            activeBackend.analysis.fitFailed.connect(analysisFitFailed)
+        }
+        return null
+    }
 
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount

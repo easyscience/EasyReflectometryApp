@@ -13,6 +13,7 @@ from .logic.experiments import Experiments as ExperimentLogic
 from .logic.fitting import Fitting as FittingLogic
 from .logic.minimizers import Minimizers as MinimizersLogic
 from .logic.parameters import Parameters as ParametersLogic
+from .workers import FitterWorker
 
 
 class Analysis(QObject):
@@ -22,6 +23,8 @@ class Analysis(QObject):
     parametersChanged = Signal()
     parametersIndexChanged = Signal()
     fittingChanged = Signal()
+    fitFailed = Signal(str)  # Emitted with error message when fitting fails
+    stopFit = Signal()  # Signal to request fitting stop
 
     externalMinimizerChanged = Signal()
     externalParametersChanged = Signal()
@@ -39,6 +42,10 @@ class Analysis(QObject):
         self._minimizers_logic = MinimizersLogic(project_lib)
         self._chached_parameters = None
         self._chached_enabled_parameters = None
+        # Thread management for background fitting
+        self._fitter_thread = None
+        # Connect stopFit signal to slot
+        self.stopFit.connect(self._onStopFit)
         # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
         self._selected_experiment_indices = []
         # Initialize selected experiments after construction to avoid binding loops
@@ -91,14 +98,91 @@ class Analysis(QObject):
     def fitChi2(self) -> float:
         return self._fitting_logic.fit_chi2
 
+    @Property('QVariant', notify=fittingChanged)
+    def fitResults(self) -> dict:
+        """Return fit results as a dict for QML consumption."""
+        return {
+            'success': self._fitting_logic.fit_success,
+            'nvarys': self._fitting_logic.fit_n_pars,
+            'chi2': self._fitting_logic.fit_chi2,
+        }
+
     @Slot(None)
     def fittingStartStop(self) -> None:
-        # make sure we can run the fitting
+        # If already running, stop the fit
+        if self._fitting_logic.running:
+            self.stopFit.emit()
+            return
+
+        # Make sure we can run the fitting
         if not self.prefitCheck():
             return
-        self._fitting_logic.start_stop()
+
+        # Use threaded fitting for non-blocking UI
+        self._start_threaded_fit()
+
+    def _start_threaded_fit(self) -> None:
+        """Start fitting in a background thread."""
+        # Reset flags and prepare for fit using proper encapsulation
+        self._fitting_logic.reset_stop_flag()
+        self._fitting_logic.prepare_for_threaded_fit()
+        self.fittingChanged.emit()
+
+        # TODO: Thread-safety: prevent model/parameter edits during fitting or snapshot state before starting the worker.
+
+        # Prepare fit data for all experiments
+        fitter, x_data, y_data, weights, method = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
+
+        if fitter is None:
+            # Error already set in fitting logic
+            self.fittingChanged.emit()
+            if self._fitting_logic.fit_error_message:
+                self.fitFailed.emit(self._fitting_logic.fit_error_message)
+            return
+
+        # Create and configure worker
+        self._fitter_thread = FitterWorker(
+            fitter=fitter,
+            method_name='fit',
+            args=(x_data, y_data),
+            kwargs={'weights': weights, 'method': method},
+            parent=self,
+        )
+        self._fitter_thread.setTerminationEnabled(True)
+        self._fitter_thread.finished.connect(self._on_fit_finished)
+        self._fitter_thread.failed.connect(self._on_fit_failed)
+        self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.start()
+
+    @Slot(list)
+    def _on_fit_finished(self, results: list) -> None:
+        """Handle successful completion of threaded fit."""
+        self._fitting_logic.on_fit_finished(results)
+        self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
+        self.externalFittingChanged.emit()
+
+    @Slot(str)
+    def _on_fit_failed(self, error_message: str) -> None:
+        """Handle failed threaded fit."""
+        self._fitting_logic.on_fit_failed(error_message)
+        self._fitter_thread = None
+        self.fittingChanged.emit()
+        self._clearCacheAndEmitParametersChanged()
+        self.externalFittingChanged.emit()
+        self.fitFailed.emit(error_message)
+
+    @Slot()
+    def _onStopFit(self) -> None:
+        """Stop fitting and clean up."""
+        self._fitting_logic.stop_fit()
+        if self._fitter_thread is not None:
+            self._fitter_thread.stop()
+            self._fitter_thread.deleteLater()
+            self._fitter_thread = None
+        self.fittingChanged.emit()
         self.externalFittingChanged.emit()
 
     def prefitCheck(self) -> bool:
