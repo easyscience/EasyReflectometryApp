@@ -123,12 +123,9 @@ class Analysis(QObject):
 
     def _start_threaded_fit(self) -> None:
         """Start fitting in a background thread."""
-        # Reset flags and prepare for fit
+        # Reset flags and prepare for fit using proper encapsulation
         self._fitting_logic.reset_stop_flag()
-        self._fitting_logic._running = True
-        self._fitting_logic._finished = False
-        self._fitting_logic._show_results_dialog = False
-        self._fitting_logic._fit_error_message = None
+        self._fitting_logic.prepare_for_threaded_fit()
         self.fittingChanged.emit()
 
         # Prepare fit data for all experiments

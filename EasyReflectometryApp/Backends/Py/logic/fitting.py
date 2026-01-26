@@ -88,6 +88,17 @@ class Fitting:
         self._stop_requested = False
         self._fit_cancelled = False
 
+    def prepare_for_threaded_fit(self) -> None:
+        """Prepare state for a new threaded fit.
+
+        This method sets the internal state flags to indicate a fit is starting.
+        Call this before launching the background thread.
+        """
+        self._running = True
+        self._finished = False
+        self._show_results_dialog = False
+        self._fit_error_message = None
+
     def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> tuple:
         """Prepare data for threaded fitting.
 
@@ -112,6 +123,20 @@ class Fitting:
             # Prepare data arrays for all experiments
             x_data = [experiments[idx].x for idx in experiments]
             y_data = [experiments[idx].y for idx in experiments]
+
+            # Validate error values before computing weights to avoid division by zero
+            import numpy as np
+
+            for idx in experiments:
+                ye = experiments[idx].ye
+                if np.any(ye == 0):
+                    exp_name = experiments[idx].name if hasattr(experiments[idx], 'name') else f'index {idx}'
+                    self._fit_error_message = f'Experiment {exp_name} has zero error values which would cause division by zero'
+                    self._running = False
+                    self._finished = True
+                    self._show_results_dialog = True
+                    return None, None, None, None, None
+
             weights = [1.0 / experiments[idx].ye for idx in experiments]
 
             # Method is optional in fit() - pass None to use minimizer's default

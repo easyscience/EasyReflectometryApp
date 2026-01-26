@@ -94,7 +94,10 @@ class FitterWorker(QThread):
             method = getattr(self._fitter, self._method_name)
             result = method(*self._args, **self._kwargs)
 
-            # Check if stop was requested during execution
+            # NOTE: This check only catches stop requests that occurred AFTER the fit
+            # completed but before we emit the result. It does NOT interrupt the fitting
+            # algorithm mid-execution since lmfit/scipy don't support cancellation callbacks.
+            # The effective cancellation window is only before the fit starts (checked above).
             if self._stop_requested:
                 self.failed.emit('Fitting cancelled by user')
                 return
@@ -119,9 +122,26 @@ class FitterWorker(QThread):
         This sets a flag that is checked during execution and also
         terminates the thread if it's still running. Call wait() after
         this to ensure proper thread cleanup.
+
+        .. warning::
+            DANGEROUS: This method uses QThread.terminate() which is strongly
+            discouraged by Qt documentation. It can:
+            - Leave mutex locks held indefinitely causing deadlocks
+            - Corrupt data structures mid-operation
+            - Prevent proper cleanup of resources (especially numpy arrays, scipy internals)
+            - Cause memory leaks and undefined behavior
+
+            The fitting libraries (lmfit, scipy) do not support graceful cancellation.
+            The stop flag is only effective BEFORE the fit starts - once the fitting
+            algorithm is running, it cannot be interrupted cleanly.
+
+            See THREAD_TERMINATION_WARNING.md for details on known issues and
+            potential future improvements (e.g., using subprocess instead of QThread).
         """
         self._stop_requested = True
         if self.isRunning():
+            # WARNING: terminate() is dangerous but necessary since fitting
+            # libraries don't support graceful cancellation. See docstring above.
             self.terminate()
             self.wait()
 
