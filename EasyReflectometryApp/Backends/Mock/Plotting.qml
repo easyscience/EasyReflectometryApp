@@ -23,6 +23,20 @@ QtObject {
 
     property int modelCount: 1
 
+    // Plot mode properties
+    property bool plotRQ4: false
+    property string yMainAxisTitle: 'R(q)'
+    property bool xAxisLog: false
+    property string xAxisType: 'linear'
+    property bool sldXDataReversed: false
+    property bool scaleShown: false
+    property bool bkgShown: false
+
+    // Signals for plot mode changes
+    signal plotModeChanged()
+    signal axisTypeChanged()
+    signal sldAxisReversedChanged()
+    signal referenceLineVisibilityChanged()
     signal samplePageDataChanged()
 
     function setQtChartsSerieRef(value1, value2, value3) {
@@ -50,6 +64,34 @@ QtObject {
     function getModelColor(index) {
         console.debug(`getModelColor ${index}`)
         return '#0000FF'
+    }
+
+    // Plot mode toggle functions
+    function togglePlotRQ4() {
+        plotRQ4 = !plotRQ4
+        yMainAxisTitle = plotRQ4 ? 'R(q)×q⁴' : 'R(q)'
+        plotModeChanged()
+    }
+
+    function toggleXAxisType() {
+        xAxisLog = !xAxisLog
+        xAxisType = xAxisLog ? 'log' : 'linear'
+        axisTypeChanged()
+    }
+
+    function reverseSldXData() {
+        sldXDataReversed = !sldXDataReversed
+        sldAxisReversedChanged()
+    }
+
+    function flipScaleShown() {
+        scaleShown = !scaleShown
+        referenceLineVisibilityChanged()
+    }
+
+    function flipBkgShown() {
+        bkgShown = !bkgShown
+        referenceLineVisibilityChanged()
     }
 
 }

@@ -328,9 +328,29 @@ QtObject {
     readonly property var plottingAnalysisMaxY: activeBackend.plotting.sampleMaxY
     readonly property var calcSerieColor: activeBackend.plotting.calcSerieColor
 
+    // Plot mode properties
+    readonly property bool plottingPlotRQ4: activeBackend.plotting.plotRQ4
+    readonly property string plottingYAxisTitle: activeBackend.plotting.yMainAxisTitle
+    readonly property bool plottingXAxisLog: activeBackend.plotting.xAxisLog
+    readonly property string plottingXAxisType: activeBackend.plotting.xAxisType
+    readonly property bool plottingSldXReversed: activeBackend.plotting.sldXDataReversed
+
+    // Reference line visibility
+    readonly property bool plottingScaleShown: activeBackend.plotting.scaleShown
+    readonly property bool plottingBkgShown: activeBackend.plotting.bkgShown
+
+    // Plot mode toggle functions
+    function plottingTogglePlotRQ4() { activeBackend.plotting.togglePlotRQ4() }
+    function plottingToggleXAxisType() { activeBackend.plotting.toggleXAxisType() }
+    function plottingReverseSldXData() { activeBackend.plotting.reverseSldXData() }
+    function plottingFlipScaleShown() { activeBackend.plotting.flipScaleShown() }
+    function plottingFlipBkgShown() { activeBackend.plotting.flipBkgShown() }
+
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }
+    function plottingRefreshExperiment() { activeBackend.plotting.drawMeasuredOnExperimentChart() }
+    function plottingRefreshAnalysis() { activeBackend.plotting.drawCalculatedAndMeasuredOnAnalysisChart() }
 
     // Multi-model sample page plotting support
     readonly property int plottingModelCount: activeBackend.plotting.modelCount
@@ -358,11 +378,16 @@ QtObject {
 
     // Signal for sample page data changes - forward from backend
     signal samplePageDataChanged()
+    // Signal for plot mode changes - forward from backend
+    signal plotModeChanged()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.samplePageDataChanged) {
             activeBackend.plotting.samplePageDataChanged.connect(samplePageDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.plotModeChanged) {
+            activeBackend.plotting.plotModeChanged.connect(plotModeChanged)
         }
     }
 

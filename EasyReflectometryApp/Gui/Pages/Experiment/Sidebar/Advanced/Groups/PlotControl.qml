@@ -29,21 +29,21 @@ EaElements.GroupBox {
 
         EaElements.CheckBox {
             topPadding: 0
-            checked: Globals.Variables.reverseSldZAxis
-            text: qsTr("Reverse SLD z-axis")
-            ToolTip.text: qsTr("Checking this box will reverse the z-axis of the SLD plot")
+            checked: Globals.BackendWrapper.plottingScaleShown
+            text: qsTr("Show scale line")
+            ToolTip.text: qsTr("Checking this box will show the scale reference line on the plot")
             onToggled: {
-                Globals.Variables.reverseSldZAxis = checked
+                Globals.BackendWrapper.plottingFlipScaleShown()
             }
         }
 
         EaElements.CheckBox {
             topPadding: 0
-            checked: Globals.Variables.logarithmicQAxis
-            text: qsTr("Logarithmic q-axis")
-            ToolTip.text: qsTr("Checking this box will make the q-axis logarithmic on the sample plot")
+            checked: Globals.BackendWrapper.plottingBkgShown
+            text: qsTr("Show background line")
+            ToolTip.text: qsTr("Checking this box will show the background reference line on the plot")
             onToggled: {
-                Globals.Variables.logarithmicQAxis = checked
+                Globals.BackendWrapper.plottingFlipBkgShown()
             }
         }
     }

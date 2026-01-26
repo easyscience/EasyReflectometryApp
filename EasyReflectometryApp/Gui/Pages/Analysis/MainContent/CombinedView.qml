@@ -69,6 +69,24 @@ Rectangle {
                     }
                 }
 
+                // Watch for plot mode changes (R(q)×q⁴ toggle)
+                Connections {
+                    target: Globals.BackendWrapper
+                    function onPlotModeChanged() {
+                        console.debug("CombinedView Analysis: Plot mode changed, refreshing chart")
+                        Globals.BackendWrapper.plottingRefreshAnalysis()
+                        // Delay resetAxes to allow axis range properties to update first
+                        combinedAnalysisResetAxesTimer.start()
+                    }
+                }
+
+                Timer {
+                    id: combinedAnalysisResetAxesTimer
+                    interval: 50
+                    repeat: false
+                    onTriggered: analysisChartView.resetAxes()
+                }
+
                 // Multi-experiment series management
                 function updateMultiExperimentSeries() {
                     // Always get the latest value from backend

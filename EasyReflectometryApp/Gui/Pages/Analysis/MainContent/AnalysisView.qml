@@ -55,6 +55,24 @@ Rectangle {
                 chartView.updateMultiExperimentSeries()
             }
         }
+
+        // Watch for plot mode changes (R(q)×q⁴ toggle)
+        Connections {
+            target: Globals.BackendWrapper
+            function onPlotModeChanged() {
+                console.debug("AnalysisView: Plot mode changed, refreshing chart")
+                Globals.BackendWrapper.plottingRefreshAnalysis()
+                // Delay resetAxes to allow axis range properties to update first
+                analysisResetAxesTimer.start()
+            }
+        }
+
+        Timer {
+            id: analysisResetAxesTimer
+            interval: 50
+            repeat: false
+            onTriggered: chartView.resetAxes()
+        }
         
         property double xRange: Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
         axisX.title: "q (Å⁻¹)"

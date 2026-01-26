@@ -347,6 +347,18 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
+        function onPlotModeChanged() {
+            refreshAllCharts()
+            // Delay resetAxes to allow axis range properties to update first
+            sampleResetAxesTimer.start()
+        }
+    }
+
+    Timer {
+        id: sampleResetAxesTimer
+        interval: 50
+        repeat: false
+        onTriggered: chartView.resetAxes()
     }
 
     Component.onCompleted: {

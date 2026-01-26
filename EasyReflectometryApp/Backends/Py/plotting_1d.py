@@ -20,6 +20,12 @@ class Plotting1d(QObject):
     experimentDataChanged = Signal()
     samplePageDataChanged = Signal()  # Signal for QML to refresh sample page charts
 
+    # New signals for plot mode properties
+    plotModeChanged = Signal()
+    axisTypeChanged = Signal()
+    sldAxisReversedChanged = Signal()
+    referenceLineVisibilityChanged = Signal()
+
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
         self._project_lib = project_lib
@@ -27,6 +33,13 @@ class Plotting1d(QObject):
         self._currentLib1d = 'QtCharts'
         self._sample_data = {}
         self._sld_data = {}
+
+        # Plot mode state
+        self._plot_rq4 = False
+        self._x_axis_log = False
+        self._sld_x_reversed = False
+        self._scale_shown = False
+        self._bkg_shown = False
         self._chartRefs = {
             'QtCharts': {
                 'samplePage': {
@@ -50,6 +63,80 @@ class Plotting1d(QObject):
         self._sample_data = {}
         self._sld_data = {}
         console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
+
+    # R(q)×q⁴ mode
+    @Property(bool, notify=plotModeChanged)
+    def plotRQ4(self) -> bool:
+        """Return whether R(q)×q⁴ mode is enabled."""
+        return self._plot_rq4
+
+    @Slot()
+    def togglePlotRQ4(self) -> None:
+        """Toggle R(q)×q⁴ plotting mode."""
+        self._plot_rq4 = not self._plot_rq4
+        self.plotModeChanged.emit()
+        # Refresh all charts with new mode
+        self.sampleChartRangesChanged.emit()
+        self.experimentChartRangesChanged.emit()
+        self.samplePageDataChanged.emit()
+
+    @Property(str, notify=plotModeChanged)
+    def yMainAxisTitle(self) -> str:
+        """Return Y-axis title based on current plot mode."""
+        return 'R(q)×q⁴' if self._plot_rq4 else 'R(q)'
+
+    # X-axis type (log/linear)
+    @Property(bool, notify=axisTypeChanged)
+    def xAxisLog(self) -> bool:
+        """Return whether X-axis is logarithmic."""
+        return self._x_axis_log
+
+    @Slot()
+    def toggleXAxisType(self) -> None:
+        """Toggle between linear and logarithmic X-axis."""
+        self._x_axis_log = not self._x_axis_log
+        self.axisTypeChanged.emit()
+
+    @Property(str, notify=axisTypeChanged)
+    def xAxisType(self) -> str:
+        """Return X-axis type as string for QML."""
+        return 'log' if self._x_axis_log else 'linear'
+
+    # SLD X-axis reversal
+    @Property(bool, notify=sldAxisReversedChanged)
+    def sldXDataReversed(self) -> bool:
+        """Return whether SLD X-axis is reversed."""
+        return self._sld_x_reversed
+
+    @Slot()
+    def reverseSldXData(self) -> None:
+        """Toggle SLD X-axis reversal."""
+        self._sld_x_reversed = not self._sld_x_reversed
+        self.sldAxisReversedChanged.emit()
+        self.sldChartRangesChanged.emit()
+
+    # Reference line visibility
+    @Property(bool, notify=referenceLineVisibilityChanged)
+    def scaleShown(self) -> bool:
+        """Return whether scale reference line is shown."""
+        return self._scale_shown
+
+    @Slot()
+    def flipScaleShown(self) -> None:
+        """Toggle scale line visibility."""
+        self._scale_shown = not self._scale_shown
+        self.referenceLineVisibilityChanged.emit()
+
+    @Property(bool, notify=referenceLineVisibilityChanged)
+    def bkgShown(self) -> bool:
+        """Return whether background reference line is shown."""
+        return self._bkg_shown
+
+    @Slot()
+    def flipBkgShown(self) -> None:
+        """Toggle background line visibility."""
+        self._bkg_shown = not self._bkg_shown
+        self.referenceLineVisibilityChanged.emit()
 
     @property
     def sample_data(self) -> DataSet1D:
@@ -154,8 +241,13 @@ class Plotting1d(QObject):
                     min_x = min(min_x, data.x.min())
                     max_x = max(max_x, data.x.max())
                 if data.y.size > 0:
-                    valid_y = data.y[data.y > 0]
+                    valid_mask = data.y > 0
+                    valid_y = data.y[valid_mask]
+                    valid_x = data.x[valid_mask]
                     if valid_y.size > 0:
+                        # Apply R×q⁴ transformation if enabled
+                        if self._plot_rq4:
+                            valid_y = valid_y * (valid_x**4)
                         min_y = min(min_y, np.log10(valid_y.min()))
                         max_y = max(max_y, np.log10(valid_y.max()))
             except (IndexError, ValueError):
@@ -233,13 +325,25 @@ class Plotting1d(QObject):
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMaxY(self):
         data = self.experiment_data
-        return np.log10(data.y.max()) if data.y.size > 0 else 1.0
+        if data.y.size == 0:
+            return 1.0
+        y_values = data.y
+        # Apply R×q⁴ transformation if enabled
+        if self._plot_rq4:
+            y_values = y_values * (data.x**4)
+        return np.log10(y_values.max())
 
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMinY(self):
         data = self.experiment_data
         valid_y = data.y[data.y > 0] if data.y.size > 0 else np.array([1e-10])
-        return np.log10(valid_y.min()) if valid_y.size > 0 else -10.0
+        if valid_y.size == 0:
+            return -10.0
+        # Apply R×q⁴ transformation if enabled
+        if self._plot_rq4:
+            valid_x = data.x[data.y > 0] if data.y.size > 0 else np.array([1.0])
+            valid_y = valid_y * (valid_x**4)
+        return np.log10(valid_y.min())
 
     @Property('QVariant', notify=chartRefsChanged)
     def chartRefs(self):
@@ -284,7 +388,13 @@ class Plotting1d(QObject):
             data = self._project_lib.sample_data_for_model_at_index(model_index)
             points = []
             for point in data.data_points():
-                points.append({'x': float(point[0]), 'y': float(np.log10(point[1])) if point[1] > 0 else -10.0})
+                x_val = float(point[0])
+                y_val = float(point[1])
+                # Apply R×q⁴ transformation if enabled
+                if self._plot_rq4 and y_val > 0:
+                    y_val = y_val * (x_val**4)
+                y_log = float(np.log10(y_val)) if y_val > 0 else -10.0
+                points.append({'x': x_val, 'y': y_log})
             return points
         except Exception as e:
             console.debug(f'Error getting sample data points for model {model_index}: {e}')
@@ -324,12 +434,25 @@ class Plotting1d(QObject):
             points = []
             for point in data.data_points():
                 if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
+                    q = point[0]
+                    r = point[1]
+                    error_var = point[2]
+                    # Apply R×q⁴ transformation if enabled
+                    if self._plot_rq4:
+                        q4 = q**4
+                        r_val = r * q4
+                        error_upper = (r + np.sqrt(error_var)) * q4
+                        error_lower = max((r - np.sqrt(error_var)) * q4, 1e-10)
+                    else:
+                        r_val = r
+                        error_upper = r + np.sqrt(error_var)
+                        error_lower = max(r - np.sqrt(error_var), 1e-10)
                     points.append(
                         {
-                            'x': float(point[0]),
-                            'y': float(np.log10(point[1])),
-                            'errorUpper': float(np.log10(point[1] + np.sqrt(point[2]))),
-                            'errorLower': float(np.log10(max(point[1] - np.sqrt(point[2]), 1e-10))),  # Avoid log(0)
+                            'x': float(q),
+                            'y': float(np.log10(r_val)),
+                            'errorUpper': float(np.log10(error_upper)),
+                            'errorLower': float(np.log10(error_lower)),
                         }
                     )
             return points
@@ -373,11 +496,18 @@ class Plotting1d(QObject):
             calc_idx = 0
             for point in exp_points:
                 if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                    calc_y_val = calc_y[calc_idx] if calc_idx < len(calc_y) else point[1]
+                    q = point[0]
+                    r_meas = point[1]
+                    calc_y_val = calc_y[calc_idx] if calc_idx < len(calc_y) else r_meas
+                    # Apply R×q⁴ transformation if enabled
+                    if self._plot_rq4:
+                        q4 = q**4
+                        r_meas = r_meas * q4
+                        calc_y_val = calc_y_val * q4
                     points.append(
                         {
-                            'x': float(point[0]),
-                            'measured': float(np.log10(point[1])),
+                            'x': float(q),
+                            'measured': float(np.log10(r_meas)),
                             'calculated': float(np.log10(calc_y_val)),
                         }
                     )
@@ -446,6 +576,7 @@ class Plotting1d(QObject):
                 nr_points = nr_points + 1
             console.debug(IO.formatMsg('sub', 'Sld curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
+    @Slot()
     def drawMeasuredOnExperimentChart(self):
         if PLOT_BACKEND == 'QtCharts':
             if self.is_multi_experiment_mode:
@@ -463,9 +594,22 @@ class Plotting1d(QObject):
         nr_points = 0
         for point in self.experiment_data.data_points():
             if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                series_measured.append(point[0], np.log10(point[1]))
-                series_error_upper.append(point[0], np.log10(point[1] + np.sqrt(point[2])))
-                series_error_lower.append(point[0], np.log10(max(point[1] - np.sqrt(point[2]), 1e-10)))
+                q = point[0]
+                r = point[1]
+                error_var = point[2]
+                # Apply R×q⁴ transformation if enabled
+                if self._plot_rq4:
+                    q4 = q**4
+                    r_val = r * q4
+                    error_upper = (r + np.sqrt(error_var)) * q4
+                    error_lower = max((r - np.sqrt(error_var)) * q4, 1e-10)
+                else:
+                    r_val = r
+                    error_upper = r + np.sqrt(error_var)
+                    error_lower = max(r - np.sqrt(error_var), 1e-10)
+                series_measured.append(q, np.log10(r_val))
+                series_error_upper.append(q, np.log10(error_upper))
+                series_error_lower.append(q, np.log10(error_lower))
                 nr_points = nr_points + 1
 
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on experiment page', 'replaced'))
@@ -486,6 +630,7 @@ class Plotting1d(QObject):
         # This method is called to trigger the refresh, actual drawing is handled by QML
         self.experimentDataChanged.emit()
 
+    @Slot()
     def drawCalculatedAndMeasuredOnAnalysisChart(self):
         if PLOT_BACKEND == 'QtCharts':
             if self.is_multi_experiment_mode:
@@ -515,11 +660,21 @@ class Plotting1d(QObject):
         nr_points = 0
         for point in self.experiment_data.data_points():
             if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                series_measured.append(point[0], np.log10(point[1]))
+                q = point[0]
+                r_meas = point[1]
+                # Apply R×q⁴ transformation if enabled
+                if self._plot_rq4:
+                    r_meas = r_meas * (q**4)
+                series_measured.append(q, np.log10(r_meas))
                 nr_points = nr_points + 1
-        console.debug(IO.formatMsg('sub', 'Measurede curve', f'{nr_points} points', 'on analysis page', 'replaced'))
+        console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
         for point in self.sample_data.data_points():
-            series_calculated.append(point[0], np.log10(point[1]))
+            q = point[0]
+            r_calc = point[1]
+            # Apply R×q⁴ transformation if enabled
+            if self._plot_rq4:
+                r_calc = r_calc * (q**4)
+            series_calculated.append(q, np.log10(r_calc))
             nr_points = nr_points + 1
         console.debug(IO.formatMsg('sub', 'Calculated curve', f'{nr_points} points', 'on analysis page', 'replaced'))
