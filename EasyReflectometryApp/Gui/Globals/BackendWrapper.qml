@@ -362,6 +362,22 @@ QtObject {
         }
     }
 
+    // Analysis-specific reference line data accessors (use sample/calculated x-range)
+    function plottingGetBackgroundDataForAnalysis() {
+        try {
+            return activeBackend.plotting.getBackgroundDataForAnalysis()
+        } catch (e) {
+            return []
+        }
+    }
+    function plottingGetScaleDataForAnalysis() {
+        try {
+            return activeBackend.plotting.getScaleDataForAnalysis()
+        } catch (e) {
+            return []
+        }
+    }
+
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }

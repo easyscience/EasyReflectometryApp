@@ -64,19 +64,19 @@ Rectangle {
         }
 
         function updateReferenceLines() {
-            // Update background line
+            // Update background line (use analysis-specific method for correct x-range)
             backgroundRefLine.clear()
             if (Globals.BackendWrapper.plottingBkgShown) {
-                var bkgData = Globals.BackendWrapper.plottingGetBackgroundData()
+                var bkgData = Globals.BackendWrapper.plottingGetBackgroundDataForAnalysis()
                 for (var i = 0; i < bkgData.length; i++) {
                     backgroundRefLine.append(bkgData[i].x, bkgData[i].y)
                 }
             }
 
-            // Update scale line
+            // Update scale line (use analysis-specific method for correct x-range)
             scaleRefLine.clear()
             if (Globals.BackendWrapper.plottingScaleShown) {
-                var scaleData = Globals.BackendWrapper.plottingGetScaleData()
+                var scaleData = Globals.BackendWrapper.plottingGetScaleDataForAnalysis()
                 for (var j = 0; j < scaleData.length; j++) {
                     scaleRefLine.append(scaleData[j].x, scaleData[j].y)
                 }
