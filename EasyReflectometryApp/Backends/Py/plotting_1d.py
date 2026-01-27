@@ -148,8 +148,11 @@ class Plotting1d(QObject):
         if not self._bkg_shown:
             return []
         try:
-            model = self._project_lib.models[self._project_lib.current_model_index]
-            exp_data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
+            # Capture indices atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            exp_idx = self._project_lib.current_experiment_index
+            model = self._project_lib.models[model_idx]
+            exp_data = self._project_lib.experimental_data_for_model_at_index(exp_idx)
             if exp_data.x is None or len(exp_data.x) == 0:
                 return []
             x = exp_data.x
@@ -175,8 +178,11 @@ class Plotting1d(QObject):
         if not self._scale_shown:
             return []
         try:
-            model = self._project_lib.models[self._project_lib.current_model_index]
-            exp_data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
+            # Capture indices atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            exp_idx = self._project_lib.current_experiment_index
+            model = self._project_lib.models[model_idx]
+            exp_data = self._project_lib.experimental_data_for_model_at_index(exp_idx)
             if exp_data.x is None or len(exp_data.x) == 0:
                 return []
             x = exp_data.x
@@ -200,7 +206,9 @@ class Plotting1d(QObject):
         if not self._bkg_shown:
             return []
         try:
-            model = self._project_lib.models[self._project_lib.current_model_index]
+            # Capture index atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            model = self._project_lib.models[model_idx]
             # Use sample/analysis x-range instead of experimental data
             x_min, x_max = self._get_all_models_sample_range()[0:2]
             if x_min == float('inf') or x_max == float('-inf'):
@@ -225,7 +233,9 @@ class Plotting1d(QObject):
         if not self._scale_shown:
             return []
         try:
-            model = self._project_lib.models[self._project_lib.current_model_index]
+            # Capture index atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            model = self._project_lib.models[model_idx]
             # Use sample/analysis x-range instead of experimental data
             x_min, x_max = self._get_all_models_sample_range()[0:2]
             if x_min == float('inf') or x_max == float('-inf'):
@@ -444,6 +454,10 @@ class Plotting1d(QObject):
         if self._plot_rq4:
             valid_x = data.x[data.y > 0] if data.y.size > 0 else np.array([1.0])
             valid_y = valid_y * (valid_x**4)
+            # Filter again after transformation to avoid log of zero/negative
+            valid_y = valid_y[valid_y > 0]
+            if valid_y.size == 0:
+                return -10.0
         return np.log10(valid_y.min())
 
     @Property('QVariant', notify=chartRefsChanged)
@@ -539,15 +553,17 @@ class Plotting1d(QObject):
                     r = point[1]
                     error_var = point[2]
                     # Apply R×q⁴ transformation if enabled
+                    # Clamp error_lower before transformation to ensure positive values
+                    error_lower_linear = max(r - np.sqrt(error_var), 1e-20)
                     if self._plot_rq4:
                         q4 = q**4
                         r_val = r * q4
                         error_upper = (r + np.sqrt(error_var)) * q4
-                        error_lower = max((r - np.sqrt(error_var)) * q4, 1e-10)
+                        error_lower = error_lower_linear * q4
                     else:
                         r_val = r
                         error_upper = r + np.sqrt(error_var)
-                        error_lower = max(r - np.sqrt(error_var), 1e-10)
+                        error_lower = error_lower_linear
                     points.append(
                         {
                             'x': float(q),
@@ -699,15 +715,17 @@ class Plotting1d(QObject):
                 r = point[1]
                 error_var = point[2]
                 # Apply R×q⁴ transformation if enabled
+                # Clamp error_lower before transformation to ensure positive values
+                error_lower_linear = max(r - np.sqrt(error_var), 1e-20)
                 if self._plot_rq4:
                     q4 = q**4
                     r_val = r * q4
                     error_upper = (r + np.sqrt(error_var)) * q4
-                    error_lower = max((r - np.sqrt(error_var)) * q4, 1e-10)
+                    error_lower = error_lower_linear * q4
                 else:
                     r_val = r
                     error_upper = r + np.sqrt(error_var)
-                    error_lower = max(r - np.sqrt(error_var), 1e-10)
+                    error_lower = error_lower_linear
                 series_measured.append(q, np.log10(r_val))
                 series_error_upper.append(q, np.log10(error_upper))
                 series_error_lower.append(q, np.log10(error_lower))

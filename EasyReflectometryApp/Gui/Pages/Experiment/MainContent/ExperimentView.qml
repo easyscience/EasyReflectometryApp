@@ -58,7 +58,8 @@ Rectangle {
 
         // Update reference lines when visibility changes
         Connections {
-            target: Globals.BackendWrapper.activeBackend.plotting
+            target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+            enabled: target !== null
             function onReferenceLineVisibilityChanged() {
                 chartView.updateReferenceLines()
             }
@@ -189,7 +190,8 @@ Rectangle {
 
         // Watch for changes in multi-experiment selection
         Connections {
-            target: Globals.BackendWrapper.activeBackend
+            target: Globals.BackendWrapper.activeBackend ?? null
+            enabled: target !== null
             function onMultiExperimentSelectionChanged() {
                 // Update series when selection changes
                 // The function will handle showing/hiding appropriate series
