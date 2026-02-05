@@ -19,6 +19,7 @@ class Plotting1d(QObject):
     experimentChartRangesChanged = Signal()
     experimentDataChanged = Signal()
     samplePageDataChanged = Signal()  # Signal for QML to refresh sample page charts
+    chartAxesResetRequested = Signal()  # Signal to request QML to reset chart axes
 
     # New signals for plot mode properties
     plotModeChanged = Signal()

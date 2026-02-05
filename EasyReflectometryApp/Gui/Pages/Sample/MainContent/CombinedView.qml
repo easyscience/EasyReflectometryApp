@@ -596,13 +596,20 @@ Rectangle {
             // Delay resetAxes to allow axis range properties to update first
             sampleCombinedResetAxesTimer.start()
         }
+        function onChartAxesResetRequested() {
+            // Reset axes when model is loaded (e.g., from ORSO file)
+            sampleCombinedResetAxesTimer.start()
+        }
     }
 
     Timer {
         id: sampleCombinedResetAxesTimer
         interval: 50
         repeat: false
-        onTriggered: sampleChartView.resetAxes()
+        onTriggered: {
+            sampleChartView.resetAxes()
+            sldChartView.resetAxes()
+        }
     }
 
     Component.onCompleted: {

@@ -317,6 +317,17 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
+        function onChartAxesResetRequested() {
+            // Reset axes when model is loaded (e.g., from ORSO file)
+            sldResetAxesTimer.start()
+        }
+    }
+
+    Timer {
+        id: sldResetAxesTimer
+        interval: 50
+        repeat: false
+        onTriggered: chartView.resetAxes()
     }
 
     Component.onCompleted: {

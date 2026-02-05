@@ -207,6 +207,10 @@ Rectangle {
                 // Delay resetAxes to allow axis range properties to update first
                 experimentResetAxesTimer.start()
             }
+            function onChartAxesResetRequested() {
+                // Reset axes when model is loaded (e.g., from ORSO file)
+                experimentResetAxesTimer.start()
+            }
         }
 
         Timer {

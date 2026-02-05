@@ -179,6 +179,7 @@ class PyBackend(QObject):
     def _relay_project_page_project_changed(self):
         self._sample.materialsTableChanged.emit()
         self._sample.modelsTableChanged.emit()
+        self._sample.modelsIndexChanged.emit()
         self._sample.assembliesTableChanged.emit()
         self._sample._clearCacheAndEmitLayersChanged()
         self._experiment.experimentChanged.emit()
@@ -188,6 +189,8 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
         self._plotting_1d.reset_data()
         self._refresh_plots()
+        # Request QML to reset axes to fit new data
+        self._plotting_1d.chartAxesResetRequested.emit()
 
     def _relay_sample_page_sample_changed(self):
         self._plotting_1d.reset_data()

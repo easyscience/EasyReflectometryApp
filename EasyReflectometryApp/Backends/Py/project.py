@@ -110,7 +110,16 @@ class Project(QObject):
         orso_data = orso.load_orso(generalizePath(url))
         # Load the sample model
         sample = load_orso_model(orso_data)
+
+        # Check if we should replace the default model or append
+        should_replace_default = self._logic.is_only_default_model()
+
         # Add the sample as a new model in the project
         self._logic.add_sample_from_orso(sample)
+
+        # If we replaced the default model, remove it (it's now at index 0)
+        if should_replace_default:
+            self._logic.remove_model_at_index(0)
+
         # notify listeners
         self.externalProjectLoaded.emit()

@@ -396,6 +396,8 @@ QtObject {
     signal samplePageDataChanged()
     // Signal for plot mode changes - forward from backend
     signal plotModeChanged()
+    // Signal to request QML to reset chart axes (e.g., after model load)
+    signal chartAxesResetRequested()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
@@ -404,6 +406,9 @@ QtObject {
         }
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.plotModeChanged) {
             activeBackend.plotting.plotModeChanged.connect(plotModeChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.chartAxesResetRequested) {
+            activeBackend.plotting.chartAxesResetRequested.connect(chartAxesResetRequested)
         }
     }
 
