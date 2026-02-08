@@ -188,6 +188,7 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
         self._plotting_1d.reset_data()
         self._refresh_plots()
+        self._plotting_1d.samplePageResetAxes.emit()
 
     def _relay_sample_page_sample_changed(self):
         self._plotting_1d.reset_data()

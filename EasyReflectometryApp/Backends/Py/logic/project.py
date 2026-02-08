@@ -122,6 +122,11 @@ class Project:
         new_model_index = len(self._project_lib.models) - 1
         self._update_enablement_of_fixed_layers_for_model(new_model_index)
 
+    def replace_models_from_orso(self, sample) -> None:
+        """Replace all existing models with a single model built from the loaded sample."""
+        self._project_lib.replace_models_from_orso(sample)
+        self._update_enablement_of_fixed_layers_for_model(0)
+
     def reset(self) -> None:
         self._project_lib.reset()
         self._project_lib.default_model()

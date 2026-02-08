@@ -78,7 +78,7 @@ QtObject {
     function projectReset() { activeBackend.project.reset() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
-    function sampleFileLoad(value) { activeBackend.project.sampleLoad(value) }
+    function sampleFileLoad(value, append) { activeBackend.project.sampleLoad(value, append) }
 
 
     ///////////////
@@ -410,6 +410,8 @@ QtObject {
 
     // Signal for sample page data changes - forward from backend
     signal samplePageDataChanged()
+    // Signal for resetting chart axes after data load
+    signal samplePageResetAxes()
     // Signal for plot mode changes - forward from backend
     signal plotModeChanged()
 
@@ -417,6 +419,9 @@ QtObject {
     function connectSamplePageDataChanged() {
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.samplePageDataChanged) {
             activeBackend.plotting.samplePageDataChanged.connect(samplePageDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.samplePageResetAxes) {
+            activeBackend.plotting.samplePageResetAxes.connect(samplePageResetAxes)
         }
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.plotModeChanged) {
             activeBackend.plotting.plotModeChanged.connect(plotModeChanged)

@@ -591,6 +591,10 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
+        function onSamplePageResetAxes() {
+            sampleCombinedResetAxesTimer.start()
+            sldCombinedResetAxesTimer.start()
+        }
         function onPlotModeChanged() {
             refreshAllCharts()
             // Delay resetAxes to allow axis range properties to update first
@@ -603,6 +607,13 @@ Rectangle {
         interval: 50
         repeat: false
         onTriggered: sampleChartView.resetAxes()
+    }
+
+    Timer {
+        id: sldCombinedResetAxesTimer
+        interval: 50
+        repeat: false
+        onTriggered: sldChartView.resetAxes()
     }
 
     Component.onCompleted: {

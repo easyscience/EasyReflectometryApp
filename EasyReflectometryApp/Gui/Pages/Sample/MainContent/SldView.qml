@@ -317,6 +317,16 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
+        function onSamplePageResetAxes() {
+            sldResetAxesTimer.start()
+        }
+    }
+
+    Timer {
+        id: sldResetAxesTimer
+        interval: 50
+        repeat: false
+        onTriggered: chartView.resetAxes()
     }
 
     Component.onCompleted: {
