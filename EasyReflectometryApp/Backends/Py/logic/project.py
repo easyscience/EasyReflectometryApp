@@ -122,13 +122,10 @@ class Project:
         new_model_index = len(self._project_lib.models) - 1
         self._update_enablement_of_fixed_layers_for_model(new_model_index)
 
-    def is_only_default_model(self) -> bool:
-        """Check if there is only one model and it is the default model."""
-        return len(self._project_lib.models) == 1 and self._project_lib.is_default_model(0)
-
-    def remove_model_at_index(self, index: int) -> None:
-        """Remove the model at the given index."""
-        self._project_lib.remove_model_at_index(index)
+    def replace_models_from_orso(self, sample) -> None:
+        """Replace all existing models with a single model built from the loaded sample."""
+        self._project_lib.replace_models_from_orso(sample)
+        self._update_enablement_of_fixed_layers_for_model(0)
 
     def reset(self) -> None:
         self._project_lib.reset()

@@ -347,6 +347,9 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
+        function onSamplePageResetAxes() {
+            sampleResetAxesTimer.start()
+        }
         function onPlotModeChanged() {
             refreshAllCharts()
             // Delay resetAxes to allow axis range properties to update first

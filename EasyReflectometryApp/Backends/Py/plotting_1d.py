@@ -19,7 +19,7 @@ class Plotting1d(QObject):
     experimentChartRangesChanged = Signal()
     experimentDataChanged = Signal()
     samplePageDataChanged = Signal()  # Signal for QML to refresh sample page charts
-    chartAxesResetRequested = Signal()  # Signal to request QML to reset chart axes
+    samplePageResetAxes = Signal()  # Signal for QML to reset chart axes after data load
 
     # New signals for plot mode properties
     plotModeChanged = Signal()
@@ -144,27 +144,24 @@ class Plotting1d(QObject):
         """Return background reference line data for plotting.
 
         Returns a horizontal line at the model's background value.
+        Note: Reference lines are always horizontal, even in R×q⁴ mode.
         """
         if not self._bkg_shown:
             return []
         try:
-            model = self._project_lib.models[self._project_lib.current_model_index]
-            exp_data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
+            # Capture indices atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            exp_idx = self._project_lib.current_experiment_index
+            model = self._project_lib.models[model_idx]
+            exp_data = self._project_lib.experimental_data_for_model_at_index(exp_idx)
             if exp_data.x is None or len(exp_data.x) == 0:
                 return []
             x = exp_data.x
             bkg_value = model.background.value
             # For log scale plotting, convert background value
             bkg_log = float(np.log10(bkg_value)) if bkg_value > 0 else -10.0
-            # Apply R×q⁴ transformation if enabled
-            if self._plot_rq4:
-                # For background, we need to transform: bkg * q^4
-                return [
-                    {'x': float(x[0]), 'y': float(np.log10(bkg_value * x[0] ** 4)) if bkg_value * x[0] ** 4 > 0 else -10.0},
-                    {'x': float(x[-1]), 'y': float(np.log10(bkg_value * x[-1] ** 4)) if bkg_value * x[-1] ** 4 > 0 else -10.0},
-                ]
-            else:
-                return [{'x': float(x[0]), 'y': bkg_log}, {'x': float(x[-1]), 'y': bkg_log}]
+            # Reference lines are always horizontal (no R×q⁴ transformation)
+            return [{'x': float(x[0]), 'y': bkg_log}, {'x': float(x[-1]), 'y': bkg_log}]
         except (IndexError, AttributeError, TypeError) as e:
             console.debug(f'Error getting background data: {e}')
             return []
@@ -177,35 +174,80 @@ class Plotting1d(QObject):
         Note: Scale is a multiplicative factor, typically close to 1.0.
         For reflectometry plots, the scale line at y=scale (log10) shows
         where R=scale, i.e., where the reflectivity equals the scale factor.
+        Reference lines are always horizontal, even in R×q⁴ mode.
         """
         if not self._scale_shown:
             return []
         try:
-            model = self._project_lib.models[self._project_lib.current_model_index]
-            exp_data = self._project_lib.experimental_data_for_model_at_index(self._project_lib.current_experiment_index)
+            # Capture indices atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            exp_idx = self._project_lib.current_experiment_index
+            model = self._project_lib.models[model_idx]
+            exp_data = self._project_lib.experimental_data_for_model_at_index(exp_idx)
             if exp_data.x is None or len(exp_data.x) == 0:
                 return []
             x = exp_data.x
             scale_value = model.scale.value
             # For log scale plotting, convert scale value
             scale_log = float(np.log10(scale_value)) if scale_value > 0 else 0.0
-            # Apply R×q⁴ transformation if enabled
-            if self._plot_rq4:
-                # For scale, we need to transform: scale * q^4
-                return [
-                    {
-                        'x': float(x[0]),
-                        'y': float(np.log10(scale_value * x[0] ** 4)) if scale_value * x[0] ** 4 > 0 else -10.0,
-                    },
-                    {
-                        'x': float(x[-1]),
-                        'y': float(np.log10(scale_value * x[-1] ** 4)) if scale_value * x[-1] ** 4 > 0 else -10.0,
-                    },
-                ]
-            else:
-                return [{'x': float(x[0]), 'y': scale_log}, {'x': float(x[-1]), 'y': scale_log}]
+            # Reference lines are always horizontal (no R×q⁴ transformation)
+            return [{'x': float(x[0]), 'y': scale_log}, {'x': float(x[-1]), 'y': scale_log}]
         except (IndexError, AttributeError, TypeError) as e:
             console.debug(f'Error getting scale data: {e}')
+            return []
+
+    @Slot(result='QVariantList')
+    def getBackgroundDataForAnalysis(self) -> list:
+        """Return background reference line data for the Analysis chart.
+
+        Uses the analysis/sample x-range (calculated model data range) instead of
+        experimental data range to ensure the line spans the full chart width.
+        Reference lines are always horizontal, even in R×q⁴ mode.
+        """
+        if not self._bkg_shown:
+            return []
+        try:
+            # Capture index atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            model = self._project_lib.models[model_idx]
+            # Use sample/analysis x-range instead of experimental data
+            x_min, x_max = self._get_all_models_sample_range()[0:2]
+            if x_min == float('inf') or x_max == float('-inf'):
+                return []
+            bkg_value = model.background.value
+            # For log scale plotting, convert background value
+            bkg_log = float(np.log10(bkg_value)) if bkg_value > 0 else -10.0
+            # Reference lines are always horizontal (no R×q⁴ transformation)
+            return [{'x': float(x_min), 'y': bkg_log}, {'x': float(x_max), 'y': bkg_log}]
+        except (IndexError, AttributeError, TypeError) as e:
+            console.debug(f'Error getting background data for analysis: {e}')
+            return []
+
+    @Slot(result='QVariantList')
+    def getScaleDataForAnalysis(self) -> list:
+        """Return scale reference line data for the Analysis chart.
+
+        Uses the analysis/sample x-range (calculated model data range) instead of
+        experimental data range to ensure the line spans the full chart width.
+        Reference lines are always horizontal, even in R×q⁴ mode.
+        """
+        if not self._scale_shown:
+            return []
+        try:
+            # Capture index atomically to prevent race conditions
+            model_idx = self._project_lib.current_model_index
+            model = self._project_lib.models[model_idx]
+            # Use sample/analysis x-range instead of experimental data
+            x_min, x_max = self._get_all_models_sample_range()[0:2]
+            if x_min == float('inf') or x_max == float('-inf'):
+                return []
+            scale_value = model.scale.value
+            # For log scale plotting, convert scale value
+            scale_log = float(np.log10(scale_value)) if scale_value > 0 else 0.0
+            # Reference lines are always horizontal (no R×q⁴ transformation)
+            return [{'x': float(x_min), 'y': scale_log}, {'x': float(x_max), 'y': scale_log}]
+        except (IndexError, AttributeError, TypeError) as e:
+            console.debug(f'Error getting scale data for analysis: {e}')
             return []
 
     @property
@@ -413,6 +455,10 @@ class Plotting1d(QObject):
         if self._plot_rq4:
             valid_x = data.x[data.y > 0] if data.y.size > 0 else np.array([1.0])
             valid_y = valid_y * (valid_x**4)
+            # Filter again after transformation to avoid log of zero/negative
+            valid_y = valid_y[valid_y > 0]
+            if valid_y.size == 0:
+                return -10.0
         return np.log10(valid_y.min())
 
     @Property('QVariant', notify=chartRefsChanged)
@@ -508,15 +554,17 @@ class Plotting1d(QObject):
                     r = point[1]
                     error_var = point[2]
                     # Apply R×q⁴ transformation if enabled
+                    # Clamp error_lower before transformation to ensure positive values
+                    error_lower_linear = max(r - np.sqrt(error_var), 1e-20)
                     if self._plot_rq4:
                         q4 = q**4
                         r_val = r * q4
                         error_upper = (r + np.sqrt(error_var)) * q4
-                        error_lower = max((r - np.sqrt(error_var)) * q4, 1e-10)
+                        error_lower = error_lower_linear * q4
                     else:
                         r_val = r
                         error_upper = r + np.sqrt(error_var)
-                        error_lower = max(r - np.sqrt(error_var), 1e-10)
+                        error_lower = error_lower_linear
                     points.append(
                         {
                             'x': float(q),
@@ -668,15 +716,17 @@ class Plotting1d(QObject):
                 r = point[1]
                 error_var = point[2]
                 # Apply R×q⁴ transformation if enabled
+                # Clamp error_lower before transformation to ensure positive values
+                error_lower_linear = max(r - np.sqrt(error_var), 1e-20)
                 if self._plot_rq4:
                     q4 = q**4
                     r_val = r * q4
                     error_upper = (r + np.sqrt(error_var)) * q4
-                    error_lower = max((r - np.sqrt(error_var)) * q4, 1e-10)
+                    error_lower = error_lower_linear * q4
                 else:
                     r_val = r
                     error_upper = r + np.sqrt(error_var)
-                    error_lower = max(r - np.sqrt(error_var), 1e-10)
+                    error_lower = error_lower_linear
                 series_measured.append(q, np.log10(r_val))
                 series_error_upper.append(q, np.log10(error_upper))
                 series_error_lower.append(q, np.log10(error_lower))

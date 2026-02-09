@@ -13,6 +13,13 @@ EaElements.GroupBox {
     collapsed: false
 
     EaElements.GroupColumn {
+        EaElements.CheckBox {
+            id: appendCheckBox
+            text: qsTr("Append to existing models")
+            checked: true
+            width: EaStyle.Sizes.sideBarContentWidth
+        }
+
         EaElements.SideBarButton {
             width: EaStyle.Sizes.sideBarContentWidth
             fontIcon: "folder-open"
@@ -24,7 +31,7 @@ EaElements.GroupBox {
             id: fileDialog
             title: qsTr("Select a sample file")
             nameFilters: [ "ORT files (*.ort)", "ORSO files (*.orso)", "All files (*.*)" ]
-            onAccepted: Globals.BackendWrapper.sampleFileLoad(selectedFiles[0])
+            onAccepted: Globals.BackendWrapper.sampleFileLoad(selectedFiles[0], appendCheckBox.checked)
         }
     }
 }

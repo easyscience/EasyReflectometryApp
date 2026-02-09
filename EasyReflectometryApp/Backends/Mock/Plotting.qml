@@ -38,6 +38,7 @@ QtObject {
     signal sldAxisReversedChanged()
     signal referenceLineVisibilityChanged()
     signal samplePageDataChanged()
+    signal samplePageResetAxes()
 
     function setQtChartsSerieRef(value1, value2, value3) {
         console.debug(`setQtChartsSerieRef ${value1}, ${value2}, ${value3}`)
@@ -110,6 +111,25 @@ QtObject {
         return [
             { 'x': 0.01, 'y': 0.0 },
             { 'x': 0.30, 'y': 0.0 }
+        ]
+    }
+
+    // Analysis-specific reference line data accessors (use sample/calculated x-range)
+    function getBackgroundDataForAnalysis() {
+        if (!bkgShown) return []
+        // Return mock horizontal line at background level using sample x-range
+        return [
+            { 'x': sampleMinX, 'y': -7.0 },
+            { 'x': sampleMaxX, 'y': -7.0 }
+        ]
+    }
+
+    function getScaleDataForAnalysis() {
+        if (!scaleShown) return []
+        // Return mock horizontal line at scale level using sample x-range
+        return [
+            { 'x': sampleMinX, 'y': 0.0 },
+            { 'x': sampleMaxX, 'y': 0.0 }
         ]
     }
 

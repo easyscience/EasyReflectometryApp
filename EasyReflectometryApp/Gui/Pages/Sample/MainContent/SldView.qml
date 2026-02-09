@@ -317,8 +317,7 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
-        function onChartAxesResetRequested() {
-            // Reset axes when model is loaded (e.g., from ORSO file)
+        function onSamplePageResetAxes() {
             sldResetAxesTimer.start()
         }
     }

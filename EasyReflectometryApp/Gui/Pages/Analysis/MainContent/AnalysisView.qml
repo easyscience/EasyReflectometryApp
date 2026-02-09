@@ -57,26 +57,27 @@ Rectangle {
 
         // Update reference lines when visibility changes
         Connections {
-            target: Globals.BackendWrapper.activeBackend.plotting
+            target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+            enabled: target !== null
             function onReferenceLineVisibilityChanged() {
                 chartView.updateReferenceLines()
             }
         }
 
         function updateReferenceLines() {
-            // Update background line
+            // Update background line (use analysis-specific method for correct x-range)
             backgroundRefLine.clear()
             if (Globals.BackendWrapper.plottingBkgShown) {
-                var bkgData = Globals.BackendWrapper.plottingGetBackgroundData()
+                var bkgData = Globals.BackendWrapper.plottingGetBackgroundDataForAnalysis()
                 for (var i = 0; i < bkgData.length; i++) {
                     backgroundRefLine.append(bkgData[i].x, bkgData[i].y)
                 }
             }
 
-            // Update scale line
+            // Update scale line (use analysis-specific method for correct x-range)
             scaleRefLine.clear()
             if (Globals.BackendWrapper.plottingScaleShown) {
-                var scaleData = Globals.BackendWrapper.plottingGetScaleData()
+                var scaleData = Globals.BackendWrapper.plottingGetScaleDataForAnalysis()
                 for (var j = 0; j < scaleData.length; j++) {
                     scaleRefLine.append(scaleData[j].x, scaleData[j].y)
                 }
@@ -101,7 +102,8 @@ Rectangle {
 
         // Watch for changes in multi-experiment selection
         Connections {
-            target: Globals.BackendWrapper.activeBackend
+            target: Globals.BackendWrapper.activeBackend ?? null
+            enabled: target !== null
             function onMultiExperimentSelectionChanged() {
                 console.log("Analysis: Multi-experiment selection changed - updating series")
                 chartView.updateMultiExperimentSeries()
