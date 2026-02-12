@@ -226,7 +226,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
     # Process parameters for each model
     for model_idx, model in enumerate(models):
         model_unique_name = model.unique_name
-        model_prefix = f'M{model_idx + 1}'
+        model_prefix = model.user_data.get('original_name', model.name)
 
         for parameter in parameters:
             # Skip parameters not in this model's path
