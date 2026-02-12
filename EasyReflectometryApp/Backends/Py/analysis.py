@@ -292,7 +292,8 @@ class Analysis(QObject):
         mapped_models = []
         experiments = self._experiments_logic._project_lib._experiments
         for ind in experiments:
-            mapped_models.append(experiments[ind].model.name)
+            name = experiments[ind].model.user_data.get('original_name', experiments[ind].model.name)
+            mapped_models.append(name)
         return mapped_models
 
     @Property('QVariantList', notify=experimentsChanged)

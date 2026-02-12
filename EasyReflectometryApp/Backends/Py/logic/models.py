@@ -128,7 +128,7 @@ def _from_models_collection_to_list_of_dicts(models_collection: ModelCollection)
     for model in models_collection:
         models_list.append(
             {
-                'label': model.name,
+                'label': model.user_data.get('original_name', model.name),  # Use original name if available
                 'color': str(model.color),
             }
         )
