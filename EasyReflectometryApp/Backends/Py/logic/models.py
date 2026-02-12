@@ -21,7 +21,10 @@ class Models:
 
     @property
     def name_at_current_index(self) -> str:
-        return self._models[self.index].name
+        if self._models[self.index].user_data.get('original_name'):
+            return self._models[self.index].user_data['original_name']
+        else:
+            return self._models[self.index].name
 
     @property
     def scaling_at_current_index(self) -> float:
