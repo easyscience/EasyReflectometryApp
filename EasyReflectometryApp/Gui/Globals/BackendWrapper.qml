@@ -80,6 +80,16 @@ QtObject {
     function projectLoad(value) { activeBackend.project.load(value) }
     function sampleFileLoad(value, append) { activeBackend.project.sampleLoad(value, append) }
 
+    // Sample load warning signal - forwarded from backend
+    signal sampleLoadWarning(string message)
+
+    property var _sampleLoadWarningConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.sampleLoadWarning) {
+            activeBackend.project.sampleLoadWarning.connect(sampleLoadWarning)
+        }
+        return null
+    }
+
 
     ///////////////
     // Sample page

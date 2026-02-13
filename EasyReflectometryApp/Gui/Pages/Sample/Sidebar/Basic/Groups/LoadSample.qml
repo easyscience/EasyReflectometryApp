@@ -34,4 +34,28 @@ EaElements.GroupBox {
             onAccepted: Globals.BackendWrapper.sampleFileLoad(selectedFiles[0], appendCheckBox.checked)
         }
     }
+
+    // Warning dialog for sample load issues
+    EaElements.Dialog {
+        id: sampleLoadWarningDialog
+        title: qsTr("Sample Load Warning")
+        standardButtons: Dialog.Ok
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        property string warningMessage: ""
+
+        EaElements.Label {
+            text: sampleLoadWarningDialog.warningMessage
+            wrapMode: Text.WordWrap
+            width: Math.min(implicitWidth, EaStyle.Sizes.sideBarContentWidth * 1.5)
+        }
+    }
+
+    Connections {
+        target: Globals.BackendWrapper
+        function onSampleLoadWarning(message) {
+            sampleLoadWarningDialog.warningMessage = message
+            sampleLoadWarningDialog.open()
+        }
+    }
 }
