@@ -13,6 +13,7 @@ from .logic.experiments import Experiments as ExperimentLogic
 from .logic.fitting import Fitting as FittingLogic
 from .logic.minimizers import Minimizers as MinimizersLogic
 from .logic.parameters import Parameters as ParametersLogic
+from .logic.helpers import get_original_name
 from .workers import FitterWorker
 
 
@@ -292,7 +293,7 @@ class Analysis(QObject):
         mapped_models = []
         experiments = self._experiments_logic._project_lib._experiments
         for ind in experiments:
-            name = experiments[ind].model.user_data.get('original_name', experiments[ind].model.name)
+            name = get_original_name(experiments[ind].model)
             mapped_models.append(name)
         return mapped_models
 

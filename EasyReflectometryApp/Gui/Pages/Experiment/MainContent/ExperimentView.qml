@@ -66,23 +66,7 @@ Rectangle {
         }
 
         function updateReferenceLines() {
-            // Update background line
-            backgroundRefLine.clear()
-            if (Globals.BackendWrapper.plottingBkgShown) {
-                var bkgData = Globals.BackendWrapper.plottingGetBackgroundData()
-                for (var i = 0; i < bkgData.length; i++) {
-                    backgroundRefLine.append(bkgData[i].x, bkgData[i].y)
-                }
-            }
-
-            // Update scale line
-            scaleRefLine.clear()
-            if (Globals.BackendWrapper.plottingScaleShown) {
-                var scaleData = Globals.BackendWrapper.plottingGetScaleData()
-                for (var j = 0; j < scaleData.length; j++) {
-                    scaleRefLine.append(scaleData[j].x, scaleData[j].y)
-                }
-            }
+            Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, false)
         }
 
         // Multi-experiment support

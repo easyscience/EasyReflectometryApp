@@ -378,6 +378,25 @@ QtObject {
         }
     }
 
+    // Helper to update background/scale reference line series on any chart view.
+    // useAnalysisRange: true for Analysis charts (sample x-range), false for Experiment charts.
+    function updateRefLines(bkgSeries, scaleSeries, useAnalysisRange) {
+        bkgSeries.clear()
+        if (plottingBkgShown) {
+            var bkgData = useAnalysisRange ? plottingGetBackgroundDataForAnalysis() : plottingGetBackgroundData()
+            for (var i = 0; i < bkgData.length; i++) {
+                bkgSeries.append(bkgData[i].x, bkgData[i].y)
+            }
+        }
+        scaleSeries.clear()
+        if (plottingScaleShown) {
+            var scaleData = useAnalysisRange ? plottingGetScaleDataForAnalysis() : plottingGetScaleData()
+            for (var j = 0; j < scaleData.length; j++) {
+                scaleSeries.append(scaleData[j].x, scaleData[j].y)
+            }
+        }
+    }
+
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }

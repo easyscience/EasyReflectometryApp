@@ -177,11 +177,15 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
 
     def _relay_project_page_project_changed(self):
+        # Clear layers cache first so that subsequent signal handlers
+        # (e.g. ComboBox onModelChanged / onCurrentAssemblyNameChanged in
+        # MultiLayer.qml) read up-to-date layer data.
+        self._sample._clearCacheAndEmitLayersChanged()
         self._sample.materialsTableChanged.emit()
         self._sample.modelsTableChanged.emit()
         self._sample.modelsIndexChanged.emit()
         self._sample.assembliesTableChanged.emit()
-        self._sample._clearCacheAndEmitLayersChanged()
+        self._sample.assembliesIndexChanged.emit()
         self._experiment.experimentChanged.emit()
         self._analysis.experimentsChanged.emit()
         self._analysis._clearCacheAndEmitParametersChanged()
