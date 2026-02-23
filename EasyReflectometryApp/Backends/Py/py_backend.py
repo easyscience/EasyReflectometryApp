@@ -200,6 +200,7 @@ class PyBackend(QObject):
         self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
+        self._plotting_1d.samplePageResetAxes.emit()
 
     def _relay_experiment_page_experiment_changed(self):
         self._analysis.experimentsChanged.emit()

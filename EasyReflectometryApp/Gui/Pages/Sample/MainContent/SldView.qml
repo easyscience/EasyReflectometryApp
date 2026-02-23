@@ -320,6 +320,15 @@ Rectangle {
         function onSamplePageResetAxes() {
             sldResetAxesTimer.start()
         }
+        function onPlotModeChanged() {
+            refreshAllCharts()
+            // Delay resetAxes to allow axis range properties to update first
+            sldResetAxesTimer.start()
+        }
+        function onChartAxesResetRequested() {
+            // Reset axes when model is loaded (e.g., from ORSO file)
+            sldResetAxesTimer.start()
+        }
     }
 
     Timer {
