@@ -83,13 +83,19 @@ Rectangle {
                         // Reset axes when model is loaded (e.g., from ORSO file)
                         combinedAnalysisResetAxesTimer.start()
                     }
+                    function onSamplePageResetAxes() {
+                        combinedAnalysisResetAxesTimer.start()
+                    }
                 }
 
                 Timer {
                     id: combinedAnalysisResetAxesTimer
                     interval: 50
                     repeat: false
-                    onTriggered: analysisChartView.resetAxes()
+                    onTriggered: {
+                        analysisChartView.resetAxes()
+                        sldChartView.resetAxes()
+                    }
                 }
 
                 // Background reference line series

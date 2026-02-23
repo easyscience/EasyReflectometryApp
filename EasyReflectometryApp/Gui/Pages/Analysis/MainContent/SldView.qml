@@ -164,6 +164,26 @@ Rectangle {
                                                                chartView.calcSerie)
             Globals.BackendWrapper.plottingRefreshSLD()
         }
+
+        Connections {
+            target: Globals.BackendWrapper
+            function onSamplePageResetAxes() {
+                analysisSldResetAxesTimer.start()
+            }
+            function onPlotModeChanged() {
+                analysisSldResetAxesTimer.start()
+            }
+            function onChartAxesResetRequested() {
+                analysisSldResetAxesTimer.start()
+            }
+        }
+
+        Timer {
+            id: analysisSldResetAxesTimer
+            interval: 50
+            repeat: false
+            onTriggered: chartView.resetAxes()
+        }
     }
 
     // Logic

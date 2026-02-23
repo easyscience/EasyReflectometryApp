@@ -107,6 +107,9 @@ Rectangle {
                 // Reset axes when model is loaded (e.g., from ORSO file)
                 analysisResetAxesTimer.start()
             }
+            function onSamplePageResetAxes() {
+                analysisResetAxesTimer.start()
+            }
         }
 
         Timer {

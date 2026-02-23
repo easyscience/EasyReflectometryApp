@@ -213,6 +213,7 @@ class PyBackend(QObject):
         self._status.statusChanged.emit()
         self._experiment.experimentChanged.emit()
         self._summary.summaryChanged.emit()
+        self._plotting_1d.samplePageResetAxes.emit()
 
     def _refresh_plots(self):
         self._plotting_1d.sampleChartRangesChanged.emit()
