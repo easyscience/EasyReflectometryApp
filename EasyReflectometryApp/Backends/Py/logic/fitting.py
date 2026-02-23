@@ -129,6 +129,15 @@ class Fitting:
             models = [experiments[idx].model for idx in experiment_indices]
             multi_fitter = MultiFitter(*models)
 
+            # Apply the user-selected minimizer to the new fitter
+            selected_minimizer = minimizers_logic.selected_minimizer_enum()
+            if selected_minimizer is not None:
+                multi_fitter.easy_science_multi_fitter.switch_minimizer(selected_minimizer)
+            if minimizers_logic.tolerance is not None:
+                multi_fitter.easy_science_multi_fitter.tolerance = minimizers_logic.tolerance
+            if minimizers_logic.max_iterations is not None:
+                multi_fitter.easy_science_multi_fitter.max_evaluations = minimizers_logic.max_iterations
+
             # Prepare data arrays for all experiments
             x_data = [experiments[idx].x for idx in experiment_indices]
             y_data = [experiments[idx].y for idx in experiment_indices]

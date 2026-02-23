@@ -38,6 +38,9 @@ class PyBackend(QObject):
 
         self._logger = LoggerLevelHandler(self)
 
+        # Wire cross-cutting references before connecting signals
+        self._status._status_logic.set_minimizers_logic(self._analysis._minimizers_logic)
+
         # Must be last to ensure all backend parts are created
         self._connect_backend_parts()
 
