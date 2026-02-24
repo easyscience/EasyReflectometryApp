@@ -133,6 +133,12 @@ class Fitting:
             selected_minimizer = minimizers_logic.selected_minimizer_enum()
             if selected_minimizer is not None:
                 multi_fitter.easy_science_multi_fitter.switch_minimizer(selected_minimizer)
+                logger.info(
+                    'Fitting: applied minimizer %s to MultiFitter (engine: %s, method: %s)',
+                    selected_minimizer.name,
+                    multi_fitter.easy_science_multi_fitter.minimizer.package,
+                    multi_fitter.easy_science_multi_fitter.minimizer._method,
+                )
             if minimizers_logic.tolerance is not None:
                 multi_fitter.easy_science_multi_fitter.tolerance = minimizers_logic.tolerance
             if minimizers_logic.max_iterations is not None:
@@ -186,6 +192,8 @@ class Fitting:
             # For multi-experiment fits, store the list; use first for single-result properties
             self._results = results
             self._result = results[0]
+            engine_name = getattr(results[0], 'minimizer_engine', 'unknown')
+            logger.info('Fit finished: engine=%s, chi2=%s, success=%s', engine_name, self.fit_chi2, results[0].success)
         else:
             self._result = results
             self._results = [results] if results else []

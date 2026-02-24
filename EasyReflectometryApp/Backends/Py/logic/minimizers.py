@@ -35,9 +35,8 @@ class Minimizers:
     def set_minimizer_current_index(self, new_value: int) -> bool:
         if new_value != self._minimizer_current_index:
             self._minimizer_current_index = new_value
-            if self._project_lib._fitter is not None:
-                enum_new_minimizer = self._list_available_minimizers[new_value]
-                self._project_lib._fitter.switch_minimizer(enum_new_minimizer)
+            enum_new_minimizer = self._list_available_minimizers[new_value]
+            self._project_lib.minimizer = enum_new_minimizer
             return True
         return False
 
