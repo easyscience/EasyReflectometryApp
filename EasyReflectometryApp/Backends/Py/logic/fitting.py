@@ -155,7 +155,8 @@ class Fitting:
                     self._show_results_dialog = True
                     return None, None, None, None, None
 
-            weights = [1.0 / experiments[idx].ye for idx in experiment_indices]
+            # ye contains variances (sigma²); weights = 1/sigma = 1/sqrt(variance)
+            weights = [1.0 / np.sqrt(experiments[idx].ye) for idx in experiment_indices]
 
             # Method is optional in fit() - pass None to use minimizer's default
             method = None

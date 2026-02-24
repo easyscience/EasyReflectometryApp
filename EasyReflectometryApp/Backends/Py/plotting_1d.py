@@ -33,6 +33,7 @@ class Plotting1d(QObject):
         self._proxy = parent
         self._currentLib1d = 'QtCharts'
         self._sample_data = {}
+        self._model_data = {}
         self._sld_data = {}
 
         # Plot mode state
@@ -62,6 +63,7 @@ class Plotting1d(QObject):
 
     def reset_data(self):
         self._sample_data = {}
+        self._model_data = {}
         self._sld_data = {}
         console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
 
@@ -219,6 +221,22 @@ class Plotting1d(QObject):
                 y=np.empty(0),
             )
         self._sample_data[idx] = data
+        return data
+
+    @property
+    def model_data(self) -> DataSet1D:
+        idx = self._project_lib.current_model_index
+        if idx in self._model_data and self._model_data[idx] is not None:
+            return self._model_data[idx]
+        try:
+            data = self._project_lib.model_data_for_model_at_index(idx)
+        except IndexError:
+            data = DataSet1D(
+                name='Model Data empty',
+                x=np.empty(0),
+                y=np.empty(0),
+            )
+        self._model_data[idx] = data
         return data
 
     @property
@@ -543,7 +561,7 @@ class Plotting1d(QObject):
             q_filtered = q_values[mask]
 
             # Get calculated model data at the same q points using the correct model index
-            calc_data = self._project_lib.sample_data_for_model_at_index(model_index, q_filtered)
+            calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered)
 
             points = []
             exp_points = list(exp_data.data_points())
@@ -573,6 +591,7 @@ class Plotting1d(QObject):
     def refreshSamplePage(self):
         # Clear cached data so it gets recalculated
         self._sample_data = {}
+        self._model_data = {}
         self._sld_data = {}
         # Emit signals to update ranges and trigger QML refresh
         self.sampleChartRangesChanged.emit()
@@ -583,6 +602,7 @@ class Plotting1d(QObject):
         self.drawMeasuredOnExperimentChart()
 
     def refreshAnalysisPage(self):
+        self._model_data = {}
         self.drawCalculatedAndMeasuredOnAnalysisChart()
 
     def refreshExperimentRanges(self):
@@ -713,7 +733,7 @@ class Plotting1d(QObject):
                 nr_points = nr_points + 1
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
-        for point in self.sample_data.data_points():
+        for point in self.model_data.data_points():
             q = point[0]
             r_calc = self._apply_rq4(q, point[1])
             series_calculated.append(q, np.log10(r_calc))

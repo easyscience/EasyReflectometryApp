@@ -11,9 +11,9 @@ from PySide6.QtCore import Slot
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiments import Experiments as ExperimentLogic
 from .logic.fitting import Fitting as FittingLogic
+from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
 from .logic.parameters import Parameters as ParametersLogic
-from .logic.helpers import get_original_name
 from .workers import FitterWorker
 
 
