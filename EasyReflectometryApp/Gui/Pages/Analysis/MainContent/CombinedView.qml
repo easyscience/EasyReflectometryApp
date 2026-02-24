@@ -12,6 +12,7 @@ import EasyApp.Gui.Globals as EaGlobals
 import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Charts as EaCharts
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
@@ -94,7 +95,7 @@ Rectangle {
                     repeat: false
                     onTriggered: {
                         analysisChartView.resetAxes()
-                        sldChartView.resetAxes()
+                        sldChart.chartView.resetAxes()
                     }
                 }
 
@@ -312,7 +313,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable pan")
                         onClicked: {
                             analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            sldChartView.allowZoom = analysisChartView.allowZoom
+                            sldChart.chartView.allowZoom = analysisChartView.allowZoom
                         }
                     }
 
@@ -326,7 +327,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable box zoom")
                         onClicked: {
                             analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            sldChartView.allowZoom = analysisChartView.allowZoom
+                            sldChart.chartView.allowZoom = analysisChartView.allowZoom
                         }
                     }
 
@@ -339,7 +340,7 @@ Rectangle {
                         ToolTip.text: qsTr("Reset axes")
                         onClicked: {
                             analysisChartView.resetAxes()
-                            sldChartView.resetAxes()
+                            sldChart.chartView.resetAxes()
                         }
                     }
                 }
@@ -455,87 +456,18 @@ Rectangle {
         }
 
         // SLD Chart (1/3 height)
-        Rectangle {
-            id: sldContainer
+        Gui.SldChart {
+            id: sldChart
+
             SplitView.fillHeight: true
             SplitView.preferredHeight: parent.height * 0.33
             SplitView.minimumHeight: 80
-            color: EaStyle.Colors.chartBackground
 
-            EaCharts.QtCharts1dMeasVsCalc {
-                id: sldChartView
+            showLegend: Globals.Variables.showLegendOnAnalysisPage
+            onShowLegendChanged: Globals.Variables.showLegendOnAnalysisPage = showLegend
 
-                anchors.fill: parent
-                anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
-
-                useOpenGL: EaGlobals.Vars.useOpenGL
-
-                property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
-                axisX.title: "z (Å)"
-                axisX.min: Globals.BackendWrapper.plottingSldMinX - xRange * 0.01
-                axisX.max: Globals.BackendWrapper.plottingSldMaxX + xRange * 0.01
-                axisX.minAfterReset: Globals.BackendWrapper.plottingSldMinX - xRange * 0.01
-                axisX.maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + xRange * 0.01
-
-                property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
-                axisY.title: "SLD (10⁻⁶Å⁻²)"
-                axisY.min: Globals.BackendWrapper.plottingSldMinY - yRange * 0.01
-                axisY.max: Globals.BackendWrapper.plottingSldMaxY + yRange * 0.01
-                axisY.minAfterReset: Globals.BackendWrapper.plottingSldMinY - yRange * 0.01
-                axisY.maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + yRange * 0.01
-
-                calcSerie.onHovered: (point, state) => showMainTooltip(sldChartView, sldDataToolTip, point, state)
-                calcSerie.color: {
-                    const models = Globals.BackendWrapper.sampleModels
-                    const idx = Globals.BackendWrapper.sampleCurrentModelIndex
-
-                    if (models && idx >= 0 && idx < models.length) {
-                        return models[idx].color
-                    }
-
-                    return undefined
-                }
-
-                // Legend
-                Rectangle {
-                    visible: Globals.Variables.showLegendOnAnalysisPage
-
-                    x: sldChartView.plotArea.x + sldChartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
-                    y: sldChartView.plotArea.y + EaStyle.Sizes.fontPixelSize
-                    width: childrenRect.width
-                    height: childrenRect.height
-
-                    color: EaStyle.Colors.mainContentBackgroundHalfTransparent
-                    border.color: EaStyle.Colors.chartGridLine
-
-                    Column {
-                        leftPadding: EaStyle.Sizes.fontPixelSize
-                        rightPadding: EaStyle.Sizes.fontPixelSize
-                        topPadding: EaStyle.Sizes.fontPixelSize * 0.5
-                        bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
-
-                        EaElements.Label {
-                            text: '━  SLD'
-                            color: sldChartView.calcSerie.color
-                        }
-                    }
-                }
-
-                EaElements.ToolTip {
-                    id: sldDataToolTip
-
-                    arrowLength: 0
-                    textFormat: Text.RichText
-                }
-
-                // Data is set in python backend (plotting_1d.py)
-                Component.onCompleted: {
-                    Globals.References.pages.analysis.mainContent.sldView = sldChartView
-                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
-                                                                       'sldSerie',
-                                                                       sldChartView.calcSerie)
-                    Globals.BackendWrapper.plottingRefreshSLD()
-                }
+            Component.onCompleted: {
+                Globals.References.pages.analysis.mainContent.sldView = sldChart.chartView
             }
         }
     }
