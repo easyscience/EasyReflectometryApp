@@ -261,7 +261,7 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewLabel {
-                    text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].error)
+                    text: formatError(Globals.BackendWrapper.analysisFitableParameters[index].error)
                     color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
                            Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
                            EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
@@ -434,6 +434,13 @@ EaElements.GroupBox {
         }
         fittables.parameterSlider.from = EaLogic.Utils.toDefaultPrecision(from)
         fittables.parameterSlider.to = EaLogic.Utils.toDefaultPrecision(to)
+    }
+
+    function formatError(value) {
+        if (value === undefined || value === 0 || isNaN(value)) return ''
+        var s = Number(value.toPrecision(2)).toString()
+        if (s.length <= 6) return s
+        return value.toExponential(1)
     }
 
     function allFittablesSelected() {
