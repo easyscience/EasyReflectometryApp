@@ -503,14 +503,10 @@ class Analysis(QObject):
         if self._chached_enabled_parameters is not None:
             return self._chached_enabled_parameters
         enabled_parameters = []
-        # import time
-        # t0 = time.time()
         for parameter in self._parameters_logic.parameters:
             if not parameter['enabled']:
                 continue
             enabled_parameters.append(parameter)
-        # t1 = time.time()
-        # print(f"Enabled parameters computation time: {t1 - t0:.4f} seconds")
         self._chached_enabled_parameters = enabled_parameters
         return enabled_parameters
 

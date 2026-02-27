@@ -251,6 +251,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                 prefixed_display_name = display_name
 
             alias = _make_alias(prefixed_display_name or parameter.name)
+            param_value = float(parameter.value)
             parameter_list.append(
                 {
                     'name': prefixed_display_name,
@@ -258,7 +259,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'group': group_name,
                     'alias': alias,
                     'unique_name': parameter.unique_name,
-                    'value': float(parameter.value),
+                    'value': param_value,
                     'error': float(parameter.variance),
                     'max': float(parameter.max),
                     'min': float(parameter.min),
