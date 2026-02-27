@@ -328,7 +328,7 @@ Rectangle {
 
     Timer {
         id: resetAxesTimer
-        interval: 50
+        interval: 75
         repeat: false
         onTriggered: chartView.resetAxes()
     }

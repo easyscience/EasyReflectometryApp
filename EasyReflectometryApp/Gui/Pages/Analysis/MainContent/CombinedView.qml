@@ -91,7 +91,7 @@ Rectangle {
 
                 Timer {
                     id: combinedAnalysisResetAxesTimer
-                    interval: 50
+                    interval: 75
                     repeat: false
                     onTriggered: {
                         analysisChartView.resetAxes()

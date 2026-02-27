@@ -341,9 +341,11 @@ class Plotting1d(QObject):
         if max_x == float('-inf'):
             max_x = self.sample_data.x.max() if self.sample_data.x.size > 0 else 1.0
         if min_y == float('inf'):
-            min_y = np.log10(self.sample_data.y.min()) if self.sample_data.y.size > 0 else -10.0
+            valid_y = self.sample_data.y[self.sample_data.y > 0] if self.sample_data.y.size > 0 else np.array([])
+            min_y = np.log10(valid_y.min()) if valid_y.size > 0 else -10.0
         if max_y == float('-inf'):
-            max_y = np.log10(self.sample_data.y.max()) if self.sample_data.y.size > 0 else 0.0
+            valid_y = self.sample_data.y[self.sample_data.y > 0] if self.sample_data.y.size > 0 else np.array([])
+            max_y = np.log10(valid_y.max()) if valid_y.size > 0 else 0.0
 
         return (min_x, max_x, min_y, max_y)
 
@@ -544,12 +546,17 @@ class Plotting1d(QObject):
             # Get the model index for this experiment - it may be different from experiment_index
             # When multiple experiments share the same model
             model_index = 0
+            model_found = False
             if hasattr(exp_data, 'model') and exp_data.model is not None:
                 # Find the model index in the models collection
                 for idx, model in enumerate(self._project_lib.models):
                     if model is exp_data.model:
                         model_index = idx
+                        model_found = True
                         break
+                if not model_found:
+                    console.debug(f'Warning: model for experiment {experiment_index} '
+                                  f'not found in models collection, falling back to model 0')
             else:
                 # Fallback: use experiment_index if it's within model range, else 0
                 model_index = experiment_index if experiment_index < len(self._project_lib.models) else 0
@@ -566,6 +573,11 @@ class Plotting1d(QObject):
             points = []
             exp_points = list(exp_data.data_points())
             calc_y = calc_data.y
+
+            if len(calc_y) != len(q_filtered):
+                console.debug(f'Warning: calculated data length ({len(calc_y)}) '
+                              f'differs from filtered experimental data ({len(q_filtered)}) '
+                              f'for experiment {experiment_index}')
 
             calc_idx = 0
             for point in exp_points:

@@ -60,6 +60,25 @@ class Analysis(QObject):
         else:
             self._selected_experiment_indices = []
 
+    def _ordered_experiments(self) -> list:
+        """Return experiments as an ordered list of experiment objects.
+
+        Handles mapping-like storage without assuming contiguous integer keys.
+        """
+        experiments = self._experiments_logic._project_lib._experiments
+        if not experiments:
+            return []
+
+        if hasattr(experiments, 'items'):
+            items = list(experiments.items())
+            try:
+                items.sort(key=lambda item: item[0])
+            except TypeError:
+                pass
+            return [experiment for _, experiment in items]
+
+        return list(experiments)
+
     ########################
     ## Fitting
     @Property(str, notify=fittingChanged)
@@ -279,7 +298,7 @@ class Analysis(QObject):
     def modelIndexForExperiment(self) -> int:
         # return the model index for the current experiment
         models = self._experiments_logic._project_lib._models
-        experiments = self._experiments_logic._project_lib._experiments
+        experiments = self._ordered_experiments()
         index = self.experimentCurrentIndex
         current_experiment = experiments[index] if 0 <= index < len(experiments) else None
         if current_experiment is not None:
@@ -291,9 +310,9 @@ class Analysis(QObject):
     def modelNamesForExperiment(self) -> list:
         # return a list of model names for each experiment
         mapped_models = []
-        experiments = self._experiments_logic._project_lib._experiments
-        for ind in experiments:
-            name = get_original_name(experiments[ind].model)
+        experiments = self._ordered_experiments()
+        for experiment in experiments:
+            name = get_original_name(experiment.model)
             mapped_models.append(name)
         return mapped_models
 
@@ -301,9 +320,9 @@ class Analysis(QObject):
     def modelColorsForExperiment(self) -> list:
         # return a list of model colors for each experiment
         mapped_models = []
-        experiments = self._experiments_logic._project_lib._experiments
-        for ind in experiments:
-            mapped_models.append(experiments[ind].model.color)
+        experiments = self._ordered_experiments()
+        for experiment in experiments:
+            mapped_models.append(experiment.model.color)
         return mapped_models
 
     @Slot(int)

@@ -405,7 +405,7 @@ Rectangle {
 
     Timer {
         id: sampleCombinedResetAxesTimer
-        interval: 50
+        interval: 75
         repeat: false
         onTriggered: {
             sampleChartView.resetAxes()
@@ -415,7 +415,7 @@ Rectangle {
 
     Timer {
         id: sldCombinedResetAxesTimer
-        interval: 50
+        interval: 75
         repeat: false
         onTriggered: sldChart.chartView.resetAxes()
     }

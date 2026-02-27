@@ -1,4 +1,5 @@
 from EasyApp.Logic.Logging import LoggerLevelHandler
+from EasyApp.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -97,18 +98,18 @@ class PyBackend(QObject):
     @Slot('QVariantList')
     def analysisSetSelectedExperimentIndices(self, indices) -> None:
         """Set multiple selected experiment indices."""
-        print(f'PyBackend.analysisSetSelectedExperimentIndices called with: {indices}')
-        print(f'Type of indices: {type(indices)}')
+        console.debug(f'PyBackend.analysisSetSelectedExperimentIndices called with: {indices}')
+        console.debug(f'Type of indices: {type(indices)}')
 
         # Convert QVariantList to Python list if needed
         python_indices = list(indices) if hasattr(indices, '__iter__') else []
-        print(f'Converted to Python list: {python_indices}')
+        console.debug(f'Converted to Python list: {python_indices}')
 
         if hasattr(self._analysis, 'setSelectedExperimentIndices'):
             self._analysis.setSelectedExperimentIndices(python_indices)
-            print('Successfully called analysis.setSelectedExperimentIndices')
+            console.debug('Successfully called analysis.setSelectedExperimentIndices')
         else:
-            print('ERROR: analysis.setSelectedExperimentIndices method not found')
+            console.debug('ERROR: analysis.setSelectedExperimentIndices method not found')
 
         # Emit our local signal to notify QML properties
         self.multiExperimentSelectionChanged.emit()

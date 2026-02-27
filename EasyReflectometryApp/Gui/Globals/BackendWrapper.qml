@@ -218,6 +218,7 @@ QtObject {
         try {
             return activeBackend.analysisExperimentsSelectedCount || 1
         } catch (e) {
+            console.warn("analysisExperimentsSelectedCount failed:", e)
             return 1
         }
     }
@@ -225,6 +226,7 @@ QtObject {
         try {
             return activeBackend.analysisSelectedExperimentIndices || []
         } catch (e) {
+            console.warn("analysisSelectedExperimentIndices failed:", e)
             return []
         }
     }
@@ -361,6 +363,7 @@ QtObject {
         try {
             return activeBackend.plotting.getBackgroundData()
         } catch (e) {
+            console.warn("plottingGetBackgroundData failed:", e)
             return []
         }
     }
@@ -368,6 +371,7 @@ QtObject {
         try {
             return activeBackend.plotting.getScaleData()
         } catch (e) {
+            console.warn("plottingGetScaleData failed:", e)
             return []
         }
     }
@@ -377,6 +381,7 @@ QtObject {
         try {
             return activeBackend.plotting.getBackgroundDataForAnalysis()
         } catch (e) {
+            console.warn("plottingGetBackgroundDataForAnalysis failed:", e)
             return []
         }
     }
@@ -384,6 +389,7 @@ QtObject {
         try {
             return activeBackend.plotting.getScaleDataForAnalysis()
         } catch (e) {
+            console.warn("plottingGetScaleDataForAnalysis failed:", e)
             return []
         }
     }
@@ -419,6 +425,7 @@ QtObject {
         try {
             return activeBackend.plotting.getSampleDataPointsForModel(index)
         } catch (e) {
+            console.warn("plottingGetSampleDataPointsForModel failed:", e)
             return []
         }
     }
@@ -426,6 +433,7 @@ QtObject {
         try {
             return activeBackend.plotting.getSldDataPointsForModel(index)
         } catch (e) {
+            console.warn("plottingGetSldDataPointsForModel failed:", e)
             return []
         }
     }
@@ -433,6 +441,7 @@ QtObject {
         try {
             return activeBackend.plotting.getModelColor(index)
         } catch (e) {
+            console.warn("plottingGetModelColor failed:", e)
             return '#000000'
         }
     }
@@ -471,6 +480,7 @@ QtObject {
         try {
             return activeBackend.plottingIsMultiExperimentMode || false
         } catch (e) {
+            console.warn("plottingIsMultiExperimentMode failed:", e)
             return false
         }
     }
@@ -478,6 +488,7 @@ QtObject {
         try {
             return activeBackend.plottingIndividualExperimentDataList || []
         } catch (e) {
+            console.warn("plottingIndividualExperimentDataList failed:", e)
             return []
         }
     }
@@ -485,6 +496,7 @@ QtObject {
         try {
             return activeBackend.plottingGetExperimentDataPoints(index)
         } catch (e) {
+            console.warn("plottingGetExperimentDataPoints failed:", e)
             return []
         }
     }
@@ -492,6 +504,7 @@ QtObject {
         try {
             return activeBackend.plottingGetAnalysisDataPoints(index)
         } catch (e) {
+            console.warn("plottingGetAnalysisDataPoints failed:", e)
             return []
         }
     }
