@@ -31,6 +31,43 @@ Rectangle {
 
         useOpenGL: EaGlobals.Vars.useOpenGL
 
+        // Background reference line series
+        LineSeries {
+            id: backgroundRefLine
+            axisX: chartView.axisX
+            axisY: chartView.axisY
+            useOpenGL: chartView.useOpenGL
+            color: "#888888"
+            width: 1
+            style: Qt.DashLine
+            visible: Globals.BackendWrapper.plottingBkgShown
+        }
+
+        // Scale reference line series
+        LineSeries {
+            id: scaleRefLine
+            axisX: chartView.axisX
+            axisY: chartView.axisY
+            useOpenGL: chartView.useOpenGL
+            color: "#666666"
+            width: 1
+            style: Qt.DotLine
+            visible: Globals.BackendWrapper.plottingScaleShown
+        }
+
+        // Update reference lines when visibility changes
+        Connections {
+            target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+            enabled: target !== null
+            function onReferenceLineVisibilityChanged() {
+                chartView.updateReferenceLines()
+            }
+        }
+
+        function updateReferenceLines() {
+            Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, true)
+        }
+
         // Multi-experiment support
         property var multiExperimentSeries: []
         property bool isMultiExperimentMode: {
@@ -49,11 +86,37 @@ Rectangle {
 
         // Watch for changes in multi-experiment selection
         Connections {
-            target: Globals.BackendWrapper.activeBackend
+            target: Globals.BackendWrapper.activeBackend ?? null
+            enabled: target !== null
             function onMultiExperimentSelectionChanged() {
                 console.log("Analysis: Multi-experiment selection changed - updating series")
                 chartView.updateMultiExperimentSeries()
             }
+        }
+
+        // Watch for plot mode changes (R(q)×q⁴ toggle)
+        Connections {
+            target: Globals.BackendWrapper
+            function onPlotModeChanged() {
+                console.debug("AnalysisView: Plot mode changed, refreshing chart")
+                Globals.BackendWrapper.plottingRefreshAnalysis()
+                // Delay resetAxes to allow axis range properties to update first
+                analysisResetAxesTimer.start()
+            }
+            function onChartAxesResetRequested() {
+                // Reset axes when model is loaded (e.g., from ORSO file)
+                analysisResetAxesTimer.start()
+            }
+            function onSamplePageResetAxes() {
+                analysisResetAxesTimer.start()
+            }
+        }
+
+        Timer {
+            id: analysisResetAxesTimer
+            interval: 75
+            repeat: false
+            onTriggered: chartView.resetAxes()
         }
         
         property double xRange: Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
@@ -64,7 +127,7 @@ Rectangle {
         axisX.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
 
         property double yRange: Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
-        axisY.title: "Log10 R(q)"
+        axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
         axisY.min: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
         axisY.max: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
         axisY.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
@@ -364,12 +427,18 @@ Rectangle {
 
             // Initialize multi-experiment support
             updateMultiExperimentSeries()
+            
+            // Initialize reference lines
+            updateReferenceLines()
         }
 
         // Update series when chart becomes visible
         onVisibleChanged: {
             if (visible && isMultiExperimentMode) {
                 updateMultiExperimentSeries()
+            }
+            if (visible) {
+                updateReferenceLines()
             }
         }
     }

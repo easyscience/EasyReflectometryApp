@@ -26,12 +26,17 @@ class Minimizers:
     def minimizer_current_index(self) -> int:
         return self._minimizer_current_index
 
+    def selected_minimizer_enum(self):
+        """Return the AvailableMinimizers enum for the currently selected minimizer."""
+        if 0 <= self._minimizer_current_index < len(self._list_available_minimizers):
+            return self._list_available_minimizers[self._minimizer_current_index]
+        return None
+
     def set_minimizer_current_index(self, new_value: int) -> bool:
         if new_value != self._minimizer_current_index:
             self._minimizer_current_index = new_value
-            if self._project_lib._fitter is not None:
-                enum_new_minimizer = self._list_available_minimizers[new_value]
-                self._project_lib._fitter.switch_minimizer(enum_new_minimizer)
+            enum_new_minimizer = self._list_available_minimizers[new_value]
+            self._project_lib.minimizer = enum_new_minimizer
             return True
         return False
 

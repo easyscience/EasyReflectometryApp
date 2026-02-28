@@ -60,6 +60,7 @@ EaElements.GroupColumn {
             EaComponents.TableViewTextInput {
                 horizontalAlignment: Text.AlignHCenter
                 text: Globals.BackendWrapper.sampleLayers[index].formula
+                onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerFormula(text)
             }
 
@@ -67,6 +68,7 @@ EaElements.GroupColumn {
                 horizontalAlignment: Text.AlignHCenter
                 enabled: Globals.BackendWrapper.sampleLayers[index].thickness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].thickness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].thickness).toFixed(2)
+                onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerThickness(text)
             }
 
@@ -74,12 +76,14 @@ EaElements.GroupColumn {
                 horizontalAlignment: Text.AlignHCenter
                 enabled: Globals.BackendWrapper.sampleLayers[index].roughness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].roughness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].roughness).toFixed(2)
+                onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerRoughness(text)
             }
 
             EaComponents.TableViewTextInput {
                 horizontalAlignment: Text.AlignHCenter
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].solvation)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].solvation).toFixed(2)
+                onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerSolvation(text)
             }
 
@@ -87,6 +91,7 @@ EaElements.GroupColumn {
                 horizontalAlignment: Text.AlignHCenter
                 enabled: Globals.BackendWrapper.sampleLayers[index].apm_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].apm)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].apm).toFixed(2)
+                onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerAPM(text)
             }
 
@@ -108,7 +113,7 @@ EaElements.GroupColumn {
                 }
             }
             mouseArea.onPressed: {
-                if (Globals.BackendWrapper.samplCurrentLayerIndex !== index) {
+                if (Globals.BackendWrapper.sampleCurrentLayerIndex !== index) {
                     Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 }
             }

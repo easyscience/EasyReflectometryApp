@@ -12,6 +12,7 @@ import EasyApp.Gui.Globals as EaGlobals
 import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Charts as EaCharts
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
@@ -25,7 +26,6 @@ Rectangle {
 
     // Store dynamically created series
     property var sampleSeries: []
-    property var sldSeries: []
 
     SplitView {
         anchors.fill: parent
@@ -101,7 +101,7 @@ Rectangle {
 
                 ValueAxis {
                     id: sampleAxisY
-                    titleText: "Log10 R(q)"
+                    titleText: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
                     // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - sampleChartView.yRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + sampleChartView.yRange * 0.01
@@ -180,7 +180,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable pan")
                         onClicked: {
                             sampleChartView.allowZoom = !checked
-                            sldChartView.allowZoom = !checked
+                            sldChart.chartView.allowZoom = !checked
                         }
                     }
 
@@ -194,7 +194,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable box zoom")
                         onClicked: {
                             sampleChartView.allowZoom = checked
-                            sldChartView.allowZoom = checked
+                            sldChart.chartView.allowZoom = checked
                         }
                     }
 
@@ -207,7 +207,7 @@ Rectangle {
                         ToolTip.text: qsTr("Reset axes")
                         onClicked: {
                             sampleChartView.resetAxes()
-                            sldChartView.resetAxes()
+                            sldChart.chartView.resetAxes()
                         }
                     }
                 }
@@ -360,222 +360,19 @@ Rectangle {
         }
 
         // SLD Chart (1/3 height)
-        Rectangle {
-            id: sldContainer
+        Gui.SldChart {
+            id: sldChart
+
             SplitView.fillHeight: true
             SplitView.preferredHeight: parent.height * 0.33
             SplitView.minimumHeight: 80
-            color: EaStyle.Colors.chartBackground
 
-            ChartView {
-                id: sldChartView
+            showLegend: Globals.Variables.showLegendOnSamplePage
+            reverseZAxis: Globals.Variables.reverseSldZAxis
+            onShowLegendChanged: Globals.Variables.showLegendOnSamplePage = showLegend
 
-                anchors.fill: parent
-                anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
-                anchors.margins: -12
-
-                antialiasing: true
-                legend.visible: false
-                backgroundRoundness: 0
-                backgroundColor: EaStyle.Colors.chartBackground
-                plotAreaColor: EaStyle.Colors.chartPlotAreaBackground
-
-                property bool allowZoom: true
-                property bool allowHover: true
-
-                property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
-
-                // Reverse axis logic
-                property bool reverseZAxis: Globals.Variables.reverseSldZAxis
-
-                ValueAxis {
-                    id: sldAxisX
-                    titleText: "z (Å)"
-                    // min/max set imperatively to avoid binding reset during zoom
-                    property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - sldChartView.xRange * 0.01
-                    property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + sldChartView.xRange * 0.01
-                    reverse: sldChartView.reverseZAxis
-                    color: EaStyle.Colors.chartAxis
-                    gridLineColor: EaStyle.Colors.chartGridLine
-                    minorGridLineColor: EaStyle.Colors.chartMinorGridLine
-                    labelsColor: EaStyle.Colors.chartLabels
-                    titleBrush: EaStyle.Colors.chartLabels
-                    Component.onCompleted: {
-                        min = minAfterReset
-                        max = maxAfterReset
-                    }
-                }
-
-                property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
-
-                ValueAxis {
-                    id: sldAxisY
-                    titleText: "SLD (10⁻⁶Å⁻²)"
-                    // min/max set imperatively to avoid binding reset during zoom
-                    property double minAfterReset: Globals.BackendWrapper.plottingSldMinY - sldChartView.yRange * 0.01
-                    property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + sldChartView.yRange * 0.01
-                    color: EaStyle.Colors.chartAxis
-                    gridLineColor: EaStyle.Colors.chartGridLine
-                    minorGridLineColor: EaStyle.Colors.chartMinorGridLine
-                    labelsColor: EaStyle.Colors.chartLabels
-                    titleBrush: EaStyle.Colors.chartLabels
-                    Component.onCompleted: {
-                        min = minAfterReset
-                        max = maxAfterReset
-                    }
-                }
-
-                function resetAxes() {
-                    sldAxisX.min = sldAxisX.minAfterReset
-                    sldAxisX.max = sldAxisX.maxAfterReset
-                    sldAxisY.min = sldAxisY.minAfterReset
-                    sldAxisY.max = sldAxisY.maxAfterReset
-                }
-
-                // Legend showing all models
-                Rectangle {
-                    visible: Globals.Variables.showLegendOnSamplePage
-
-                    x: sldChartView.plotArea.x + sldChartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
-                    y: sldChartView.plotArea.y + EaStyle.Sizes.fontPixelSize
-                    width: childrenRect.width
-                    height: childrenRect.height
-
-                    color: EaStyle.Colors.mainContentBackgroundHalfTransparent
-                    border.color: EaStyle.Colors.chartGridLine
-
-                    Column {
-                        leftPadding: EaStyle.Sizes.fontPixelSize
-                        rightPadding: EaStyle.Sizes.fontPixelSize
-                        topPadding: EaStyle.Sizes.fontPixelSize * 0.5
-                        bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
-
-                        Repeater {
-                            model: container.modelCount
-                            EaElements.Label {
-                                text: '━  SLD ' + Globals.BackendWrapper.sampleModels[index].label
-                                color: Globals.BackendWrapper.sampleModels[index].color
-                            }
-                        }
-                    }
-                }
-
-                EaElements.ToolTip {
-                    id: sldDataToolTip
-
-                    arrowLength: 0
-                    textFormat: Text.RichText
-                }
-
-                // Zoom rectangle
-                Rectangle {
-                    id: sldRecZoom
-
-                    property int xScaleZoom: 0
-                    property int yScaleZoom: 0
-
-                    visible: false
-                    transform: Scale {
-                        origin.x: 0
-                        origin.y: 0
-                        xScale: sldRecZoom.xScaleZoom
-                        yScale: sldRecZoom.yScaleZoom
-                    }
-                    border.color: EaStyle.Colors.appBorder
-                    border.width: 1
-                    opacity: 0.9
-                    color: "transparent"
-
-                    Rectangle {
-                        anchors.fill: parent
-                        opacity: 0.5
-                        color: sldRecZoom.border.color
-                    }
-                }
-
-                // Zoom with left mouse button
-                MouseArea {
-                    id: sldZoomMouseArea
-
-                    enabled: sldChartView.allowZoom
-                    anchors.fill: sldChartView
-                    acceptedButtons: Qt.LeftButton
-                    onPressed: {
-                        sldRecZoom.x = mouseX
-                        sldRecZoom.y = mouseY
-                        sldRecZoom.visible = true
-                    }
-                    onMouseXChanged: {
-                        if (mouseX > sldRecZoom.x) {
-                            sldRecZoom.xScaleZoom = 1
-                            sldRecZoom.width = Math.min(mouseX, sldChartView.width) - sldRecZoom.x
-                        } else {
-                            sldRecZoom.xScaleZoom = -1
-                            sldRecZoom.width = sldRecZoom.x - Math.max(mouseX, 0)
-                        }
-                    }
-                    onMouseYChanged: {
-                        if (mouseY > sldRecZoom.y) {
-                            sldRecZoom.yScaleZoom = 1
-                            sldRecZoom.height = Math.min(mouseY, sldChartView.height) - sldRecZoom.y
-                        } else {
-                            sldRecZoom.yScaleZoom = -1
-                            sldRecZoom.height = sldRecZoom.y - Math.max(mouseY, 0)
-                        }
-                    }
-                    onReleased: {
-                        const x = Math.min(sldRecZoom.x, mouseX) - sldChartView.anchors.leftMargin
-                        const y = Math.min(sldRecZoom.y, mouseY) - sldChartView.anchors.topMargin
-                        const width = sldRecZoom.width
-                        const height = sldRecZoom.height
-                        sldChartView.zoomIn(Qt.rect(x, y, width, height))
-                        sldRecZoom.visible = false
-                    }
-                }
-
-                // Pan with left mouse button
-                MouseArea {
-                    property real pressedX
-                    property real pressedY
-                    property int threshold: 1
-
-                    enabled: !sldZoomMouseArea.enabled
-                    anchors.fill: sldChartView
-                    acceptedButtons: Qt.LeftButton
-                    onPressed: {
-                        pressedX = mouseX
-                        pressedY = mouseY
-                    }
-                    onMouseXChanged: Qt.callLater(update)
-                    onMouseYChanged: Qt.callLater(update)
-
-                    function update() {
-                        const dx = mouseX - pressedX
-                        const dy = mouseY - pressedY
-                        pressedX = mouseX
-                        pressedY = mouseY
-
-                        if (dx > threshold)
-                            sldChartView.scrollLeft(dx)
-                        else if (dx < -threshold)
-                            sldChartView.scrollRight(-dx)
-                        if (dy > threshold)
-                            sldChartView.scrollUp(dy)
-                        else if (dy < -threshold)
-                            sldChartView.scrollDown(-dy)
-                    }
-                }
-
-                // Reset axes with right mouse button
-                MouseArea {
-                    anchors.fill: sldChartView
-                    acceptedButtons: Qt.RightButton
-                    onClicked: sldChartView.resetAxes()
-                }
-
-                Component.onCompleted: {
-                    Globals.References.pages.sample.mainContent.sldView = sldChartView
-                }
+            Component.onCompleted: {
+                Globals.References.pages.sample.mainContent.sldView = sldChart.chartView
             }
         }
     }
@@ -591,6 +388,36 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
+        function onSamplePageResetAxes() {
+            sampleCombinedResetAxesTimer.start()
+            sldCombinedResetAxesTimer.start()
+        }
+        function onPlotModeChanged() {
+            refreshAllCharts()
+            // Delay resetAxes to allow axis range properties to update first
+            sampleCombinedResetAxesTimer.start()
+        }
+        function onChartAxesResetRequested() {
+            // Reset axes when model is loaded (e.g., from ORSO file)
+            sampleCombinedResetAxesTimer.start()
+        }
+    }
+
+    Timer {
+        id: sampleCombinedResetAxesTimer
+        interval: 75
+        repeat: false
+        onTriggered: {
+            sampleChartView.resetAxes()
+            sldChart.chartView.resetAxes()
+        }
+    }
+
+    Timer {
+        id: sldCombinedResetAxesTimer
+        interval: 75
+        repeat: false
+        onTriggered: sldChart.chartView.resetAxes()
     }
 
     Component.onCompleted: {
@@ -607,14 +434,6 @@ Rectangle {
         }
         sampleSeries = []
 
-        // Remove old SLD series
-        for (let j = 0; j < sldSeries.length; j++) {
-            if (sldSeries[j]) {
-                sldChartView.removeSeries(sldSeries[j])
-            }
-        }
-        sldSeries = []
-
         // Determine which x-axis to use for sample chart based on log setting
         const sampleXAxisToUse = sampleChartView.useLogQAxis ? sampleAxisXLog : sampleAxisX
 
@@ -629,15 +448,6 @@ Rectangle {
             // Connect hovered signal for tooltip
             sampleLine.hovered.connect((point, state) => showMainTooltip(sampleChartView, sampleDataToolTip, point, state))
             sampleSeries.push(sampleLine)
-
-            // Create SLD series
-            const sldLine = sldChartView.createSeries(ChartView.SeriesTypeLine, "SLD " + models[k].label, sldAxisX, sldAxisY)
-            sldLine.color = models[k].color
-            sldLine.width = 2
-            sldLine.useOpenGL = EaGlobals.Vars.useOpenGL
-            // Connect hovered signal for tooltip
-            sldLine.hovered.connect((point, state) => showMainTooltip(sldChartView, sldDataToolTip, point, state))
-            sldSeries.push(sldLine)
         }
 
         // Populate data
@@ -654,18 +464,6 @@ Rectangle {
             if (series) {
                 series.clear()
                 const points = Globals.BackendWrapper.plottingGetSampleDataPointsForModel(i)
-                for (let p = 0; p < points.length; p++) {
-                    series.append(points[p].x, points[p].y)
-                }
-            }
-        }
-
-        // Refresh SLD series
-        for (let j = 0; j < sldSeries.length && j < models.length; j++) {
-            const series = sldSeries[j]
-            if (series) {
-                series.clear()
-                const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(j)
                 for (let p = 0; p < points.length; p++) {
                     series.append(points[p].x, points[p].y)
                 }

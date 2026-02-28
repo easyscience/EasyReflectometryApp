@@ -552,13 +552,29 @@ class Sample(QObject):
     def _format_numeric(value: float) -> str:
         return f'{value:.6g}'
 
+    def _get_independent_parameter_entries(self) -> list[dict]:
+        """Return the filtered list of independent+enabled parameter entries.
+
+        This must match the same filtering as dependentParameterNames so that
+        the QML dropdown index maps to the correct parameter object.
+        """
+        entries = []
+        for parameter in self._parameters_logic.parameters:
+            if not parameter['independent']:
+                continue
+            if hasattr(parameter['object'], 'enabled') and not parameter['object'].enabled:
+                continue
+            entries.append(parameter)
+        return entries
+
     def _prepare_constraint_instruction(
         self,
         dependent_index: int,
         relation_operator: str,
         expression: str,
     ) -> dict[str, Any]:
-        if dependent_index < 0 or dependent_index >= len(self._project_lib.parameters):
+        independent_entries = self._get_independent_parameter_entries()
+        if dependent_index < 0 or dependent_index >= len(independent_entries):
             raise ValueError('Select a dependent parameter before defining a constraint.')
 
         relation = self._sanitize_relation(relation_operator)
@@ -868,7 +884,7 @@ class Sample(QObject):
         except Exception as error:  # noqa: BLE001
             return {'success': False, 'message': str(error)}
 
-        dependent = self._project_lib.parameters[dependent_index]
+        dependent = self._get_independent_parameter_entries()[dependent_index]['object']
         previous_state = self._capture_parameter_state(dependent)
         self._ensure_parameter_independent(dependent)
 

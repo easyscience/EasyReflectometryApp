@@ -1,4 +1,5 @@
 from EasyApp.Logic.Logging import LoggerLevelHandler
+from EasyApp.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -37,6 +38,9 @@ class PyBackend(QObject):
         self._plotting_1d = Plotting1d(self._project_lib, parent=self)
 
         self._logger = LoggerLevelHandler(self)
+
+        # Wire cross-cutting references before connecting signals
+        self._status._status_logic.set_minimizers_logic(self._analysis._minimizers_logic)
 
         # Must be last to ensure all backend parts are created
         self._connect_backend_parts()
@@ -94,18 +98,18 @@ class PyBackend(QObject):
     @Slot('QVariantList')
     def analysisSetSelectedExperimentIndices(self, indices) -> None:
         """Set multiple selected experiment indices."""
-        print(f'PyBackend.analysisSetSelectedExperimentIndices called with: {indices}')
-        print(f'Type of indices: {type(indices)}')
+        console.debug(f'PyBackend.analysisSetSelectedExperimentIndices called with: {indices}')
+        console.debug(f'Type of indices: {type(indices)}')
 
         # Convert QVariantList to Python list if needed
         python_indices = list(indices) if hasattr(indices, '__iter__') else []
-        print(f'Converted to Python list: {python_indices}')
+        console.debug(f'Converted to Python list: {python_indices}')
 
         if hasattr(self._analysis, 'setSelectedExperimentIndices'):
             self._analysis.setSelectedExperimentIndices(python_indices)
-            print('Successfully called analysis.setSelectedExperimentIndices')
+            console.debug('Successfully called analysis.setSelectedExperimentIndices')
         else:
-            print('ERROR: analysis.setSelectedExperimentIndices method not found')
+            console.debug('ERROR: analysis.setSelectedExperimentIndices method not found')
 
         # Emit our local signal to notify QML properties
         self.multiExperimentSelectionChanged.emit()
@@ -177,10 +181,15 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
 
     def _relay_project_page_project_changed(self):
+        # Clear layers cache first so that subsequent signal handlers
+        # (e.g. ComboBox onModelChanged / onCurrentAssemblyNameChanged in
+        # MultiLayer.qml) read up-to-date layer data.
+        self._sample._clearCacheAndEmitLayersChanged()
         self._sample.materialsTableChanged.emit()
         self._sample.modelsTableChanged.emit()
+        self._sample.modelsIndexChanged.emit()
         self._sample.assembliesTableChanged.emit()
-        self._sample._clearCacheAndEmitLayersChanged()
+        self._sample.assembliesIndexChanged.emit()
         self._experiment.experimentChanged.emit()
         self._analysis.experimentsChanged.emit()
         self._analysis._clearCacheAndEmitParametersChanged()
@@ -188,12 +197,14 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
         self._plotting_1d.reset_data()
         self._refresh_plots()
+        self._plotting_1d.samplePageResetAxes.emit()
 
     def _relay_sample_page_sample_changed(self):
         self._plotting_1d.reset_data()
         self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
+        self._plotting_1d.samplePageResetAxes.emit()
 
     def _relay_experiment_page_experiment_changed(self):
         self._analysis.experimentsChanged.emit()
@@ -206,6 +217,7 @@ class PyBackend(QObject):
         self._status.statusChanged.emit()
         self._experiment.experimentChanged.emit()
         self._summary.summaryChanged.emit()
+        self._plotting_1d.samplePageResetAxes.emit()
 
     def _refresh_plots(self):
         self._plotting_1d.sampleChartRangesChanged.emit()

@@ -11,8 +11,10 @@ from PySide6.QtCore import Slot
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiments import Experiments as ExperimentLogic
 from .logic.fitting import Fitting as FittingLogic
+from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
 from .logic.parameters import Parameters as ParametersLogic
+from .workers import FitterWorker
 
 
 class Analysis(QObject):
@@ -22,6 +24,8 @@ class Analysis(QObject):
     parametersChanged = Signal()
     parametersIndexChanged = Signal()
     fittingChanged = Signal()
+    fitFailed = Signal(str)  # Emitted with error message when fitting fails
+    stopFit = Signal()  # Signal to request fitting stop
 
     externalMinimizerChanged = Signal()
     externalParametersChanged = Signal()
@@ -39,6 +43,10 @@ class Analysis(QObject):
         self._minimizers_logic = MinimizersLogic(project_lib)
         self._chached_parameters = None
         self._chached_enabled_parameters = None
+        # Thread management for background fitting
+        self._fitter_thread = None
+        # Connect stopFit signal to slot
+        self.stopFit.connect(self._onStopFit)
         # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
         self._selected_experiment_indices = []
         # Initialize selected experiments after construction to avoid binding loops
@@ -51,6 +59,25 @@ class Analysis(QObject):
             self._selected_experiment_indices = [0]
         else:
             self._selected_experiment_indices = []
+
+    def _ordered_experiments(self) -> list:
+        """Return experiments as an ordered list of experiment objects.
+
+        Handles mapping-like storage without assuming contiguous integer keys.
+        """
+        experiments = self._experiments_logic._project_lib._experiments
+        if not experiments:
+            return []
+
+        if hasattr(experiments, 'items'):
+            items = list(experiments.items())
+            try:
+                items.sort(key=lambda item: item[0])
+            except TypeError:
+                pass
+            return [experiment for _, experiment in items]
+
+        return list(experiments)
 
     ########################
     ## Fitting
@@ -91,14 +118,91 @@ class Analysis(QObject):
     def fitChi2(self) -> float:
         return self._fitting_logic.fit_chi2
 
+    @Property('QVariant', notify=fittingChanged)
+    def fitResults(self) -> dict:
+        """Return fit results as a dict for QML consumption."""
+        return {
+            'success': self._fitting_logic.fit_success,
+            'nvarys': self._fitting_logic.fit_n_pars,
+            'chi2': self._fitting_logic.fit_chi2,
+        }
+
     @Slot(None)
     def fittingStartStop(self) -> None:
-        # make sure we can run the fitting
+        # If already running, stop the fit
+        if self._fitting_logic.running:
+            self.stopFit.emit()
+            return
+
+        # Make sure we can run the fitting
         if not self.prefitCheck():
             return
-        self._fitting_logic.start_stop()
+
+        # Use threaded fitting for non-blocking UI
+        self._start_threaded_fit()
+
+    def _start_threaded_fit(self) -> None:
+        """Start fitting in a background thread."""
+        # Reset flags and prepare for fit using proper encapsulation
+        self._fitting_logic.reset_stop_flag()
+        self._fitting_logic.prepare_for_threaded_fit()
+        self.fittingChanged.emit()
+
+        # TODO: Thread-safety: prevent model/parameter edits during fitting or snapshot state before starting the worker.
+
+        # Prepare fit data for all experiments
+        fitter, x_data, y_data, weights, method = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
+
+        if fitter is None:
+            # Error already set in fitting logic
+            self.fittingChanged.emit()
+            if self._fitting_logic.fit_error_message:
+                self.fitFailed.emit(self._fitting_logic.fit_error_message)
+            return
+
+        # Create and configure worker
+        self._fitter_thread = FitterWorker(
+            fitter=fitter,
+            method_name='fit',
+            args=(x_data, y_data),
+            kwargs={'weights': weights, 'method': method},
+            parent=self,
+        )
+        self._fitter_thread.setTerminationEnabled(True)
+        self._fitter_thread.finished.connect(self._on_fit_finished)
+        self._fitter_thread.failed.connect(self._on_fit_failed)
+        self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.start()
+
+    @Slot(list)
+    def _on_fit_finished(self, results: list) -> None:
+        """Handle successful completion of threaded fit."""
+        self._fitting_logic.on_fit_finished(results)
+        self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
+        self.externalFittingChanged.emit()
+
+    @Slot(str)
+    def _on_fit_failed(self, error_message: str) -> None:
+        """Handle failed threaded fit."""
+        self._fitting_logic.on_fit_failed(error_message)
+        self._fitter_thread = None
+        self.fittingChanged.emit()
+        self._clearCacheAndEmitParametersChanged()
+        self.externalFittingChanged.emit()
+        self.fitFailed.emit(error_message)
+
+    @Slot()
+    def _onStopFit(self) -> None:
+        """Stop fitting and clean up."""
+        self._fitting_logic.stop_fit()
+        if self._fitter_thread is not None:
+            self._fitter_thread.stop()
+            self._fitter_thread.deleteLater()
+            self._fitter_thread = None
+        self.fittingChanged.emit()
         self.externalFittingChanged.emit()
 
     def prefitCheck(self) -> bool:
@@ -194,7 +298,7 @@ class Analysis(QObject):
     def modelIndexForExperiment(self) -> int:
         # return the model index for the current experiment
         models = self._experiments_logic._project_lib._models
-        experiments = self._experiments_logic._project_lib._experiments
+        experiments = self._ordered_experiments()
         index = self.experimentCurrentIndex
         current_experiment = experiments[index] if 0 <= index < len(experiments) else None
         if current_experiment is not None:
@@ -206,18 +310,19 @@ class Analysis(QObject):
     def modelNamesForExperiment(self) -> list:
         # return a list of model names for each experiment
         mapped_models = []
-        experiments = self._experiments_logic._project_lib._experiments
-        for ind in experiments:
-            mapped_models.append(experiments[ind].model.name)
+        experiments = self._ordered_experiments()
+        for experiment in experiments:
+            name = get_original_name(experiment.model)
+            mapped_models.append(name)
         return mapped_models
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelColorsForExperiment(self) -> list:
         # return a list of model colors for each experiment
         mapped_models = []
-        experiments = self._experiments_logic._project_lib._experiments
-        for ind in experiments:
-            mapped_models.append(experiments[ind].model.color)
+        experiments = self._ordered_experiments()
+        for experiment in experiments:
+            mapped_models.append(experiment.model.color)
         return mapped_models
 
     @Slot(int)
@@ -417,14 +522,10 @@ class Analysis(QObject):
         if self._chached_enabled_parameters is not None:
             return self._chached_enabled_parameters
         enabled_parameters = []
-        # import time
-        # t0 = time.time()
         for parameter in self._parameters_logic.parameters:
             if not parameter['enabled']:
                 continue
             enabled_parameters.append(parameter)
-        # t1 = time.time()
-        # print(f"Enabled parameters computation time: {t1 - t0:.4f} seconds")
         self._chached_enabled_parameters = enabled_parameters
         return enabled_parameters
 

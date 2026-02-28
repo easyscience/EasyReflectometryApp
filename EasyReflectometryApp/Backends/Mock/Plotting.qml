@@ -23,7 +23,22 @@ QtObject {
 
     property int modelCount: 1
 
+    // Plot mode properties
+    property bool plotRQ4: false
+    property string yMainAxisTitle: 'R(q)'
+    property bool xAxisLog: false
+    property string xAxisType: 'linear'
+    property bool sldXDataReversed: false
+    property bool scaleShown: false
+    property bool bkgShown: false
+
+    // Signals for plot mode changes
+    signal plotModeChanged()
+    signal axisTypeChanged()
+    signal sldAxisReversedChanged()
+    signal referenceLineVisibilityChanged()
     signal samplePageDataChanged()
+    signal samplePageResetAxes()
 
     function setQtChartsSerieRef(value1, value2, value3) {
         console.debug(`setQtChartsSerieRef ${value1}, ${value2}, ${value3}`)
@@ -50,6 +65,72 @@ QtObject {
     function getModelColor(index) {
         console.debug(`getModelColor ${index}`)
         return '#0000FF'
+    }
+
+    // Plot mode toggle functions
+    function togglePlotRQ4() {
+        plotRQ4 = !plotRQ4
+        yMainAxisTitle = plotRQ4 ? 'R(q)×q⁴' : 'R(q)'
+        plotModeChanged()
+    }
+
+    function toggleXAxisType() {
+        xAxisLog = !xAxisLog
+        xAxisType = xAxisLog ? 'log' : 'linear'
+        axisTypeChanged()
+    }
+
+    function reverseSldXData() {
+        sldXDataReversed = !sldXDataReversed
+        sldAxisReversedChanged()
+    }
+
+    function flipScaleShown() {
+        scaleShown = !scaleShown
+        referenceLineVisibilityChanged()
+    }
+
+    function flipBkgShown() {
+        bkgShown = !bkgShown
+        referenceLineVisibilityChanged()
+    }
+
+    // Reference line data accessors (mock implementation)
+    function getBackgroundData() {
+        if (!bkgShown) return []
+        // Return mock horizontal line at background level
+        return [
+            { 'x': 0.01, 'y': -7.0 },
+            { 'x': 0.30, 'y': -7.0 }
+        ]
+    }
+
+    function getScaleData() {
+        if (!scaleShown) return []
+        // Return mock horizontal line at scale level (log10(1.0) = 0)
+        return [
+            { 'x': 0.01, 'y': 0.0 },
+            { 'x': 0.30, 'y': 0.0 }
+        ]
+    }
+
+    // Analysis-specific reference line data accessors (use sample/calculated x-range)
+    function getBackgroundDataForAnalysis() {
+        if (!bkgShown) return []
+        // Return mock horizontal line at background level using sample x-range
+        return [
+            { 'x': sampleMinX, 'y': -7.0 },
+            { 'x': sampleMaxX, 'y': -7.0 }
+        ]
+    }
+
+    function getScaleDataForAnalysis() {
+        if (!scaleShown) return []
+        // Return mock horizontal line at scale level using sample x-range
+        return [
+            { 'x': sampleMinX, 'y': 0.0 },
+            { 'x': sampleMaxX, 'y': 0.0 }
+        ]
     }
 
 }

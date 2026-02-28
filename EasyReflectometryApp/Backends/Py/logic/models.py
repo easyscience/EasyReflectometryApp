@@ -5,6 +5,8 @@ from easyreflectometry.model import Model
 from easyreflectometry.model import ModelCollection
 from easyreflectometry.model.resolution_functions import PercentageFwhm
 
+from .helpers import get_original_name
+
 
 class Models:
     def __init__(self, project_lib: ProjectLib):
@@ -21,7 +23,7 @@ class Models:
 
     @property
     def name_at_current_index(self) -> str:
-        return self._models[self.index].name
+        return get_original_name(self._models[self.index])
 
     @property
     def scaling_at_current_index(self) -> float:
@@ -128,7 +130,7 @@ def _from_models_collection_to_list_of_dicts(models_collection: ModelCollection)
     for model in models_collection:
         models_list.append(
             {
-                'label': model.name,
+                'label': get_original_name(model),
                 'color': str(model.color),
             }
         )
