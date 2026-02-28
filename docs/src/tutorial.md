@@ -1,6 +1,6 @@
 # Getting started
 This is the tutorial for EasyReflectometryApp and how to use it.  
-Version: 1.1.1
+Version: 1.2.1
 
 ## Home page
 When opening up the EasyRecletometryApp you are presented with the **Home** page.  
