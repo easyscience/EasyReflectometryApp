@@ -78,7 +78,17 @@ QtObject {
     function projectReset() { activeBackend.project.reset() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
-    function sampleFileLoad(value) { activeBackend.project.sampleLoad(value) }
+    function sampleFileLoad(value, append) { activeBackend.project.sampleLoad(value, append) }
+
+    // Sample load warning signal - forwarded from backend
+    signal sampleLoadWarning(string message)
+
+    property var _sampleLoadWarningConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.sampleLoadWarning) {
+            activeBackend.project.sampleLoadWarning.connect(sampleLoadWarning)
+        }
+        return null
+    }
 
 
     ///////////////
@@ -208,6 +218,7 @@ QtObject {
         try {
             return activeBackend.analysisExperimentsSelectedCount || 1
         } catch (e) {
+            console.warn("analysisExperimentsSelectedCount failed:", e)
             return 1
         }
     }
@@ -215,6 +226,7 @@ QtObject {
         try {
             return activeBackend.analysisSelectedExperimentIndices || []
         } catch (e) {
+            console.warn("analysisSelectedExperimentIndices failed:", e)
             return []
         }
     }
@@ -328,9 +340,84 @@ QtObject {
     readonly property var plottingAnalysisMaxY: activeBackend.plotting.sampleMaxY
     readonly property var calcSerieColor: activeBackend.plotting.calcSerieColor
 
+    // Plot mode properties
+    readonly property bool plottingPlotRQ4: activeBackend.plotting.plotRQ4
+    readonly property string plottingYAxisTitle: activeBackend.plotting.yMainAxisTitle
+    readonly property bool plottingXAxisLog: activeBackend.plotting.xAxisLog
+    readonly property string plottingXAxisType: activeBackend.plotting.xAxisType
+    readonly property bool plottingSldXReversed: activeBackend.plotting.sldXDataReversed
+
+    // Reference line visibility
+    readonly property bool plottingScaleShown: activeBackend.plotting.scaleShown
+    readonly property bool plottingBkgShown: activeBackend.plotting.bkgShown
+
+    // Plot mode toggle functions
+    function plottingTogglePlotRQ4() { activeBackend.plotting.togglePlotRQ4() }
+    function plottingToggleXAxisType() { activeBackend.plotting.toggleXAxisType() }
+    function plottingReverseSldXData() { activeBackend.plotting.reverseSldXData() }
+    function plottingFlipScaleShown() { activeBackend.plotting.flipScaleShown() }
+    function plottingFlipBkgShown() { activeBackend.plotting.flipBkgShown() }
+
+    // Reference line data accessors
+    function plottingGetBackgroundData() {
+        try {
+            return activeBackend.plotting.getBackgroundData()
+        } catch (e) {
+            console.warn("plottingGetBackgroundData failed:", e)
+            return []
+        }
+    }
+    function plottingGetScaleData() {
+        try {
+            return activeBackend.plotting.getScaleData()
+        } catch (e) {
+            console.warn("plottingGetScaleData failed:", e)
+            return []
+        }
+    }
+
+    // Analysis-specific reference line data accessors (use sample/calculated x-range)
+    function plottingGetBackgroundDataForAnalysis() {
+        try {
+            return activeBackend.plotting.getBackgroundDataForAnalysis()
+        } catch (e) {
+            console.warn("plottingGetBackgroundDataForAnalysis failed:", e)
+            return []
+        }
+    }
+    function plottingGetScaleDataForAnalysis() {
+        try {
+            return activeBackend.plotting.getScaleDataForAnalysis()
+        } catch (e) {
+            console.warn("plottingGetScaleDataForAnalysis failed:", e)
+            return []
+        }
+    }
+
+    // Helper to update background/scale reference line series on any chart view.
+    // useAnalysisRange: true for Analysis charts (sample x-range), false for Experiment charts.
+    function updateRefLines(bkgSeries, scaleSeries, useAnalysisRange) {
+        bkgSeries.clear()
+        if (plottingBkgShown) {
+            var bkgData = useAnalysisRange ? plottingGetBackgroundDataForAnalysis() : plottingGetBackgroundData()
+            for (var i = 0; i < bkgData.length; i++) {
+                bkgSeries.append(bkgData[i].x, bkgData[i].y)
+            }
+        }
+        scaleSeries.clear()
+        if (plottingScaleShown) {
+            var scaleData = useAnalysisRange ? plottingGetScaleDataForAnalysis() : plottingGetScaleData()
+            for (var j = 0; j < scaleData.length; j++) {
+                scaleSeries.append(scaleData[j].x, scaleData[j].y)
+            }
+        }
+    }
+
     function plottingSetQtChartsSerieRef(value1, value2, value3) { activeBackend.plotting.setQtChartsSerieRef(value1, value2, value3) }
     function plottingRefreshSample() { activeBackend.plotting.drawCalculatedOnSampleChart() }
     function plottingRefreshSLD() { activeBackend.plotting.drawCalculatedOnSldChart() }
+    function plottingRefreshExperiment() { activeBackend.plotting.drawMeasuredOnExperimentChart() }
+    function plottingRefreshAnalysis() { activeBackend.plotting.drawCalculatedAndMeasuredOnAnalysisChart() }
 
     // Multi-model sample page plotting support
     readonly property int plottingModelCount: activeBackend.plotting.modelCount
@@ -338,6 +425,7 @@ QtObject {
         try {
             return activeBackend.plotting.getSampleDataPointsForModel(index)
         } catch (e) {
+            console.warn("plottingGetSampleDataPointsForModel failed:", e)
             return []
         }
     }
@@ -345,6 +433,7 @@ QtObject {
         try {
             return activeBackend.plotting.getSldDataPointsForModel(index)
         } catch (e) {
+            console.warn("plottingGetSldDataPointsForModel failed:", e)
             return []
         }
     }
@@ -352,17 +441,33 @@ QtObject {
         try {
             return activeBackend.plotting.getModelColor(index)
         } catch (e) {
+            console.warn("plottingGetModelColor failed:", e)
             return '#000000'
         }
     }
 
     // Signal for sample page data changes - forward from backend
     signal samplePageDataChanged()
+    // Signal for resetting chart axes after data load
+    signal samplePageResetAxes()
+    // Signal for plot mode changes - forward from backend
+    signal plotModeChanged()
+    // Signal to request QML to reset chart axes (e.g., after model load)
+    signal chartAxesResetRequested()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.samplePageDataChanged) {
             activeBackend.plotting.samplePageDataChanged.connect(samplePageDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.samplePageResetAxes) {
+            activeBackend.plotting.samplePageResetAxes.connect(samplePageResetAxes)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.plotModeChanged) {
+            activeBackend.plotting.plotModeChanged.connect(plotModeChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.chartAxesResetRequested) {
+            activeBackend.plotting.chartAxesResetRequested.connect(chartAxesResetRequested)
         }
     }
 
@@ -375,6 +480,7 @@ QtObject {
         try {
             return activeBackend.plottingIsMultiExperimentMode || false
         } catch (e) {
+            console.warn("plottingIsMultiExperimentMode failed:", e)
             return false
         }
     }
@@ -382,6 +488,7 @@ QtObject {
         try {
             return activeBackend.plottingIndividualExperimentDataList || []
         } catch (e) {
+            console.warn("plottingIndividualExperimentDataList failed:", e)
             return []
         }
     }
@@ -389,6 +496,7 @@ QtObject {
         try {
             return activeBackend.plottingGetExperimentDataPoints(index)
         } catch (e) {
+            console.warn("plottingGetExperimentDataPoints failed:", e)
             return []
         }
     }
@@ -396,6 +504,7 @@ QtObject {
         try {
             return activeBackend.plottingGetAnalysisDataPoints(index)
         } catch (e) {
+            console.warn("plottingGetAnalysisDataPoints failed:", e)
             return []
         }
     }

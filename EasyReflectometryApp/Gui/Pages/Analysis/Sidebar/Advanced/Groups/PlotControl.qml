@@ -4,19 +4,15 @@
 
 import QtQuick
 
+import EasyApp.Gui.Style as EaStyle
 import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
 
-import "./Groups" as Groups
+import Gui as Gui
 
+EaElements.GroupBox {
+    title: qsTr("Plot control")
+    collapsed: true
 
-EaComponents.SideBarColumn {
-
-//    Groups.ParamNames {}
-
-    Groups.Calculator {}
-
-    Groups.Minimizer {}
-
-    Groups.PlotControl {}
+    Gui.PlotControlRefLines {}
 }
+

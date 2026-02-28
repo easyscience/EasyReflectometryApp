@@ -106,6 +106,25 @@ class Fitting:
         self._show_results_dialog = False
         self._fit_error_message = None
 
+    def _ordered_experiments(self) -> list:
+        """Return experiments as an ordered list of experiment objects.
+
+        Handles mapping-like storage without assuming contiguous integer keys.
+        """
+        experiments = self._project_lib._experiments
+        if not experiments:
+            return []
+
+        if hasattr(experiments, 'items'):
+            items = list(experiments.items())
+            try:
+                items.sort(key=lambda item: item[0])
+            except TypeError:
+                pass
+            return [experiment for _, experiment in items]
+
+        return list(experiments)
+
     def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> tuple:
         """Prepare data for threaded fitting.
 
@@ -115,7 +134,7 @@ class Fitting:
         try:
             from easyreflectometry.fitting import MultiFitter
 
-            experiments = self._project_lib._experiments
+            experiments = self._ordered_experiments()
             if not experiments:
                 self._fit_error_message = 'No experiments to fit'
                 self._running = False
@@ -123,30 +142,44 @@ class Fitting:
                 self._show_results_dialog = True
                 return None, None, None, None, None
 
-            experiment_indices = range(len(experiments))
-
             # Create MultiFitter with all models
-            models = [experiments[idx].model for idx in experiment_indices]
+            models = [experiment.model for experiment in experiments]
             multi_fitter = MultiFitter(*models)
 
+            # Apply the user-selected minimizer to the new fitter
+            selected_minimizer = minimizers_logic.selected_minimizer_enum()
+            if selected_minimizer is not None:
+                multi_fitter.easy_science_multi_fitter.switch_minimizer(selected_minimizer)
+                logger.info(
+                    'Fitting: applied minimizer %s to MultiFitter (engine: %s, method: %s)',
+                    selected_minimizer.name,
+                    multi_fitter.easy_science_multi_fitter.minimizer.package,
+                    multi_fitter.easy_science_multi_fitter.minimizer._method,
+                )
+            if minimizers_logic.tolerance is not None:
+                multi_fitter.easy_science_multi_fitter.tolerance = minimizers_logic.tolerance
+            if minimizers_logic.max_iterations is not None:
+                multi_fitter.easy_science_multi_fitter.max_evaluations = minimizers_logic.max_iterations
+
             # Prepare data arrays for all experiments
-            x_data = [experiments[idx].x for idx in experiment_indices]
-            y_data = [experiments[idx].y for idx in experiment_indices]
+            x_data = [experiment.x for experiment in experiments]
+            y_data = [experiment.y for experiment in experiments]
 
             # Validate error values before computing weights to avoid division by zero
             import numpy as np
 
-            for idx in experiment_indices:
-                ye = experiments[idx].ye
+            for idx, experiment in enumerate(experiments):
+                ye = experiment.ye
                 if np.any(ye == 0):
-                    exp_name = experiments[idx].name if hasattr(experiments[idx], 'name') else f'index {idx}'
+                    exp_name = experiment.name if hasattr(experiment, 'name') else f'index {idx}'
                     self._fit_error_message = f'Experiment {exp_name} has zero error values which would cause division by zero'
                     self._running = False
                     self._finished = True
                     self._show_results_dialog = True
                     return None, None, None, None, None
 
-            weights = [1.0 / experiments[idx].ye for idx in experiment_indices]
+            # ye contains variances (sigma²); weights = 1/sigma = 1/sqrt(variance)
+            weights = [1.0 / np.sqrt(experiment.ye) for experiment in experiments]
 
             # Method is optional in fit() - pass None to use minimizer's default
             method = None
@@ -176,6 +209,8 @@ class Fitting:
             # For multi-experiment fits, store the list; use first for single-result properties
             self._results = results
             self._result = results[0]
+            engine_name = getattr(results[0], 'minimizer_engine', 'unknown')
+            logger.info('Fit finished: engine=%s, chi2=%s, success=%s', engine_name, self.fit_chi2, results[0].success)
         else:
             self._result = results
             self._results = [results] if results else []
@@ -222,12 +257,12 @@ class Fitting:
                 # Handle fit failure - create a failed result
                 self._result = None
                 self._fit_error_message = str(e)
-                print(f'Fit failed: {e}')
+                logger.warning('Fit failed: %s', e)
             except Exception as e:
                 # Handle any other unexpected exceptions
                 self._result = None
                 self._fit_error_message = str(e)
-                print(f'Unexpected error during fit: {e}')
+                logger.warning('Unexpected error during fit: %s', e)
             finally:
                 self._running = False
                 self._finished = True

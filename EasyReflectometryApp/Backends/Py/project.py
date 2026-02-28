@@ -1,3 +1,5 @@
+import warnings
+
 from EasyApp.Logic.Utils.Utils import generalizePath
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.orso_utils import load_orso_model
@@ -20,6 +22,7 @@ class Project(QObject):
     externalNameChanged = Signal()
     externalProjectLoaded = Signal()
     externalProjectReset = Signal()
+    sampleLoadWarning = Signal(str)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -104,13 +107,25 @@ class Project(QObject):
         self.externalNameChanged.emit()
         self.externalProjectReset.emit()
 
-    @Slot(str)
-    def sampleLoad(self, url: str) -> None:
+    @Slot(str, bool)
+    def sampleLoad(self, url: str, append: bool = True) -> None:
         # Load ORSO file content
         orso_data = orso.load_orso(generalizePath(url))
         # Load the sample model
-        sample = load_orso_model(orso_data)
-        # Add the sample as a new model in the project
-        self._logic.add_sample_from_orso(sample)
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter('always')
+            sample = load_orso_model(orso_data)
+        if sample is None:
+            warning_msg = 'The ORSO file does not contain a valid sample model definition. No sample was loaded.'
+            for w in caught_warnings:
+                warning_msg = str(w.message)
+            self.sampleLoadWarning.emit(warning_msg)
+            return
+        if append:
+            # Add the sample as a new model in the project
+            self._logic.add_sample_from_orso(sample)
+        else:
+            # Replace all existing models with the loaded sample
+            self._logic.replace_models_from_orso(sample)
         # notify listeners
         self.externalProjectLoaded.emit()

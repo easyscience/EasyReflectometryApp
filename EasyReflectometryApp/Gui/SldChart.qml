@@ -9,21 +9,29 @@ import QtCharts
 import EasyApp.Gui.Style as EaStyle
 import EasyApp.Gui.Globals as EaGlobals
 import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Charts as EaCharts
 
 import Gui.Globals as Globals
 
 
 Rectangle {
-    id: container
+    id: root
 
     color: EaStyle.Colors.chartBackground
+
+    // Whether to show the legend (caller binds to the right page variable)
+    property bool showLegend: false
+
+    // Whether to show the z-axis reversed
+    property bool reverseZAxis: false
+
+    // Expose the ChartView so callers can store a reference / call resetAxes
+    readonly property alias chartView: chartView
 
     // Track model count changes to refresh charts
     property int modelCount: Globals.BackendWrapper.sampleModels.length
 
     // Store dynamically created series
-    property var sampleSeries: []
+    property var sldSeries: []
 
     ChartView {
         id: chartView
@@ -41,18 +49,14 @@ Rectangle {
         property bool allowZoom: true
         property bool allowHover: true
 
-        property double xRange: Globals.BackendWrapper.plottingSampleMaxX - Globals.BackendWrapper.plottingSampleMinX
-
-        // Logarithmic axis control
-        property bool useLogQAxis: Globals.Variables.logarithmicQAxis
+        property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
 
         ValueAxis {
             id: axisX
-            visible: !chartView.useLogQAxis
-            titleText: "q (Å⁻¹)"
-            // min/max set imperatively to avoid binding reset during zoom
-            property double minAfterReset: Globals.BackendWrapper.plottingSampleMinX - chartView.xRange * 0.01
-            property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + chartView.xRange * 0.01
+            titleText: "z (Å)"
+            property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - chartView.xRange * 0.01
+            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + chartView.xRange * 0.01
+            reverse: root.reverseZAxis
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -64,33 +68,13 @@ Rectangle {
             }
         }
 
-        LogValueAxis {
-            id: axisXLog
-            visible: chartView.useLogQAxis
-            titleText: "q (Å⁻¹)"
-            // min/max set for log scale - ensure positive values
-            property double minAfterReset: Math.max(Globals.BackendWrapper.plottingSampleMinX, 1e-6)
-            property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX * 1.1
-            base: 10
-            color: EaStyle.Colors.chartAxis
-            gridLineColor: EaStyle.Colors.chartGridLine
-            minorGridLineColor: EaStyle.Colors.chartMinorGridLine
-            labelsColor: EaStyle.Colors.chartLabels
-            titleBrush: EaStyle.Colors.chartLabels
-            Component.onCompleted: {
-                min = minAfterReset
-                max = maxAfterReset
-            }
-        }
-
-        property double yRange: Globals.BackendWrapper.plottingSampleMaxY - Globals.BackendWrapper.plottingSampleMinY
+        property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
 
         ValueAxis {
             id: axisY
-            titleText: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
-            // min/max set imperatively to avoid binding reset during zoom
-            property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - chartView.yRange * 0.01
-            property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + chartView.yRange * 0.01
+            titleText: "SLD (10⁻⁶Å⁻²)"
+            property double minAfterReset: Globals.BackendWrapper.plottingSldMinY - chartView.yRange * 0.01
+            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + chartView.yRange * 0.01
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -103,27 +87,16 @@ Rectangle {
         }
 
         function resetAxes() {
-            if (useLogQAxis) {
-                axisXLog.min = axisXLog.minAfterReset
-                axisXLog.max = axisXLog.maxAfterReset
-            } else {
-                axisX.min = axisX.minAfterReset
-                axisX.max = axisX.maxAfterReset
-            }
+            axisX.min = axisX.minAfterReset
+            axisX.max = axisX.maxAfterReset
             axisY.min = axisY.minAfterReset
             axisY.max = axisY.maxAfterReset
-        }
-
-        // Handle logarithmic axis changes
-        onUseLogQAxisChanged: {
-            Qt.callLater(recreateAllSeries)
-            Qt.callLater(resetAxes)
         }
 
         // Tool buttons
         Row {
             id: toolButtons
-            z: 1  // Keep buttons above MouseAreas
+            z: 1
 
             x: chartView.plotArea.x + chartView.plotArea.width - width
             y: chartView.plotArea.y - height - EaStyle.Sizes.fontPixelSize
@@ -131,16 +104,16 @@ Rectangle {
             spacing: 0.25 * EaStyle.Sizes.fontPixelSize
 
             EaElements.TabButton {
-                checked: Globals.Variables.showLegendOnSamplePage
+                checked: root.showLegend
                 autoExclusive: false
                 height: EaStyle.Sizes.toolButtonHeight
                 width: EaStyle.Sizes.toolButtonHeight
                 borderColor: EaStyle.Colors.chartAxis
                 fontIcon: "align-left"
-                ToolTip.text: Globals.Variables.showLegendOnSamplePage ?
+                ToolTip.text: root.showLegend ?
                                   qsTr("Hide legend") :
                                   qsTr("Show legend")
-                onClicked: Globals.Variables.showLegendOnSamplePage = checked
+                onClicked: root.showLegend = checked
             }
 
             EaElements.TabButton {
@@ -187,12 +160,11 @@ Rectangle {
                 ToolTip.text: qsTr("Reset axes")
                 onClicked: chartView.resetAxes()
             }
-
         }
 
         // Legend showing all models
         Rectangle {
-            visible: Globals.Variables.showLegendOnSamplePage
+            visible: root.showLegend
 
             x: chartView.plotArea.x + chartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
             y: chartView.plotArea.y + EaStyle.Sizes.fontPixelSize
@@ -209,9 +181,9 @@ Rectangle {
                 bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
 
                 Repeater {
-                    model: container.modelCount
+                    model: root.modelCount
                     EaElements.Label {
-                        text: '━  ' + Globals.BackendWrapper.sampleModels[index].label
+                        text: '━  SLD ' + Globals.BackendWrapper.sampleModels[index].label
                         color: Globals.BackendWrapper.sampleModels[index].color
                     }
                 }
@@ -220,7 +192,6 @@ Rectangle {
 
         EaElements.ToolTip {
             id: dataToolTip
-
             arrowLength: 0
             textFormat: Text.RichText
         }
@@ -330,10 +301,6 @@ Rectangle {
             acceptedButtons: Qt.RightButton
             onClicked: chartView.resetAxes()
         }
-
-        Component.onCompleted: {
-            Globals.References.pages.sample.mainContent.sampleView = chartView
-        }
     }
 
     // Create series dynamically when model count changes
@@ -348,21 +315,19 @@ Rectangle {
             refreshAllCharts()
         }
         function onSamplePageResetAxes() {
-            sampleResetAxesTimer.start()
+            resetAxesTimer.start()
         }
         function onPlotModeChanged() {
             refreshAllCharts()
-            // Delay resetAxes to allow axis range properties to update first
-            sampleResetAxesTimer.start()
+            resetAxesTimer.start()
         }
         function onChartAxesResetRequested() {
-            // Reset axes when model is loaded (e.g., from ORSO file)
-            sampleResetAxesTimer.start()
+            resetAxesTimer.start()
         }
     }
 
     Timer {
-        id: sampleResetAxesTimer
+        id: resetAxesTimer
         interval: 75
         repeat: false
         onTriggered: chartView.resetAxes()
@@ -374,26 +339,22 @@ Rectangle {
 
     function recreateAllSeries() {
         // Remove old series
-        for (let i = 0; i < sampleSeries.length; i++) {
-            if (sampleSeries[i]) {
-                chartView.removeSeries(sampleSeries[i])
+        for (let i = 0; i < sldSeries.length; i++) {
+            if (sldSeries[i]) {
+                chartView.removeSeries(sldSeries[i])
             }
         }
-        sampleSeries = []
-
-        // Determine which x-axis to use based on log setting
-        const xAxisToUse = chartView.useLogQAxis ? axisXLog : axisX
+        sldSeries = []
 
         // Create new series for each model
         const models = Globals.BackendWrapper.sampleModels
         for (let k = 0; k < models.length; k++) {
-            const line = chartView.createSeries(ChartView.SeriesTypeLine, models[k].label, xAxisToUse, axisY)
+            const line = chartView.createSeries(ChartView.SeriesTypeLine, models[k].label, axisX, axisY)
             line.color = models[k].color
             line.width = 2
             line.useOpenGL = EaGlobals.Vars.useOpenGL
-            // Connect hovered signal for tooltip
-            line.hovered.connect((point, state) => showMainTooltip(chartView, point, state))
-            sampleSeries.push(line)
+            line.hovered.connect((point, state) => showMainTooltip(point, state))
+            sldSeries.push(line)
         }
 
         refreshAllCharts()
@@ -401,11 +362,11 @@ Rectangle {
 
     function refreshAllCharts() {
         const models = Globals.BackendWrapper.sampleModels
-        for (let i = 0; i < sampleSeries.length && i < models.length; i++) {
-            const series = sampleSeries[i]
+        for (let i = 0; i < sldSeries.length && i < models.length; i++) {
+            const series = sldSeries[i]
             if (series) {
                 series.clear()
-                const points = Globals.BackendWrapper.plottingGetSampleDataPointsForModel(i)
+                const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(i)
                 for (let p = 0; p < points.length; p++) {
                     series.append(points[p].x, points[p].y)
                 }
@@ -413,17 +374,15 @@ Rectangle {
         }
     }
 
-    // Logic
-    function showMainTooltip(chart, point, state) {
+    function showMainTooltip(point, state) {
         if (!chartView.allowHover) {
             return
         }
-        const pos = chart.mapToPosition(Qt.point(point.x, point.y))
+        const pos = chartView.mapToPosition(Qt.point(point.x, point.y))
         dataToolTip.x = pos.x
         dataToolTip.y = pos.y
         dataToolTip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
-        dataToolTip.parent = chart
+        dataToolTip.parent = chartView
         dataToolTip.visible = state
     }
 }
-

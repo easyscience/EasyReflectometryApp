@@ -9,6 +9,8 @@ from easyreflectometry.utils import count_free_parameters
 from easyscience import global_object
 from easyscience.variable import Parameter
 
+from .helpers import get_original_name
+
 RESERVED_ALIAS_NAMES = {'np', 'numpy', 'math', 'pi', 'e'}
 
 
@@ -226,7 +228,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
     # Process parameters for each model
     for model_idx, model in enumerate(models):
         model_unique_name = model.unique_name
-        model_prefix = f'M{model_idx + 1}'
+        model_prefix = get_original_name(model)
 
         for parameter in parameters:
             # Skip parameters not in this model's path
@@ -249,6 +251,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                 prefixed_display_name = display_name
 
             alias = _make_alias(prefixed_display_name or parameter.name)
+            param_value = float(parameter.value)
             parameter_list.append(
                 {
                     'name': prefixed_display_name,
@@ -256,7 +259,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'group': group_name,
                     'alias': alias,
                     'unique_name': parameter.unique_name,
-                    'value': float(parameter.value),
+                    'value': param_value,
                     'error': float(parameter.variance),
                     'max': float(parameter.max),
                     'min': float(parameter.min),

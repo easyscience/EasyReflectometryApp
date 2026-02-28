@@ -78,6 +78,7 @@ EaElements.GroupColumn {
                 horizontalAlignment: Text.AlignHCenter
                 enabled: Globals.BackendWrapper.sampleLayers[index].thickness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].thickness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].thickness).toFixed(2)
+                onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerThickness(text)
             }
 
@@ -85,6 +86,7 @@ EaElements.GroupColumn {
                 horizontalAlignment: Text.AlignHCenter
                 enabled: Globals.BackendWrapper.sampleLayers[index].roughness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].roughness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].roughness).toFixed(2)
+                onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerRoughness(text)
             }
 

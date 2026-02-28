@@ -11,6 +11,7 @@ from PySide6.QtCore import Slot
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiments import Experiments as ExperimentLogic
 from .logic.fitting import Fitting as FittingLogic
+from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
 from .logic.parameters import Parameters as ParametersLogic
 from .workers import FitterWorker
@@ -58,6 +59,25 @@ class Analysis(QObject):
             self._selected_experiment_indices = [0]
         else:
             self._selected_experiment_indices = []
+
+    def _ordered_experiments(self) -> list:
+        """Return experiments as an ordered list of experiment objects.
+
+        Handles mapping-like storage without assuming contiguous integer keys.
+        """
+        experiments = self._experiments_logic._project_lib._experiments
+        if not experiments:
+            return []
+
+        if hasattr(experiments, 'items'):
+            items = list(experiments.items())
+            try:
+                items.sort(key=lambda item: item[0])
+            except TypeError:
+                pass
+            return [experiment for _, experiment in items]
+
+        return list(experiments)
 
     ########################
     ## Fitting
@@ -278,7 +298,7 @@ class Analysis(QObject):
     def modelIndexForExperiment(self) -> int:
         # return the model index for the current experiment
         models = self._experiments_logic._project_lib._models
-        experiments = self._experiments_logic._project_lib._experiments
+        experiments = self._ordered_experiments()
         index = self.experimentCurrentIndex
         current_experiment = experiments[index] if 0 <= index < len(experiments) else None
         if current_experiment is not None:
@@ -290,18 +310,19 @@ class Analysis(QObject):
     def modelNamesForExperiment(self) -> list:
         # return a list of model names for each experiment
         mapped_models = []
-        experiments = self._experiments_logic._project_lib._experiments
-        for ind in experiments:
-            mapped_models.append(experiments[ind].model.name)
+        experiments = self._ordered_experiments()
+        for experiment in experiments:
+            name = get_original_name(experiment.model)
+            mapped_models.append(name)
         return mapped_models
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelColorsForExperiment(self) -> list:
         # return a list of model colors for each experiment
         mapped_models = []
-        experiments = self._experiments_logic._project_lib._experiments
-        for ind in experiments:
-            mapped_models.append(experiments[ind].model.color)
+        experiments = self._ordered_experiments()
+        for experiment in experiments:
+            mapped_models.append(experiment.model.color)
         return mapped_models
 
     @Slot(int)
@@ -501,14 +522,10 @@ class Analysis(QObject):
         if self._chached_enabled_parameters is not None:
             return self._chached_enabled_parameters
         enabled_parameters = []
-        # import time
-        # t0 = time.time()
         for parameter in self._parameters_logic.parameters:
             if not parameter['enabled']:
                 continue
             enabled_parameters.append(parameter)
-        # t1 = time.time()
-        # print(f"Enabled parameters computation time: {t1 - t0:.4f} seconds")
         self._chached_enabled_parameters = enabled_parameters
         return enabled_parameters
 
