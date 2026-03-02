@@ -515,22 +515,23 @@ class Plotting1d(QObject):
             data = self._project_lib.experimental_data_for_model_at_index(experiment_index)
             points = []
             for point in data.data_points():
-                if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                    q = point[0]
-                    r = point[1]
-                    error_var = point[2]
-                    error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
-                    r_val = self._apply_rq4(q, r)
-                    error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
-                    error_lower = self._apply_rq4(q, error_lower_linear)
-                    points.append(
-                        {
-                            'x': float(q),
-                            'y': float(np.log10(r_val)),
-                            'errorUpper': float(np.log10(error_upper)),
-                            'errorLower': float(np.log10(error_lower)),
-                        }
-                    )
+                q = point[0]
+                r = point[1]
+                if r <= 0:
+                    continue
+                error_var = point[2]
+                error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
+                r_val = self._apply_rq4(q, r)
+                error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
+                error_lower = self._apply_rq4(q, error_lower_linear)
+                points.append(
+                    {
+                        'x': float(q),
+                        'y': float(np.log10(r_val)),
+                        'errorUpper': float(np.log10(error_upper)),
+                        'errorLower': float(np.log10(error_lower)),
+                    }
+                )
             return points
         except Exception as e:
             console.debug(f'Error getting experiment data points for index {experiment_index}: {e}')
@@ -678,18 +679,19 @@ class Plotting1d(QObject):
         series_error_lower.clear()
         nr_points = 0
         for point in self.experiment_data.data_points():
-            if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                q = point[0]
-                r = point[1]
-                error_var = point[2]
-                error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
-                r_val = self._apply_rq4(q, r)
-                error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
-                error_lower = self._apply_rq4(q, error_lower_linear)
-                series_measured.append(q, np.log10(r_val))
-                series_error_upper.append(q, np.log10(error_upper))
-                series_error_lower.append(q, np.log10(error_lower))
-                nr_points = nr_points + 1
+            q = point[0]
+            r = point[1]
+            if r <= 0:
+                continue
+            error_var = point[2]
+            error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
+            r_val = self._apply_rq4(q, r)
+            error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
+            error_lower = self._apply_rq4(q, error_lower_linear)
+            series_measured.append(q, np.log10(r_val))
+            series_error_upper.append(q, np.log10(error_upper))
+            series_error_lower.append(q, np.log10(error_lower))
+            nr_points = nr_points + 1
 
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on experiment page', 'replaced'))
 
@@ -738,11 +740,13 @@ class Plotting1d(QObject):
         series_calculated.clear()
         nr_points = 0
         for point in self.experiment_data.data_points():
-            if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                q = point[0]
-                r_meas = self._apply_rq4(q, point[1])
-                series_measured.append(q, np.log10(r_meas))
-                nr_points = nr_points + 1
+            q = point[0]
+            r_meas = point[1]
+            if r_meas <= 0:
+                continue
+            r_meas = self._apply_rq4(q, r_meas)
+            series_measured.append(q, np.log10(r_meas))
+            nr_points = nr_points + 1
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
         for point in self.model_data.data_points():

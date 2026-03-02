@@ -113,6 +113,12 @@ class Project:
     def load_new_experiment(self, path: str) -> None:
         self._project_lib.load_new_experiment(path)
 
+    def count_datasets_in_file(self, path: str) -> int:
+        return self._project_lib.count_datasets_in_file(path)
+
+    def load_all_experiments_from_file(self, path: str) -> int:
+        return self._project_lib.load_all_experiments_from_file(path)
+
     def set_sample_from_orso(self, sample) -> None:
         self._project_lib.set_sample_from_orso(sample)
 
