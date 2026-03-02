@@ -60,7 +60,11 @@ class Experiment(QObject):
             paths = paths.split(',')
 
         for path in paths:
-            self._project_logic.load_new_experiment(IO.generalizePath(path))
+            generalized = IO.generalizePath(path)
+            if self._project_logic.count_datasets_in_file(generalized) > 1:
+                self._project_logic.load_all_experiments_from_file(generalized)
+            else:
+                self._project_logic.load_new_experiment(generalized)
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
         pass  # debug anchor
