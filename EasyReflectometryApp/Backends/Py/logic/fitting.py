@@ -161,25 +161,32 @@ class Fitting:
             if minimizers_logic.max_iterations is not None:
                 multi_fitter.easy_science_multi_fitter.max_evaluations = minimizers_logic.max_iterations
 
-            # Prepare data arrays for all experiments
-            x_data = [experiment.x for experiment in experiments]
-            y_data = [experiment.y for experiment in experiments]
-
-            # Validate error values before computing weights to avoid division by zero
+            # Prepare data arrays for all experiments, masking out zero-variance points
             import numpy as np
 
+            x_data = []
+            y_data = []
+            weights = []
             for idx, experiment in enumerate(experiments):
-                ye = experiment.ye
-                if np.any(ye == 0):
-                    exp_name = experiment.name if hasattr(experiment, 'name') else f'index {idx}'
-                    self._fit_error_message = f'Experiment {exp_name} has zero error values which would cause division by zero'
-                    self._running = False
-                    self._finished = True
-                    self._show_results_dialog = True
-                    return None, None, None, None, None
+                x_vals = np.asarray(experiment.x)
+                y_vals = np.asarray(experiment.y)
+                ye_vals = np.asarray(experiment.ye)
 
-            # ye contains variances (sigma²); weights = 1/sigma = 1/sqrt(variance)
-            weights = [1.0 / np.sqrt(experiment.ye) for experiment in experiments]
+                # Mask out points with zero variance (same as MultiFitter.fit in EasyReflectometryLib)
+                valid = ye_vals > 0
+                num_masked = int(np.sum(~valid))
+                if num_masked > 0:
+                    exp_name = experiment.name if hasattr(experiment, 'name') else f'index {idx}'
+                    logger.warning(
+                        'Masked %d data point(s) in experiment %s due to zero variance.',
+                        num_masked,
+                        exp_name,
+                    )
+
+                x_data.append(x_vals[valid])
+                y_data.append(y_vals[valid])
+                # ye contains variances (sigma²); weights = 1/sigma = 1/sqrt(variance)
+                weights.append(1.0 / np.sqrt(ye_vals[valid]))
 
             # Method is optional in fit() - pass None to use minimizer's default
             method = None
