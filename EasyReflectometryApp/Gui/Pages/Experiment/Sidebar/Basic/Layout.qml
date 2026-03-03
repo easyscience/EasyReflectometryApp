@@ -1,7 +1,7 @@
-import QtQuick 2.14
-import QtQuick.Controls 2.14
+import QtQuick
+import QtQuick.Controls
 
-import easyApp.Gui.Components as EaComponents
+import EasyApp.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 import "./Groups" as Groups
