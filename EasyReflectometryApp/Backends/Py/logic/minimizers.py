@@ -56,7 +56,7 @@ class Minimizers:
     @property
     def max_iterations(self) -> int:
         if self._multi_fitter is None:
-            return 100  # Default max iterations
+            return 5000  # Default max iterations
         return self._multi_fitter.max_evaluations
 
     def set_tolerance(self, new_value: float) -> bool:
