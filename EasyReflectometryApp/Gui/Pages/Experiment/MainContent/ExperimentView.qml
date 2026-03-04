@@ -181,6 +181,8 @@ Rectangle {
                 // The function will handle showing/hiding appropriate series
                 console.log("Multi-experiment selection changed - updating series")
                 chartView.updateMultiExperimentSeries()
+                // Reset axes to fit the new experiment data
+                experimentResetAxesTimer.start()
             }
         }
 

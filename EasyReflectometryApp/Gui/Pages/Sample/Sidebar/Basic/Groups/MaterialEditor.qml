@@ -63,17 +63,30 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewTextInput {
                     text: Globals.BackendWrapper.sampleMaterials[index].label
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialName(text)
+                    onEditingFinished: {
+                        if (Globals.BackendWrapper.sampleCurrentMaterialIndex === index &&
+                            text !== Globals.BackendWrapper.sampleMaterials[index].label) {
+                            Globals.BackendWrapper.sampleSetCurrentMaterialName(text)
+                        }
+                    }
                 }
 
                 EaComponents.TableViewTextInput {
                     text: Number(Globals.BackendWrapper.sampleMaterials[index].sld).toFixed(3)
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialSld(text)
+                    onEditingFinished: {
+                        if (Globals.BackendWrapper.sampleCurrentMaterialIndex === index) {
+                            Globals.BackendWrapper.sampleSetCurrentMaterialSld(text)
+                        }
+                    }
                 }
 
                 EaComponents.TableViewTextInput {
                     text: Number(Globals.BackendWrapper.sampleMaterials[index].isld).toFixed(3)
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialISld(text)
+                    onEditingFinished: {
+                        if (Globals.BackendWrapper.sampleCurrentMaterialIndex === index) {
+                            Globals.BackendWrapper.sampleSetCurrentMaterialISld(text)
+                        }
+                    }
                 }
 
                 EaComponents.TableViewButton {

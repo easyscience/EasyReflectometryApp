@@ -91,6 +91,8 @@ Rectangle {
             function onMultiExperimentSelectionChanged() {
                 console.log("Analysis: Multi-experiment selection changed - updating series")
                 chartView.updateMultiExperimentSeries()
+                // Reset axes to fit the new experiment data
+                analysisResetAxesTimer.start()
             }
         }
 

@@ -79,7 +79,11 @@ EaElements.GroupColumn {
                 enabled: Globals.BackendWrapper.sampleLayers[index].thickness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].thickness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].thickness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerThickness(text)
+                onEditingFinished: {
+                    if (Globals.BackendWrapper.sampleCurrentLayerIndex === index) {
+                        Globals.BackendWrapper.sampleSetCurrentLayerThickness(text)
+                    }
+                }
             }
 
             EaComponents.TableViewTextInput {
@@ -87,7 +91,11 @@ EaElements.GroupColumn {
                 enabled: Globals.BackendWrapper.sampleLayers[index].roughness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].roughness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].roughness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerRoughness(text)
+                onEditingFinished: {
+                    if (Globals.BackendWrapper.sampleCurrentLayerIndex === index) {
+                        Globals.BackendWrapper.sampleSetCurrentLayerRoughness(text)
+                    }
+                }
             }
 
             EaComponents.TableViewButton {
