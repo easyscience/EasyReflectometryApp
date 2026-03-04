@@ -351,9 +351,12 @@ EaElements.GroupBox {
             var currentIndex = selectedExperimentIndices[0]
 
             // If we were in multi-selection mode and now switching to single selection,
-            // force a plot refresh by toggling the current index
+            // notify backend to clear multi-selection and force a plot refresh
             if (wasMultiSelected) {
-                // console.log("Switching from multi-selection to single selection - forcing plot refresh")
+                // Tell the backend to exit multi-experiment mode
+                if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
+                    Globals.BackendWrapper.analysisSetSelectedExperimentIndices([currentIndex])
+                }
                 // Force refresh by temporarily setting a different index and then back
                 var tempIndex = (currentIndex === 0) ? 1 : 0
                 if (tempIndex < Globals.BackendWrapper.analysisExperimentsAvailable.length) {
