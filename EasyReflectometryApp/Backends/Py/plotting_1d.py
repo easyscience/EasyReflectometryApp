@@ -17,6 +17,7 @@ class Plotting1d(QObject):
     sldChartRangesChanged = Signal()
     sampleChartRangesChanged = Signal()
     experimentChartRangesChanged = Signal()
+    analysisChartRangesChanged = Signal()
     experimentDataChanged = Signal()
     samplePageDataChanged = Signal()  # Signal for QML to refresh sample page charts
     samplePageResetAxes = Signal()  # Signal for QML to reset chart axes after data load
@@ -90,6 +91,7 @@ class Plotting1d(QObject):
         # Refresh all charts with new mode
         self.sampleChartRangesChanged.emit()
         self.experimentChartRangesChanged.emit()
+        self.analysisChartRangesChanged.emit()
         self.samplePageDataChanged.emit()
 
     @Property(str, notify=plotModeChanged)
@@ -346,6 +348,72 @@ class Plotting1d(QObject):
         if max_y == float('-inf'):
             valid_y = self.sample_data.y[self.sample_data.y > 0] if self.sample_data.y.size > 0 else np.array([])
             max_y = np.log10(valid_y.max()) if valid_y.size > 0 else 0.0
+
+        return (min_x, max_x, min_y, max_y)
+
+    # Analysis (union of sample + experiment ranges)
+    @Property(float, notify=analysisChartRangesChanged)
+    def analysisMaxX(self):
+        return self._get_analysis_range()[1]
+
+    @Property(float, notify=analysisChartRangesChanged)
+    def analysisMinX(self):
+        return self._get_analysis_range()[0]
+
+    @Property(float, notify=analysisChartRangesChanged)
+    def analysisMaxY(self):
+        return self._get_analysis_range()[3]
+
+    @Property(float, notify=analysisChartRangesChanged)
+    def analysisMinY(self):
+        return self._get_analysis_range()[2]
+
+    def _get_analysis_range(self):
+        """Get combined X/Y ranges from model calculation and selected experiment data."""
+        min_x, max_x = float('inf'), float('-inf')
+        min_y, max_y = float('inf'), float('-inf')
+
+        # Model (calculated) data for the current model
+        try:
+            m_data = self.model_data
+            if m_data.x.size > 0:
+                min_x = min(min_x, m_data.x.min())
+                max_x = max(max_x, m_data.x.max())
+            if m_data.y.size > 0:
+                valid_mask = m_data.y > 0
+                valid_y = m_data.y[valid_mask]
+                if valid_y.size > 0:
+                    valid_y = self._apply_rq4(m_data.x[valid_mask], valid_y)
+                    min_y = min(min_y, np.log10(valid_y.min()))
+                    max_y = max(max_y, np.log10(valid_y.max()))
+        except Exception:  # noqa: S110
+            pass
+
+        # Experiment (measured) data for selected experiments
+        try:
+            exp_data = self.experiment_data
+            if exp_data.x.size > 0:
+                min_x = min(min_x, exp_data.x.min())
+                max_x = max(max_x, exp_data.x.max())
+            if exp_data.y.size > 0:
+                valid_mask = exp_data.y > 0
+                valid_y = exp_data.y[valid_mask]
+                if valid_y.size > 0:
+                    valid_y = self._apply_rq4(exp_data.x[valid_mask], valid_y)
+                    min_y = min(min_y, np.log10(valid_y.min()))
+                    max_y = max(max_y, np.log10(valid_y.max()))
+        except Exception:  # noqa: S110
+            pass
+
+        # Fallback defaults
+        if min_x == float('inf'):
+            min_x = 0.0
+        if max_x == float('-inf'):
+            max_x = 1.0
+        if min_y == float('inf'):
+            min_y = -10.0
+        if max_y == float('-inf'):
+            max_y = 0.0
 
         return (min_x, max_x, min_y, max_y)
 
@@ -609,6 +677,7 @@ class Plotting1d(QObject):
         # Emit signals to update ranges and trigger QML refresh
         self.sampleChartRangesChanged.emit()
         self.sldChartRangesChanged.emit()
+        self.analysisChartRangesChanged.emit()
         self.samplePageDataChanged.emit()
 
     def refreshExperimentPage(self):

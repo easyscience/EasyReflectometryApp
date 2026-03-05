@@ -334,10 +334,10 @@ QtObject {
     readonly property var plottingExperimentMinY: activeBackend.plotting.experimentMinY
     readonly property var plottingExperimentMaxY: activeBackend.plotting.experimentMaxY
 
-    readonly property var plottingAnalysisMinX: activeBackend.plotting.sampleMinX
-    readonly property var plottingAnalysisMaxX: activeBackend.plotting.sampleMaxX
-    readonly property var plottingAnalysisMinY: activeBackend.plotting.sampleMinY
-    readonly property var plottingAnalysisMaxY: activeBackend.plotting.sampleMaxY
+    readonly property var plottingAnalysisMinX: activeBackend.plotting.analysisMinX
+    readonly property var plottingAnalysisMaxX: activeBackend.plotting.analysisMaxX
+    readonly property var plottingAnalysisMinY: activeBackend.plotting.analysisMinY
+    readonly property var plottingAnalysisMaxY: activeBackend.plotting.analysisMaxY
     readonly property var calcSerieColor: activeBackend.plotting.calcSerieColor
 
     // Plot mode properties
