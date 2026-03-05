@@ -56,8 +56,8 @@ EaElements.StatusBar {
     EaElements.StatusBarItem {
         visible: Globals.BackendWrapper.analysisFitChi2 > 0
         keyIcon: 'chart-line'
-        keyText: qsTr('Chi²')
+        keyText: qsTr('Red. \u03c7\u00b2')
         valueText: Globals.BackendWrapper.analysisFitChi2.toFixed(2)
-        ToolTip.text: qsTr('Goodness of fit (chi-squared)')
+        ToolTip.text: qsTr('Goodness of fit (reduced chi-squared)')
     }
 }

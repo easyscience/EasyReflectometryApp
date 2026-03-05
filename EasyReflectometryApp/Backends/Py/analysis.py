@@ -499,14 +499,22 @@ class Analysis(QObject):
     def minimizerMaxIterations(self) -> Optional[int]:
         return self._minimizers_logic.max_iterations
 
-    @Slot(float)
-    def setMinimizerTolerance(self, new_value: float) -> None:
-        if self._minimizers_logic.set_tolerance(new_value):
+    @Slot(str)
+    def setMinimizerTolerance(self, new_value: str) -> None:
+        try:
+            value = float(new_value)
+        except (ValueError, TypeError):
+            return
+        if self._minimizers_logic.set_tolerance(value):
             self.minimizerChanged.emit()
 
-    @Slot(int)
-    def setMinimizerMaxIterations(self, new_value: int) -> None:
-        if self._minimizers_logic.set_max_iterations(new_value):
+    @Slot(str)
+    def setMinimizerMaxIterations(self, new_value: str) -> None:
+        try:
+            value = int(float(new_value))
+        except (ValueError, TypeError):
+            return
+        if self._minimizers_logic.set_max_iterations(value):
             self.minimizerChanged.emit()
 
     #############

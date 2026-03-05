@@ -6,6 +6,8 @@ class Minimizers:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         self._minimizer_current_index = 0
+        self._cached_tolerance = None
+        self._cached_max_iterations = None
         self._list_available_minimizers = list(AvailableMinimizers)
         try:
             self._list_available_minimizers.remove(AvailableMinimizers.LMFit)
@@ -37,40 +39,56 @@ class Minimizers:
             self._minimizer_current_index = new_value
             enum_new_minimizer = self._list_available_minimizers[new_value]
             self._project_lib.minimizer = enum_new_minimizer
+            self._apply_cached_values()
             return True
         return False
 
     @property
     def _multi_fitter(self):
         """Get the multi fitter, or None if not available."""
-        if self._project_lib._fitter is None:
+        fitter = self._project_lib.fitter
+        if fitter is None:
             return None
-        return self._project_lib._fitter.easy_science_multi_fitter
+        return fitter.easy_science_multi_fitter
+
+    def _apply_cached_values(self):
+        """Apply any cached tolerance/max_iterations to the fitter."""
+        mf = self._multi_fitter
+        if mf is None:
+            return
+        if self._cached_tolerance is not None:
+            mf.tolerance = self._cached_tolerance
+        if self._cached_max_iterations is not None:
+            mf.max_evaluations = self._cached_max_iterations
 
     @property
     def tolerance(self) -> float:
-        if self._multi_fitter is None:
-            return 1e-6  # Default tolerance
-        return self._multi_fitter.tolerance
+        if self._cached_tolerance is not None:
+            return self._cached_tolerance
+        mf = self._multi_fitter
+        if mf is not None and mf.tolerance is not None:
+            return mf.tolerance
+        return 1e-6  # Default tolerance
 
     @property
     def max_iterations(self) -> int:
-        if self._multi_fitter is None:
-            return 5000  # Default max iterations
-        return self._multi_fitter.max_evaluations
+        if self._cached_max_iterations is not None:
+            return self._cached_max_iterations
+        mf = self._multi_fitter
+        if mf is not None and mf.max_evaluations is not None:
+            return mf.max_evaluations
+        return 5000  # Default max iterations
 
     def set_tolerance(self, new_value: float) -> bool:
-        if self._multi_fitter is None:
-            return False
-        if new_value != self._multi_fitter.tolerance:
-            self._multi_fitter.tolerance = new_value
-            return True
-        return False
+        self._cached_tolerance = new_value
+        mf = self._multi_fitter
+        if mf is not None:
+            mf.tolerance = new_value
+        return True
 
     def set_max_iterations(self, new_value: float) -> bool:
-        if self._multi_fitter is None:
-            return False
-        if new_value != self._multi_fitter.max_evaluations:
-            self._multi_fitter.max_evaluations = new_value
-            return True
-        return False
+        self._cached_max_iterations = int(new_value)
+        mf = self._multi_fitter
+        if mf is not None:
+            mf.max_evaluations = int(new_value)
+        return True

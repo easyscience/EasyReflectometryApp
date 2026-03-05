@@ -48,10 +48,10 @@ EaElements.GroupBox {
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
             onAccepted: {
-                onAccepted: Globals.BackendWrapper.analysisSetMinimizerTolerance(text)
+                Globals.BackendWrapper.analysisSetMinimizerTolerance(text)
                 focus = false
             }
-            text: Globals.BackendWrapper.analysisMinimizerTolerance === undefined ? 'Defaults' : Number(Globals.BackendWrapper.analysisMinimizerTolerance).toFixed(3)
+            text: Globals.BackendWrapper.analysisMinimizerTolerance == null ? 'Defaults' : Number(Globals.BackendWrapper.analysisMinimizerTolerance).toFixed(3)
             EaElements.Label {
                 id: toleranceLabel
                 text: qsTr("Tolerance")
@@ -68,7 +68,7 @@ EaElements.GroupBox {
                 Globals.BackendWrapper.analysisSetMinimizerMaxIterations(text)
                 focus = false
             }
-            text: Globals.BackendWrapper.analysisMinimizerMaxIterations === undefined ? 'Defaults' : Number(Globals.BackendWrapper.analysisMinimizerMaxIterations)
+            text: Globals.BackendWrapper.analysisMinimizerMaxIterations == null ? 'Defaults' : Number(Globals.BackendWrapper.analysisMinimizerMaxIterations)
             EaElements.Label {
                 id: maxIterLabel
                 text: qsTr("Max evaluations")

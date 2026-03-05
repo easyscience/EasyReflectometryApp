@@ -45,7 +45,7 @@ EaElements.Dialog {
 
         EaElements.Label {
             visible: Globals.BackendWrapper.analysisFitSuccess
-            text: "Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
+            text: "Reduced \u03c7\u00b2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
         }
 
         EaElements.Label {

@@ -217,32 +217,47 @@ class Fitting:
             self._results = results
             self._result = results[0]
             engine_name = getattr(results[0], 'minimizer_engine', 'unknown')
-            logger.info('Fit finished: engine=%s, chi2=%s, success=%s', engine_name, self.fit_chi2, results[0].success)
+            logger.info('Fit finished: engine=%s, reduced_chi2=%s, success=%s', engine_name, self.fit_chi2, results[0].success)
         else:
             self._result = results
             self._results = [results] if results else []
 
     @property
     def fit_n_pars(self) -> int:
-        """Return total number of refined parameters across all fits."""
+        """Return total number of refined parameters.
+
+        In a multi-experiment fit the parameter dict is shared across
+        all sub-results, so we only count once.
+        """
         if self._results:
-            return sum(r.n_pars for r in self._results)
+            return self._results[0].n_pars
         if self._result is None:
             return 0
         return self._result.n_pars
 
     @property
     def fit_chi2(self) -> float:
-        """Return total chi-squared across all fits."""
+        """Return reduced chi-squared (goodness-of-fit per degree of freedom).
+
+        For multi-experiment fits the total chi2 is divided by the total
+        degrees of freedom (sum of data points minus number of free
+        parameters, counted once since they are shared).
+        """
         if self._results:
             try:
-                return float(sum(r.chi2 for r in self._results))
+                total_chi2 = sum(r.chi2 for r in self._results)
+                total_points = sum(len(r.x) for r in self._results)
+                n_pars = self._results[0].n_pars
+                dof = total_points - n_pars
+                if dof <= 0:
+                    return float(total_chi2)
+                return float(total_chi2 / dof)
             except (ValueError, TypeError):
                 return 0.0
         if self._result is None:
             return 0.0
         try:
-            return float(self._result.chi2)
+            return float(self._result.reduced_chi)
         except (ValueError, TypeError):
             return 0.0
 
