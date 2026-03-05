@@ -101,7 +101,12 @@ Rectangle {
 
                 ValueAxis {
                     id: sampleAxisY
-                    titleText: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
+                    titleText: Globals.BackendWrapper.plottingYAxisTitle
+                    labelFormat: "10^%.0f"
+                    tickType: ValueAxis.TicksDynamic
+                    minorTickCount: 4
+                    onMinChanged: Qt.callLater(sampleChartView.updateAdaptiveYAxisTicks)
+                    onMaxChanged: Qt.callLater(sampleChartView.updateAdaptiveYAxisTicks)
                     // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - sampleChartView.yRange * 0.01
                     property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + sampleChartView.yRange * 0.01
@@ -126,6 +131,31 @@ Rectangle {
                     }
                     sampleAxisY.min = sampleAxisY.minAfterReset
                     sampleAxisY.max = sampleAxisY.maxAfterReset
+                    Qt.callLater(updateAdaptiveYAxisTicks)
+                }
+
+                function niceStep(rawStep) {
+                    const p = Math.pow(10, Math.floor(Math.log10(rawStep)))
+                    const n = rawStep / p
+                    if (n <= 1)
+                        return 1 * p
+                    if (n <= 2)
+                        return 2 * p
+                    if (n <= 2.5)
+                        return 2.5 * p
+                    if (n <= 5)
+                        return 5 * p
+                    return 10 * p
+                }
+
+                function updateAdaptiveYAxisTicks() {
+                    const span = Math.max(1e-9, sampleAxisY.max - sampleAxisY.min)
+                    const step = Math.max(1e-9, niceStep(span / 8.0))
+                    sampleAxisY.tickType = ValueAxis.TicksDynamic
+                    sampleAxisY.tickInterval = step
+                    sampleAxisY.tickAnchor = Math.floor(sampleAxisY.min / step) * step
+                    const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(-Math.log10(step)))
+                    sampleAxisY.labelFormat = `10^%.${decimals}f`
                 }
 
                 // Handle logarithmic axis changes
@@ -355,6 +385,7 @@ Rectangle {
 
                 Component.onCompleted: {
                     Globals.References.pages.sample.mainContent.sampleView = sampleChartView
+                    Qt.callLater(sampleChartView.updateAdaptiveYAxisTicks)
                 }
             }
         }

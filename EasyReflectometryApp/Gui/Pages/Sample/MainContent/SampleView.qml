@@ -87,7 +87,12 @@ Rectangle {
 
         ValueAxis {
             id: axisY
-            titleText: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
+            titleText: Globals.BackendWrapper.plottingYAxisTitle
+            labelFormat: "10^%.0f"
+            tickType: ValueAxis.TicksDynamic
+            minorTickCount: 4
+            onMinChanged: Qt.callLater(chartView.updateAdaptiveYAxisTicks)
+            onMaxChanged: Qt.callLater(chartView.updateAdaptiveYAxisTicks)
             // min/max set imperatively to avoid binding reset during zoom
             property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - chartView.yRange * 0.01
             property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + chartView.yRange * 0.01
@@ -112,6 +117,31 @@ Rectangle {
             }
             axisY.min = axisY.minAfterReset
             axisY.max = axisY.maxAfterReset
+            Qt.callLater(updateAdaptiveYAxisTicks)
+        }
+
+        function niceStep(rawStep) {
+            const p = Math.pow(10, Math.floor(Math.log10(rawStep)))
+            const n = rawStep / p
+            if (n <= 1)
+                return 1 * p
+            if (n <= 2)
+                return 2 * p
+            if (n <= 2.5)
+                return 2.5 * p
+            if (n <= 5)
+                return 5 * p
+            return 10 * p
+        }
+
+        function updateAdaptiveYAxisTicks() {
+            const span = Math.max(1e-9, axisY.max - axisY.min)
+            const step = Math.max(1e-9, niceStep(span / 8.0))
+            axisY.tickType = ValueAxis.TicksDynamic
+            axisY.tickInterval = step
+            axisY.tickAnchor = Math.floor(axisY.min / step) * step
+            const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(-Math.log10(step)))
+            axisY.labelFormat = `10^%.${decimals}f`
         }
 
         // Handle logarithmic axis changes
@@ -370,6 +400,7 @@ Rectangle {
 
     Component.onCompleted: {
         Qt.callLater(recreateAllSeries)
+        Qt.callLater(chartView.updateAdaptiveYAxisTicks)
     }
 
     function recreateAllSeries() {

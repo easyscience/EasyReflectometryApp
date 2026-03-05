@@ -200,6 +200,31 @@ Rectangle {
             }
             axisY.min = axisY.minAfterReset
             axisY.max = axisY.maxAfterReset
+            Qt.callLater(updateAdaptiveYAxisTicks)
+        }
+
+        function niceStep(rawStep) {
+            const p = Math.pow(10, Math.floor(Math.log10(rawStep)))
+            const n = rawStep / p
+            if (n <= 1)
+                return 1 * p
+            if (n <= 2)
+                return 2 * p
+            if (n <= 2.5)
+                return 2.5 * p
+            if (n <= 5)
+                return 5 * p
+            return 10 * p
+        }
+
+        function updateAdaptiveYAxisTicks() {
+            const span = Math.max(1e-9, axisY.max - axisY.min)
+            const step = Math.max(1e-9, niceStep(span / 8.0))
+            axisY.tickType = ValueAxis.TicksDynamic
+            axisY.tickInterval = step
+            axisY.tickAnchor = Math.floor(axisY.min / step) * step
+            const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(-Math.log10(step)))
+            axisY.labelFormat = `10^%.${decimals}f`
         }
         
         property double xRange: Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
@@ -210,7 +235,12 @@ Rectangle {
         axisX.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
 
         property double yRange: Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
-        axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
+        axisY.title: Globals.BackendWrapper.plottingYAxisTitle
+        axisY.labelFormat: "10^%.0f"
+        axisY.tickType: ValueAxis.TicksDynamic
+        axisY.minorTickCount: 4
+        axisY.onMinChanged: Qt.callLater(chartView.updateAdaptiveYAxisTicks)
+        axisY.onMaxChanged: Qt.callLater(chartView.updateAdaptiveYAxisTicks)
         axisY.min: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
         axisY.max: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
         axisY.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
@@ -513,6 +543,9 @@ Rectangle {
             
             // Initialize reference lines
             updateReferenceLines()
+
+            // Initialize adaptive Y-axis ticks
+            Qt.callLater(updateAdaptiveYAxisTicks)
         }
 
         // Update series when chart becomes visible
