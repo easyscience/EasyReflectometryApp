@@ -241,6 +241,87 @@ Rectangle {
                         seriesSet.calculatedSerie.append(point.x, point.calculated)
                     }
                 }
+
+                // Logarithmic axis control
+                property bool useLogQAxis: Globals.Variables.logarithmicQAxis
+
+                // Hidden anchor series to keep the linear axisX alive when all visible series use log axis
+                LineSeries {
+                    id: linearAxisAnchor
+                    axisX: analysisChartView.axisX
+                    axisY: analysisChartView.axisY
+                    visible: false
+                }
+
+                LogValueAxis {
+                    id: analysisAxisXLog
+                    titleText: "q (Å⁻¹)"
+                    property double minAfterReset: Math.max(Globals.BackendWrapper.plottingAnalysisMinX, 1e-6)
+                    property double maxAfterReset: Math.max(Globals.BackendWrapper.plottingAnalysisMaxX * 1.1, 1e-5)
+                    base: 10
+                    lineVisible: false
+                    labelsVisible: false
+                    gridVisible: false
+                    minorGridVisible: false
+                    titleVisible: false
+                    color: EaStyle.Colors.chartAxis
+                    gridLineColor: EaStyle.Colors.chartGridLine
+                    minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+                    labelsColor: EaStyle.Colors.chartLabels
+                    labelsFont.family: EaStyle.Fonts.fontFamily
+                    labelsFont.pixelSize: EaStyle.Sizes.fontPixelSize
+                    titleFont.family: EaStyle.Fonts.fontFamily
+                    titleFont.pixelSize: EaStyle.Sizes.fontPixelSize
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
+                }
+
+                // Hidden anchor series to keep analysisAxisXLog alive when all visible series use linear axis
+                LineSeries {
+                    id: logAxisAnchor
+                    axisX: analysisAxisXLog
+                    axisY: analysisChartView.axisY
+                    visible: false
+                }
+
+                onUseLogQAxisChanged: switchXAxis()
+
+                function switchXAxis() {
+                    var newAxis = useLogQAxis ? analysisAxisXLog : axisX
+                    for (var i = 0; i < analysisChartView.count; i++) {
+                        var s = analysisChartView.series(i)
+                        if (s && s !== linearAxisAnchor && s !== logAxisAnchor) s.axisX = newAxis
+                    }
+                    axisX.labelsVisible = !useLogQAxis
+                    axisX.gridVisible = !useLogQAxis
+                    axisX.minorGridVisible = !useLogQAxis
+                    axisX.titleVisible = !useLogQAxis
+                    analysisAxisXLog.labelsVisible = useLogQAxis
+                    analysisAxisXLog.gridVisible = useLogQAxis
+                    analysisAxisXLog.minorGridVisible = useLogQAxis
+                    analysisAxisXLog.titleVisible = useLogQAxis
+                    if (useLogQAxis) {
+                        analysisAxisXLog.min = analysisAxisXLog.minAfterReset
+                        analysisAxisXLog.max = analysisAxisXLog.maxAfterReset
+                    } else {
+                        axisX.min = axisX.minAfterReset
+                        axisX.max = axisX.maxAfterReset
+                    }
+                }
+
+                function resetAxes() {
+                    if (useLogQAxis) {
+                        analysisAxisXLog.min = analysisAxisXLog.minAfterReset
+                        analysisAxisXLog.max = analysisAxisXLog.maxAfterReset
+                    } else {
+                        axisX.min = axisX.minAfterReset
+                        axisX.max = axisX.maxAfterReset
+                    }
+                    axisY.min = axisY.minAfterReset
+                    axisY.max = axisY.maxAfterReset
+                }
                 
                 property double xRange: Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
                 axisX.title: "q (Å⁻¹)"
