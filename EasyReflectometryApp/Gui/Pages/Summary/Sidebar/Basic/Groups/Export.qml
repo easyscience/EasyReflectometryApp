@@ -16,6 +16,14 @@ import Gui.Globals as Globals
 
 Column {
     spacing: EaStyle.Sizes.fontPixelSize
+    property string _lastRequestedReportPath: ''
+
+    function _fileNameFromPath(path) {
+        if (!path) {
+            return ''
+        }
+        return path.split(/[\\/]/).pop()
+    }
 
     // Name field + format selector
     Row {
@@ -84,12 +92,26 @@ Column {
         fontIcon: 'download'
         text: qsTr('Save')
         onClicked: {
+           const outputPath = reportLocationField.text + '.' + formatField.currentValue.toLowerCase()
+           _lastRequestedReportPath = outputPath
            if (formatField.currentValue === 'HTML') {
-               Globals.BackendWrapper.summarySaveAsHtml()
+               Globals.BackendWrapper.summarySaveAsHtml(outputPath)
            } else if (formatField.currentValue === 'PDF') {
-               Globals.BackendWrapper.summarySaveAsPdf()
+               Globals.BackendWrapper.summarySaveAsPdf(outputPath)
            }
        }
+    }
+
+    Connections {
+        target: Globals.BackendWrapper
+        function onSummaryExportingFinished(success, filePath) {
+            if (filePath !== _lastRequestedReportPath) {
+                return
+            }
+            reportSavedDialog.success = success
+            reportSavedDialog.filePath = filePath
+            reportSavedDialog.open()
+        }
     }
 
     // Save directory dialog
@@ -97,6 +119,48 @@ Column {
         id: summaryParentDirDialog
         title: qsTr("Choose report parent directory")
         currentFolder: Globals.BackendWrapper.summaryFileUrl
+        onAccepted: reportLocationField.text = EaLogic.Utils.urlToLocalFile(
+            selectedFolder + '/' + nameField.text
+        )
+    }
+
+    EaElements.Dialog {
+        id: reportSavedDialog
+        property bool success: false
+        property string filePath: ''
+        visible: false
+        title: qsTr('Save confirmation')
+        standardButtons: Dialog.Ok
+        Component.onCompleted: setSaveConfirmationOkButton()
+
+        Row {
+            padding: EaStyle.Sizes.fontPixelSize
+            spacing: EaStyle.Sizes.fontPixelSize * 0.75
+
+            EaElements.Label {
+                anchors.verticalCenter: parent.verticalCenter
+                font.family: EaStyle.Fonts.iconsFamily
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 1.25
+                text: reportSavedDialog.success ? 'check-circle' : 'minus-circle'
+            }
+
+            EaElements.Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: reportSavedDialog.success
+                      ? qsTr('File "%1" is successfully saved').arg(_fileNameFromPath(reportSavedDialog.filePath))
+                      : qsTr('Failed to save file "%1"').arg(_fileNameFromPath(reportSavedDialog.filePath))
+            }
+        }
+
+        function setSaveConfirmationOkButton() {
+            const buttons = reportSavedDialog.footer.contentModel.children
+            for (let i in buttons) {
+                const button = buttons[i]
+                if (button.text === 'OK') {
+                    return
+                }
+            }
+        }
     }
 
 }

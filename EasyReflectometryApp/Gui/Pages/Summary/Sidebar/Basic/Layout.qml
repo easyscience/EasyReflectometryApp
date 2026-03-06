@@ -21,4 +21,13 @@ EaComponents.SideBarColumn {
         Loader { source: 'Groups/Export.qml' }
     }
 
+    EaElements.GroupBox {
+        enabled: Globals.BackendWrapper.summaryCreated
+        title: qsTr('Export plots')
+        icon: 'chart-line'
+        collapsed: false
+
+        Loader { source: 'Groups/ExportPlots.qml' }
+    }
+
 }
