@@ -37,7 +37,7 @@ EaElements.GroupBox {
         property string selectedColor: EaStyle.Colors.themeForegroundHovered
 
         spacing: EaStyle.Sizes.fontPixelSize
-/*
+
         // Filter parameters widget
         Row {
             spacing: EaStyle.Sizes.fontPixelSize * 0.5
@@ -49,10 +49,14 @@ EaElements.GroupBox {
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 3
 
                 placeholderText: qsTr("Filter criteria")
+                text: Globals.BackendWrapper.analysisNameFilterCriteria
 
                 onTextChanged: {
-                    nameFilterSelector.currentIndex = nameFilterSelector.indexOfValue(text)
-                    Globals.Proxies.main.fittables.nameFilterCriteria = text
+                    Globals.BackendWrapper.analysisSetNameFilterCriteria(text)
+                    const matchingIndex = nameFilterSelector.indexOfValue(text)
+                    if (matchingIndex !== nameFilterSelector.currentIndex) {
+                        nameFilterSelector.currentIndex = matchingIndex
+                    }
                 }
             }
             // Filter criteria
@@ -76,26 +80,36 @@ EaElements.GroupBox {
                 model: [
                     { value: "", text: `All names (${Globals.BackendWrapper.analysisModelParametersCount + Globals.BackendWrapper.analysisExperimentParametersCount})` },
                     { value: "model", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>layer-group </font>Model (${Globals.BackendWrapper.analysisModelParametersCount})` },
-                    { value: "cell", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>cube </font>Unit cell` },
-                    { value: "atom_site", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>atom </font>Atom sites` },
-                    { value: "fract", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>map-marker-alt </font>Atomic coordinates` },
-                    { value: "occupancy", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>fill </font>Atomic occupancies` },
-                    { value: "B_iso", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>arrows-alt </font>Atomic displacement` },
                     { value: "experiment", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>microscope </font>Experiment (${Globals.BackendWrapper.analysisExperimentParametersCount})` },
-                    { value: "resolution", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>shapes </font>Peak shape` },
-                    { value: "asymmetry", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>balance-scale-left </font>Peak asymmetry` },
                     { value: "background", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>wave-square </font>Background` }
                 ]
 
                 onActivated: filterCriteriaField.text = currentValue
+
+                Component.onCompleted: {
+                    const selected = Globals.BackendWrapper.analysisNameFilterCriteria
+                    const index = indexOfValue(selected)
+                    currentIndex = index >= 0 ? index : 0
+                }
+
+                Connections {
+                    target: Globals.BackendWrapper
+
+                    function onAnalysisNameFilterCriteriaChanged() {
+                        const selected = Globals.BackendWrapper.analysisNameFilterCriteria
+                        const index = nameFilterSelector.indexOfValue(selected)
+                        const targetIndex = index >= 0 ? index : -1
+                        if (nameFilterSelector.currentIndex !== targetIndex) {
+                            nameFilterSelector.currentIndex = targetIndex
+                        }
+                    }
+                }
             }
             // Filter by name
 
             // Filter by variability
             EaElements.ComboBox {
                 id: variabilityFilterSelector
-
-                property int lastIndex: -1
 
                 topInset: 0
                 bottomInset: 0
@@ -108,23 +122,40 @@ EaElements.GroupBox {
                 textRole: "text"
 
                 model: [
-                    { value: 'all', text: `All parameters (${Globals.BackendWrapper.analysisFreeParamsCount +
-                                                        Globals.BackendWrapper.analysisFixedParamsCount})` },
-                    { value: 'free', text: `Free parameters (${Globals.BackendWrapper.analysisFreeParamsCount})` },
-                    { value: 'fixed', text: `Fixed parameters (${Globals.BackendWrapper.analysisFixedParamsCount})` }
+                    { value: 'all', text: `All parameters (${Globals.BackendWrapper.analysisFreeParametersCount +
+                                                        Globals.BackendWrapper.analysisFixedParametersCount})` },
+                    { value: 'free', text: `Free parameters (${Globals.BackendWrapper.analysisFreeParametersCount})` },
+                    { value: 'fixed', text: `Fixed parameters (${Globals.BackendWrapper.analysisFixedParametersCount})` }
                 ]
-                onModelChanged: currentIndex = lastIndex
 
                 onActivated: {
-                    lastIndex = currentIndex
-                    Globals.Proxies.main.fittables.variabilityFilterCriteria = currentValue
+                    Globals.BackendWrapper.analysisSetVariabilityFilterCriteria(currentValue)
+                }
+
+                Component.onCompleted: {
+                    const selected = Globals.BackendWrapper.analysisVariabilityFilterCriteria
+                    const index = indexOfValue(selected)
+                    currentIndex = index >= 0 ? index : 0
+                }
+
+                Connections {
+                    target: Globals.BackendWrapper
+
+                    function onAnalysisVariabilityFilterCriteriaChanged() {
+                        const selected = Globals.BackendWrapper.analysisVariabilityFilterCriteria
+                        const index = variabilityFilterSelector.indexOfValue(selected)
+                        const targetIndex = index >= 0 ? index : 0
+                        if (variabilityFilterSelector.currentIndex !== targetIndex) {
+                            variabilityFilterSelector.currentIndex = targetIndex
+                        }
+                    }
                 }
             }
             // Filter by variability
 
         }
         // Filter parameters widget
-*/
+
         // Table
         EaComponents.TableView {
             id: tableView

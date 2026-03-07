@@ -521,13 +521,26 @@ class Analysis(QObject):
     def enabledParameters(self) -> list[dict[str]]:
         if self._chached_enabled_parameters is not None:
             return self._chached_enabled_parameters
-        enabled_parameters = []
-        for parameter in self._parameters_logic.parameters:
-            if not parameter['enabled']:
-                continue
-            enabled_parameters.append(parameter)
-        self._chached_enabled_parameters = enabled_parameters
-        return enabled_parameters
+        self._chached_enabled_parameters = self._parameters_logic.parameters
+        return self._chached_enabled_parameters
+
+    @Property(str, notify=parametersChanged)
+    def nameFilterCriteria(self) -> str:
+        return self._parameters_logic.name_filter_criteria
+
+    @Property(str, notify=parametersChanged)
+    def variabilityFilterCriteria(self) -> str:
+        return self._parameters_logic.variability_filter_criteria
+
+    @Slot(str)
+    def setNameFilterCriteria(self, new_value: str) -> None:
+        if self._parameters_logic.set_name_filter_criteria(new_value):
+            self._clearCacheAndEmitParametersChanged()
+
+    @Slot(str)
+    def setVariabilityFilterCriteria(self, new_value: str) -> None:
+        if self._parameters_logic.set_variability_filter_criteria(new_value):
+            self._clearCacheAndEmitParametersChanged()
 
     @Property(int, notify=parametersIndexChanged)
     def currentParameterIndex(self) -> int:
@@ -550,11 +563,23 @@ class Analysis(QObject):
 
     @Property(int, notify=parametersChanged)
     def modelParametersCount(self) -> int:
-        return 3
+        return len(
+            [
+                parameter
+                for parameter in self._parameters_logic.all_parameters()
+                if parameter.get('enabled', True) and not self._parameters_logic.is_experiment_parameter(parameter)
+            ]
+        )
 
     @Property(int, notify=parametersChanged)
     def experimentParametersCount(self) -> int:
-        return 3
+        return len(
+            [
+                parameter
+                for parameter in self._parameters_logic.all_parameters()
+                if parameter.get('enabled', True) and self._parameters_logic.is_experiment_parameter(parameter)
+            ]
+        )
 
     @Slot(float)
     def setCurrentParameterValue(self, new_value: float) -> None:
@@ -580,4 +605,12 @@ class Analysis(QObject):
     def _clearCacheAndEmitParametersChanged(self):
         self._chached_parameters = None
         self._chached_enabled_parameters = None
+        parameters_length = len(self.enabledParameters)
+        current_index = self._parameters_logic.current_index()
+        if parameters_length == 0 and current_index != 0:
+            self._parameters_logic.set_current_index(0)
+            self.parametersIndexChanged.emit()
+        elif parameters_length > 0 and current_index >= parameters_length:
+            self._parameters_logic.set_current_index(parameters_length - 1)
+            self.parametersIndexChanged.emit()
         self.parametersChanged.emit()

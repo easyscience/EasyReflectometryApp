@@ -18,6 +18,8 @@ class Parameters:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         self._current_index = 0
+        self._name_filter_criteria = ''
+        self._variability_filter_criteria = 'all'
 
     @property
     def as_status_string(self) -> str:
@@ -25,10 +27,72 @@ class Parameters:
 
     @property
     def parameters(self) -> list[dict[str, Any]]:
+        parameters = self.all_parameters()
+        return [parameter for parameter in parameters if self._parameter_matches_filters(parameter)]
+
+    def all_parameters(self) -> list[dict[str, Any]]:
         return _from_parameters_to_list_of_dicts(self._project_lib.parameters, self._project_lib._models)
 
+    @property
+    def name_filter_criteria(self) -> str:
+        return self._name_filter_criteria
+
+    @property
+    def variability_filter_criteria(self) -> str:
+        return self._variability_filter_criteria
+
+    def set_name_filter_criteria(self, criteria: str) -> bool:
+        normalized = (criteria or '').strip()
+        if normalized == self._name_filter_criteria:
+            return False
+        self._name_filter_criteria = normalized
+        self._current_index = 0
+        return True
+
+    def set_variability_filter_criteria(self, criteria: str) -> bool:
+        normalized = (criteria or 'all').strip().lower()
+        if normalized not in {'all', 'free', 'fixed'}:
+            normalized = 'all'
+        if normalized == self._variability_filter_criteria:
+            return False
+        self._variability_filter_criteria = normalized
+        self._current_index = 0
+        return True
+
+    def is_experiment_parameter(self, parameter: dict[str, Any]) -> bool:
+        return _is_experiment_parameter(parameter)
+
+    def _parameter_matches_filters(self, parameter: dict[str, Any]) -> bool:
+        if not parameter.get('enabled', True):
+            return False
+
+        if self._variability_filter_criteria == 'free' and not parameter.get('fit', False):
+            return False
+        if self._variability_filter_criteria == 'fixed' and parameter.get('fit', False):
+            return False
+
+        criteria = self._name_filter_criteria
+        if not criteria:
+            return True
+
+        normalized = criteria.lower()
+        searchable_text = ' '.join(
+            str(parameter.get(key, '')) for key in ('name', 'display_name', 'group', 'unique_name')
+        ).lower()
+
+        if normalized == 'model':
+            return not _is_experiment_parameter(parameter)
+        if normalized == 'experiment':
+            return _is_experiment_parameter(parameter)
+        if normalized in {'cell', 'atom_site'}:
+            return normalized in searchable_text
+        if normalized == 'b_iso':
+            return 'b_iso' in searchable_text or 'adp' in searchable_text
+
+        return normalized in searchable_text
+
     def constraint_context(self) -> list[dict[str, Any]]:
-        parameter_snapshot = self.parameters
+        parameter_snapshot = self.all_parameters()
         context: list[dict[str, Any]] = []
         for parameter in parameter_snapshot:
             context.append(
@@ -273,3 +337,18 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             )
 
     return parameter_list
+
+
+def _is_experiment_parameter(parameter: dict[str, Any]) -> bool:
+    searchable_text = ' '.join(str(parameter.get(key, '')) for key in ('name', 'display_name', 'group', 'unique_name')).lower()
+    experiment_markers = (
+        'experiment',
+        'dataset',
+        'instrument',
+        'resolution',
+        'asymmetry',
+        'background',
+        'scale',
+        'probe',
+    )
+    return any(marker in searchable_text for marker in experiment_markers)
