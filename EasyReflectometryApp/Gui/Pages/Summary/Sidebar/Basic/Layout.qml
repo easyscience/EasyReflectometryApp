@@ -1,4 +1,4 @@
-// 5SPDX-FileCopyrightText: 2025 EasyApp contributors
+// SPDX-FileCopyrightText: 2025 EasyApp contributors
 // SPDX-License-Identifier: BSD-3-Clause
 // © 2025 Contributors to the EasyApp project <https://github.com/easyscience/EasyApp>
 
@@ -19,6 +19,15 @@ EaComponents.SideBarColumn {
         collapsed: false
 
         Loader { source: 'Groups/Export.qml' }
+    }
+
+    EaElements.GroupBox {
+        enabled: Globals.BackendWrapper.summaryCreated
+        title: qsTr('Export plots')
+        icon: 'chart-line'
+        collapsed: false
+
+        Loader { source: 'Groups/ExportPlots.qml' }
     }
 
 }

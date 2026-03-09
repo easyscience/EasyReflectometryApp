@@ -1,4 +1,4 @@
-// 5SPDX-FileCopyrightText: 2025 EasyApp contributors
+// SPDX-FileCopyrightText: 2025 EasyApp contributors
 // SPDX-License-Identifier: BSD-3-Clause
 // © 2025 Contributors to the EasyApp project <https://github.com/easyscience/EasyApp>
 
@@ -16,6 +16,7 @@ import Gui.Globals as Globals
 
 Column {
     spacing: EaStyle.Sizes.fontPixelSize
+    property string _lastRequestedReportPath: ''
 
     // Name field + format selector
     Row {
@@ -84,12 +85,26 @@ Column {
         fontIcon: 'download'
         text: qsTr('Save')
         onClicked: {
+           const outputPath = reportLocationField.text + '.' + formatField.currentValue.toLowerCase()
+           _lastRequestedReportPath = outputPath
            if (formatField.currentValue === 'HTML') {
-               Globals.BackendWrapper.summarySaveAsHtml()
+               Globals.BackendWrapper.summarySaveAsHtml(outputPath)
            } else if (formatField.currentValue === 'PDF') {
-               Globals.BackendWrapper.summarySaveAsPdf()
+               Globals.BackendWrapper.summarySaveAsPdf(outputPath)
            }
        }
+    }
+
+    Connections {
+        target: Globals.BackendWrapper
+        function onSummaryExportingFinished(success, filePath) {
+            if (filePath !== _lastRequestedReportPath) {
+                return
+            }
+            reportSavedDialog.success = success
+            reportSavedDialog.filePath = filePath
+            reportSavedDialog.open()
+        }
     }
 
     // Save directory dialog
@@ -97,6 +112,13 @@ Column {
         id: summaryParentDirDialog
         title: qsTr("Choose report parent directory")
         currentFolder: Globals.BackendWrapper.summaryFileUrl
+        onAccepted: reportLocationField.text = EaLogic.Utils.urlToLocalFile(
+            selectedFolder + '/' + nameField.text
+        )
+    }
+
+    SaveConfirmationDialog {
+        id: reportSavedDialog
     }
 
 }
