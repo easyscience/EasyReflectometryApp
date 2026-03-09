@@ -1,4 +1,4 @@
-// 5SPDX-FileCopyrightText: 2025 EasyApp contributors
+// SPDX-FileCopyrightText: 2025 EasyApp contributors
 // SPDX-License-Identifier: BSD-3-Clause
 // © 2025 Contributors to the EasyApp project <https://github.com/easyscience/EasyApp>
 
@@ -17,13 +17,6 @@ import Gui.Globals as Globals
 Column {
     spacing: EaStyle.Sizes.fontPixelSize
     property string _lastRequestedReportPath: ''
-
-    function _fileNameFromPath(path) {
-        if (!path) {
-            return ''
-        }
-        return path.split(/[\\/]/).pop()
-    }
 
     // Name field + format selector
     Row {
@@ -124,43 +117,8 @@ Column {
         )
     }
 
-    EaElements.Dialog {
+    SaveConfirmationDialog {
         id: reportSavedDialog
-        property bool success: false
-        property string filePath: ''
-        visible: false
-        title: qsTr('Save confirmation')
-        standardButtons: Dialog.Ok
-        Component.onCompleted: setSaveConfirmationOkButton()
-
-        Row {
-            padding: EaStyle.Sizes.fontPixelSize
-            spacing: EaStyle.Sizes.fontPixelSize * 0.75
-
-            EaElements.Label {
-                anchors.verticalCenter: parent.verticalCenter
-                font.family: EaStyle.Fonts.iconsFamily
-                font.pixelSize: EaStyle.Sizes.fontPixelSize * 1.25
-                text: reportSavedDialog.success ? 'check-circle' : 'minus-circle'
-            }
-
-            EaElements.Label {
-                anchors.verticalCenter: parent.verticalCenter
-                text: reportSavedDialog.success
-                      ? qsTr('File "%1" is successfully saved').arg(_fileNameFromPath(reportSavedDialog.filePath))
-                      : qsTr('Failed to save file "%1"').arg(_fileNameFromPath(reportSavedDialog.filePath))
-            }
-        }
-
-        function setSaveConfirmationOkButton() {
-            const buttons = reportSavedDialog.footer.contentModel.children
-            for (let i in buttons) {
-                const button = buttons[i]
-                if (button.text === 'OK') {
-                    return
-                }
-            }
-        }
     }
 
 }

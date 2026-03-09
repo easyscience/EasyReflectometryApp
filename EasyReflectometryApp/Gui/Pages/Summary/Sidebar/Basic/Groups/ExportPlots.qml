@@ -17,13 +17,6 @@ Column {
     spacing: EaStyle.Sizes.fontPixelSize
     property string _lastRequestedPlotPath: ''
 
-    function _fileNameFromPath(path) {
-        if (!path) {
-            return ''
-        }
-        return path.split(/[\\/]/).pop()
-    }
-
     // Open in matplotlib button
     EaElements.SideBarButton {
         id: showPlotButton
@@ -154,9 +147,6 @@ Column {
             if (filePath !== _lastRequestedPlotPath) {
                 return
             }
-            if (!filePath.toLowerCase().endsWith('.pdf')) {
-                return
-            }
             plotSavedDialog.success = success
             plotSavedDialog.filePath = filePath
             plotSavedDialog.open()
@@ -175,42 +165,7 @@ Column {
         )
     }
 
-    EaElements.Dialog {
+    SaveConfirmationDialog {
         id: plotSavedDialog
-        property bool success: false
-        property string filePath: ''
-        visible: false
-        title: qsTr('Save confirmation')
-        standardButtons: Dialog.Ok
-        Component.onCompleted: setSaveConfirmationOkButton()
-
-        Row {
-            padding: EaStyle.Sizes.fontPixelSize
-            spacing: EaStyle.Sizes.fontPixelSize * 0.75
-
-            EaElements.Label {
-                anchors.verticalCenter: parent.verticalCenter
-                font.family: EaStyle.Fonts.iconsFamily
-                font.pixelSize: EaStyle.Sizes.fontPixelSize * 1.25
-                text: plotSavedDialog.success ? 'check-circle' : 'minus-circle'
-            }
-
-            EaElements.Label {
-                anchors.verticalCenter: parent.verticalCenter
-                text: plotSavedDialog.success
-                      ? qsTr('File "%1" is successfully saved').arg(_fileNameFromPath(plotSavedDialog.filePath))
-                      : qsTr('Failed to save file "%1"').arg(_fileNameFromPath(plotSavedDialog.filePath))
-            }
-        }
-
-        function setSaveConfirmationOkButton() {
-            const buttons = plotSavedDialog.footer.contentModel.children
-            for (let i in buttons) {
-                const button = buttons[i]
-                if (button.text === 'OK') {
-                    return
-                }
-            }
-        }
     }
 }
