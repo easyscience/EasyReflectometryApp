@@ -73,9 +73,16 @@ EaElements.GroupBox {
                 valueRole: "value"
                 textRole: "text"
 
-                displayText: currentIndex === -1 ?
-                                qsTr("Filter by name") :
-                                currentText.replace('&nbsp;◦ ', '')
+                displayText: {
+                    if (currentIndex === -1) {
+                        return qsTr('Filter by name')
+                    }
+                    const entry = model && model[currentIndex]
+                    if (!entry || !entry.text) {
+                        return qsTr('Filter by name')
+                    }
+                    return entry.text.replace('&nbsp;◦ ', '')
+                }
 
                 model: [
                     { value: "", text: `All names (${Globals.BackendWrapper.analysisModelParametersCount + Globals.BackendWrapper.analysisExperimentParametersCount})` },
@@ -85,6 +92,19 @@ EaElements.GroupBox {
                 ]
 
                 onActivated: filterCriteriaField.text = currentValue
+
+                delegate: EaElements.MenuItem {
+                    width: nameFilterSelector.width
+                    height: EaStyle.Sizes.comboBoxHeight
+                    textFormat: Text.RichText
+                    elide: Text.ElideMiddle
+                    text: {
+                        const entry = nameFilterSelector.model && nameFilterSelector.model[index]
+                        return entry && entry.text ? entry.text : ''
+                    }
+                    highlighted: nameFilterSelector.highlightedIndex === index
+                    hoverEnabled: nameFilterSelector.hoverEnabled
+                }
 
                 Component.onCompleted: {
                     const selected = Globals.BackendWrapper.analysisNameFilterCriteria
@@ -116,7 +136,16 @@ EaElements.GroupBox {
 
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 3
 
-                displayText: currentIndex === -1 ? qsTr("Filter by variability") : currentText
+                displayText: {
+                    if (currentIndex === -1) {
+                        return qsTr('Filter by variability')
+                    }
+                    const entry = model && model[currentIndex]
+                    if (!entry || !entry.text) {
+                        return qsTr('Filter by variability')
+                    }
+                    return entry.text
+                }
 
                 valueRole: "value"
                 textRole: "text"
@@ -130,6 +159,19 @@ EaElements.GroupBox {
 
                 onActivated: {
                     Globals.BackendWrapper.analysisSetVariabilityFilterCriteria(currentValue)
+                }
+
+                delegate: EaElements.MenuItem {
+                    width: variabilityFilterSelector.width
+                    height: EaStyle.Sizes.comboBoxHeight
+                    textFormat: Text.RichText
+                    elide: Text.ElideMiddle
+                    text: {
+                        const entry = variabilityFilterSelector.model && variabilityFilterSelector.model[index]
+                        return entry && entry.text ? entry.text : ''
+                    }
+                    highlighted: variabilityFilterSelector.highlightedIndex === index
+                    hoverEnabled: variabilityFilterSelector.hoverEnabled
                 }
 
                 Component.onCompleted: {
