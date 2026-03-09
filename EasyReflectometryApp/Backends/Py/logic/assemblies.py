@@ -61,10 +61,8 @@ class Assemblies:
             self.index = self.index + 1
 
     def set_name_at_current_index(self, new_value: str) -> None:
-        if self._assemblies[self.index].name != new_value:
-            self._assemblies[self.index].name = new_value
-            return True
-        return False
+        self._assemblies[self.index].name = new_value
+        return True
 
     def set_type_at_current_index(self, new_value: str) -> bool:
         if new_value == self._assemblies[self.index].type:
@@ -74,7 +72,7 @@ class Assemblies:
             new_assembly = Multilayer()
             new_assembly.layers[0].material = self._assemblies[self.index].layers.data[0].material
         elif new_value == 'Repeating Multi-layer':
-            new_assembly = RepeatingMultilayer()
+            new_assembly = RepeatingMultilayer(repetitions=1, name=new_value)
             new_assembly.layers[0].material = self._assemblies[self.index].layers.data[0].material
         elif new_value == 'Surfactant Layer':
             index_air = self._project_lib.get_index_air()
@@ -83,10 +81,10 @@ class Assemblies:
             new_assembly.layers[0].solvent = self._project_lib._materials[index_air]
             new_assembly.layers[1].solvent = self._project_lib._materials[index_d2o]
 
-        new_assembly.name = self._assemblies[self.index].name
+        if new_assembly.name is None:
+            new_assembly.name = self._assemblies[self.index].name
 
         self._assemblies[self.index] = new_assembly
-        self._project_lib._models[self._project_lib.current_model_index].sample._disable_changes_to_outermost_layers()
         return True
 
     # Only for repeating multilayer
@@ -126,13 +124,13 @@ def _from_assemblies_collection_to_list_of_dicts(assemblies_collection: Sample) 
             {
                 'label': assembly.name,
                 'type': assembly.type,
-                'repetetions': 1,
+                'repetitions': 1,
                 'constrain_apm': 'False',
                 'conformal_roughness': 'False',
             }
         )
         if isinstance(assembly, RepeatingMultilayer):
-            assemblies_list[-1]['repetetions'] = assembly.repetitions
+            assemblies_list[-1]['repetitions'] = assembly.repetitions
 
         if isinstance(assembly, SurfactantLayer):
             assemblies_list[-1]['constrain_apm'] = assembly.constrain_area_per_molecule

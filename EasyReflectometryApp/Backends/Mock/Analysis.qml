@@ -20,6 +20,18 @@ QtObject {
     readonly property string fittingStatus: ''//undefined  //'Success'
     readonly property bool isFitFinished: true
     readonly property bool fittingRunning: false
+    property bool showFitResultsDialog: false
+    readonly property bool fitSuccess: true
+    readonly property string fitErrorMessage: ''
+    readonly property int fitNumRefinedParams: 3
+    readonly property real fitChi2: 1.2345
+    readonly property var fitResults: ({ success: true, nvarys: 3, chi2: 1.2345 })
+
+    // Fit failure signal (mirrors Python backend)
+    signal fitFailed(string message)
+
+    // Stop fit signal (mirrors Python backend)
+    signal stopFit()
 
     // Parameters
     property int currentParameterIndex: 0
@@ -99,5 +111,9 @@ QtObject {
     //Actions
     function fittingStartStop() {
         console.debug('fittingStartStop')
+    }
+    function setShowFitResultsDialog(value) {
+        showFitResultsDialog = value
+        console.debug(`setShowFitResultsDialog ${value}`)
     }
 }

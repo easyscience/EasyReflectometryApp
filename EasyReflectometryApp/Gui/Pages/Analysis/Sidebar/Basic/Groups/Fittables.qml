@@ -18,11 +18,18 @@ EaElements.GroupBox {
     //title: qsTr("Parameters")
     collapsible: false
     last: true
+    readonly property var backend: Globals.BackendWrapper
 
     Column {
         id: fittables
         property int selectedParamIndex: Globals.BackendWrapper.analysisCurrentParameterIndex
+        property bool bulkUpdatingSelection: false
+        property real fitColumnWidth: EaStyle.Sizes.fontPixelSize * 3.0
+        property alias parameterSlider: slider
         onSelectedParamIndexChanged: {
+            if (bulkUpdatingSelection) {
+                return
+            }
             updateSliderLimits()
             updateSliderValue()
         }
@@ -30,7 +37,7 @@ EaElements.GroupBox {
         property string selectedColor: EaStyle.Colors.themeForegroundHovered
 
         spacing: EaStyle.Sizes.fontPixelSize
-/*
+
         // Filter parameters widget
         Row {
             spacing: EaStyle.Sizes.fontPixelSize * 0.5
@@ -42,10 +49,14 @@ EaElements.GroupBox {
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 3
 
                 placeholderText: qsTr("Filter criteria")
+                text: Globals.BackendWrapper.analysisNameFilterCriteria
 
                 onTextChanged: {
-                    nameFilterSelector.currentIndex = nameFilterSelector.indexOfValue(text)
-                    Globals.Proxies.main.fittables.nameFilterCriteria = text
+                    Globals.BackendWrapper.analysisSetNameFilterCriteria(text)
+                    const matchingIndex = nameFilterSelector.indexOfValue(text)
+                    if (matchingIndex !== nameFilterSelector.currentIndex) {
+                        nameFilterSelector.currentIndex = matchingIndex
+                    }
                 }
             }
             // Filter criteria
@@ -62,25 +73,57 @@ EaElements.GroupBox {
                 valueRole: "value"
                 textRole: "text"
 
-                displayText: currentIndex === -1 ?
-                                qsTr("Filter by name") :
-                                currentText.replace('&nbsp;◦ ', '')
+                displayText: {
+                    if (currentIndex === -1) {
+                        return qsTr('Filter by name')
+                    }
+                    const entry = model && model[currentIndex]
+                    if (!entry || !entry.text) {
+                        return qsTr('Filter by name')
+                    }
+                    return entry.text.replace('&nbsp;◦ ', '')
+                }
 
                 model: [
                     { value: "", text: `All names (${Globals.BackendWrapper.analysisModelParametersCount + Globals.BackendWrapper.analysisExperimentParametersCount})` },
                     { value: "model", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>layer-group </font>Model (${Globals.BackendWrapper.analysisModelParametersCount})` },
-                    { value: "cell", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>cube </font>Unit cell` },
-                    { value: "atom_site", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>atom </font>Atom sites` },
-                    { value: "fract", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>map-marker-alt </font>Atomic coordinates` },
-                    { value: "occupancy", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>fill </font>Atomic occupancies` },
-                    { value: "B_iso", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>arrows-alt </font>Atomic displacement` },
                     { value: "experiment", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>microscope </font>Experiment (${Globals.BackendWrapper.analysisExperimentParametersCount})` },
-                    { value: "resolution", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>shapes </font>Peak shape` },
-                    { value: "asymmetry", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>balance-scale-left </font>Peak asymmetry` },
                     { value: "background", text: `<font color='${EaStyle.Colors.themeForegroundMinor}' face='${EaStyle.Fonts.iconsFamily}'>wave-square </font>Background` }
                 ]
 
                 onActivated: filterCriteriaField.text = currentValue
+
+                delegate: EaElements.MenuItem {
+                    width: nameFilterSelector.width
+                    height: EaStyle.Sizes.comboBoxHeight
+                    textFormat: Text.RichText
+                    elide: Text.ElideMiddle
+                    text: {
+                        const entry = nameFilterSelector.model && nameFilterSelector.model[index]
+                        return entry && entry.text ? entry.text : ''
+                    }
+                    highlighted: nameFilterSelector.highlightedIndex === index
+                    hoverEnabled: nameFilterSelector.hoverEnabled
+                }
+
+                Component.onCompleted: {
+                    const selected = Globals.BackendWrapper.analysisNameFilterCriteria
+                    const index = indexOfValue(selected)
+                    currentIndex = index >= 0 ? index : 0
+                }
+
+                Connections {
+                    target: Globals.BackendWrapper
+
+                    function onAnalysisNameFilterCriteriaChanged() {
+                        const selected = Globals.BackendWrapper.analysisNameFilterCriteria
+                        const index = nameFilterSelector.indexOfValue(selected)
+                        const targetIndex = index >= 0 ? index : -1
+                        if (nameFilterSelector.currentIndex !== targetIndex) {
+                            nameFilterSelector.currentIndex = targetIndex
+                        }
+                    }
+                }
             }
             // Filter by name
 
@@ -88,45 +131,82 @@ EaElements.GroupBox {
             EaElements.ComboBox {
                 id: variabilityFilterSelector
 
-                property int lastIndex: -1
-
                 topInset: 0
                 bottomInset: 0
 
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 3
 
-                displayText: currentIndex === -1 ? qsTr("Filter by variability") : currentText
+                displayText: {
+                    if (currentIndex === -1) {
+                        return qsTr('Filter by variability')
+                    }
+                    const entry = model && model[currentIndex]
+                    if (!entry || !entry.text) {
+                        return qsTr('Filter by variability')
+                    }
+                    return entry.text
+                }
 
                 valueRole: "value"
                 textRole: "text"
 
                 model: [
-                    { value: 'all', text: `All parameters (${Globals.BackendWrapper.analysisFreeParamsCount +
-                                                        Globals.BackendWrapper.analysisFixedParamsCount})` },
-                    { value: 'free', text: `Free parameters (${Globals.BackendWrapper.analysisFreeParamsCount})` },
-                    { value: 'fixed', text: `Fixed parameters (${Globals.BackendWrapper.analysisFixedParamsCount})` }
+                    { value: 'all', text: `All parameters (${Globals.BackendWrapper.analysisFreeParametersCount +
+                                                        Globals.BackendWrapper.analysisFixedParametersCount})` },
+                    { value: 'free', text: `Free parameters (${Globals.BackendWrapper.analysisFreeParametersCount})` },
+                    { value: 'fixed', text: `Fixed parameters (${Globals.BackendWrapper.analysisFixedParametersCount})` }
                 ]
-                onModelChanged: currentIndex = lastIndex
 
                 onActivated: {
-                    lastIndex = currentIndex
-                    Globals.Proxies.main.fittables.variabilityFilterCriteria = currentValue
+                    Globals.BackendWrapper.analysisSetVariabilityFilterCriteria(currentValue)
+                }
+
+                delegate: EaElements.MenuItem {
+                    width: variabilityFilterSelector.width
+                    height: EaStyle.Sizes.comboBoxHeight
+                    textFormat: Text.RichText
+                    elide: Text.ElideMiddle
+                    text: {
+                        const entry = variabilityFilterSelector.model && variabilityFilterSelector.model[index]
+                        return entry && entry.text ? entry.text : ''
+                    }
+                    highlighted: variabilityFilterSelector.highlightedIndex === index
+                    hoverEnabled: variabilityFilterSelector.hoverEnabled
+                }
+
+                Component.onCompleted: {
+                    const selected = Globals.BackendWrapper.analysisVariabilityFilterCriteria
+                    const index = indexOfValue(selected)
+                    currentIndex = index >= 0 ? index : 0
+                }
+
+                Connections {
+                    target: Globals.BackendWrapper
+
+                    function onAnalysisVariabilityFilterCriteriaChanged() {
+                        const selected = Globals.BackendWrapper.analysisVariabilityFilterCriteria
+                        const index = variabilityFilterSelector.indexOfValue(selected)
+                        const targetIndex = index >= 0 ? index : 0
+                        if (variabilityFilterSelector.currentIndex !== targetIndex) {
+                            variabilityFilterSelector.currentIndex = targetIndex
+                        }
+                    }
                 }
             }
             // Filter by variability
 
         }
         // Filter parameters widget
-*/
+
         // Table
         EaComponents.TableView {
             id: tableView
             defaultInfoText: qsTr("No parameters found")
 
-            //maxRowCountShow: 7 +
-            //                Math.trunc((applicationWindow.height - EaStyle.Sizes.appWindowMinimumHeight) /
-            //                            EaStyle.Sizes.tableRowHeight)
-            
+            maxRowCountShow: 8 +
+                            Math.trunc((applicationWindow.height - EaStyle.Sizes.appWindowMinimumHeight) /
+                             EaStyle.Sizes.tableRowHeight)
+
             // Table model
             // We only use the length of the model object defined in backend logic and
             // directly access that model in every row using the TableView index property.
@@ -143,14 +223,14 @@ EaElements.GroupBox {
             header: EaComponents.TableViewHeader {
                 EaComponents.TableViewLabel {
                     width: EaStyle.Sizes.fontPixelSize * 2.5
-                    //text: qsTr("No.")
+                    text: qsTr("No.")
                 }
 
                 EaComponents.TableViewLabel {
                     flexibleWidth: true
                     horizontalAlignment: Text.AlignLeft
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("name")
+                    text: qsTr("Name")
                 }
 
                 EaComponents.TableViewLabel {
@@ -158,11 +238,11 @@ EaElements.GroupBox {
                     width: EaStyle.Sizes.fontPixelSize * 4.5
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("value")
+                    text: qsTr("Value")
                 }
 
                 EaComponents.TableViewLabel {
-                    width: EaStyle.Sizes.fontPixelSize * 3.0
+                    width: EaStyle.Sizes.fontPixelSize * 4.0
                     horizontalAlignment: Text.AlignLeft
                     //text: qsTr("units")
                 }
@@ -171,27 +251,27 @@ EaElements.GroupBox {
                     width: valueLabel.width
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("error")
+                    text: qsTr("Error")
                 }
 
                 EaComponents.TableViewLabel {
                     width: valueLabel.width
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("min")
+                    text: qsTr("Min")
                 }
 
                 EaComponents.TableViewLabel {
                     width: valueLabel.width
                     horizontalAlignment: Text.AlignRight
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("max")
+                    text: qsTr("Max")
                 }
 
                 EaComponents.TableViewLabel {
-                    width: EaStyle.Sizes.fontPixelSize * 3.0
+                    width: fittables.fitColumnWidth
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: qsTr("vary")
+                    text: qsTr("Fit")
                 }
             }
             // Header row
@@ -216,13 +296,18 @@ EaElements.GroupBox {
                 EaComponents.TableViewLabel {
                     width: EaStyle.Sizes.fontPixelSize * 5
                     text: Globals.BackendWrapper.analysisFitableParameters[index].name
+                    color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                           Globals.BackendWrapper.analysisFitableParameters[index].independent  : true) ?
+                           EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
                     ToolTip.text: textFormat === Text.PlainText ? text : ''
                 }
 
                 EaComponents.TableViewParameter {
                     id: valueColumn
+                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
                     selected: index === Globals.BackendWrapper.analysisCurrentParameterIndex
-                    text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].value)
+                    text: EaLogic.Utils.toMaxPrecision(Globals.BackendWrapper.analysisFitableParameters[index].value, 3)
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing (manual) 'value' field of fittable on Analysis page ***")
@@ -233,15 +318,31 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewLabel {
-                    text: Globals.BackendWrapper.analysisFitableParameters[index].units !== 'dimensionless' ? Globals.BackendWrapper.analysisFitableParameters[index].units : "" 
+                    text: {
+                        const unit = Globals.BackendWrapper.analysisFitableParameters[index].units
+                        if (unit !== undefined && unit !== 'dimensionless') {
+                            if (unit.endsWith('Å^2')) {
+                                '10⁻⁶Å⁻²'
+                            } else {
+                                unit
+                            }
+                        } else {
+                            ""
+                        }
+                    }
                     color: EaStyle.Colors.themeForegroundMinor
                 }
 
                 EaComponents.TableViewLabel {
-                    text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].error)
+                    text: formatError(Globals.BackendWrapper.analysisFitableParameters[index].error)
+                    color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                           Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
+                           EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
                 }
 
                 EaComponents.TableViewParameter {
+                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
                     minored: true
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].min).replace('Infinity', 'inf')
                     onEditingFinished: {
@@ -253,6 +354,8 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewParameter {
+                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
                     minored: true
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].max).replace('Infinity', 'inf')
                     onEditingFinished: {
@@ -265,17 +368,53 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewCheckBox {
                     id: fitColumn
-                    enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length
+                    enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length &&
+                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
                     checked: Globals.BackendWrapper.analysisFitableParameters[index].fit
                     onToggled: {
                         console.debug("*** Editing 'fit' field of fittable on Analysis page ***")
-                        Globals.BackendWrapper.analysisSetCurrentParameterFit(checkState)
+                        // Ensure this row is selected before toggling the fit value
+                        if (Globals.BackendWrapper.analysisCurrentParameterIndex !== index) {
+                            Globals.BackendWrapper.analysisSetCurrentParameterIndex(index)
+                        }
+                        Globals.BackendWrapper.analysisSetCurrentParameterFit(checked)
                     }
                 }
             }
             // Table content row
         }
         // Table
+
+        Item {
+            id: fitAllContainer
+            visible: Globals.BackendWrapper.analysisFitableParameters.length
+            width: tableView.width
+            height: EaStyle.Sizes.tableRowHeight
+
+            EaComponents.TableViewLabel {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.right: fitAllCheckBox.left
+                anchors.rightMargin: EaStyle.Sizes.fontPixelSize * 0.5
+                text: qsTr("Select All")
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideNone
+            }
+
+            EaComponents.TableViewCheckBox {
+                id: fitAllCheckBox
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: Math.max(tableView.width - fittables.fitColumnWidth, 0)
+                enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length &&
+                         Globals.BackendWrapper.analysisFitableParameters.length
+                checked: allFittablesSelected()
+                onToggled: {
+                    setAllFittablesFit(checked)
+                }
+            }
+        }
 
         // Parameter change slider
         Row {
@@ -287,8 +426,10 @@ EaElements.GroupBox {
                 readOnly: true
                 width: EaStyle.Sizes.fontPixelSize * 6
                 text: {
-                    const value = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value
-                    const error = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].error
+                    const par_index = Globals.BackendWrapper.analysisCurrentParameterIndex
+                    const params = Globals.BackendWrapper.analysisFitableParameters
+                    const value = params[par_index] !== undefined ? params[par_index].value : 0
+                    const error = params[par_index] !== undefined ? params[par_index].error : 0
                     return EaLogic.Utils.toDefaultPrecision(slider.from)
                 }
             }
@@ -296,7 +437,10 @@ EaElements.GroupBox {
             EaElements.Slider {
                 id: slider
 
-                enabled: !Globals.BackendWrapper.analysisFittingRunning
+                enabled: !Globals.BackendWrapper.analysisFittingRunning &&
+                         Globals.BackendWrapper.analysisFitableParameters.length > 0 &&
+                         (Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].independent !== undefined ?
+                          Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].independent : true)
                 width: tableView.width - EaStyle.Sizes.fontPixelSize * 14
 
                 stepSize: (to - from) / 20
@@ -327,27 +471,104 @@ EaElements.GroupBox {
             }
         }
     }
+
     // Logic
 
     function updateSliderValue() {
-        const value = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value
-        slider.value = EaLogic.Utils.toDefaultPrecision(value)
+        if (!backend.analysisFitableParameters.length) {
+            return
+        }
+        const currentIndex = backend.analysisCurrentParameterIndex
+        if (currentIndex < 0 || currentIndex >= backend.analysisFitableParameters.length) {
+            return
+        }
+        const value = backend.analysisFitableParameters[currentIndex].value
+        fittables.parameterSlider.value = EaLogic.Utils.toDefaultPrecision(value)
     }
 
     function updateSliderLimits() {
-        var from = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value * 0.9
-        var to = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].value * 1.1
+        if (!backend.analysisFitableParameters.length) {
+            return
+        }
+        const currentIndex = backend.analysisCurrentParameterIndex
+        if (currentIndex < 0 || currentIndex >= backend.analysisFitableParameters.length) {
+            return
+        }
+        var from = backend.analysisFitableParameters[currentIndex].value * 0.9
+        var to = backend.analysisFitableParameters[currentIndex].value * 1.1
         if (from === 0 && to === 0) {
             to = 0.1
         }
-        if (Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].max < to) {
-            to = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].max
+        if (backend.analysisFitableParameters[currentIndex].max < to) {
+            to = backend.analysisFitableParameters[currentIndex].max
         }
-        if (Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].min > from) {
-            from = Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].min
+        if (backend.analysisFitableParameters[currentIndex].min > from) {
+            from = backend.analysisFitableParameters[currentIndex].min
         }
-        slider.from = EaLogic.Utils.toDefaultPrecision(from)
-        slider.to = EaLogic.Utils.toDefaultPrecision(to)
+        fittables.parameterSlider.from = EaLogic.Utils.toDefaultPrecision(from)
+        fittables.parameterSlider.to = EaLogic.Utils.toDefaultPrecision(to)
+    }
+
+    function formatError(value) {
+        if (value === undefined || value === 0 || isNaN(value)) return ''
+        var s = Number(value.toPrecision(2)).toString()
+        if (s.length <= 6) return s
+        return value.toExponential(1)
+    }
+
+    function allFittablesSelected() {
+        const params = backend.analysisFitableParameters
+        if (!params || !params.length) {
+            return false
+        }
+        for (let i = 0; i < params.length; i++) {
+            const parameter = params[i]
+            const independent = parameter.independent !== undefined ? parameter.independent : true
+            if (!independent) {
+                continue
+            }
+            if (!parameter.fit) {
+                return false
+            }
+        }
+        return true
+    }
+
+    function setAllFittablesFit(enable) {
+        const params = backend.analysisFitableParameters
+        if (!params || !params.length) {
+            return
+        }
+        const originalIndex = backend.analysisCurrentParameterIndex
+        var hasChanges = false
+        const targetFit = !!enable
+        fittables.bulkUpdatingSelection = true
+        try {
+            for (let i = 0; i < params.length; i++) {
+                const parameter = params[i]
+                const independent = parameter.independent !== undefined ? parameter.independent : true
+                if (!independent) {
+                    continue
+                }
+                if (!!parameter.fit === targetFit) {
+                    continue
+                }
+                backend.analysisSetCurrentParameterIndex(i)
+                backend.analysisSetCurrentParameterFit(targetFit)
+                hasChanges = true
+            }
+        } finally {
+            const paramsLength = params.length
+            if (paramsLength) {
+                const targetIndex = originalIndex >= 0 && originalIndex < paramsLength ? originalIndex : Math.min(Math.max(originalIndex, 0), paramsLength - 1)
+                backend.analysisSetCurrentParameterIndex(targetIndex)
+            }
+            fittables.bulkUpdatingSelection = false
+        }
+        if (hasChanges) {
+            updateSliderLimits()
+            updateSliderValue()
+        }
     }
 }
 

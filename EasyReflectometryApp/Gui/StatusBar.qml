@@ -53,4 +53,11 @@ EaElements.StatusBar {
         valueText: Globals.BackendWrapper.statusVariables ?? ''
         ToolTip.text: qsTr('Number of parameters: total, free and fixed')
     }
+    EaElements.StatusBarItem {
+        visible: Globals.BackendWrapper.analysisFitChi2 > 0
+        keyIcon: 'chart-line'
+        keyText: qsTr('Chi²')
+        valueText: Globals.BackendWrapper.analysisFitChi2.toFixed(2)
+        ToolTip.text: qsTr('Goodness of fit (chi-squared)')
+    }
 }

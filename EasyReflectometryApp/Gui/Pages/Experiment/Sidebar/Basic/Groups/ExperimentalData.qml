@@ -2,8 +2,8 @@ import QtQuick 2.14
 import QtQuick.Controls 2.14
 import QtQuick.Dialogs as Dialogs1
 
-import easyApp.Gui.Style as EaStyle
-import easyApp.Gui.Elements as EaElements
+import EasyApp.Gui.Style as EaStyle
+import EasyApp.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
@@ -11,6 +11,7 @@ EaElements.GroupBox {
     title: qsTr("Experimental data")
     collapsible: false
     enabled: Globals.Constants.proxy.fitter.isFitFinished
+
     Row {
         spacing: EaStyle.Sizes.fontPixelSize
 

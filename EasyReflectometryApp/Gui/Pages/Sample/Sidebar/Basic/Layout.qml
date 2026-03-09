@@ -1,12 +1,15 @@
 import QtQuick 2.14
 import QtQuick.Controls 2.14
 
-import easyApp.Gui.Components 1.0 as EaComponents
+import EasyApp.Gui.Components 1.0 as EaComponents
 
 import Gui.Globals as Globals
 import "./Groups" as Groups
 
 EaComponents.SideBarColumn {
+    Groups.LoadSample{
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+    }
     Groups.MaterialEditor{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }

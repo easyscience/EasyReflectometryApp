@@ -3,6 +3,8 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    // Signals to match the Python backend
+    signal constraintsChanged
     // MATERIALS
     readonly property int currentMaterialIndex: -1
 
@@ -271,11 +273,96 @@ QtObject {
         'parameter 2',
         'parameter 3'
     ]
-    readonly property var relationOperators: ['=', '&lt', '&gt']
+    readonly property var relationOperators: [
+        { value: '=', text: '=' },
+        { value: '>', text: '≥' },
+        { value: '<', text: '≤' }
+    ]
     readonly property var arithmicOperators: ['', '*', '/', '+', '-']
+    readonly property var constraintParametersMetadata: [
+        { alias: 'parameter_1', displayName: 'parameter 1', independent: true },
+        { alias: 'parameter_2', displayName: 'parameter 2', independent: true },
+        { alias: 'parameter_3', displayName: 'parameter 3', independent: true }
+    ]
 
-    function addConstraint(value1, value2, value3, value4, value5) {
-        console.debug(`addConstraint ${value1} ${value2} ${value3} ${value4} ${value5}`)
+    // Mock constraints data - matches the structured format expected by the UI
+    property var constraintsList: [
+        {
+            dependentName: 'Thickness Layer 1',
+            expression: 'parameter 2 * 0.5 + 1.5',
+            rawExpression: 'parameter_2 * 0.5 + 1.5',
+            relation: '=',
+            type: 'expression'
+        },
+        {
+            dependentName: 'Roughness Layer 2',
+            expression: 'parameter 1 / 3.14',
+            rawExpression: 'parameter_1 / 3.14',
+            relation: '=',
+            type: 'expression'
+        },
+        {
+            dependentName: 'SLD Layer 3',
+            expression: '5.0',
+            rawExpression: '5.0',
+            relation: '=',
+            type: 'static'
+        }
+    ]
+
+    function validateConstraintExpression(dependentIndex, relation, expression) {
+        if (dependentIndex < 0 || dependentIndex >= parameterNames.length) {
+            return { valid: false, message: 'Select a dependent parameter first.' }
+        }
+        const expr = expression !== undefined && expression !== null ? String(expression).trim() : ''
+        if (expr.length === 0) {
+            return { valid: false, message: 'Expression cannot be empty.' }
+        }
+        return {
+            valid: true,
+            message: '',
+            preview: expr,
+            relation: relation,
+            type: relation === '=' ? 'expression' : (relation === '>' ? 'lower_bound' : 'upper_bound')
+        }
+    }
+
+    function addConstraint(dependentIndex, relation, expression) {
+        const validation = validateConstraintExpression(dependentIndex, relation, expression)
+        if (!validation.valid) {
+            return { success: false, message: validation.message }
+        }
+
+        const constraint = {
+            dependentName: parameterNames[dependentIndex] || 'Unknown parameter',
+            expression: validation.preview,
+            rawExpression: expression,
+            relation: relation,
+            type: validation.type
+        }
+
+        var newConstraints = constraintsList.slice()
+        newConstraints.push(constraint)
+        constraintsList = newConstraints
+        constraintsChanged()
+
+        return {
+            success: true,
+            message: '',
+            preview: validation.preview,
+            relation: relation,
+            type: validation.type
+        }
+    }
+
+    function removeConstraintByIndex(index) {
+        console.debug(`removeConstraintByIndex ${index}`)
+        if (index >= 0 && index < constraintsList.length) {
+            var newConstraints = constraintsList.slice() // Create a copy
+            newConstraints.splice(index, 1)
+            constraintsList = newConstraints
+            constraintsChanged()
+        }
     }
 
     // Q Range

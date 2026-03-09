@@ -17,4 +17,6 @@ EaComponents.SideBarColumn {
     Groups.Calculator {}
 
     Groups.Minimizer {}
+
+    Groups.PlotControl {}
 }

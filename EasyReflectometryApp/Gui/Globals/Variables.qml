@@ -11,4 +11,10 @@ QtObject {
     property bool showLegendOnSamplePage: false
     property bool showLegendOnExperimentPage: false
     property bool showLegendOnAnalysisPage: false
+    property bool useStaggeredPlotting: false
+    property double staggeringFactor: 0.5
+
+    // Sample page plot control settings
+    property bool reverseSldZAxis: false
+    property bool logarithmicQAxis: false
 }

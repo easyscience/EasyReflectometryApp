@@ -17,6 +17,9 @@ FileDialog{
 
     onAccepted: {
         Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = true
+        Globals.References.applicationWindow.appBarCentralTabs.experimentButton.enabled = true
+        Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = true
+        Globals.References.applicationWindow.appBarCentralTabs.summaryButton.enabled = true
         Globals.BackendWrapper.projectLoad(selectedFile)
     }
 

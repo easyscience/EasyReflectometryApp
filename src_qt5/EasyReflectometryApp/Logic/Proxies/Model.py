@@ -8,7 +8,7 @@ from PySide2.QtCore import Slot
 import numpy as np
 
 from easyscience import global_object
-from easyscience.Utils.io.xml import XMLSerializer
+from easyscience.utils.io.xml import XMLSerializer
 from easyscience.global_object.undo_redo import property_stack_deco
 from easyreflectometry.sample import Layer
 from easyreflectometry.sample import LayerAreaPerMolecule
@@ -720,7 +720,7 @@ class ModelProxy(QObject):
                 self.currentLayersIndex].thickness.value == thickness:
             return
         self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[
-            self.currentLayersIndex].thickness = thickness
+            self.currentLayersIndex].thickness.value = thickness
         self.parent.layersChanged.emit()
 
     @Slot(float)
@@ -733,7 +733,7 @@ class ModelProxy(QObject):
         layer = self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[self.currentLayersIndex]
         if layer.roughness.value == roughness:
             return 
-        layer.roughness = roughness
+        layer.roughness.value = roughness
         self.parent.layersChanged.emit()
 
     @Slot(float)
@@ -795,10 +795,14 @@ class ModelProxy(QObject):
             if item['name'] == x:
                 solvent = self._model[self.currentModelIndex].sample[i].layers[0]
         if solvent is None:
-            self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[0].roughness.user_constraints['solvent_roughness'].enabled == False
+            # self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[0].roughness.user_constraints[
+            # 'solvent_roughness'].enabled == False
+            self._model[self.currentModelIndex].sample[self.currentItemsIndex].layers[0].roughness.make_independent()
         else:
             solvent.roughness.enabled = True
-            self._model[self.currentModelIndex].sample[self.currentItemsIndex].constrain_solvent_roughness(solvent.roughness)
+            self._model[self.currentModelIndex].sample[self.currentItemsIndex].make_dependent_on(
+                dependency_expression='a', dependency_map={'a': solvent.roughness.value})
+            #self._model[self.currentModelIndex].sample[self.currentItemsIndex].constrain_solvent_roughness(solvent.roughness)
         self.parent.layersChanged.emit()
 
     # # #

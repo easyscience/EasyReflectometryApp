@@ -12,30 +12,17 @@ import Gui.Globals as Globals
 
 
 EaComponents.ContentPage {
-//    defaultInfo: Globals.Proxies.main.model.defined &&
-//                 Globals.Proxies.main.experiment.defined ?
-//                     "" :
-//                     qsTr("No analysis done")
 
     mainView: EaComponents.MainContent {
-/*        tabs: [
-            EaElements.TabButton {
-                text: Globals.Proxies.experimentMainParam('_sample', 'type').value === 'pd' ?
-                          qsTr("Fitting") :
-                          qsTr("I vs. sinθ/λ")
-            },
-            EaElements.TabButton { text: qsTr("Imeas vs. Icalc") }
-        ]
-*/
+        tabs: [
+            EaElements.TabButton { text: qsTr('Reflectivity') }
+       ]
+
         items: [
             Loader {
-                source: `MainContent/AnalysisView.qml`
+                source: `MainContent/CombinedView.qml`
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             }
-//            Loader {
-//                source: `MainContent/ScChartTab.qml`
-//                onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
-//            }
         ]
     }
 

@@ -4,8 +4,8 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'EasyReflectometryApp'
-version = '1.1.1'
-release_data = '28 May 2025'
+version = '1.2.0'
+release_data = '10 March 2026'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
     {name = "Andrew R. McCluskey"}, 
@@ -31,9 +31,10 @@ classifiers = [
 
 requires-python = '>=3.11'
 dependencies = [
-  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git',
-  'easyreflectometry',
-  'PySide6>=6.8,<6.9', # Issue with TableView formatting in 6.9,
+  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@develop',
+  'easyreflectometry @ git+https://github.com/EasyScience/EasyReflectometryLib.git@develop',
+  'asteval',
+  'PySide6',
   'toml',
 ]
 

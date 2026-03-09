@@ -3,15 +3,21 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    signal htmlExportingFinished(bool success, string filePath)
+
     readonly property bool created: true
 
     readonly property var exportFormats: ["HTML", "PDF"]
 
     readonly property string fileName: "summary"
+    readonly property string plotFileName: "plots"
 
     readonly property string filePath: '/Users/andpe/ExampleProject/summary'
+    readonly property string plotFilePath: '/Users/andpe/ExampleProject/plots'
 
     readonly property string fileUrl: 'file:///Users/andpe/ExampleProject/summary'
+    readonly property string plotFileUrl: 'file:///Users/andpe/ExampleProject/plots'
+    readonly property var plotExportFormats: ["PDF", "PNG", "SVG"]
 
     readonly property string asHtml: '
 <!DOCTYPE html>
@@ -82,16 +88,31 @@ th, td { padding-right: 18px; }
 </body>
 </html>
 '
-    function saveAsHtml() {
+    function saveAsHtml(path) {
         console.debug(`Saving HTML summary`)
+        htmlExportingFinished(true, path)
     }
 
-    function saveAsPdf() {
+    function saveAsPdf(path) {
         console.debug(`Saving PDF summary`)
+        htmlExportingFinished(true, path)
     }
 
     function setFileName(value) {
         console.debug(`setFileName ${value}`)
+    }
+
+    function setPlotFileName(value) {
+        console.debug(`setPlotFileName ${value}`)
+    }
+
+    function savePlot(path, widthCm, heightCm) {
+        console.debug(`savePlot ${path} ${widthCm} ${heightCm}`)
+        htmlExportingFinished(true, path)
+    }
+
+    function showPlot(widthCm, heightCm) {
+        console.debug(`showPlot ${widthCm} ${heightCm}`)
     }
 
 }

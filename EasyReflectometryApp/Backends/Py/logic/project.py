@@ -7,6 +7,8 @@ from easyreflectometry import Project as ProjectLib
 class Project:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
+        self._project_lib.default_model()
+        self._update_enablement_of_fixed_layers_for_model(0)
 
     @property
     def created(self) -> bool:
@@ -84,6 +86,12 @@ class Project:
             pass
         return experimental_data
 
+    def _update_enablement_of_fixed_layers_for_model(self, index: int) -> None:
+        sample = self._project_lib.models[index].sample
+        sample[0].layers[0].thickness.enabled = False
+        sample[0].layers[0].roughness.enabled = False
+        sample[-1].layers[-1].thickness.enabled = False
+
     def info(self) -> dict:
         info = copy(self._project_lib._info)
         info['location'] = self._project_lib.path
@@ -101,6 +109,29 @@ class Project:
 
     def load_experiment(self, path: str) -> None:
         self._project_lib.load_experiment_for_model_at_index(path, self._project_lib._current_model_index)
+
+    def load_new_experiment(self, path: str) -> None:
+        self._project_lib.load_new_experiment(path)
+
+    def count_datasets_in_file(self, path: str) -> int:
+        return self._project_lib.count_datasets_in_file(path)
+
+    def load_all_experiments_from_file(self, path: str) -> int:
+        return self._project_lib.load_all_experiments_from_file(path)
+
+    def set_sample_from_orso(self, sample) -> None:
+        self._project_lib.set_sample_from_orso(sample)
+
+    def add_sample_from_orso(self, sample) -> None:
+        """Add a new model with the given sample to the existing model collection."""
+        self._project_lib.add_sample_from_orso(sample)
+        new_model_index = len(self._project_lib.models) - 1
+        self._update_enablement_of_fixed_layers_for_model(new_model_index)
+
+    def replace_models_from_orso(self, sample) -> None:
+        """Replace all existing models with a single model built from the loaded sample."""
+        self._project_lib.replace_models_from_orso(sample)
+        self._update_enablement_of_fixed_layers_for_model(0)
 
     def reset(self) -> None:
         self._project_lib.reset()
