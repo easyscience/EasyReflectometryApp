@@ -295,11 +295,15 @@ QtObject {
     readonly property int analysisFixedParametersCount: activeBackend.analysis.fixedParametersCount
     readonly property int analysisModelParametersCount: activeBackend.analysis.modelParametersCount
     readonly property int analysisExperimentParametersCount: activeBackend.analysis.experimentParametersCount
+    readonly property string analysisNameFilterCriteria: activeBackend.analysis.nameFilterCriteria
+    readonly property string analysisVariabilityFilterCriteria: activeBackend.analysis.variabilityFilterCriteria
 
     function analysisSetCurrentParameterValue(value) { activeBackend.analysis.setCurrentParameterValue(value) }
     function analysisSetCurrentParameterMin(value) { activeBackend.analysis.setCurrentParameterMin(value) }
     function analysisSetCurrentParameterMax(value) { activeBackend.analysis.setCurrentParameterMax(value) }
     function analysisSetCurrentParameterFit(value) { activeBackend.analysis.setCurrentParameterFit(value) }
+    function analysisSetNameFilterCriteria(value) { activeBackend.analysis.setNameFilterCriteria(value) }
+    function analysisSetVariabilityFilterCriteria(value) { activeBackend.analysis.setVariabilityFilterCriteria(value) }
 
     ///////////////
     // Summary page
