@@ -310,10 +310,26 @@ QtObject {
     readonly property string summaryFilePath: activeBackend.summary.filePath
     readonly property string summaryFileUrl: activeBackend.summary.fileUrl
     readonly property var summaryExportFormats: activeBackend.summary.exportFormats
+    readonly property string summaryPlotFileName: activeBackend.summary.plotFileName
+    readonly property string summaryPlotFilePath: activeBackend.summary.plotFilePath
+    readonly property string summaryPlotFileUrl: activeBackend.summary.plotFileUrl
+    readonly property var summaryPlotExportFormats: activeBackend.summary.plotExportFormats
 
     function summarySetFileName(value) { activeBackend.summary.setFileName(value) }
-    function summarySaveAsHtml() { activeBackend.summary.saveAsHtml() }
-    function summarySaveAsPdf() { activeBackend.summary.saveAsPdf() }
+    function summarySetPlotFileName(value) { activeBackend.summary.setPlotFileName(value) }
+    function summarySaveAsHtml(path) { activeBackend.summary.saveAsHtml(path) }
+    function summarySaveAsPdf(path) { activeBackend.summary.saveAsPdf(path) }
+    function summarySavePlot(path, widthCm, heightCm) { activeBackend.summary.savePlot(path, widthCm, heightCm) }
+    function summaryShowPlot(widthCm, heightCm) { activeBackend.summary.showPlot(widthCm, heightCm) }
+
+    signal summaryExportingFinished(bool success, string filePath)
+
+    property var _summaryExportConnection: {
+        if (activeBackend && activeBackend.summary && activeBackend.summary.htmlExportingFinished) {
+            activeBackend.summary.htmlExportingFinished.connect(summaryExportingFinished)
+        }
+        return null
+    }
 
 
     ///////////////
