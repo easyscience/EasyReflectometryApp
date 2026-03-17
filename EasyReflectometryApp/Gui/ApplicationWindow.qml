@@ -30,7 +30,7 @@ EaComponents.ApplicationWindow {
 
         EaElements.ToolButton {
             enabled: Globals.BackendWrapper.projectCreated
-            highlighted: true
+            highlighted: Globals.BackendWrapper.stateHasChanged
             fontIcon: "save"
             ToolTip.text: qsTr("Save current state of the project")
             onClicked: Globals.BackendWrapper.projectSave()
@@ -169,7 +169,53 @@ EaComponents.ApplicationWindow {
     // MISC
     ///////
 
-    onClosing: Qt.quit()
+    onClosing: function(close) {
+        if (Globals.BackendWrapper.stateHasChanged) {
+            close.accepted = false
+            unsavedChangesDialog.open()
+        } else {
+            Qt.quit()
+        }
+    }
+
+    EaElements.Dialog {
+        id: unsavedChangesDialog
+        title: qsTr("Unsaved Changes")
+
+        Column {
+            spacing: 10
+            Text {
+                text: qsTr("The project has unsaved changes. Do you want to save before closing?")
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        footer: Row {
+            spacing: 10
+
+            EaElements.Button {
+                text: qsTr("Save and Close")
+                onClicked: {
+                    Globals.BackendWrapper.projectSave()
+                    unsavedChangesDialog.close()
+                    Qt.quit()
+                }
+            }
+
+            EaElements.Button {
+                text: qsTr("Discard")
+                onClicked: {
+                    unsavedChangesDialog.close()
+                    Qt.quit()
+                }
+            }
+
+            EaElements.Button {
+                text: qsTr("Cancel")
+                onClicked: unsavedChangesDialog.close()
+            }
+        }
+    }
 
     Component.onCompleted: {
         console.debug(`Application window loaded ::: ${this}`)

@@ -19,11 +19,14 @@ from .summary import Summary
 class PyBackend(QObject):
     # Signal for multi-experiment selection changes
     multiExperimentSelectionChanged = Signal()
+    # Signal for dirty state tracking (True = unsaved changes exist)
+    stateChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self._project_lib = ProjectLib()
+        self._state_changed = False
 
         # Page and Status bar backend parts
         self._home = Home()
@@ -44,6 +47,7 @@ class PyBackend(QObject):
 
         # Must be last to ensure all backend parts are created
         self._connect_backend_parts()
+        self._connect_state_tracking()
 
     # Enable dot access in QML code to the page specific backend parts
     # Pages
@@ -83,6 +87,37 @@ class PyBackend(QObject):
     @Property('QVariant', constant=True)
     def logger(self):
         return self._logger
+
+    # State tracking
+    @Property(bool, notify=stateChanged)
+    def stateHasChanged(self) -> bool:
+        return self._state_changed
+
+    @stateHasChanged.setter
+    def stateHasChanged(self, changed: bool):
+        if self._state_changed == changed:
+            return
+        self._state_changed = changed
+        self.stateChanged.emit()
+
+    def _mark_state_dirty(self):
+        self.stateHasChanged = True
+
+    def _mark_state_clean(self):
+        self.stateHasChanged = False
+
+    def _connect_state_tracking(self) -> None:
+        # Mutations mark state dirty
+        self._sample.externalSampleChanged.connect(self._mark_state_dirty)
+        self._experiment.externalExperimentChanged.connect(self._mark_state_dirty)
+        self._analysis.externalParametersChanged.connect(self._mark_state_dirty)
+        self._analysis.externalFittingChanged.connect(self._mark_state_dirty)
+        self._analysis.externalMinimizerChanged.connect(self._mark_state_dirty)
+        self._analysis.externalCalculatorChanged.connect(self._mark_state_dirty)
+        # Save/load/reset clear dirty state
+        self._project.externalProjectSaved.connect(self._mark_state_clean)
+        self._project.externalProjectLoaded.connect(self._mark_state_clean)
+        self._project.externalProjectReset.connect(self._mark_state_clean)
 
     # Analysis properties and methods for multi-experiment selection
     @Property(int, notify=multiExperimentSelectionChanged)

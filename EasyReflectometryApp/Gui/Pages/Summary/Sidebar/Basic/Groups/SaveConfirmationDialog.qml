@@ -10,15 +10,19 @@ import EasyApp.Gui.Elements as EaElements
 
 
 EaElements.Dialog {
-    id: saveConfirmationDialog
-
+    id: dialog
     property bool success: false
-    property string filePath: 'undefined'
-
+    property string filePath: ''
     visible: false
     title: qsTr('Save confirmation')
-
     standardButtons: Dialog.Ok
+
+    function _fileNameFromPath(path) {
+        if (!path) {
+            return ''
+        }
+        return path.split(/[\\/]/).pop()
+    }
 
     Row {
         padding: EaStyle.Sizes.fontPixelSize
@@ -28,14 +32,14 @@ EaElements.Dialog {
             anchors.verticalCenter: parent.verticalCenter
             font.family: EaStyle.Fonts.iconsFamily
             font.pixelSize: EaStyle.Sizes.fontPixelSize * 1.25
-            text: saveConfirmationDialog.success ? 'check-circle' : 'minus-circle'
+            text: dialog.success ? 'check-circle' : 'minus-circle'
         }
 
         EaElements.Label {
             anchors.verticalCenter: parent.verticalCenter
-            text: saveConfirmationDialog.success
-                  ? qsTr('File "<a href="%1">%1</a>" is successfully saved'.arg(saveConfirmationDialog.filePath))
-                  : qsTr('Failed to save file "%1"'.arg(saveConfirmationDialog.filePath))
+            text: dialog.success
+                  ? qsTr('File "%1" is successfully saved').arg(dialog._fileNameFromPath(dialog.filePath))
+                  : qsTr('Failed to save file "%1"').arg(dialog._fileNameFromPath(dialog.filePath))
         }
     }
 }

@@ -21,6 +21,7 @@ class Project(QObject):
     externalCreatedChanged = Signal()
     externalNameChanged = Signal()
     externalProjectLoaded = Signal()
+    externalProjectSaved = Signal()
     externalProjectReset = Signal()
     sampleLoadWarning = Signal(str)
 
@@ -95,6 +96,7 @@ class Project(QObject):
     @Slot()
     def save(self) -> None:
         self._logic.save()
+        self.externalProjectSaved.emit()
 
     @Slot()
     def reset(self) -> None:

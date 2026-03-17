@@ -50,6 +50,12 @@ QtObject {
 
 
     ///////////////
+    // State tracking
+    ///////////////
+    readonly property bool stateHasChanged: activeBackend.stateHasChanged
+
+
+    ///////////////
     // Home page
     ///////////////
     readonly property string homeVersionNumber: activeBackend.home.version.number
