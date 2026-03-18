@@ -233,16 +233,22 @@ class Fitting:
 
     @property
     def fit_chi2(self) -> float:
-        """Return total chi-squared across all fits."""
+        """Return reduced chi-squared across all fits (chi2 / degrees of freedom)."""
         if self._results:
             try:
-                return float(sum(r.chi2 for r in self._results))
+                total_chi2 = float(sum(r.chi2 for r in self._results))
+                total_points = sum(len(r.x) for r in self._results)
+                n_params = self._results[0].n_pars
+                total_dof = total_points - n_params
+                if total_dof <= 0:
+                    return 0.0
+                return total_chi2 / total_dof
             except (ValueError, TypeError):
                 return 0.0
         if self._result is None:
             return 0.0
         try:
-            return float(self._result.chi2)
+            return float(self._result.reduced_chi)
         except (ValueError, TypeError):
             return 0.0
 
