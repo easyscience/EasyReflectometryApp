@@ -8,7 +8,6 @@ import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
-//import Gui.Components as Components
 
 
 EaComponents.ContentPage {
@@ -36,6 +35,23 @@ EaComponents.ContentPage {
             Loader { source: 'Sidebar/Basic/Layout.qml' },
             Loader { source: 'Sidebar/Advanced/Layout.qml' }
         ]
+
+        footerComponent: Component {
+            EaElements.SideBarButton {
+                enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length
+                wide: true
+                fontIcon: Globals.BackendWrapper.analysisFittingRunning ? 'stop-circle' : 'play-circle'
+                text: Globals.BackendWrapper.analysisFittingRunning ? qsTr('Cancel fitting') : qsTr('Start fitting')
+
+                onClicked: {
+                    console.debug(`Clicking '${text}' button: ${this}`)
+                    Globals.BackendWrapper.analysisFittingStartStop()
+                }
+
+                Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.startFittingButton = this
+                Loader { source: 'Sidebar/Basic/Popups/FitStatusDialog.qml' }
+            }
+        }
 
 //        continueButton.enabled: Globals.Proxies.main.summary.isCreated
 

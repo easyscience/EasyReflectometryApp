@@ -28,23 +28,4 @@ EaComponents.SideBarColumn {
 //    }
 
     Groups.Fittables{}
-
-/*    EaElements.GroupBox {
-        //title: qsTr("Parameters")
-        collapsible: false
-        last: true
-
-        Loader { source: 'Fittables.qml' }
-    }
-*/
-
-    Groups.Fitting{}
-
-/*    EaElements.GroupBox {
-        //title: qsTr("Fitting")
-        collapsible: false
-
-        Loader { source: 'Fitting.qml' }
-    }
-*/
 }
