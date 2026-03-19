@@ -1,6 +1,5 @@
 from EasyReflectometryApp.Backends.Py.logic.material import Material
 from EasyReflectometryApp.Backends.Py.logic.material import _from_materials_collection_to_list_of_dicts
-
 from tests.factories import make_material
 from tests.factories import make_material_collection
 from tests.factories import make_project

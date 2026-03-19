@@ -1,5 +1,4 @@
 from EasyReflectometryApp.Backends.Py.workers.fitter_worker import FitterWorker
-
 from tests.factories import make_worker_fitter
 
 

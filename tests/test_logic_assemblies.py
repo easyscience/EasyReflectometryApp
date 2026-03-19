@@ -1,5 +1,4 @@
 from EasyReflectometryApp.Backends.Py.logic import assemblies as assemblies_module
-
 from tests.factories import FakeMultilayer
 from tests.factories import FakeRepeatingMultilayer
 from tests.factories import FakeSurfactantLayer

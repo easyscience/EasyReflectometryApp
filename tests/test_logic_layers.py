@@ -1,5 +1,4 @@
 from EasyReflectometryApp.Backends.Py.logic import layers as layers_module
-
 from tests.factories import FakeLayerAreaPerMolecule
 from tests.factories import make_assembly
 from tests.factories import make_layer

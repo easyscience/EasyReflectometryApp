@@ -1,10 +1,8 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 
 from EasyReflectometryApp.Backends.Py.logic import summary as summary_module
-
 from tests.factories import make_assembly
 from tests.factories import make_experiment
 from tests.factories import make_layer

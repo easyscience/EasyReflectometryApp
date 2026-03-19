@@ -1,5 +1,4 @@
 from EasyReflectometryApp.Backends.Py.logic import models as models_module
-
 from tests.factories import FakeResolutionFunction
 from tests.factories import make_material
 from tests.factories import make_material_collection

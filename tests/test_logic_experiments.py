@@ -1,5 +1,4 @@
 from EasyReflectometryApp.Backends.Py.logic.experiments import Experiments
-
 from tests.factories import make_experiment
 from tests.factories import make_project
 

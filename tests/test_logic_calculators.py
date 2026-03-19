@@ -1,5 +1,4 @@
 from EasyReflectometryApp.Backends.Py.logic.calculators import Calculators
-
 from tests.factories import make_project
 
 

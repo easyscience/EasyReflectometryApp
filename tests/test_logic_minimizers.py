@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 from EasyReflectometryApp.Backends.Py.logic import minimizers as minimizers_module
-
 from tests.factories import make_multi_fitter_stub
 from tests.factories import make_project
 

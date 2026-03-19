@@ -1,5 +1,4 @@
 from EasyReflectometryApp.Backends.Py.logic.status import Status
-
 from tests.factories import FakeMinimizerValue
 from tests.factories import make_project
 

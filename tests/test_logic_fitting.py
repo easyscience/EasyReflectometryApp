@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import numpy as np
 
 from EasyReflectometryApp.Backends.Py.logic import fitting as fitting_module
-
 from tests.factories import make_experiment
 from tests.factories import make_fit_result
 from tests.factories import make_model

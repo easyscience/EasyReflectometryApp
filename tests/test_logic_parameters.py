@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 from EasyReflectometryApp.Backends.Py.logic import parameters as parameters_module
-
 from tests.factories import FakeParameter
 from tests.factories import make_model
 from tests.factories import make_model_collection

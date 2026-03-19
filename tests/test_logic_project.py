@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from EasyReflectometryApp.Backends.Py.logic.project import Project
-
 from tests.factories import make_assembly
 from tests.factories import make_layer
 from tests.factories import make_material
