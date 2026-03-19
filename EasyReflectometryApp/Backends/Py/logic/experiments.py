@@ -51,6 +51,9 @@ class Experiments:
     def set_current_index(self, new_value: int) -> None:
         if new_value != self._project_lib._current_experiment_index:
             self._project_lib._current_experiment_index = new_value
+            # experiment = self._experiment_at_index(new_value)
+            # if experiment and experiment.model in self._project_lib._models:
+            #     self._project_lib.current_model_index = self._project_lib._models.index(experiment.model)
             return True
         return False
 
@@ -85,6 +88,7 @@ class Experiments:
             try:
                 model = models[new_value]
                 exp.model = model
+                # self._project_lib.current_model_index = new_value
             except IndexError:
                 print(f'Model index {new_value} is out of range for the current experiment.')
         else:

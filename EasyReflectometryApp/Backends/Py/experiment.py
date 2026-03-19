@@ -30,6 +30,18 @@ class Experiment(QObject):
     def resolution(self) -> str:
         return self._model_logic.resolution_at_current_index
 
+    @Property('QVariantList', notify=experimentChanged)
+    def resolutionTypes(self) -> list[str]:
+        return self._model_logic.resolution_type_names
+
+    @Property(str, notify=experimentChanged)
+    def resolutionType(self) -> str:
+        return self._model_logic.resolution_type_at_current_index
+
+    @Property(int, notify=experimentChanged)
+    def resolutionTypeCurrentIndex(self) -> int:
+        return self._model_logic.resolution_type_index_at_current_index
+
     @Property(bool, notify=experimentChanged)
     def experimentalData(self) -> bool:
         return self._project_logic.experimental_data_at_current_index
@@ -38,6 +50,7 @@ class Experiment(QObject):
     @Slot(int)
     def setModelIndex(self, value: int) -> None:
         self._model_logic.index = value
+        self.experimentChanged.emit()
 
     @Slot(float)
     def setScaling(self, new_value: float) -> None:
@@ -48,6 +61,18 @@ class Experiment(QObject):
     @Slot(float)
     def setBackground(self, new_value: float) -> None:
         if self._model_logic.set_background_at_current_index(new_value):
+            self.experimentChanged.emit()
+            self.externalExperimentChanged.emit()
+
+    @Slot(str)
+    def setResolution(self, new_value: str) -> None:
+        if self._model_logic.set_resolution_at_current_index(new_value):
+            self.experimentChanged.emit()
+            self.externalExperimentChanged.emit()
+
+    @Slot(int)
+    def setResolutionType(self, new_value: int) -> None:
+        if self._model_logic.set_resolution_type_at_current_index(new_value):
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
 

@@ -1,11 +1,19 @@
 from typing import Union
 
+import numpy as np
+
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.model import Model
 from easyreflectometry.model import ModelCollection
+from easyreflectometry.model.resolution_functions import DEFAULT_RESOLUTION_FWHM_PERCENTAGE
+from easyreflectometry.model.resolution_functions import LinearSpline
 from easyreflectometry.model.resolution_functions import PercentageFwhm
+from easyreflectometry.model.resolution_functions import Pointwise
 
 from .helpers import get_original_name
+
+
+RESOLUTION_FUNCTION_TYPES = ('PercentageFwhm', 'LinearSpline', 'Pointwise')
 
 
 class Models:
@@ -41,6 +49,25 @@ class Models:
             return '-'
 
     @property
+    def resolution_type_names(self) -> list[str]:
+        return list(RESOLUTION_FUNCTION_TYPES)
+
+    @property
+    def resolution_type_at_current_index(self) -> str:
+        resolution_function = self._models[self.index].resolution_function
+        if isinstance(resolution_function, PercentageFwhm):
+            return 'PercentageFwhm'
+        if isinstance(resolution_function, LinearSpline):
+            return 'LinearSpline'
+        if isinstance(resolution_function, Pointwise):
+            return 'Pointwise'
+        raise ValueError(f'Unsupported resolution function type: {type(resolution_function)!r}')
+
+    @property
+    def resolution_type_index_at_current_index(self) -> int:
+        return RESOLUTION_FUNCTION_TYPES.index(self.resolution_type_at_current_index)
+
+    @property
     def models(self) -> list[dict[str, str]]:
         return _from_models_collection_to_list_of_dicts(self._models)
 
@@ -72,6 +99,53 @@ class Models:
                 self._models[self.index].resolution_function.constant = float(new_value)
                 return True
         return False
+
+    def set_resolution_type_at_current_index(self, new_value: Union[int, str]) -> bool:
+        try:
+            if isinstance(new_value, int):
+                resolution_type = RESOLUTION_FUNCTION_TYPES[new_value]
+            else:
+                resolution_type = new_value
+        except IndexError:
+            return False
+
+        if self.resolution_type_at_current_index == resolution_type:
+            return False
+
+        try:
+            self._models[self.index].resolution_function = self._resolution_function_for_type(resolution_type)
+        except ValueError:
+            return False
+        return True
+
+    def _resolution_function_for_type(self, resolution_type: str):
+        current_resolution = self._models[self.index].resolution_function
+        if resolution_type == 'PercentageFwhm':
+            constant = DEFAULT_RESOLUTION_FWHM_PERCENTAGE
+            if isinstance(current_resolution, PercentageFwhm):
+                constant = current_resolution.constant
+            return PercentageFwhm(constant)
+
+        experiment = self._current_experiment()
+        if experiment is None or len(experiment.x) == 0:
+            raise ValueError(f'Cannot set resolution type {resolution_type} without experimental data')
+
+        q_data_points = np.asarray(experiment.x)
+        resolution_variances = np.asarray(experiment.xe)
+
+        if resolution_type == 'LinearSpline':
+            return LinearSpline(q_data_points=q_data_points, fwhm_values=np.sqrt(resolution_variances))
+
+        if resolution_type == 'Pointwise':
+            return Pointwise([q_data_points, np.asarray(experiment.y), resolution_variances])
+
+        raise ValueError(f'Unsupported resolution type: {resolution_type}')
+
+    def _current_experiment(self):
+        try:
+            return self._project_lib.experimental_data_for_model_at_index(self.index)
+        except IndexError:
+            return None
 
     def remove_at_index(self, value: str) -> None:
         self._models.pop(int(value))

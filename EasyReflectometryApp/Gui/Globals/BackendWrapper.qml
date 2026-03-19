@@ -200,7 +200,10 @@ QtObject {
     function experimentSetScaling(value) { activeBackend.experiment.setScaling(value) }
     readonly property var experimentBackground: activeBackend.experiment.background
     function experimentSetBackground(value) { activeBackend.experiment.setBackground(value) }
+    readonly property var experimentResolutionTypes: activeBackend.experiment.resolutionTypes
+    readonly property int experimentResolutionTypeCurrentIndex: activeBackend.experiment.resolutionTypeCurrentIndex
     readonly property var experimentResolution: activeBackend.experiment.resolution
+    function experimentSetResolutionType(value) { activeBackend.experiment.setResolutionType(value) }
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
     function experimentLoad(value) { activeBackend.experiment.load(value) }
 
