@@ -17,6 +17,6 @@ class Calculators:
         if new_value != self._current_index:
             self._current_index = new_value
             new_calculator = self._list_available_calculators[new_value]
-            self._project_lib._calculator.switch(new_calculator)
+            self._project_lib.calculator = new_calculator
             return True
         return False
