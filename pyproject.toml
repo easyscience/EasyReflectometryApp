@@ -39,6 +39,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+test = [
+    'pytest',
+    'pytest-cov',
+]
+
 ci = [
   'pyinstaller',
   'licensename',
