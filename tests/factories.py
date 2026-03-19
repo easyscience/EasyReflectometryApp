@@ -236,6 +236,10 @@ class FakeMaterialCollection(list):
 class FakeCalculatorController:
     def __init__(self, available_interfaces):
         self.available_interfaces = list(available_interfaces)
+        self.switched_to = None
+
+    def switch(self, value):
+        self.switched_to = value
 
 
 class FakeExperiment:

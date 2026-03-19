@@ -92,7 +92,7 @@ def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results():
     assert logic.fit_finished is True
     assert logic.fit_success is True
     assert logic.fit_n_pars == 4
-    assert logic.fit_chi2 == 2.0
+    assert logic.fit_chi2 == 10.0
 
     logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi=4.5))
     assert logic.fit_success is False
@@ -119,7 +119,7 @@ def test_fit_failure_and_cancellation_state_transitions():
 
 def test_start_stop_handles_success_and_fiterror():
     project = make_project(models=[object()])
-    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, reduced_chi=1.7))
+    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, chi2=1.7, reduced_chi=1.7))
     logic = fitting_module.Fitting(project)
 
     logic.start_stop()

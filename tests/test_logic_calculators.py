@@ -20,7 +20,7 @@ def test_set_current_index_updates_project_calculator():
 
     assert changed is True
     assert logic.current_index() == 1
-    assert project.calculator == 'refl1d'
+    assert project._calculator.switched_to == 'refl1d'
 
 
 def test_set_current_index_returns_false_when_unchanged():

@@ -179,3 +179,89 @@ def test_summary_ordering_and_empty_sections(tmp_path, monkeypatch):
     assert logic._ordered_experiments() == []
     assert logic._all_models_section_html() == '<h3>All Samples</h3><p>No samples available.</p>'
     assert logic._all_experiments_section_html() == '<h3>All Experiments</h3><p>No experiments available.</p>'
+
+
+def test_summary_injection_and_explicit_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
+    project = make_summary_project(tmp_path)
+    logic = summary_module.Summary(project)
+    logic.file_name = 'custom-summary'
+    logic.plot_file_name = 'custom-plots'
+
+    injected = logic._inject_multimodel_multiexperiment_sections('<div>base</div>')
+
+    assert 'All Samples' in injected
+    assert 'All Experiments' in injected
+    assert logic.file_path == project.path / 'custom-summary'
+    assert logic.plot_file_path == project.path / 'custom-plots'
+
+    html_target = tmp_path / 'explicit' / 'report.html'
+    pdf_target = tmp_path / 'explicit' / 'report.pdf'
+    logic.save_as_html(str(html_target))
+    logic.save_as_pdf(str(pdf_target))
+
+    assert html_target.exists()
+    assert logic._summary.saved_pdf_path == pdf_target
+
+
+def test_summary_experiment_section_handles_empty_names_missing_models_and_nan_ranges(tmp_path, monkeypatch):
+    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
+    project = make_project(models=make_model_collection())
+    project.path = tmp_path / 'report'
+    project.experiments = [make_experiment('', model=None, x=np.array([]), y=np.array([]), ye=np.array([]))]
+    project._experiments = project.experiments
+    logic = summary_module.Summary(project)
+
+    html = logic._all_experiments_section_html()
+
+    assert 'Experiment 1' in html
+    assert 'N/A' in html
+    assert 'nan' in html
+
+
+def test_summary_make_plot_uses_plain_plot_without_valid_errors_and_sample_fallback(tmp_path, monkeypatch):
+    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
+    project = make_summary_project(tmp_path)
+    project.experiments = [
+        make_experiment('No Errors', model=project.models[0], x=np.array([0.1, 0.2]), y=np.array([1.0, 2.0]), ye=None),
+        make_experiment('Mismatched Errors', model=project.models[0], x=np.array([0.3, 0.4]), y=np.array([3.0, 4.0]), ye=np.array([0.5])),
+    ]
+    project._experiments = project.experiments
+    logic = summary_module.Summary(project)
+    fake_pyplot = FakePyplot()
+    monkeypatch.setattr(logic, '_plt', lambda: fake_pyplot)
+    monkeypatch.setattr(logic, '_gridspec', lambda: FakeGridSpecModule)
+
+    figure = logic.make_plot(10.0, 8.0)
+    reflectivity_axis = figure.axes[0]
+    assert reflectivity_axis.errorbar_calls == []
+    assert len(reflectivity_axis.plot_calls) == 4
+
+    project.experiments = []
+    project._experiments = []
+    project.sample_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([0.1, 0.2]), y=np.array([2.0, 3.0]))
+    project.sld_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([]), y=np.array([]))
+    figure = logic.make_plot(10.0, 8.0)
+    reflectivity_axis = figure.axes[0]
+    assert reflectivity_axis.legend_called is True
+
+
+def test_summary_make_plot_skips_empty_series_and_does_not_add_legend_without_reflectivity(tmp_path, monkeypatch):
+    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
+    project = make_project(models=make_model_collection(make_model(name='Model A', color='')))
+    project.path = tmp_path / 'empty-plots'
+    project.experiments = []
+    project._experiments = []
+    project.sample_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([]), y=np.array([]))
+    project.sld_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([]), y=np.array([]))
+    logic = summary_module.Summary(project)
+    fake_pyplot = FakePyplot()
+    monkeypatch.setattr(logic, '_plt', lambda: fake_pyplot)
+    monkeypatch.setattr(logic, '_gridspec', lambda: FakeGridSpecModule)
+
+    figure = logic.make_plot(10.0, 8.0)
+    reflectivity_axis = figure.axes[0]
+
+    assert reflectivity_axis.plot_calls == []
+    assert reflectivity_axis.errorbar_calls == []
+    assert reflectivity_axis.legend_called is False
