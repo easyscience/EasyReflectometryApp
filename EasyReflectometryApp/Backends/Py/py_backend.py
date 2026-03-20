@@ -226,5 +226,6 @@ class PyBackend(QObject):
         self._plotting_1d.refreshSamplePage()
         self._plotting_1d.refreshExperimentPage()
         self._plotting_1d.refreshAnalysisPage()
+        self._plotting_1d.samplePageResetAxes.emit()
         # Emit signal for multi-experiment changes
         self.multiExperimentSelectionChanged.emit()
