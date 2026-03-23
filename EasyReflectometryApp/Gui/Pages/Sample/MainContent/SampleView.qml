@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
+// SPDX-FileCopyrightText: 2026 EasyReflectometry contributors <support@easyreflectometry.org>
 // SPDX-License-Identifier: BSD-3-Clause
-// © 2025 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+// © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
 import QtQuick.Controls
