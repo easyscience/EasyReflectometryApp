@@ -159,6 +159,7 @@ class PyBackend(QObject):
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._experiment.externalExperimentChanged.connect(self._refresh_plots)
+        self._experiment.qRangeUpdated.connect(self._sample.qRangeChanged)
 
     def _connect_analysis_page(self) -> None:
         self._analysis.externalMinimizerChanged.connect(self._relay_analysis_page)
