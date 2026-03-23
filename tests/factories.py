@@ -302,6 +302,14 @@ class FakeFitResult:
 
 
 class FakeProject:
+    @property
+    def _current_model_index(self):
+        return self.current_model_index
+
+    @_current_model_index.setter
+    def _current_model_index(self, value):
+        self.current_model_index = value
+
     def __init__(
         self,
         materials=None,
@@ -319,7 +327,6 @@ class FakeProject:
         self._models = models or FakeModelCollection()
         self.models = self._models
         self.current_model_index = 0
-        self._current_model_index = 0
         self.current_assembly_index = 0
         self.current_layer_index = 0
         self._calculator = FakeCalculatorController(calculator_interfaces or ['refnx', 'refl1d'])

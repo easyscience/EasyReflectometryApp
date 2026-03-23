@@ -39,6 +39,9 @@ class FakeMultiFitter:
 
 
 def install_fake_multifitter(monkeypatch):
+    # Inject a fake module into sys.modules because the real easyreflectometry.fitting
+    # module pulls in heavy calculator backends at import time. Using monkeypatch.setitem
+    # ensures the original module is restored automatically after the test.
     fake_module = ModuleType('easyreflectometry.fitting')
     fake_module.MultiFitter = FakeMultiFitter
     monkeypatch.setitem(sys.modules, 'easyreflectometry.fitting', fake_module)
@@ -127,8 +130,9 @@ def test_start_stop_handles_success_and_fiterror():
     assert logic.show_results_dialog is True
     assert logic.fit_chi2 == 1.7
 
-    project.fitter = SimpleNamespace(
-        fit_single_data_set_1d=lambda exp_data: (_ for _ in ()).throw(fitting_module.FitError('fit failed'))
-    )
+    def _raise_fit_error(exp_data):
+        raise fitting_module.FitError('fit failed')
+
+    project.fitter = SimpleNamespace(fit_single_data_set_1d=_raise_fit_error)
     logic.start_stop()
     assert 'fit failed' in logic.fit_error_message

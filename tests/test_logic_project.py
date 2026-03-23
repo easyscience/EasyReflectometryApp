@@ -87,7 +87,7 @@ def test_project_experimental_data_and_orso_model_updates():
     logic = Project(project_lib)
 
     assert logic.experimental_data_at_current_index is True
-    project_lib._current_model_index = 5
+    project_lib.current_model_index = 5
     assert logic.experimental_data_at_current_index is False
 
     added_model = make_model(sample=make_sample(make_assembly(), make_assembly(), make_assembly()))
@@ -110,3 +110,4 @@ def test_project_reset_calls_reset_and_default_model():
     logic.reset()
 
     assert project_lib.calls == [('reset',), ('default_model',)]
+

@@ -34,3 +34,4 @@ def test_status_wrapper_phase_count_is_none(monkeypatch, qcore_application):
     status = status_module.Status(project_lib=object())
 
     assert status.phaseCount is None
+

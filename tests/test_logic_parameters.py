@@ -300,6 +300,8 @@ def test_parameter_current_selection_edge_cases_and_unsupported_constraint(monke
     project.parameters = [parameter, dependent]
     logic.add_constraint(1, '=', 2.0, '', 0)
 
+    # NOTE: The production code reports this error via print(). If the error reporting
+    # mechanism changes to logging, this assertion must be updated to use caplog instead.
     captured = capsys.readouterr()
     assert 'Unsupported type' in captured.out
     assert dependent.independent is True
