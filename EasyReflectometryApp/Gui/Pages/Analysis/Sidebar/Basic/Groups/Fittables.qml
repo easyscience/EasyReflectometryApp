@@ -343,7 +343,6 @@ EaElements.GroupBox {
                 EaComponents.TableViewParameter {
                     enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true
-                    minored: true
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].min).replace('Infinity', 'inf')
                     onEditingFinished: {
                         focus = false
@@ -356,7 +355,6 @@ EaElements.GroupBox {
                 EaComponents.TableViewParameter {
                     enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true
-                    minored: true
                     text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].max).replace('Infinity', 'inf')
                     onEditingFinished: {
                         focus = false
