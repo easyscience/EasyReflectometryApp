@@ -224,9 +224,9 @@ class Fitting:
 
     @property
     def fit_n_pars(self) -> int:
-        """Return total number of refined parameters across all fits."""
+        """Return the global number of refined parameters for the fit."""
         if self._results:
-            return sum(r.n_pars for r in self._results)
+            return self._results[0].n_pars
         if self._result is None:
             return 0
         return self._result.n_pars

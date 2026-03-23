@@ -168,6 +168,8 @@ class PyBackend(QObject):
         self._analysis.externalFittingChanged.connect(self._refresh_plots)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
+        # Update status bar when parameters change (e.g. fit checkbox toggle, post-fit)
+        self._analysis.parametersChanged.connect(self._status.statusChanged)
         # Connect multi-experiment selection changes
         self._analysis.experimentsChanged.connect(self.multiExperimentSelectionChanged)
 
