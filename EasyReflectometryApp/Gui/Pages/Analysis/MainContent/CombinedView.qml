@@ -256,7 +256,7 @@ Rectangle {
                 axisY.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
                 axisY.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
 
-                calcSerie.onHovered: (point, state) => showMainTooltip(analysisChartView, analysisDataToolTip, point, state)
+                onChartHovered: (chartX, chartY, screenX, screenY, active) => showMainTooltip(analysisChartView, analysisDataToolTip, chartX, chartY, screenX, screenY, active)
                 calcSerie.color: {
                     const models = Globals.BackendWrapper.sampleModels
                     const idx = Globals.BackendWrapper.sampleCurrentModelIndex
@@ -473,15 +473,14 @@ Rectangle {
     }
 
     // Logic
-    function showMainTooltip(chart, tooltip, point, state) {
+    function showMainTooltip(chart, tooltip, chartX, chartY, screenX, screenY, active) {
         if (!chart.allowHover) {
             return
         }
-        const pos = chart.mapToPosition(Qt.point(point.x, point.y))
-        tooltip.x = pos.x
-        tooltip.y = pos.y
-        tooltip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
+        tooltip.x = screenX
+        tooltip.y = screenY
+        tooltip.text = `<p align="left">x: ${chartX.toFixed(3)}<br\>y: ${chartY.toFixed(3)}</p>`
         tooltip.parent = chart
-        tooltip.visible = state
+        tooltip.visible = active
     }
 }

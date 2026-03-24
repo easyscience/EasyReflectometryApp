@@ -196,6 +196,33 @@ Rectangle {
             textFormat: Text.RichText
         }
 
+        // Cross-platform hover tracking for tooltips
+        HoverHandler {
+            id: chartHoverHandler
+            onHoveredChanged: {
+                if (!hovered) {
+                    dataToolTip.visible = false
+                }
+            }
+            onPointChanged: {
+                if (hovered && chartView.allowHover) {
+                    const pos = point.position
+                    const pa = chartView.plotArea
+                    if (pos.x >= pa.x && pos.x <= pa.x + pa.width &&
+                        pos.y >= pa.y && pos.y <= pa.y + pa.height) {
+                        const val = chartView.mapToValue(pos)
+                        dataToolTip.x = pos.x
+                        dataToolTip.y = pos.y
+                        dataToolTip.text = `<p align="left">x: ${val.x.toFixed(3)}<br\>y: ${val.y.toFixed(3)}</p>`
+                        dataToolTip.parent = chartView
+                        dataToolTip.visible = true
+                    } else {
+                        dataToolTip.visible = false
+                    }
+                }
+            }
+        }
+
         // Zoom rectangle
         Rectangle {
             id: recZoom
@@ -353,7 +380,6 @@ Rectangle {
             line.color = models[k].color
             line.width = 2
             line.useOpenGL = EaGlobals.Vars.useOpenGL
-            line.hovered.connect((point, state) => showMainTooltip(point, state))
             sldSeries.push(line)
         }
 
@@ -374,15 +400,5 @@ Rectangle {
         }
     }
 
-    function showMainTooltip(point, state) {
-        if (!chartView.allowHover) {
-            return
-        }
-        const pos = chartView.mapToPosition(Qt.point(point.x, point.y))
-        dataToolTip.x = pos.x
-        dataToolTip.y = pos.y
-        dataToolTip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
-        dataToolTip.parent = chartView
-        dataToolTip.visible = state
-    }
+
 }

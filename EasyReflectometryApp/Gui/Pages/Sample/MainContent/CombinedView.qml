@@ -247,6 +247,33 @@ Rectangle {
                     textFormat: Text.RichText
                 }
 
+                // Cross-platform hover tracking for tooltips
+                HoverHandler {
+                    id: sampleChartHoverHandler
+                    onHoveredChanged: {
+                        if (!hovered) {
+                            sampleDataToolTip.visible = false
+                        }
+                    }
+                    onPointChanged: {
+                        if (hovered && sampleChartView.allowHover) {
+                            const pos = point.position
+                            const pa = sampleChartView.plotArea
+                            if (pos.x >= pa.x && pos.x <= pa.x + pa.width &&
+                                pos.y >= pa.y && pos.y <= pa.y + pa.height) {
+                                const val = sampleChartView.mapToValue(pos)
+                                sampleDataToolTip.x = pos.x
+                                sampleDataToolTip.y = pos.y
+                                sampleDataToolTip.text = `<p align="left">x: ${val.x.toFixed(3)}<br\>y: ${val.y.toFixed(3)}</p>`
+                                sampleDataToolTip.parent = sampleChartView
+                                sampleDataToolTip.visible = true
+                            } else {
+                                sampleDataToolTip.visible = false
+                            }
+                        }
+                    }
+                }
+
                 // Zoom rectangle
                 Rectangle {
                     id: sampleRecZoom
@@ -445,8 +472,6 @@ Rectangle {
             sampleLine.color = models[k].color
             sampleLine.width = 2
             sampleLine.useOpenGL = EaGlobals.Vars.useOpenGL
-            // Connect hovered signal for tooltip
-            sampleLine.hovered.connect((point, state) => showMainTooltip(sampleChartView, sampleDataToolTip, point, state))
             sampleSeries.push(sampleLine)
         }
 
@@ -471,16 +496,5 @@ Rectangle {
         }
     }
 
-    // Logic
-    function showMainTooltip(chart, tooltip, point, state) {
-        if (!chart.allowHover) {
-            return
-        }
-        const pos = chart.mapToPosition(Qt.point(point.x, point.y))
-        tooltip.x = pos.x
-        tooltip.y = pos.y
-        tooltip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
-        tooltip.parent = chart
-        tooltip.visible = state
-    }
+
 }
