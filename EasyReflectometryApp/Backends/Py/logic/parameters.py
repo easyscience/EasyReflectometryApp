@@ -258,11 +258,22 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         return alias
 
     def _get_parameter_display_data(param: Parameter, model_unique_name: str) -> Tuple[str, str]:
-        """Extract display name and group from parameter path."""
+        """Extract display name and group from parameter path.
+
+        For layer parameters (thickness, roughness), uses the assembly name
+        from the path instead of the layer name, so that renaming an assembly
+        in the Model Editor is reflected in the Analysis parameters table.
+        """
         path = global_object.map.find_path(model_unique_name, param.unique_name)
         if len(path) >= 2:
-            parent_name = global_object.map.get_item_by_key(path[-2]).name
             param_name = global_object.map.get_item_by_key(path[-1]).name
+            # For layer parameters the path is:
+            # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
+            # Use the assembly name (path[-4]) instead of the layer name (path[-2])
+            if _is_layer_parameter(param) and len(path) >= 4:
+                parent_name = global_object.map.get_item_by_key(path[-4]).name
+            else:
+                parent_name = global_object.map.get_item_by_key(path[-2]).name
             return f'{parent_name} {param_name}', parent_name
         return param.name, ''  # Fallback to parameter name without group
 
