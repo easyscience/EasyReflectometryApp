@@ -428,6 +428,70 @@ class Plotting1d(QObject):
             return -10.0
         return np.log10(valid_y.min())
 
+    # Residual ranges
+    def _get_residual_range(self) -> tuple:
+        """Return (min_x, max_x, min_y, max_y) for the residual chart.
+
+        X range matches the filtered analysis domain.  Y range is computed
+        from residual values across all currently selected experiments, with
+        a 10 % margin.  Safe fallback values are returned when data is empty.
+        """
+        min_x, max_x = float('inf'), float('-inf')
+        min_y, max_y = float('inf'), float('-inf')
+
+        try:
+            indices = []
+            if self.is_multi_experiment_mode:
+                indices = list(self._proxy._analysis._selected_experiment_indices)
+            else:
+                indices = [self._project_lib.current_experiment_index]
+
+            for exp_idx in indices:
+                try:
+                    aligned = self._get_aligned_analysis_values(exp_idx)
+                    for item in aligned:
+                        q = item['q']
+                        calc = item['calculated']
+                        meas = item['measured']
+                        sigma = item['sigma']
+                        if sigma > 0.0:
+                            residual = (calc - meas) / sigma
+                        elif meas > 0.0:
+                            residual = (calc - meas) / meas
+                        else:
+                            residual = calc - meas
+                        min_x = min(min_x, q)
+                        max_x = max(max_x, q)
+                        min_y = min(min_y, residual)
+                        max_y = max(max_y, residual)
+                except Exception as e:
+                    console.debug(f'Residual range error for experiment {exp_idx}: {e}')
+                    continue
+        except Exception as e:
+            console.debug(f'Error computing residual range: {e}')
+
+        if min_x == float('inf'):
+            return (0.0, 1.0, -1.0, 1.0)
+
+        y_margin = max(abs(min_y), abs(max_y)) * 0.10 or 0.1
+        return (min_x, max_x, min_y - y_margin, max_y + y_margin)
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMinX(self) -> float:
+        return self._get_residual_range()[0]
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMaxX(self) -> float:
+        return self._get_residual_range()[1]
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMinY(self) -> float:
+        return self._get_residual_range()[2]
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMaxY(self) -> float:
+        return self._get_residual_range()[3]
+
     @Property('QVariant', notify=chartRefsChanged)
     def chartRefs(self):
         return self._chartRefs
@@ -537,68 +601,110 @@ class Plotting1d(QObject):
             console.debug(f'Error getting experiment data points for index {experiment_index}: {e}')
             return []
 
+    def _get_aligned_analysis_values(self, experiment_index: int) -> list:
+        """Return aligned measured/calculated pairs in linear (rq4-transformed) space.
+
+        Both values have ``_apply_rq4`` applied but no log10.  Only points within
+        [q_min, q_max] are included.  The caller is responsible for any further
+        transformation (log10 for display, subtraction for residuals, etc.).
+
+        Each element is a dict::
+
+            {'q': float, 'measured': float, 'calculated': float}
+        """
+        # Get measured experimental data
+        exp_data = self._project_lib.experimental_data_for_model_at_index(experiment_index)
+
+        # Resolve model index, which may differ from experiment_index when multiple
+        # experiments share the same model.
+        model_index = 0
+        model_found = False
+        if hasattr(exp_data, 'model') and exp_data.model is not None:
+            for idx, model in enumerate(self._project_lib.models):
+                if model is exp_data.model:
+                    model_index = idx
+                    model_found = True
+                    break
+            if not model_found:
+                console.debug(f'Warning: model for experiment {experiment_index} '
+                              f'not found in models collection, falling back to model 0')
+        else:
+            model_index = experiment_index if experiment_index < len(self._project_lib.models) else 0
+
+        # Filter experimental q values to [q_min, q_max]
+        q_values = exp_data.x
+        mask = (q_values >= self._project_lib.q_min) & (q_values <= self._project_lib.q_max)
+        q_filtered = q_values[mask]
+
+        # Evaluate model at the filtered experimental q points
+        calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered)
+        calc_y = calc_data.y
+
+        if len(calc_y) != len(q_filtered):
+            console.debug(f'Warning: calculated data length ({len(calc_y)}) '
+                          f'differs from filtered experimental data ({len(q_filtered)}) '
+                          f'for experiment {experiment_index}')
+
+        points = []
+        calc_idx = 0
+        for point in exp_data.data_points():
+            q = point[0]
+            if self._project_lib.q_min < q < self._project_lib.q_max:
+                r_meas = point[1]
+                calc_y_val = calc_y[calc_idx] if calc_idx < len(calc_y) else r_meas
+                sigma_linear = float(np.sqrt(max(point[2], 0.0)))
+                sigma_transformed = float(self._apply_rq4(q, sigma_linear)) if sigma_linear > 0.0 else 0.0
+                points.append({
+                    'q': float(q),
+                    'measured': float(self._apply_rq4(q, r_meas)),
+                    'calculated': float(self._apply_rq4(q, calc_y_val)),
+                    'sigma': sigma_transformed,
+                })
+                calc_idx += 1
+        return points
+
     @Slot(int, result='QVariantList')
     def getAnalysisDataPoints(self, experiment_index: int) -> list:
         """Get measured and calculated data points for a specific experiment for analysis plotting."""
         try:
-            # Get measured experimental data
-            exp_data = self._project_lib.experimental_data_for_model_at_index(experiment_index)
-
-            # Get the model index for this experiment - it may be different from experiment_index
-            # When multiple experiments share the same model
-            model_index = 0
-            model_found = False
-            if hasattr(exp_data, 'model') and exp_data.model is not None:
-                # Find the model index in the models collection
-                for idx, model in enumerate(self._project_lib.models):
-                    if model is exp_data.model:
-                        model_index = idx
-                        model_found = True
-                        break
-                if not model_found:
-                    console.debug(f'Warning: model for experiment {experiment_index} '
-                                  f'not found in models collection, falling back to model 0')
-            else:
-                # Fallback: use experiment_index if it's within model range, else 0
-                model_index = experiment_index if experiment_index < len(self._project_lib.models) else 0
-
-            # Get the q values from the experimental data for calculating the model
-            q_values = exp_data.x
-            # Filter to q range
-            mask = (q_values >= self._project_lib.q_min) & (q_values <= self._project_lib.q_max)
-            q_filtered = q_values[mask]
-
-            # Get calculated model data at the same q points using the correct model index
-            calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered)
-
             points = []
-            exp_points = list(exp_data.data_points())
-            calc_y = calc_data.y
-
-            if len(calc_y) != len(q_filtered):
-                console.debug(f'Warning: calculated data length ({len(calc_y)}) '
-                              f'differs from filtered experimental data ({len(q_filtered)}) '
-                              f'for experiment {experiment_index}')
-
-            calc_idx = 0
-            for point in exp_points:
-                if point[0] < self._project_lib.q_max and self._project_lib.q_min < point[0]:
-                    q = point[0]
-                    r_meas = point[1]
-                    calc_y_val = calc_y[calc_idx] if calc_idx < len(calc_y) else r_meas
-                    r_meas = self._apply_rq4(q, r_meas)
-                    calc_y_val = self._apply_rq4(q, calc_y_val)
-                    points.append(
-                        {
-                            'x': float(q),
-                            'measured': float(np.log10(r_meas)),
-                            'calculated': float(np.log10(calc_y_val)),
-                        }
-                    )
-                    calc_idx += 1
+            for item in self._get_aligned_analysis_values(experiment_index):
+                q = item['q']
+                r_meas = item['measured']
+                r_calc = item['calculated']
+                points.append({
+                    'x': q,
+                    'measured': float(np.log10(r_meas)) if r_meas > 0 else -10.0,
+                    'calculated': float(np.log10(r_calc)) if r_calc > 0 else -10.0,
+                })
             return points
         except Exception as e:
             console.debug(f'Error getting analysis data points for index {experiment_index}: {e}')
+            return []
+
+    @Slot(int, result='QVariantList')
+    def getResidualDataPoints(self, experiment_index: int) -> list:
+        """Get normalized residual data points (model − experiment) / sigma.
+
+        Falls back to (model − experiment) / experiment when sigma is zero
+        (i.e. measurement uncertainty not provided).
+        """
+        try:
+            points = []
+            for item in self._get_aligned_analysis_values(experiment_index):
+                calc = item['calculated']
+                meas = item['measured']
+                sigma = item['sigma']
+                if sigma > 0.0:
+                    residual = (calc - meas) / sigma
+                elif meas > 0.0:
+                    residual = (calc - meas) / meas
+                else:
+                    residual = calc - meas
+                points.append({'x': float(item['q']), 'y': float(residual)})
+            return points
+        except Exception as e:
+            console.debug(f'Error getting residual data points for index {experiment_index}: {e}')
             return []
 
     def refreshSamplePage(self):
@@ -617,6 +723,8 @@ class Plotting1d(QObject):
     def refreshAnalysisPage(self):
         self._model_data = {}
         self.drawCalculatedAndMeasuredOnAnalysisChart()
+        # Notify the residual chart to re-poll data and ranges
+        self.sampleChartRangesChanged.emit()
 
     def refreshExperimentRanges(self):
         """Emit signal to update experiment chart ranges when selection changes."""

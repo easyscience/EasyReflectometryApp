@@ -135,6 +135,11 @@ class PyBackend(QObject):
         """Get measured and calculated data points for a specific experiment for analysis plotting."""
         return self._plotting_1d.getAnalysisDataPoints(experiment_index)
 
+    @Slot(int, result='QVariantList')
+    def plottingGetResidualDataPoints(self, experiment_index: int) -> list:
+        """Get residual data points (model - experiment) for a specific experiment."""
+        return self._plotting_1d.getResidualDataPoints(experiment_index)
+
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:
         self._connect_project_page()
