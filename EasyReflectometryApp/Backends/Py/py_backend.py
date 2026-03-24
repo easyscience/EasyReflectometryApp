@@ -152,7 +152,8 @@ class PyBackend(QObject):
     def _connect_sample_page(self) -> None:
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)
         self._sample.externalRefreshPlot.connect(self._refresh_plots)
-        self._sample.modelsTableChanged.connect(self._analysis.parametersChanged)
+        self._sample.modelsTableChanged.connect(self._analysis._clearCacheAndEmitParametersChanged)
+        self._sample.modelsTableChanged.connect(self._analysis.experimentsChanged)
         # Connect sample changes to multi-experiment selection signal
         self._sample.modelsTableChanged.connect(self.multiExperimentSelectionChanged)
 
