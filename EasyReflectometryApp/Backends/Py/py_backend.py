@@ -137,7 +137,7 @@ class PyBackend(QObject):
 
     @Slot(int, result='QVariantList')
     def plottingGetResidualDataPoints(self, experiment_index: int) -> list:
-        """Get residual data points (model - experiment) for a specific experiment."""
+        """Get residual data points for a specific experiment for residual plotting."""
         return self._plotting_1d.getResidualDataPoints(experiment_index)
 
     ######### Connections to relay info between the backend parts
@@ -165,7 +165,8 @@ class PyBackend(QObject):
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._experiment.externalExperimentChanged.connect(self._refresh_plots)
-        self._experiment.qRangeUpdated.connect(self._sample.qRangeChanged)
+        if hasattr(self._experiment, 'qRangeUpdated') and hasattr(self._sample, 'qRangeChanged'):
+            self._experiment.qRangeUpdated.connect(self._sample.qRangeChanged)
 
     def _connect_analysis_page(self) -> None:
         self._analysis.externalMinimizerChanged.connect(self._relay_analysis_page)

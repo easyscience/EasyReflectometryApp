@@ -8,6 +8,7 @@ from easyreflectometry import Project as ProjectLib
 class Project:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
+        self._last_q_range_changed = False
         self._project_lib.default_model()
         self._update_enablement_of_fixed_layers_for_model(0)
 

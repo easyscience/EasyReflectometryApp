@@ -2,6 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 from typing import List
 from typing import Optional
+from typing import cast
 
 from easyreflectometry import Project as ProjectLib
 from easyscience.fitting import FitResults
@@ -31,7 +32,7 @@ class Fitting:
         if self._result is None:
             return ''
         else:
-            return self._result.success
+            return str(self._result.success)
 
     @property
     def running(self) -> bool:
@@ -105,6 +106,8 @@ class Fitting:
         self._finished = False
         self._show_results_dialog = False
         self._fit_error_message = None
+        self._result = None
+        self._results = []
 
     def _ordered_experiments(self) -> list:
         """Return experiments as an ordered list of experiment objects.
@@ -118,7 +121,7 @@ class Fitting:
         if hasattr(experiments, 'items'):
             items = list(experiments.items())
             try:
-                items.sort(key=lambda item: item[0])
+                items = sorted(items)
             except TypeError:
                 pass
             return [experiment for _, experiment in items]
@@ -201,7 +204,7 @@ class Fitting:
             logger.exception('Error preparing threaded fit')
             return None, None, None, None, None
 
-    def on_fit_finished(self, results: List[FitResults]) -> None:
+    def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
         """Handle successful completion of fitting.
 
         :param results: List of FitResults from the multi-fitter.
@@ -219,25 +222,28 @@ class Fitting:
             engine_name = getattr(results[0], 'minimizer_engine', 'unknown')
             logger.info('Fit finished: engine=%s, chi2=%s, success=%s', engine_name, self.fit_chi2, results[0].success)
         else:
-            self._result = results
-            self._results = [results] if results else []
+            single_result = cast(Optional[FitResults], results)
+            self._result = single_result
+            self._results = [single_result] if single_result is not None else []
 
     @property
     def fit_n_pars(self) -> int:
         """Return the global number of refined parameters for the fit."""
         if self._results:
-            return sum(r.n_pars for r in self._results)
+            return sum(result.n_pars for result in self._results)
         if self._result is None:
             return 0
         return self._result.n_pars
 
     @property
     def fit_chi2(self) -> float:
-        """Return reduced chi-squared across all fits (chi2 / degrees of freedom)"""
+        """Return reduced chi-squared across all fits."""
         if self._results:
             try:
-                total_chi2 = float(sum(r.chi2 for r in self._results))
-                total_points = sum(len(r.x) for r in self._results)
+                if len(self._results) == 1:
+                    return float(self._results[0].reduced_chi)
+                total_chi2 = float(sum(result.chi2 for result in self._results))
+                total_points = sum(len(result.x) for result in self._results)
                 n_params = self._results[0].n_pars
                 total_dof = total_points - n_params
                 if total_dof <= 0:
