@@ -8,6 +8,7 @@ from easyreflectometry import Project as ProjectLib
 class Project:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
+        self._last_q_range_changed = False
         self._project_lib.default_model()
         self._update_enablement_of_fixed_layers_for_model(0)
 
@@ -119,10 +120,10 @@ class Project:
     def count_datasets_in_file(self, path: str) -> int:
         return self._project_lib.count_datasets_in_file(path)
 
-    def load_all_experiments_from_file(self, path: str) -> tuple[int, bool]:
+    def load_all_experiments_from_file(self, path: str) -> int:
         loaded_count = self._project_lib.load_all_experiments_from_file(path)
-        q_max_changed = self._sync_q_max_with_loaded_experiments()
-        return loaded_count, q_max_changed
+        self._last_q_range_changed = self._sync_q_max_with_loaded_experiments()
+        return loaded_count
 
     def _sync_q_max_with_loaded_experiments(self) -> bool:
         """Set model q_max to the largest q value found in loaded experiments.

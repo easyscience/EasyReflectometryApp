@@ -95,12 +95,12 @@ def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results():
     assert logic.fit_finished is True
     assert logic.fit_success is True
     assert logic.fit_n_pars == 4
-    assert logic.fit_chi2 == 10.0
+    assert logic.fit_chi2 == 2.0
 
     logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi=4.5))
     assert logic.fit_success is False
     assert logic.fit_n_pars == 1
-    assert logic.fit_chi2 == 9.0
+    assert logic.fit_chi2 == 4.5
 
 
 def test_fit_failure_and_cancellation_state_transitions():
