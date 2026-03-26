@@ -303,6 +303,15 @@ class FakeFitResult:
 
 class FakeProject:
     @property
+    def calculator(self):
+        return self._calculator_name
+
+    @calculator.setter
+    def calculator(self, value):
+        self._calculator_name = value
+        self._calculator.switched_to = value
+
+    @property
     def _current_model_index(self):
         return self.current_model_index
 
@@ -330,7 +339,7 @@ class FakeProject:
         self.current_assembly_index = 0
         self.current_layer_index = 0
         self._calculator = FakeCalculatorController(calculator_interfaces or ['refnx', 'refl1d'])
-        self.calculator = calculator_name
+        self._calculator_name = calculator_name
         self.minimizer = FakeMinimizerValue(minimizer_name)
         self._fitter = None
         self.fitter = None

@@ -76,6 +76,31 @@ class Plotting1d(QObject):
             return y * (x**4)
         return y
 
+    def _qtcharts_series_ref(self, page: str, serie: str):
+        return self._chartRefs['QtCharts'].get(page, {}).get(serie)
+
+    def _clear_qtcharts_series(self, page: str, *series_names: str) -> bool:
+        missing_series = []
+        for series_name in series_names:
+            series_ref = self._qtcharts_series_ref(page, series_name)
+            if series_ref is None:
+                missing_series.append(series_name)
+                continue
+            series_ref.clear()
+
+        if missing_series:
+            console.debug(
+                IO.formatMsg(
+                    'sub',
+                    f'{page} series unavailable',
+                    ', '.join(missing_series),
+                    'skipping redraw',
+                )
+            )
+            return False
+
+        return True
+
     # R(q)×q⁴ mode
     @Property(bool, notify=plotModeChanged)
     def plotRQ4(self) -> bool:
@@ -779,12 +804,12 @@ class Plotting1d(QObject):
                 self.qtchartsReplaceMeasuredOnExperimentChartAndRedraw()
 
     def qtchartsReplaceMeasuredOnExperimentChartAndRedraw(self):
-        series_measured = self._chartRefs['QtCharts']['experimentPage']['measuredSerie']
-        series_measured.clear()
-        series_error_upper = self._chartRefs['QtCharts']['experimentPage']['errorUpperSerie']
-        series_error_upper.clear()
-        series_error_lower = self._chartRefs['QtCharts']['experimentPage']['errorLowerSerie']
-        series_error_lower.clear()
+        if not self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie'):
+            return
+
+        series_measured = self._qtcharts_series_ref('experimentPage', 'measuredSerie')
+        series_error_upper = self._qtcharts_series_ref('experimentPage', 'errorUpperSerie')
+        series_error_lower = self._qtcharts_series_ref('experimentPage', 'errorLowerSerie')
         nr_points = 0
         for point in self.experiment_data.data_points():
             q = point[0]
@@ -808,12 +833,7 @@ class Plotting1d(QObject):
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines'))
 
         # Clear default series but don't use them for multi-experiment mode
-        if 'measuredSerie' in self._chartRefs['QtCharts']['experimentPage']:
-            self._chartRefs['QtCharts']['experimentPage']['measuredSerie'].clear()
-        if 'errorUpperSerie' in self._chartRefs['QtCharts']['experimentPage']:
-            self._chartRefs['QtCharts']['experimentPage']['errorUpperSerie'].clear()
-        if 'errorLowerSerie' in self._chartRefs['QtCharts']['experimentPage']:
-            self._chartRefs['QtCharts']['experimentPage']['errorLowerSerie'].clear()
+        self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie')
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
@@ -832,20 +852,18 @@ class Plotting1d(QObject):
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines on analysis page'))
 
         # Clear default series but don't use them for multi-experiment mode
-        if 'measuredSerie' in self._chartRefs['QtCharts']['analysisPage']:
-            self._chartRefs['QtCharts']['analysisPage']['measuredSerie'].clear()
-        if 'calculatedSerie' in self._chartRefs['QtCharts']['analysisPage']:
-            self._chartRefs['QtCharts']['analysisPage']['calculatedSerie'].clear()
+        self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie')
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
         self.experimentDataChanged.emit()
 
     def qtchartsReplaceCalculatedAndMeasuredOnAnalysisChartAndRedraw(self):
-        series_measured = self._chartRefs['QtCharts']['analysisPage']['measuredSerie']
-        series_measured.clear()
-        series_calculated = self._chartRefs['QtCharts']['analysisPage']['calculatedSerie']
-        series_calculated.clear()
+        if not self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie'):
+            return
+
+        series_measured = self._qtcharts_series_ref('analysisPage', 'measuredSerie')
+        series_calculated = self._qtcharts_series_ref('analysisPage', 'calculatedSerie')
         nr_points = 0
         for point in self.experiment_data.data_points():
             q = point[0]

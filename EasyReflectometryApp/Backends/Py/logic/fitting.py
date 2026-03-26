@@ -226,14 +226,14 @@ class Fitting:
     def fit_n_pars(self) -> int:
         """Return the global number of refined parameters for the fit."""
         if self._results:
-            return self._results[0].n_pars
+            return sum(r.n_pars for r in self._results)
         if self._result is None:
             return 0
         return self._result.n_pars
 
     @property
     def fit_chi2(self) -> float:
-        """Return reduced chi-squared across all fits (chi2 / degrees of freedom)."""
+        """Return reduced chi-squared across all fits (chi2 / degrees of freedom)"""
         if self._results:
             try:
                 total_chi2 = float(sum(r.chi2 for r in self._results))

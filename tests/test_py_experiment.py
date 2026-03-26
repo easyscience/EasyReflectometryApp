@@ -33,6 +33,7 @@ class StubProjectLogic:
 
     def load_all_experiments_from_file(self, path):
         self.loaded_all.append(path)
+        return (2, False)
 
     def load_new_experiment(self, path):
         self.loaded_new.append(path)
