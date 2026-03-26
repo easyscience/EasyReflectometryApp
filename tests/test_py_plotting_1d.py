@@ -259,6 +259,7 @@ def _make_plotting_stub(project, rq4=False):
     p._sample_data = {}
     p._model_data = {}
     p._sld_data = {}
+    p._residual_range_cache = None
     p._chartRefs = {'QtCharts': {'samplePage': {}, 'experimentPage': {}, 'analysisPage': {}}}
     return p
 

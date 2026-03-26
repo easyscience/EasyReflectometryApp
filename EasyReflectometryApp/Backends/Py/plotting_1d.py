@@ -42,6 +42,7 @@ class Plotting1d(QObject):
         self._sld_x_reversed = False
         self._scale_shown = False
         self._bkg_shown = False
+        self._residual_range_cache = None
         self._chartRefs = {
             'QtCharts': {
                 'samplePage': {
@@ -65,6 +66,7 @@ class Plotting1d(QObject):
         self._sample_data = {}
         self._model_data = {}
         self._sld_data = {}
+        self._residual_range_cache = None
         console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
 
     def _apply_rq4(self, x, y):
@@ -454,13 +456,22 @@ class Plotting1d(QObject):
         return np.log10(valid_y.min())
 
     # Residual ranges
+    def _invalidate_residual_range_cache(self):
+        """Clear the cached residual range so it is recomputed on next access."""
+        self._residual_range_cache = None
+
     def _get_residual_range(self) -> tuple:
         """Return (min_x, max_x, min_y, max_y) for the residual chart.
 
         X range matches the filtered analysis domain.  Y range is computed
         from residual values across all currently selected experiments, with
         a 10 % margin.  Safe fallback values are returned when data is empty.
+
+        The result is cached until invalidated by ``_invalidate_residual_range_cache``.
         """
+        if self._residual_range_cache is not None:
+            return self._residual_range_cache
+
         min_x, max_x = float('inf'), float('-inf')
         min_y, max_y = float('inf'), float('-inf')
 
@@ -496,10 +507,13 @@ class Plotting1d(QObject):
             console.debug(f'Error computing residual range: {e}')
 
         if min_x == float('inf'):
-            return (0.0, 1.0, -1.0, 1.0)
+            result = (0.0, 1.0, -1.0, 1.0)
+        else:
+            y_margin = max(abs(min_y), abs(max_y)) * 0.10 or 0.1
+            result = (min_x, max_x, min_y - y_margin, max_y + y_margin)
 
-        y_margin = max(abs(min_y), abs(max_y)) * 0.10 or 0.1
-        return (min_x, max_x, min_y - y_margin, max_y + y_margin)
+        self._residual_range_cache = result
+        return result
 
     @Property(float, notify=sampleChartRangesChanged)
     def residualMinX(self) -> float:
@@ -674,7 +688,7 @@ class Plotting1d(QObject):
         calc_idx = 0
         for point in exp_data.data_points():
             q = point[0]
-            if self._project_lib.q_min < q < self._project_lib.q_max:
+            if self._project_lib.q_min <= q <= self._project_lib.q_max:
                 r_meas = point[1]
                 calc_y_val = calc_y[calc_idx] if calc_idx < len(calc_y) else r_meas
                 sigma_linear = float(np.sqrt(max(point[2], 0.0)))
@@ -747,6 +761,7 @@ class Plotting1d(QObject):
 
     def refreshAnalysisPage(self):
         self._model_data = {}
+        self._invalidate_residual_range_cache()
         self.drawCalculatedAndMeasuredOnAnalysisChart()
         # Notify the residual chart to re-poll data and ranges
         self.sampleChartRangesChanged.emit()
