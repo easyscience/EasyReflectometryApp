@@ -120,10 +120,10 @@ class Project:
     def count_datasets_in_file(self, path: str) -> int:
         return self._project_lib.count_datasets_in_file(path)
 
-    def load_all_experiments_from_file(self, path: str) -> int:
+    def load_all_experiments_from_file(self, path: str) -> tuple[int, bool]:
         loaded_count = self._project_lib.load_all_experiments_from_file(path)
-        self._last_q_range_changed = self._sync_q_max_with_loaded_experiments()
-        return loaded_count
+        q_max_changed = self._sync_q_max_with_loaded_experiments()
+        return loaded_count, q_max_changed
 
     def _sync_q_max_with_loaded_experiments(self) -> bool:
         """Set model q_max to the largest q value found in loaded experiments.

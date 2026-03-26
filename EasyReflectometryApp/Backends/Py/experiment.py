@@ -64,13 +64,9 @@ class Experiment(QObject):
         for path in paths:
             generalized = IO.generalizePath(path)
             if self._project_logic.count_datasets_in_file(generalized) > 1:
-                result = self._project_logic.load_all_experiments_from_file(generalized)
-                if isinstance(result, tuple):
-                    _count, changed = result
-                else:
-                    changed = bool(getattr(self._project_logic, '_last_q_range_changed', False))
+                _count, changed = self._project_logic.load_all_experiments_from_file(generalized)
             else:
-                changed = bool(self._project_logic.load_new_experiment(generalized))
+                changed = self._project_logic.load_new_experiment(generalized)
             if changed:
                 q_range_changed = True
             self.experimentChanged.emit()

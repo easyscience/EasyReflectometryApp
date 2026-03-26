@@ -72,7 +72,7 @@ def test_project_info_and_delegated_file_operations():
     logic.load_experiment('exp.ort')
     logic.load_new_experiment('new.ort')
     assert logic.count_datasets_in_file('file.ort') == 3
-    assert logic.load_all_experiments_from_file('file.ort') == 2
+    assert logic.load_all_experiments_from_file('file.ort') == (2, False)
 
     assert ('create',) in project_lib.calls
     assert ('save_as_json', False) in project_lib.calls

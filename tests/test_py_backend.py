@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
@@ -34,6 +35,7 @@ class StubSample(QObject):
     modelsIndexChanged = Signal()
     assembliesTableChanged = Signal()
     assembliesIndexChanged = Signal()
+    qRangeChanged = Signal()
 
     def __init__(self, _project_lib):
         super().__init__()
@@ -46,6 +48,7 @@ class StubSample(QObject):
 class StubExperiment(QObject):
     externalExperimentChanged = Signal()
     experimentChanged = Signal()
+    qRangeUpdated = Signal()
 
     def __init__(self, _project_lib):
         super().__init__()
@@ -211,3 +214,90 @@ def test_backend_refresh_plots_emits_ranges_and_multi_signal(monkeypatch, qcore_
     assert backend.plottingIndividualExperimentDataList == [{'name': 'E0', 'index': 0, 'color': '#111111', 'hasData': True}]
     assert backend.plottingGetExperimentDataPoints(3) == [{'x': 3.0, 'y': 0.0}]
     assert backend.plottingGetAnalysisDataPoints(5) == [{'x': 5.0, 'measured': 0.0, 'calculated': 0.0}]
+
+
+# ===========================================================================
+# Delegation-contract tests.
+# These verify that PyBackend correctly forwards calls to Plotting1d without
+# requiring the full Qt infrastructure — Plotting1d is replaced by MagicMock.
+# ===========================================================================
+
+class _DelegationStub:
+    """Minimal replica of the PyBackend delegation methods under test."""
+
+    def __init__(self, plotting_1d):
+        self._plotting_1d = plotting_1d
+
+    def plottingGetAnalysisDataPoints(self, experiment_index: int) -> list:
+        return self._plotting_1d.getAnalysisDataPoints(experiment_index)
+
+    def plottingGetResidualDataPoints(self, experiment_index: int) -> list:
+        return self._plotting_1d.getResidualDataPoints(experiment_index)
+
+
+class TestPlottingGetResidualDataPointsDelegation:
+    def _backend(self):
+        mock_plotting = MagicMock()
+        return _DelegationStub(mock_plotting), mock_plotting
+
+    def test_delegates_to_plotting_1d(self):
+        backend, plotting = self._backend()
+        expected = [{'x': 0.1, 'y': 0.002}, {'x': 0.2, 'y': -0.001}]
+        plotting.getResidualDataPoints.return_value = expected
+
+        result = backend.plottingGetResidualDataPoints(0)
+
+        plotting.getResidualDataPoints.assert_called_once_with(0)
+        assert result == expected
+
+    def test_passes_experiment_index(self):
+        backend, plotting = self._backend()
+        plotting.getResidualDataPoints.return_value = []
+
+        backend.plottingGetResidualDataPoints(3)
+
+        plotting.getResidualDataPoints.assert_called_once_with(3)
+
+    def test_returns_empty_list_when_plotting_returns_empty(self):
+        backend, plotting = self._backend()
+        plotting.getResidualDataPoints.return_value = []
+
+        result = backend.plottingGetResidualDataPoints(0)
+
+        assert result == []
+
+    def test_returns_result_unchanged(self):
+        backend, plotting = self._backend()
+        payload = [{'x': i * 0.1, 'y': i * 0.001} for i in range(10)]
+        plotting.getResidualDataPoints.return_value = payload
+
+        result = backend.plottingGetResidualDataPoints(0)
+
+        assert result is payload
+
+
+class TestPlottingGetAnalysisDataPointsDelegation:
+    """Regression: existing analysis bridging is unaffected by residual additions."""
+
+    def _backend(self):
+        mock_plotting = MagicMock()
+        return _DelegationStub(mock_plotting), mock_plotting
+
+    def test_delegates_to_plotting_1d(self):
+        backend, plotting = self._backend()
+        expected = [{'x': 0.1, 'measured': -2.0, 'calculated': -1.9}]
+        plotting.getAnalysisDataPoints.return_value = expected
+
+        result = backend.plottingGetAnalysisDataPoints(0)
+
+        plotting.getAnalysisDataPoints.assert_called_once_with(0)
+        assert result == expected
+
+    def test_passes_experiment_index(self):
+        backend, plotting = self._backend()
+        plotting.getAnalysisDataPoints.return_value = []
+
+        backend.plottingGetAnalysisDataPoints(5)
+
+        plotting.getAnalysisDataPoints.assert_called_once_with(5)
+

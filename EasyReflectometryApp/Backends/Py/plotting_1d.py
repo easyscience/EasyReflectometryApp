@@ -42,6 +42,7 @@ class Plotting1d(QObject):
         self._sld_x_reversed = False
         self._scale_shown = False
         self._bkg_shown = False
+        self._residual_range_cache = None
         self._chartRefs = {
             'QtCharts': {
                 'samplePage': {
@@ -65,6 +66,7 @@ class Plotting1d(QObject):
         self._sample_data = {}
         self._model_data = {}
         self._sld_data = {}
+        self._residual_range_cache = None
         console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
 
     def _apply_rq4(self, x, y):
@@ -75,6 +77,31 @@ class Plotting1d(QObject):
         if self._plot_rq4:
             return y * (x**4)
         return y
+
+    def _qtcharts_series_ref(self, page: str, serie: str):
+        return self._chartRefs['QtCharts'].get(page, {}).get(serie)
+
+    def _clear_qtcharts_series(self, page: str, *series_names: str) -> bool:
+        missing_series = []
+        for series_name in series_names:
+            series_ref = self._qtcharts_series_ref(page, series_name)
+            if series_ref is None:
+                missing_series.append(series_name)
+                continue
+            series_ref.clear()
+
+        if missing_series:
+            console.debug(
+                IO.formatMsg(
+                    'sub',
+                    f'{page} series unavailable',
+                    ', '.join(missing_series),
+                    'skipping redraw',
+                )
+            )
+            return False
+
+        return True
 
     # R(q)×q⁴ mode
     @Property(bool, notify=plotModeChanged)
@@ -428,6 +455,82 @@ class Plotting1d(QObject):
             return -10.0
         return np.log10(valid_y.min())
 
+    # Residual ranges
+    def _invalidate_residual_range_cache(self):
+        """Clear the cached residual range so it is recomputed on next access."""
+        self._residual_range_cache = None
+
+    def _get_residual_range(self) -> tuple:
+        """Return (min_x, max_x, min_y, max_y) for the residual chart.
+
+        X range matches the filtered analysis domain.  Y range is computed
+        from residual values across all currently selected experiments, with
+        a 10 % margin.  Safe fallback values are returned when data is empty.
+
+        The result is cached until invalidated by ``_invalidate_residual_range_cache``.
+        """
+        if self._residual_range_cache is not None:
+            return self._residual_range_cache
+
+        min_x, max_x = float('inf'), float('-inf')
+        min_y, max_y = float('inf'), float('-inf')
+
+        try:
+            indices = []
+            if self.is_multi_experiment_mode:
+                indices = list(self._proxy._analysis._selected_experiment_indices)
+            else:
+                indices = [self._project_lib.current_experiment_index]
+
+            for exp_idx in indices:
+                try:
+                    aligned = self._get_aligned_analysis_values(exp_idx)
+                    for item in aligned:
+                        q = item['q']
+                        calc = item['calculated']
+                        meas = item['measured']
+                        sigma = item['sigma']
+                        if sigma > 0.0:
+                            residual = (calc - meas) / sigma
+                        elif meas > 0.0:
+                            residual = (calc - meas) / meas
+                        else:
+                            residual = calc - meas
+                        min_x = min(min_x, q)
+                        max_x = max(max_x, q)
+                        min_y = min(min_y, residual)
+                        max_y = max(max_y, residual)
+                except Exception as e:
+                    console.debug(f'Residual range error for experiment {exp_idx}: {e}')
+                    continue
+        except Exception as e:
+            console.debug(f'Error computing residual range: {e}')
+
+        if min_x == float('inf'):
+            result = (0.0, 1.0, -1.0, 1.0)
+        else:
+            y_margin = max(abs(min_y), abs(max_y)) * 0.10 or 0.1
+            result = (min_x, max_x, min_y - y_margin, max_y + y_margin)
+
+        self._residual_range_cache = result
+        return result
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMinX(self) -> float:
+        return self._get_residual_range()[0]
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMaxX(self) -> float:
+        return self._get_residual_range()[1]
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMinY(self) -> float:
+        return self._get_residual_range()[2]
+
+    @Property(float, notify=sampleChartRangesChanged)
+    def residualMaxY(self) -> float:
+        return self._get_residual_range()[3]
+
     @Property('QVariant', notify=chartRefsChanged)
     def chartRefs(self):
         return self._chartRefs
@@ -705,6 +808,7 @@ class Plotting1d(QObject):
 
     def refreshAnalysisPage(self):
         self._model_data = {}
+        self._invalidate_residual_range_cache()
         self.drawCalculatedAndMeasuredOnAnalysisChart()
         self.sampleChartRangesChanged.emit()
 
@@ -761,12 +865,12 @@ class Plotting1d(QObject):
                 self.qtchartsReplaceMeasuredOnExperimentChartAndRedraw()
 
     def qtchartsReplaceMeasuredOnExperimentChartAndRedraw(self):
-        series_measured = self._chartRefs['QtCharts']['experimentPage']['measuredSerie']
-        series_measured.clear()
-        series_error_upper = self._chartRefs['QtCharts']['experimentPage']['errorUpperSerie']
-        series_error_upper.clear()
-        series_error_lower = self._chartRefs['QtCharts']['experimentPage']['errorLowerSerie']
-        series_error_lower.clear()
+        if not self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie'):
+            return
+
+        series_measured = self._qtcharts_series_ref('experimentPage', 'measuredSerie')
+        series_error_upper = self._qtcharts_series_ref('experimentPage', 'errorUpperSerie')
+        series_error_lower = self._qtcharts_series_ref('experimentPage', 'errorLowerSerie')
         nr_points = 0
         for point in self.experiment_data.data_points():
             q = point[0]
@@ -790,12 +894,7 @@ class Plotting1d(QObject):
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines'))
 
         # Clear default series but don't use them for multi-experiment mode
-        if 'measuredSerie' in self._chartRefs['QtCharts']['experimentPage']:
-            self._chartRefs['QtCharts']['experimentPage']['measuredSerie'].clear()
-        if 'errorUpperSerie' in self._chartRefs['QtCharts']['experimentPage']:
-            self._chartRefs['QtCharts']['experimentPage']['errorUpperSerie'].clear()
-        if 'errorLowerSerie' in self._chartRefs['QtCharts']['experimentPage']:
-            self._chartRefs['QtCharts']['experimentPage']['errorLowerSerie'].clear()
+        self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie')
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
@@ -814,20 +913,18 @@ class Plotting1d(QObject):
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines on analysis page'))
 
         # Clear default series but don't use them for multi-experiment mode
-        if 'measuredSerie' in self._chartRefs['QtCharts']['analysisPage']:
-            self._chartRefs['QtCharts']['analysisPage']['measuredSerie'].clear()
-        if 'calculatedSerie' in self._chartRefs['QtCharts']['analysisPage']:
-            self._chartRefs['QtCharts']['analysisPage']['calculatedSerie'].clear()
+        self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie')
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
         self.experimentDataChanged.emit()
 
     def qtchartsReplaceCalculatedAndMeasuredOnAnalysisChartAndRedraw(self):
-        series_measured = self._chartRefs['QtCharts']['analysisPage']['measuredSerie']
-        series_measured.clear()
-        series_calculated = self._chartRefs['QtCharts']['analysisPage']['calculatedSerie']
-        series_calculated.clear()
+        if not self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie'):
+            return
+
+        series_measured = self._qtcharts_series_ref('analysisPage', 'measuredSerie')
+        series_calculated = self._qtcharts_series_ref('analysisPage', 'calculatedSerie')
         nr_points = 0
         for point in self.experiment_data.data_points():
             q = point[0]

@@ -424,6 +424,7 @@ Rectangle {
             Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                'calculatedSerie',
                                                                calculated)
+            Globals.BackendWrapper.plottingRefreshAnalysis()
 
             // Initialize multi-experiment support
             updateMultiExperimentSeries()

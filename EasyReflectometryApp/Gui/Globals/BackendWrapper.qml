@@ -358,6 +358,12 @@ QtObject {
     readonly property var plottingAnalysisMaxX: activeBackend.plotting.sampleMaxX
     readonly property var plottingAnalysisMinY: activeBackend.plotting.sampleMinY
     readonly property var plottingAnalysisMaxY: activeBackend.plotting.sampleMaxY
+
+    readonly property var plottingResidualMinX: activeBackend.plotting.residualMinX
+    readonly property var plottingResidualMaxX: activeBackend.plotting.residualMaxX
+    readonly property var plottingResidualMinY: activeBackend.plotting.residualMinY
+    readonly property var plottingResidualMaxY: activeBackend.plotting.residualMaxY
+
     readonly property var calcSerieColor: activeBackend.plotting.calcSerieColor
 
     // Plot mode properties
@@ -525,6 +531,14 @@ QtObject {
             return activeBackend.plottingGetAnalysisDataPoints(index)
         } catch (e) {
             console.warn("plottingGetAnalysisDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetResidualDataPoints(index) {
+        try {
+            return activeBackend.plottingGetResidualDataPoints(index)
+        } catch (e) {
+            console.warn("plottingGetResidualDataPoints failed:", e)
             return []
         }
     }
