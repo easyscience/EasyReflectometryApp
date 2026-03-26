@@ -1,6 +1,7 @@
 from copy import copy
 from pathlib import Path
 
+import numpy as np
 from easyreflectometry import Project as ProjectLib
 
 
@@ -107,17 +108,61 @@ class Project:
     def load(self, path: str) -> None:
         self._project_lib.load_from_json(path)
 
-    def load_experiment(self, path: str) -> None:
+    def load_experiment(self, path: str) -> bool:
         self._project_lib.load_experiment_for_model_at_index(path, self._project_lib._current_model_index)
+        return self._sync_q_max_with_loaded_experiments()
 
-    def load_new_experiment(self, path: str) -> None:
+    def load_new_experiment(self, path: str) -> bool:
         self._project_lib.load_new_experiment(path)
+        return self._sync_q_max_with_loaded_experiments()
 
     def count_datasets_in_file(self, path: str) -> int:
         return self._project_lib.count_datasets_in_file(path)
 
-    def load_all_experiments_from_file(self, path: str) -> int:
-        return self._project_lib.load_all_experiments_from_file(path)
+    def load_all_experiments_from_file(self, path: str) -> tuple[int, bool]:
+        loaded_count = self._project_lib.load_all_experiments_from_file(path)
+        q_max_changed = self._sync_q_max_with_loaded_experiments()
+        return loaded_count, q_max_changed
+
+    def _sync_q_max_with_loaded_experiments(self) -> bool:
+        """Set model q_max to the largest q value found in loaded experiments.
+
+        :return: True if q_max was changed, False otherwise.
+        :rtype: bool
+        """
+        experiments = self._project_lib._experiments
+        if not experiments:
+            return False
+
+        if hasattr(experiments, 'values'):
+            experiment_iterable = experiments.values()
+        else:
+            experiment_iterable = experiments
+
+        q_max_candidates = []
+        for experiment in experiment_iterable:
+            x_values = getattr(experiment, 'x', None)
+            if x_values is None:
+                continue
+
+            q_values = np.asarray(x_values, dtype=float)
+            if q_values.size == 0:
+                continue
+
+            finite_q_values = q_values[np.isfinite(q_values)]
+            if finite_q_values.size == 0:
+                continue
+
+            q_max_candidates.append(float(np.max(finite_q_values)))
+
+        if not q_max_candidates:
+            return False
+
+        new_q_max = max(q_max_candidates)
+        if new_q_max != self._project_lib.q_max:
+            self._project_lib.q_max = new_q_max
+            return True
+        return False
 
     def set_sample_from_orso(self, sample) -> None:
         self._project_lib.set_sample_from_orso(sample)

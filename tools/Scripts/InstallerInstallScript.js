@@ -102,7 +102,7 @@ Component.prototype.createOperations = function () {
   if (installer.value("os") === "x11") {
     component.addOperation(
       "CreateDesktopEntry",
-      "@TargetDir@/@ProductName@.desktop",
+      "@ProductName@.desktop",
       "Comment=A scientific software for modelling and analysis of the neutron re data.\n" +
       "Type=Application\n" +
       "Exec=@TargetDir@/@ProductName@/@ProductName@\n" +
@@ -122,12 +122,6 @@ Component.prototype.createOperations = function () {
       "'metadata::trusted'", "yes"
     )
     */
-
-    component.addOperation(
-      "Copy",
-      "@TargetDir@/@ProductName@.desktop",
-      "@HomeDir@/.local/share/applications/@ProductName@.desktop"
-    )
 
     /*
     component.addOperation(

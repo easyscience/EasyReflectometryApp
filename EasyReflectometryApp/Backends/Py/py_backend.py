@@ -135,6 +135,11 @@ class PyBackend(QObject):
         """Get measured and calculated data points for a specific experiment for analysis plotting."""
         return self._plotting_1d.getAnalysisDataPoints(experiment_index)
 
+    @Slot(int, result='QVariantList')
+    def plottingGetResidualDataPoints(self, experiment_index: int) -> list:
+        """Get residual data points (model - experiment) for a specific experiment."""
+        return self._plotting_1d.getResidualDataPoints(experiment_index)
+
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:
         self._connect_project_page()
@@ -152,13 +157,15 @@ class PyBackend(QObject):
     def _connect_sample_page(self) -> None:
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)
         self._sample.externalRefreshPlot.connect(self._refresh_plots)
-        self._sample.modelsTableChanged.connect(self._analysis.parametersChanged)
+        self._sample.modelsTableChanged.connect(self._analysis._clearCacheAndEmitParametersChanged)
+        self._sample.modelsTableChanged.connect(self._analysis.experimentsChanged)
         # Connect sample changes to multi-experiment selection signal
         self._sample.modelsTableChanged.connect(self.multiExperimentSelectionChanged)
 
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._experiment.externalExperimentChanged.connect(self._refresh_plots)
+        self._experiment.qRangeUpdated.connect(self._sample.qRangeChanged)
 
     def _connect_analysis_page(self) -> None:
         self._analysis.externalMinimizerChanged.connect(self._relay_analysis_page)
@@ -168,6 +175,8 @@ class PyBackend(QObject):
         self._analysis.externalFittingChanged.connect(self._refresh_plots)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
+        # Update status bar when parameters change (e.g. fit checkbox toggle, post-fit)
+        self._analysis.parametersChanged.connect(self._status.statusChanged)
         # Connect multi-experiment selection changes
         self._analysis.experimentsChanged.connect(self.multiExperimentSelectionChanged)
 
@@ -192,12 +201,10 @@ class PyBackend(QObject):
         self._sample.assembliesIndexChanged.emit()
         self._experiment.experimentChanged.emit()
         self._analysis.experimentsChanged.emit()
-        self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
         self._plotting_1d.reset_data()
         self._refresh_plots()
-        self._plotting_1d.samplePageResetAxes.emit()
 
     def _relay_sample_page_sample_changed(self):
         self._plotting_1d.reset_data()
@@ -226,5 +233,6 @@ class PyBackend(QObject):
         self._plotting_1d.refreshSamplePage()
         self._plotting_1d.refreshExperimentPage()
         self._plotting_1d.refreshAnalysisPage()
+        self._plotting_1d.samplePageResetAxes.emit()
         # Emit signal for multi-experiment changes
         self.multiExperimentSelectionChanged.emit()

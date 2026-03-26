@@ -11,7 +11,10 @@ from .helpers import get_original_name
 class Models:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
-        self._models = project_lib._models
+
+    @property
+    def _models(self) -> ModelCollection:
+        return self._project_lib._models
 
     @property
     def index(self) -> int:

@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
+// SPDX-FileCopyrightText: 2026 EasyReflectometry contributors <support@easyreflectometry.org>
 // SPDX-License-Identifier: BSD-3-Clause
-// © 2025 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+// © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
 import QtQuick.Controls
@@ -95,7 +95,7 @@ Rectangle {
                     repeat: false
                     onTriggered: {
                         analysisChartView.resetAxes()
-                        sldChart.chartView.resetAxes()
+                        lowerPanel.resetAllAxes()
                     }
                 }
 
@@ -313,7 +313,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable pan")
                         onClicked: {
                             analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            sldChart.chartView.allowZoom = analysisChartView.allowZoom
+                            lowerPanel.setAllowZoom(analysisChartView.allowZoom)
                         }
                     }
 
@@ -327,7 +327,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable box zoom")
                         onClicked: {
                             analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            sldChart.chartView.allowZoom = analysisChartView.allowZoom
+                            lowerPanel.setAllowZoom(analysisChartView.allowZoom)
                         }
                     }
 
@@ -340,7 +340,7 @@ Rectangle {
                         ToolTip.text: qsTr("Reset axes")
                         onClicked: {
                             analysisChartView.resetAxes()
-                            sldChart.chartView.resetAxes()
+                            lowerPanel.resetAllAxes()
                         }
                     }
                 }
@@ -445,6 +445,7 @@ Rectangle {
                     Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                        'calculatedSerie',
                                                                        calculated)
+                    Globals.BackendWrapper.plottingRefreshAnalysis()
 
                     // Initialize multi-experiment support
                     updateMultiExperimentSeries()
@@ -455,20 +456,13 @@ Rectangle {
             }
         }
 
-        // SLD Chart (1/3 height)
-        Gui.SldChart {
-            id: sldChart
+        // Lower panel: SLD tab + Residuals tab
+        SldView {
+            id: lowerPanel
 
             SplitView.fillHeight: true
             SplitView.preferredHeight: parent.height * 0.33
             SplitView.minimumHeight: 80
-
-            showLegend: Globals.Variables.showLegendOnAnalysisPage
-            onShowLegendChanged: Globals.Variables.showLegendOnAnalysisPage = showLegend
-
-            Component.onCompleted: {
-                Globals.References.pages.analysis.mainContent.sldView = sldChart.chartView
-            }
         }
     }
 
