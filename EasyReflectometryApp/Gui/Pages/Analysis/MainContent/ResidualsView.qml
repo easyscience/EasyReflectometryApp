@@ -384,7 +384,7 @@ Rectangle {
         _clearMultiExperimentSeries()
 
         singleResidualSerie.clear()
-        const expIdx = Globals.BackendWrapper.activeBackend?.analysisCurrentExperimentIndex ?? 0
+        const expIdx = Globals.BackendWrapper.analysisExperimentsCurrentIndex
         const points = Globals.BackendWrapper.plottingGetResidualDataPoints(expIdx)
         for (let i = 0; i < points.length; i++) {
             singleResidualSerie.append(points[i].x, points[i].y)
