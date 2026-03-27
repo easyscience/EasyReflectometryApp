@@ -7,6 +7,7 @@ import EasyApp.Gui.Globals as EaGlobals
 import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Components as EaComponents
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
@@ -25,7 +26,7 @@ EaComponents.ContentPage {
         ]
     }
 
-    sideBar: EaComponents.SideBar {
+    sideBar: Gui.SideBarWithFooter {
         tabs: [
             EaElements.TabButton { text: qsTr("Basic controls") },
             EaElements.TabButton { text: qsTr("Extra controls") } //; enabled: Globals.Proxies.main.analysis.defined }

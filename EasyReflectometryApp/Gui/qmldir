@@ -2,5 +2,6 @@ module Gui
 
 ApplicationWindow ApplicationWindow.qml
 PlotControlRefLines PlotControlRefLines.qml
+SideBarWithFooter SideBarWithFooter.qml
 SldChart SldChart.qml
 StatusBar StatusBar.qml
