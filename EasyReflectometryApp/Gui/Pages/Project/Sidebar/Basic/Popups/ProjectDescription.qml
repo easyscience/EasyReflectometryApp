@@ -24,6 +24,7 @@ EaComponents.ProjectDescriptionDialog {
         Globals.BackendWrapper.projectSetLocation(projectLocation)
 
         Globals.BackendWrapper.projectCreate()
+        Globals.References.resetActive = true
         Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = true
     }
 

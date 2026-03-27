@@ -16,6 +16,7 @@ FileDialog{
     nameFilters: [ 'JSON files (*.json)']
 
     onAccepted: {
+        Globals.References.resetActive = true
         Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = true
         Globals.References.applicationWindow.appBarCentralTabs.experimentButton.enabled = true
         Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = true
