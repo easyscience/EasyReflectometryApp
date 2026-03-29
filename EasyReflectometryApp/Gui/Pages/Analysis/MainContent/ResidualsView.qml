@@ -44,8 +44,12 @@ Rectangle {
 
         property double xRange: Globals.BackendWrapper.plottingResidualMaxX - Globals.BackendWrapper.plottingResidualMinX
 
+        // Logarithmic axis control
+        property bool useLogQAxis: Globals.Variables.logarithmicQAxis
+
         ValueAxis {
             id: axisX
+            visible: !chartView.useLogQAxis
             titleText: "q (Å⁻¹)"
             property double minAfterReset: Globals.BackendWrapper.plottingResidualMinX - chartView.xRange * 0.01
             property double maxAfterReset: Globals.BackendWrapper.plottingResidualMaxX + chartView.xRange * 0.01
@@ -58,6 +62,33 @@ Rectangle {
                 min = minAfterReset
                 max = maxAfterReset
             }
+        }
+
+        LogValueAxis {
+            id: axisXLog
+            visible: chartView.useLogQAxis
+            titleText: "q (Å⁻¹)"
+            property double minAfterReset: Math.max(Globals.BackendWrapper.plottingResidualMinX, 1e-6)
+            property double maxAfterReset: Globals.BackendWrapper.plottingResidualMaxX * 1.1
+            base: 10
+            color: EaStyle.Colors.chartAxis
+            gridLineColor: EaStyle.Colors.chartGridLine
+            minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+            labelsColor: EaStyle.Colors.chartLabels
+            titleBrush: EaStyle.Colors.chartLabels
+            Component.onCompleted: {
+                min = minAfterReset
+                max = maxAfterReset
+            }
+        }
+
+        onUseLogQAxisChanged: {
+            refreshResidualChart()
+            Qt.callLater(resetAxes)
+        }
+
+        function currentXAxis() {
+            return useLogQAxis ? axisXLog : axisX
         }
 
         property double yRange: Globals.BackendWrapper.plottingResidualMaxY - Globals.BackendWrapper.plottingResidualMinY
@@ -79,10 +110,21 @@ Rectangle {
         }
 
         function resetAxes() {
-            axisX.min = axisX.minAfterReset
-            axisX.max = axisX.maxAfterReset
-            axisY.min = axisY.minAfterReset
-            axisY.max = axisY.maxAfterReset
+            if (useLogQAxis) {
+                if (axisXLog) {
+                    axisXLog.min = axisXLog.minAfterReset
+                    axisXLog.max = axisXLog.maxAfterReset
+                }
+            } else {
+                if (axisX) {
+                    axisX.min = axisX.minAfterReset
+                    axisX.max = axisX.maxAfterReset
+                }
+            }
+            if (axisY) {
+                axisY.min = axisY.minAfterReset
+                axisY.max = axisY.maxAfterReset
+            }
         }
 
         // Zero reference line — always visible, not affected by scale/bkg toggles
@@ -366,6 +408,9 @@ Rectangle {
         Qt.callLater(refreshResidualChart)
     }
 
+    // Dynamic series for log mode (single experiment)
+    property var logResidualSerie: null
+
     function refreshResidualChart() {
         // Update zero-line span to match new range
         zeroLine.clear()
@@ -383,18 +428,49 @@ Rectangle {
         // Remove any lingering multi-experiment series
         _clearMultiExperimentSeries()
 
-        singleResidualSerie.clear()
+        // Clean up previous log mode series
+        if (logResidualSerie) {
+            chartView.removeSeries(logResidualSerie)
+            logResidualSerie = null
+        }
+
         const expIdx = Globals.BackendWrapper.analysisExperimentsCurrentIndex
         const points = Globals.BackendWrapper.plottingGetResidualDataPoints(expIdx)
-        for (let i = 0; i < points.length; i++) {
-            singleResidualSerie.append(points[i].x, points[i].y)
+
+        if (chartView.useLogQAxis) {
+            // Log mode: use dynamic series on log axis
+            singleResidualSerie.visible = false
+
+            logResidualSerie = chartView.createSeries(ChartView.SeriesTypeLine, "residual_log", axisXLog, axisY)
+            logResidualSerie.color = singleResidualSerie.color
+            logResidualSerie.width = singleResidualSerie.width
+            logResidualSerie.useOpenGL = EaGlobals.Vars.useOpenGL
+
+            for (let i = 0; i < points.length; i++) {
+                logResidualSerie.append(points[i].x, points[i].y)
+            }
+        } else {
+            // Linear mode: use static series
+            singleResidualSerie.visible = !isMultiExperimentMode
+            singleResidualSerie.clear()
+            for (let i = 0; i < points.length; i++) {
+                singleResidualSerie.append(points[i].x, points[i].y)
+            }
         }
     }
 
     function _refreshMultiExperiment() {
         singleResidualSerie.clear()
+        singleResidualSerie.visible = false
         _clearMultiExperimentSeries()
 
+        // Clean up log mode single series
+        if (logResidualSerie) {
+            chartView.removeSeries(logResidualSerie)
+            logResidualSerie = null
+        }
+
+        var xAxisToUse = chartView.currentXAxis()
         const experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
         for (let i = 0; i < experimentDataList.length; i++) {
             const expData = experimentDataList[i]
@@ -402,7 +478,7 @@ Rectangle {
 
             const serie = chartView.createSeries(ChartView.SeriesTypeLine,
                                                   expData.name || `Exp ${i + 1}`,
-                                                  axisX, axisY)
+                                                  xAxisToUse, axisY)
             serie.color = expData.color
             serie.width = 1
             serie.useOpenGL = EaGlobals.Vars.useOpenGL

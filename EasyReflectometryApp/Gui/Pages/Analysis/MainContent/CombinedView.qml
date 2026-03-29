@@ -194,10 +194,12 @@ Rectangle {
                 }
 
                 function createExperimentSeries(expIndex, expName, color) {
+                    var xAxis = currentXAxis()
+
                     // Create measured data series
                     var measuredSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine, 
                                                          `${expName} - Measured`, 
-                                                         analysisChartView.axisX, analysisChartView.axisY)
+                                                         xAxis, analysisChartView.axisY)
                     measuredSerie.color = color
                     measuredSerie.width = 1
                     measuredSerie.capStyle = Qt.RoundCap
@@ -206,7 +208,7 @@ Rectangle {
                     // Create calculated data series (slightly different style)
                     var calculatedSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine,
                                                             `${expName} - Calculated`,
-                                                            analysisChartView.axisX, analysisChartView.axisY)
+                                                            xAxis, analysisChartView.axisY)
                     calculatedSerie.color = color
                     calculatedSerie.width = 2
                     calculatedSerie.capStyle = Qt.RoundCap
@@ -248,6 +250,102 @@ Rectangle {
                 axisX.max: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
                 axisX.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
                 axisX.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
+
+                // Logarithmic axis control
+                property bool useLogQAxis: Globals.Variables.logarithmicQAxis
+                axisX.visible: !useLogQAxis
+
+                LogValueAxis {
+                    id: analysisAxisXLog
+                    visible: analysisChartView.useLogQAxis
+                    titleText: "q (Å⁻¹)"
+                    property double minAfterReset: Math.max(Globals.BackendWrapper.plottingAnalysisMinX, 1e-6)
+                    property double maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX * 1.1
+                    base: 10
+                    color: EaStyle.Colors.chartAxis
+                    gridLineColor: EaStyle.Colors.chartGridLine
+                    minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+                    labelsColor: EaStyle.Colors.chartLabels
+                    titleBrush: EaStyle.Colors.chartLabels
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
+                }
+
+                // Dynamic series for log mode (single experiment)
+                property var logModeSeries: null
+
+                function currentXAxis() {
+                    return useLogQAxis ? analysisAxisXLog : analysisChartView.axisX
+                }
+
+                onUseLogQAxisChanged: {
+                    recreateForLogMode()
+                }
+
+                function recreateForLogMode() {
+                    // Clean up previous log mode series
+                    if (logModeSeries) {
+                        analysisChartView.removeSeries(logModeSeries.measuredSerie)
+                        analysisChartView.removeSeries(logModeSeries.calculatedSerie)
+                        logModeSeries = null
+                    }
+
+                    if (isMultiExperimentMode) {
+                        updateMultiExperimentSeries()
+                    } else if (useLogQAxis) {
+                        measured.visible = false
+                        calculated.visible = false
+
+                        var newMeasured = analysisChartView.createSeries(ChartView.SeriesTypeLine, "measured_log", analysisAxisXLog, analysisChartView.axisY)
+                        newMeasured.color = measured.color
+                        newMeasured.width = measured.width
+                        newMeasured.useOpenGL = analysisChartView.useOpenGL
+
+                        var newCalculated = analysisChartView.createSeries(ChartView.SeriesTypeLine, "calculated_log", analysisAxisXLog, analysisChartView.axisY)
+                        newCalculated.color = calculated.color
+                        newCalculated.width = calculated.width
+                        newCalculated.useOpenGL = analysisChartView.useOpenGL
+
+                        logModeSeries = {
+                            measuredSerie: newMeasured,
+                            calculatedSerie: newCalculated
+                        }
+
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', newMeasured)
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', newCalculated)
+                        Globals.BackendWrapper.plottingRefreshAnalysis()
+                    } else {
+                        measured.visible = true
+                        calculated.visible = true
+
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measured)
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
+                        Globals.BackendWrapper.plottingRefreshAnalysis()
+                    }
+
+                    updateReferenceLines()
+                    Qt.callLater(resetAxes)
+                }
+
+                function resetAxes() {
+                    if (useLogQAxis) {
+                        if (analysisAxisXLog) {
+                            analysisAxisXLog.min = analysisAxisXLog.minAfterReset
+                            analysisAxisXLog.max = analysisAxisXLog.maxAfterReset
+                        }
+                    } else {
+                        if (analysisChartView.axisX) {
+                            analysisChartView.axisX.min = analysisChartView.axisX.minAfterReset
+                            analysisChartView.axisX.max = analysisChartView.axisX.maxAfterReset
+                        }
+                    }
+                    if (analysisChartView.axisY) {
+                        analysisChartView.axisY.min = analysisChartView.axisY.minAfterReset
+                        analysisChartView.axisY.max = analysisChartView.axisY.maxAfterReset
+                    }
+                }
 
                 property double yRange: Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
                 axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
