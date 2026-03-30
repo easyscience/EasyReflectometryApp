@@ -23,7 +23,7 @@ EaElements.GroupBox {
         EaElements.SideBarButton {
             width: EaStyle.Sizes.sideBarContentWidth
             fontIcon: "folder-open"
-            text: qsTr("Load file")
+            text: qsTr("Load sample from file")
             onClicked: fileDialog.open()
         }
 

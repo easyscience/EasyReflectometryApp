@@ -234,6 +234,16 @@ EaElements.GroupBox {
                     width: EaStyle.Sizes.fontPixelSize * 11
                     text: index > -1 ? Globals.BackendWrapper.analysisExperimentsAvailable[index] : ""
                     onEditingFinished: Globals.BackendWrapper.analysisSetExperimentNameAtIndex(index, text)
+
+                    // Always show each experiment in its distinct palette color
+                    color: {
+                        var palette = [
+                            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+                            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+                        ]
+                        return palette[index % palette.length]
+                    }
+                    font.bold: true
                 }
 
                 EaComponents.TableViewComboBox {

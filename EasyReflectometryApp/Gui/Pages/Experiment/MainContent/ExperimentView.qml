@@ -24,6 +24,17 @@ Rectangle {
         property alias measured: chartView.calcSerie
         property alias errorUpper: chartView.measSerie
         property alias errorLower: chartView.bkgSerie
+
+        // Experiment color palette (must match ExperimentalDataExplorer and backend)
+        property var experimentColorPalette: [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ]
+        property color currentExperimentColor: experimentColorPalette[
+            Globals.BackendWrapper.analysisExperimentsCurrentIndex % experimentColorPalette.length
+        ]
+
+        calcSerie.color: currentExperimentColor
         bkgSerie.color: measSerie.color
         measSerie.width: 1
         bkgSerie.width: 1
@@ -265,7 +276,7 @@ Rectangle {
                 errorLower.visible = false
 
                 var newMeasured = chartView.createSeries(ChartView.SeriesTypeLine, "measured_log", axisXLog, chartView.axisY)
-                newMeasured.color = measured.color
+                newMeasured.color = chartView.currentExperimentColor
                 newMeasured.width = measured.width
                 newMeasured.useOpenGL = chartView.useOpenGL
 

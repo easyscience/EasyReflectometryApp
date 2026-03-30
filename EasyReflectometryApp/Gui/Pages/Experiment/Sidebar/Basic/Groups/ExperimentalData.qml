@@ -19,7 +19,7 @@ EaElements.GroupBox {
             enabled: true
             wide: true
             fontIcon: "upload"
-            text: qsTr("Import experimental data")
+            text: qsTr("Load experiment(s) from file(s)")
 
             onClicked: {
                 console.debug(`Clicking '${text}' button ::: ${this}`)
