@@ -28,7 +28,9 @@ Rectangle {
             Globals.BackendWrapper.analysisExperimentsCurrentIndex
         )
         measSerie.width: 1
+        measSerie.style: Qt.DotLine
         bkgSerie.width: 1
+        bkgSerie.style: Qt.DotLine
 
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
@@ -319,6 +321,7 @@ Rectangle {
                                                      xAxis, chartView.axisY)
             measuredSerie.color = color
             measuredSerie.width = 1
+            measuredSerie.style = Qt.DotLine
             measuredSerie.capStyle = Qt.RoundCap
             measuredSerie.useOpenGL = chartView.useOpenGL
 
