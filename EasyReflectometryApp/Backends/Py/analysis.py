@@ -455,7 +455,7 @@ class Analysis(QObject):
                         if exp_idx < len(self._experiments_logic.available())
                         else f'Experiment {exp_idx + 1}'
                     )
-                    color = color_palette[idx % len(color_palette)]
+                    color = color_palette[exp_idx % len(color_palette)]
 
                     experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
             except (IndexError, AttributeError) as e:
