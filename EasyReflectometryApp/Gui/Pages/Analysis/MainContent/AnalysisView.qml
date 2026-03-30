@@ -27,7 +27,8 @@ Rectangle {
         measSerie.color: Globals.Variables.experimentColor(
             Globals.BackendWrapper.analysisExperimentsCurrentIndex
         )
-        measSerie.width: 1
+        measSerie.width: 2
+        measSerie.opacity: 0.95
         measSerie.style: Qt.DotLine
         bkgSerie.width: 1
         bkgSerie.style: Qt.DotLine
@@ -320,7 +321,8 @@ Rectangle {
                                                      `${expName} - Measured`, 
                                                      xAxis, chartView.axisY)
             measuredSerie.color = color
-            measuredSerie.width = 1
+            measuredSerie.width = 2
+            measuredSerie.opacity = 0.95
             measuredSerie.style = Qt.DotLine
             measuredSerie.capStyle = Qt.RoundCap
             measuredSerie.useOpenGL = chartView.useOpenGL
