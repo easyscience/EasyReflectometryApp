@@ -24,6 +24,9 @@ Rectangle {
         property alias calculated: chartView.calcSerie
         property alias measured: chartView.measSerie
         bkgSerie.color: measSerie.color
+        measSerie.color: Globals.Variables.experimentColor(
+            Globals.BackendWrapper.analysisExperimentsCurrentIndex
+        )
         measSerie.width: 1
         bkgSerie.width: 1
 
@@ -235,11 +238,11 @@ Rectangle {
 
         calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
         calcSerie.color: {
-            const models = Globals.BackendWrapper.sampleModels
-            const idx = Globals.BackendWrapper.sampleCurrentModelIndex
+            const colors = Globals.BackendWrapper.modelColorsForExperiment
+            const idx = Globals.BackendWrapper.analysisExperimentsCurrentIndex
 
-            if (models && idx >= 0 && idx < models.length) {
-                return models[idx].color
+            if (colors && idx >= 0 && idx < colors.length) {
+                return colors[idx]
             }
 
             return undefined
@@ -304,6 +307,12 @@ Rectangle {
         function createExperimentSeries(expIndex, expName, color) {
             var xAxis = currentXAxis()
 
+            // Look up the model color for this experiment
+            var modelColors = Globals.BackendWrapper.modelColorsForExperiment
+            var modelColor = (modelColors && expIndex >= 0 && expIndex < modelColors.length)
+                             ? modelColors[expIndex]
+                             : color
+
             // Create measured data series
             var measuredSerie = chartView.createSeries(ChartView.SeriesTypeLine, 
                                                      `${expName} - Measured`, 
@@ -313,11 +322,11 @@ Rectangle {
             measuredSerie.capStyle = Qt.RoundCap
             measuredSerie.useOpenGL = chartView.useOpenGL
 
-            // Create calculated data series (slightly different style)
+            // Create calculated data series using the model's own color
             var calculatedSerie = chartView.createSeries(ChartView.SeriesTypeLine,
                                                         `${expName} - Calculated`,
                                                         xAxis, chartView.axisY)
-            calculatedSerie.color = color
+            calculatedSerie.color = modelColor
             calculatedSerie.width = 2
             calculatedSerie.capStyle = Qt.RoundCap
             calculatedSerie.useOpenGL = chartView.useOpenGL

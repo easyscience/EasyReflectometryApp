@@ -162,6 +162,10 @@ EaElements.GroupBox {
                         width: EaStyle.Sizes.fontPixelSize * 11
                         text: index > -1 ? Globals.BackendWrapper.analysisExperimentsAvailable[index] : ""
                         onEditingFinished: Globals.BackendWrapper.analysisSetExperimentNameAtIndex(index, text)
+
+                        // Match experiment line color on the chart
+                        color: Globals.Variables.experimentColor(index)
+                        font.bold: true
                     }
 
                     EaComponents.TableViewLabel {

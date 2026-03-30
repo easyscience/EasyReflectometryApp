@@ -151,14 +151,9 @@ Rectangle {
             axisY: axisY
             useOpenGL: EaGlobals.Vars.useOpenGL
             width: 1
-            color: {
-                const models = Globals.BackendWrapper.sampleModels
-                const idx = Globals.BackendWrapper.sampleCurrentModelIndex
-                if (models && idx >= 0 && idx < models.length) {
-                    return models[idx].color
-                }
-                return EaStyle.Colors.themeForeground
-            }
+            color: Globals.Variables.experimentColor(
+                Globals.BackendWrapper.analysisExperimentsCurrentIndex
+            )
             visible: !isMultiExperimentMode
             onHovered: (point, state) => showMainTooltip(chartView, dataToolTip, point, state)
         }

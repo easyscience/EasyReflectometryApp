@@ -25,14 +25,9 @@ Rectangle {
         property alias errorUpper: chartView.measSerie
         property alias errorLower: chartView.bkgSerie
 
-        // Experiment color palette (must match ExperimentalDataExplorer and backend)
-        property var experimentColorPalette: [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
-        ]
-        property color currentExperimentColor: experimentColorPalette[
-            Globals.BackendWrapper.analysisExperimentsCurrentIndex % experimentColorPalette.length
-        ]
+        property color currentExperimentColor: Globals.Variables.experimentColor(
+            Globals.BackendWrapper.analysisExperimentsCurrentIndex
+        )
 
         calcSerie.color: currentExperimentColor
         bkgSerie.color: measSerie.color
