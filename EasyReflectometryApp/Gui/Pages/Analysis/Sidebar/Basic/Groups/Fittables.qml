@@ -335,9 +335,7 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     text: formatError(Globals.BackendWrapper.analysisFitableParameters[index].error)
-                    color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                           Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
-                           EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
+                    color: EaStyle.Colors.themeForegroundDisabled
                 }
 
                 EaComponents.TableViewParameter {
