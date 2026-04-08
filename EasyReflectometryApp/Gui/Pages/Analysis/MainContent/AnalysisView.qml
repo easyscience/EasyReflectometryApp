@@ -461,12 +461,12 @@ Rectangle {
                 // Single experiment legend
                 EaElements.Label {
                     visible: !chartView.isMultiExperimentMode
-                    text: '━  I (Measured)'
+                    text: Globals.Variables.lineStyleSymbol(chartView.measSerie.style) + '  I (Measured)'
                     color: chartView.measSerie.color
                 }
                 EaElements.Label {
                     visible: !chartView.isMultiExperimentMode
-                    text: '━ (Calculated)'
+                    text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + ' (Calculated)'
                     color: chartView.calcSerie.color
                 }
 
@@ -510,12 +510,12 @@ Rectangle {
                     }
 
                     EaElements.Label {
-                        text: qsTr("━ Measured (thin)")
+                        text: Globals.Variables.lineStyleSymbol(chartView.measSerie.style) + ' ' + qsTr("Measured")
                         font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
                         color: EaStyle.Colors.themeForegroundMinor
                     }
                     EaElements.Label {
-                        text: qsTr("━ Calculated (thick)")
+                        text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + ' ' + qsTr("Calculated")
                         font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
                         color: EaStyle.Colors.themeForegroundMinor
                     }

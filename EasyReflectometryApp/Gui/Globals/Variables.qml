@@ -27,4 +27,14 @@ QtObject {
     function experimentColor(index) {
         return experimentColorPalette[index % experimentColorPalette.length]
     }
+
+    function lineStyleSymbol(style) {
+        switch (style) {
+        case Qt.DotLine:        return '\u22c5 \u22c5 \u22c5'
+        case Qt.DashLine:       return '\u2504\u2504'
+        case Qt.DashDotLine:    return '\u2504\u22c5\u2504'
+        case Qt.DashDotDotLine: return '\u2504\u22c5\u22c5\u2504'
+        default:                return '\u2501'
+        }
+    }
 }

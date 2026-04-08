@@ -591,12 +591,12 @@ Rectangle {
                 // Single experiment legend
                 EaElements.Label {
                     visible: !chartView.isMultiExperimentMode
-                    text: '━  I (Measured)'
+                    text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + '  I (Measured)'
                     color: chartView.calcSerie.color
                 }
                 EaElements.Label {
                     visible: !chartView.isMultiExperimentMode
-                    text: '━ Error'
+                    text: Globals.Variables.lineStyleSymbol(chartView.measSerie.style) + ' Error'
                     color: chartView.measSerie.color
                 }
                 
