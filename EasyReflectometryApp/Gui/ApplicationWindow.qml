@@ -38,7 +38,7 @@ EaComponents.ApplicationWindow {
 
         EaElements.ToolButton {
             enabled: Globals.References.resetActive
-            fontIcon: "backspace"
+            fontIcon: "undo"
             ToolTip.text: qsTr("Reset to initial state without project, models and data")
             onClicked: resetStateDialog.open()
         }

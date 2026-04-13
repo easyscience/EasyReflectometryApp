@@ -203,7 +203,7 @@ Rectangle {
                         height: EaStyle.Sizes.toolButtonHeight
                         width: EaStyle.Sizes.toolButtonHeight
                         borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "backspace"
+                        fontIcon: "undo"
                         ToolTip.text: qsTr("Reset axes")
                         onClicked: {
                             sampleChartView.resetAxes()
