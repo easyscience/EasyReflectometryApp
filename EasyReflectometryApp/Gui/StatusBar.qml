@@ -58,9 +58,13 @@ EaElements.StatusBar {
         visible: Globals.BackendWrapper.analysisFittingRunning
         keyIcon: 'play-circle'
         keyText: qsTr('Fit')
-        valueText: Globals.BackendWrapper.analysisFitHasInterimUpdate
-                   ? Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
-                   : Globals.BackendWrapper.analysisFitProgressMessage
+        valueText: {
+            if (!Globals.BackendWrapper.analysisFitHasInterimUpdate)
+                return Globals.BackendWrapper.analysisFitProgressMessage
+            const iter = Globals.BackendWrapper.analysisFitIteration
+            const rchi2 = Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
+            return qsTr('iter %1 · χ² %2').arg(iter).arg(rchi2)
+        }
         ToolTip.text: qsTr('Current fitting progress')
     }
 
