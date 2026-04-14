@@ -82,9 +82,10 @@ def test_prepare_threaded_fit_builds_masked_arrays_and_configures_minimizer(monk
     assert method is None
 
 
-def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results():
+def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monkeypatch):
     project = make_project()
     logic = fitting_module.Fitting(project)
+    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 2)
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_finished([
@@ -94,13 +95,81 @@ def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results():
 
     assert logic.fit_finished is True
     assert logic.fit_success is True
-    assert logic.fit_n_pars == 4
+    assert logic.fit_n_pars == 2
     assert logic.fit_chi2 == 2.0
 
     logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi=4.5))
     assert logic.fit_success is False
     assert logic.fit_n_pars == 1
     assert logic.fit_chi2 == 4.5
+
+
+def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_results(monkeypatch):
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 3)
+
+    logic.prepare_for_threaded_fit()
+    logic.on_fit_finished([
+        make_fit_result(success=True, chi2=4.0, n_pars=3, x=[1, 2, 3], reduced_chi=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=3, x=[1, 2, 3, 4], reduced_chi=1.2),
+    ])
+
+    assert logic.fit_n_pars == 3
+
+
+def test_fit_progress_updates_transient_state_and_message():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.prepare_for_threaded_fit()
+    logic.on_fit_progress(
+        {
+            'iteration': 12,
+            'chi2': 4.25,
+            'reduced_chi2': 1.75,
+            'parameter_values': {'alpha': 2.0},
+            'refresh_plots': True,
+            'finished': False,
+        }
+    )
+
+    assert logic.fit_iteration == 12
+    assert logic.fit_interim_chi2 == 4.25
+    assert logic.fit_interim_reduced_chi2 == 1.75
+    assert logic.fit_preview_parameter_values == {'alpha': 2.0}
+    assert logic.fit_has_preview_update is True
+    assert logic.fit_has_interim_update is True
+    assert logic.fit_progress_message == 'Fitting... iter 12, Chi2 = 4.25'
+
+
+def test_fit_progress_state_resets_on_finish_failure_and_stop():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.prepare_for_threaded_fit()
+    logic.on_fit_progress({'iteration': 3, 'chi2': 8.0, 'parameter_values': {'beta': 1.0}})
+    logic.on_fit_finished(make_fit_result(success=True, chi2=8.0, n_pars=1, x=[1, 2], reduced_chi=4.0))
+
+    assert logic.fit_iteration == 0
+    assert logic.fit_progress_message == ''
+    assert logic.fit_has_interim_update is False
+
+    logic.prepare_for_threaded_fit()
+    logic.on_fit_progress({'iteration': 4, 'chi2': 7.0, 'refresh_plots': True})
+    logic.on_fit_failed('boom')
+
+    assert logic.fit_iteration == 0
+    assert logic.fit_preview_parameter_values == {}
+    assert logic.fit_has_preview_update is False
+
+    logic.prepare_for_threaded_fit()
+    logic.on_fit_progress({'iteration': 5, 'chi2': 6.0})
+    logic.stop_fit()
+
+    assert logic.fit_iteration == 0
+    assert logic.fit_progress_message == ''
+    assert logic.fit_has_interim_update is False
 
 
 def test_fit_failure_and_cancellation_state_transitions():

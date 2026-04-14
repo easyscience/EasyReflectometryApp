@@ -13,6 +13,10 @@ import Gui.Globals as Globals
 
 EaComponents.ContentPage {
 
+    Loader {
+        source: 'Sidebar/Basic/Popups/FitStatusDialog.qml'
+    }
+
     mainView: EaComponents.MainContent {
         tabs: [
             EaElements.TabButton { text: qsTr('Reflectivity') }
@@ -50,7 +54,6 @@ EaComponents.ContentPage {
                 }
 
                 Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.startFittingButton = this
-                Loader { source: 'Sidebar/Basic/Popups/FitStatusDialog.qml' }
             }
         }
 

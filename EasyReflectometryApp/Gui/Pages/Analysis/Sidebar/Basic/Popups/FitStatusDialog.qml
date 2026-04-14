@@ -25,6 +25,10 @@ EaElements.Dialog {
         Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
     }
 
+    onRejected: {
+        Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
+    }
+
     onClosed: {
         Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
     }

@@ -53,8 +53,19 @@ EaElements.StatusBar {
         valueText: Globals.BackendWrapper.statusVariables ?? ''
         ToolTip.text: qsTr('Number of parameters: total, free and fixed')
     }
+
     EaElements.StatusBarItem {
-        visible: Globals.BackendWrapper.analysisFitChi2 > 0
+        visible: Globals.BackendWrapper.analysisFittingRunning
+        keyIcon: 'play-circle'
+        keyText: qsTr('Fit')
+        valueText: Globals.BackendWrapper.analysisFitHasInterimUpdate
+                   ? Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
+                   : Globals.BackendWrapper.analysisFitProgressMessage
+        ToolTip.text: qsTr('Current fitting progress')
+    }
+
+    EaElements.StatusBarItem {
+        visible: !Globals.BackendWrapper.analysisFittingRunning && Globals.BackendWrapper.analysisFitChi2 > 0
         keyIcon: 'chart-line'
         keyText: qsTr('Reduced Chi²')
         valueText: Globals.BackendWrapper.analysisFitChi2.toFixed(2)
