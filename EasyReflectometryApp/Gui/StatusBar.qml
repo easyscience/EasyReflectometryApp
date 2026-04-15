@@ -59,13 +59,24 @@ EaElements.StatusBar {
         keyIcon: 'play-circle'
         keyText: qsTr('Fit')
         valueText: {
-            if (!Globals.BackendWrapper.analysisFitHasInterimUpdate)
-                return Globals.BackendWrapper.analysisFitProgressMessage
-            const iter = Globals.BackendWrapper.analysisFitIteration
-            const rchi2 = Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
-            return qsTr('iter %1 · χ² %2').arg(iter).arg(rchi2)
+            if (Globals.BackendWrapper.analysisFitHasInterimUpdate) {
+                const iter = Globals.BackendWrapper.analysisFitIteration
+                const rchi2 = Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
+                return qsTr('iter %1 · χ² %2').arg(iter).arg(rchi2)
+            }
+            return qsTr('Fitting running') + '.'.repeat(dotCount % 5)
         }
         ToolTip.text: qsTr('Current fitting progress')
+
+        property int dotCount: 0
+        Timer {
+            interval: 600
+            repeat: true
+            running: Globals.BackendWrapper.analysisFittingRunning
+                     && !Globals.BackendWrapper.analysisFitHasInterimUpdate
+            onTriggered: parent.dotCount++
+        }
+        onVisibleChanged: if (!visible) dotCount = 0
     }
 
     EaElements.StatusBarItem {
