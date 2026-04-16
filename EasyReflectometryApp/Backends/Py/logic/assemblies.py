@@ -60,9 +60,17 @@ class Assemblies:
             self._assemblies.move_down(self.index)
             self.index = self.index + 1
 
-    def set_name_at_current_index(self, new_value: str) -> None:
-        self._assemblies[self.index].name = new_value
-        return True
+    def set_name_at_current_index(self, new_value: str) -> bool:
+        if self._assemblies[self.index].name != new_value:
+            self._assemblies[self.index].name = new_value
+            return True
+        return False
+
+    def set_name_at_index(self, index: int, new_value: str) -> bool:
+        if self._assemblies[index].name != new_value:
+            self._assemblies[index].name = new_value
+            return True
+        return False
 
     def set_type_at_current_index(self, new_value: str) -> bool:
         if new_value == self._assemblies[self.index].type:

@@ -57,6 +57,12 @@ class Models:
             return True
         return False
 
+    def set_name_at_index(self, index: int, new_value: str) -> bool:
+        if self._models[index].name != new_value:
+            self._models[index].name = new_value
+            return True
+        return False
+
     def set_scaling_at_current_index(self, new_value: str) -> bool:
         if self._models[self.index].scale.value != float(new_value):
             self._models[self.index].scale.value = float(new_value)

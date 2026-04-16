@@ -82,15 +82,33 @@ class Layers:
             return True
         return False
 
+    def set_name_at_index(self, index: int, new_value: str) -> bool:
+        if self._layers[index].name != new_value:
+            self._layers[index].name = new_value
+            return True
+        return False
+
     def set_thickness_at_current_index(self, new_value: float) -> bool:
         if self._layers[self.index].thickness.value != new_value:
             self._layers[self.index].thickness.value = new_value
             return True
         return False
 
+    def set_thickness_at_index(self, index: int, new_value: float) -> bool:
+        if self._layers[index].thickness.value != new_value:
+            self._layers[index].thickness.value = new_value
+            return True
+        return False
+
     def set_roughness_at_current_index(self, new_value: float) -> bool:
         if self._layers[self.index].roughness.value != new_value:
             self._layers[self.index].roughness.value = new_value
+            return True
+        return False
+
+    def set_roughness_at_index(self, index: int, new_value: float) -> bool:
+        if self._layers[index].roughness.value != new_value:
+            self._layers[index].roughness.value = new_value
             return True
         return False
 
@@ -102,9 +120,22 @@ class Layers:
             return True
         return False
 
+    def set_material_at_index(self, index: int, new_value: int) -> bool:
+        if self._layers[index].material != self._project_lib._materials[new_value]:
+            self._layers[index].material = self._project_lib._materials[new_value]
+            self._layers[index].name = self._project_lib._materials[new_value].name + ' Layer'
+            return True
+        return False
+
     def set_solvent_at_current_index(self, new_value: int) -> bool:
         if self._layers[self.index].solvent != self._project_lib._materials[new_value]:
             self._layers[self.index].solvent = self._project_lib._materials[new_value]
+            return True
+        return False
+
+    def set_solvent_at_index(self, index: int, new_value: int) -> bool:
+        if self._layers[index].solvent != self._project_lib._materials[new_value]:
+            self._layers[index].solvent = self._project_lib._materials[new_value]
             return True
         return False
 
@@ -114,15 +145,33 @@ class Layers:
             return True
         return False
 
+    def set_apm_at_index(self, index: int, new_value: float) -> bool:
+        if self._layers[index].area_per_molecule != new_value:
+            self._layers[index].area_per_molecule = new_value
+            return True
+        return False
+
     def set_solvation_at_current_index(self, new_value: float) -> bool:
         if self._layers[self.index].solvent_fraction != new_value:
             self._layers[self.index].solvent_fraction = new_value
             return True
         return False
 
+    def set_solvation_at_index(self, index: int, new_value: float) -> bool:
+        if self._layers[index].solvent_fraction != new_value:
+            self._layers[index].solvent_fraction = new_value
+            return True
+        return False
+
     def set_formula(self, new_value: str) -> bool:
         if self._layers[self.index].molecular_formula != new_value:
             self._layers[self.index].molecular_formula = new_value
+            return True
+        return False
+
+    def set_formula_at_index(self, index: int, new_value: str) -> bool:
+        if self._layers[index].molecular_formula != new_value:
+            self._layers[index].molecular_formula = new_value
             return True
         return False
 

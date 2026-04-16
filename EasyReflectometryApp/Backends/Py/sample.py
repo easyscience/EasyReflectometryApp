@@ -118,6 +118,11 @@ class Sample(QObject):
         if self._material_logic.set_name_at_current_index(new_value):
             self.materialsTableChanged.emit()
 
+    @Slot(int, str)
+    def setMaterialNameAtIndex(self, index: int, new_value: str) -> None:
+        if self._material_logic.set_name_at_index(index, new_value):
+            self.materialsTableChanged.emit()
+
     @Slot(float)
     def setCurrentMaterialSld(self, new_value: float) -> None:
         if self._material_logic.set_sld_at_current_index(new_value):
@@ -125,9 +130,23 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
+    @Slot(int, float)
+    def setMaterialSldAtIndex(self, index: int, new_value: float) -> None:
+        if self._material_logic.set_sld_at_index(index, new_value):
+            self.materialsTableChanged.emit()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
     @Slot(float)
     def setCurrentMaterialISld(self, new_value: float) -> None:
         if self._material_logic.set_isld_at_current_index(new_value):
+            self.materialsTableChanged.emit()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
+    @Slot(int, float)
+    def setMaterialISldAtIndex(self, index: int, new_value: float) -> None:
+        if self._material_logic.set_isld_at_index(index, new_value):
             self.materialsTableChanged.emit()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -197,6 +216,13 @@ class Sample(QObject):
             self.modelsIndexChanged.emit()
             self._clearCacheAndEmitLayersChanged()
 
+    @Slot(int, str)
+    def setModelNameAtIndex(self, index: int, value: str) -> None:
+        if self._models_logic.set_name_at_index(index, value):
+            self.modelsTableChanged.emit()
+            self.modelsIndexChanged.emit()
+            self._clearCacheAndEmitLayersChanged()
+
     # Actions
     @Slot(str)
     def removeModel(self, value: str) -> None:
@@ -260,6 +286,13 @@ class Sample(QObject):
     @Slot(str)
     def setCurrentAssemblyName(self, new_value: str) -> None:
         if self._assemblies_logic.set_name_at_current_index(new_value):
+            self.assembliesTableChanged.emit()
+            self.materialsTableChanged.emit()
+            self.externalSampleChanged.emit()
+
+    @Slot(int, str)
+    def setAssemblyNameAtIndex(self, index: int, new_value: str) -> None:
+        if self._assemblies_logic.set_name_at_index(index, new_value):
             self.assembliesTableChanged.emit()
             self.materialsTableChanged.emit()
             self.externalSampleChanged.emit()
@@ -367,9 +400,21 @@ class Sample(QObject):
         if self._layers_logic.set_name_at_current_index(new_value):
             self._clearCacheAndEmitLayersChanged()
 
+    @Slot(int, str)
+    def setLayerNameAtIndex(self, index: int, new_value: str) -> None:
+        if self._layers_logic.set_name_at_index(index, new_value):
+            self._clearCacheAndEmitLayersChanged()
+
     @Slot(int)
     def setCurrentLayerMaterial(self, new_value: int) -> None:
         if self._layers_logic.set_material_at_current_index(new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
+    @Slot(int, int)
+    def setLayerMaterialAtIndex(self, index: int, new_value: int) -> None:
+        if self._layers_logic.set_material_at_index(index, new_value):
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -381,9 +426,23 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
+    @Slot(int, int)
+    def setLayerSolventAtIndex(self, index: int, new_value: int) -> None:
+        if self._layers_logic.set_solvent_at_index(index, new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
     @Slot(float)
     def setCurrentLayerThickness(self, new_value: float) -> None:
         if self._layers_logic.set_thickness_at_current_index(new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
+    @Slot(int, float)
+    def setLayerThicknessAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_thickness_at_index(index, new_value):
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -395,9 +454,23 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
+    @Slot(int, float)
+    def setLayerRoughnessAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_roughness_at_index(index, new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
     @Slot(str)
     def setCurrentLayerFormula(self, new_value: str) -> None:
         if self._layers_logic.set_formula(new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
+    @Slot(int, str)
+    def setLayerFormulaAtIndex(self, index: int, new_value: str) -> None:
+        if self._layers_logic.set_formula_at_index(index, new_value):
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -409,9 +482,23 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
+    @Slot(int, float)
+    def setLayerAPMAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_apm_at_index(index, new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
     @Slot(float)
     def setCurrentLayerSolvation(self, new_value: float) -> None:
         if self._layers_logic.set_solvation_at_current_index(new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
+    @Slot(int, float)
+    def setLayerSolvationAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_solvation_at_index(index, new_value):
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()

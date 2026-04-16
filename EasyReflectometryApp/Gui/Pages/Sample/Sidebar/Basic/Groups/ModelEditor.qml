@@ -64,7 +64,7 @@ EaElements.GroupBox {
                 EaComponents.TableViewTextInput {
                     horizontalAlignment: Text.AlignLeft
                     text: Globals.BackendWrapper.sampleAssemblies[index].label
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentAssemblyName(text)
+                    onEditingFinished: Globals.BackendWrapper.sampleSetAssemblyNameAtIndex(index, text)
                 }
 
                 EaComponents.TableViewComboBox{

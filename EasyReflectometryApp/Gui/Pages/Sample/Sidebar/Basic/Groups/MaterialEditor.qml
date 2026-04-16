@@ -63,17 +63,17 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewTextInput {
                     text: Globals.BackendWrapper.sampleMaterials[index].label
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialName(text)
+                    onEditingFinished: Globals.BackendWrapper.sampleSetMaterialNameAtIndex(index, text)
                 }
 
                 EaComponents.TableViewTextInput {
                     text: Number(Globals.BackendWrapper.sampleMaterials[index].sld).toFixed(3)
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialSld(text)
+                    onEditingFinished: Globals.BackendWrapper.sampleSetMaterialSldAtIndex(index, text)
                 }
 
                 EaComponents.TableViewTextInput {
                     text: Number(Globals.BackendWrapper.sampleMaterials[index].isld).toFixed(3)
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentMaterialISld(text)
+                    onEditingFinished: Globals.BackendWrapper.sampleSetMaterialISldAtIndex(index, text)
                 }
 
                 EaComponents.TableViewButton {
