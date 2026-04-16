@@ -96,11 +96,12 @@ EaElements.GroupColumn {
             }
 
             EaComponents.TableViewComboBox{
+                readonly property int rowIndex: index
                 property string currentAssemblyName: Globals.BackendWrapper.sampleCurrentAssemblyName
                 horizontalAlignment: Text.AlignLeft
                 model: Globals.BackendWrapper.sampleMaterialNames
-                onActivated: {
-                    Globals.BackendWrapper.sampleSetLayerSolventAtIndex(index, currentIndex)
+                onActivated: function(comboIndex) {
+                    Globals.BackendWrapper.sampleSetLayerSolventAtIndex(rowIndex, comboIndex)
                 }
                 onModelChanged: {
                     currentIndex = indexOfValue(Globals.BackendWrapper.sampleLayers[index].solvent)

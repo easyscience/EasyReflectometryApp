@@ -162,3 +162,28 @@ def test_layers_index_based_setters_update_target_row_even_when_current_index_di
 
     assert logic.set_solvent_at_index(1, 0) is True
     assert logic._layers[1].solvent.name == 'Air'
+
+
+def test_layers_index_based_setters_ignore_invalid_indices(monkeypatch):
+    monkeypatch.setattr(layers_module, 'Material', make_material)
+
+    air = make_material('Air')
+    si = make_material('Si')
+    materials = make_material_collection(air, si)
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(name='Top Layer', material=air)]),
+        make_assembly(name='Middle', layers=[make_layer(name='Layer A', material=air, thickness=10.0, roughness=1.0)]),
+        make_assembly(name='Bottom', layers=[make_layer(name='Bottom Layer', material=si)]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(materials=materials, models=make_model_collection(model))
+    project.current_assembly_index = 1
+    logic = layers_module.Layers(project)
+
+    assert logic.set_material_at_index(3, 1) is False
+    assert logic.set_material_at_index(0, 5) is False
+    assert logic.set_solvent_at_index(2, 0) is False
+    assert logic.set_thickness_at_index(4, 12.0) is False
+
+    assert logic._layers[0].material.name == 'Air'
+    assert logic._layers[0].thickness.value == 10.0

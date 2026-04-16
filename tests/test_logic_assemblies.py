@@ -106,3 +106,25 @@ def test_assemblies_set_type_at_index_updates_target_row_when_current_index_diff
     assert isinstance(logic._assemblies[2], FakeMultilayer)
     assert logic._assemblies[2].name == 'Bottom'
     assert project.current_assembly_index == 2
+
+
+def test_assemblies_index_based_setters_ignore_invalid_indices(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
+    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
+
+    materials = make_material_collection(make_material('Air'), make_material('Si'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(name='Top Layer', material=materials[0])]),
+        make_assembly(name='Middle', layers=[make_layer(name='Middle Layer', material=materials[1])]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(materials=materials, models=make_model_collection(model))
+    logic = assemblies_module.Assemblies(project)
+
+    assert logic.set_name_at_index(5, 'Ignored') is False
+    assert logic.set_type_at_index(4, 'Surfactant Layer') is False
+    assert logic.set_type_at_index(0, 'Unsupported') is False
+
+    assert logic._assemblies[0].name == 'Top'
+    assert isinstance(logic._assemblies[0], FakeMultilayer)

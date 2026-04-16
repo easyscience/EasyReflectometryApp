@@ -68,12 +68,13 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewComboBox{
+                    readonly property int rowIndex: index
                     horizontalAlignment: Text.AlignLeft
                     property var fullModel: ["Multi-layer", "Repeating Multi-layer", "Surfactant Layer"]
                     property var limitedModel: ["Multi-layer", "Repeating Multi-layer"]
                     model: index === 0 || index === assembliesView.model - 1 ? limitedModel : fullModel
-                    onActivated: {
-                        Globals.BackendWrapper.sampleSetAssemblyTypeAtIndex(index, currentValue)
+                    onActivated: function(comboIndex) {
+                        Globals.BackendWrapper.sampleSetAssemblyTypeAtIndex(rowIndex, model[comboIndex])
                     }
                     Component.onCompleted: {
                         currentIndex = indexOfValue(Globals.BackendWrapper.sampleAssemblies[index].type)

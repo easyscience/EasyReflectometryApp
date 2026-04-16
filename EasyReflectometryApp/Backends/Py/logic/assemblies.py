@@ -11,6 +11,9 @@ class Assemblies:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
 
+    def _has_valid_assembly_index(self, index: int) -> bool:
+        return 0 <= index < len(self._assemblies)
+
     @property
     def _assemblies(self) -> Sample:
         return self._project_lib._models[self._project_lib.current_model_index].sample  # Sample is a collection of assemblies
@@ -67,6 +70,8 @@ class Assemblies:
         return False
 
     def set_name_at_index(self, index: int, new_value: str) -> bool:
+        if not self._has_valid_assembly_index(index):
+            return False
         if self._assemblies[index].name != new_value:
             self._assemblies[index].name = new_value
             return True
@@ -76,6 +81,8 @@ class Assemblies:
         return self.set_type_at_index(self.index, new_value)
 
     def set_type_at_index(self, index: int, new_value: str) -> bool:
+        if not self._has_valid_assembly_index(index):
+            return False
         if new_value == self._assemblies[index].type:
             return False
 
@@ -91,6 +98,8 @@ class Assemblies:
             new_assembly = SurfactantLayer()
             new_assembly.layers[0].solvent = self._project_lib._materials[index_air]
             new_assembly.layers[1].solvent = self._project_lib._materials[index_d2o]
+        else:
+            return False
 
         if new_assembly.name is None:
             new_assembly.name = self._assemblies[index].name
