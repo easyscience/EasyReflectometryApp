@@ -14,6 +14,26 @@ class Assemblies:
     def _has_valid_assembly_index(self, index: int) -> bool:
         return 0 <= index < len(self._assemblies)
 
+    def _target_insert_index(self, current_index: int, previous_length: int) -> int:
+        if previous_length <= 1:
+            return previous_length
+        return min(current_index + 1, previous_length - 1)
+
+    def _move_new_assembly_into_position(self, existing_ids: set[int], target_index: int) -> int | None:
+        new_index = next((idx for idx, assembly in enumerate(self._assemblies) if id(assembly) not in existing_ids), None)
+        if new_index is None:
+            return None
+
+        while new_index > target_index:
+            self._assemblies.move_up(new_index)
+            new_index -= 1
+
+        while new_index < target_index:
+            self._assemblies.move_down(new_index)
+            new_index += 1
+
+        return new_index
+
     @property
     def _assemblies(self) -> Sample:
         return self._project_lib._models[self._project_lib.current_model_index].sample  # Sample is a collection of assemblies
@@ -46,12 +66,23 @@ class Assemblies:
         self._assemblies.remove_assembly(int(value))
 
     def add_new(self) -> None:
+        previous_length = len(self._assemblies)
+        target_index = self._target_insert_index(self.index, previous_length)
+        existing_ids = {id(assembly) for assembly in self._assemblies}
         self._assemblies.add_assembly()
+        new_index = self._move_new_assembly_into_position(existing_ids, target_index)
         index_si = self._project_lib.get_index_si()
-        self._assemblies[-1].layers[0].material = self._project_lib._materials[index_si]
+        if new_index is not None:
+            self._assemblies[new_index].layers[0].material = self._project_lib._materials[index_si]
 
     def duplicate_selected(self) -> None:
+        if not self._has_valid_assembly_index(self.index):
+            return
+        previous_length = len(self._assemblies)
+        target_index = self._target_insert_index(self.index, previous_length)
+        existing_ids = {id(assembly) for assembly in self._assemblies}
         self._assemblies.duplicate_assembly(self.index)
+        self._move_new_assembly_into_position(existing_ids, target_index)
 
     def move_selected_up(self) -> None:
         if self.index > 0:

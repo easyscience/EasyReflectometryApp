@@ -351,14 +351,18 @@ class Sample(QObject):
     @Slot()
     def addNewAssembly(self) -> None:
         self._assemblies_logic.add_new()
+        self._clearCacheAndEmitLayersChanged()
         self.assembliesTableChanged.emit()
+        self.assembliesIndexChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
     @Slot()
     def duplicateSelectedAssembly(self) -> None:
         self._assemblies_logic.duplicate_selected()
+        self._clearCacheAndEmitLayersChanged()
         self.assembliesTableChanged.emit()
+        self.assembliesIndexChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
