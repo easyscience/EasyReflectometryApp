@@ -275,13 +275,34 @@ class Sample(QObject):
     def currentAssemblyType(self) -> str:
         return self._assemblies_logic.type_at_current_index
 
+    def _refreshCurrentAssemblySelectionState(self) -> None:
+        sample = self._project_lib._models[self._project_lib.current_model_index].sample
+        assembly_count = len(sample)
+
+        if assembly_count == 0:
+            self._project_lib.current_assembly_index = 0
+            self._project_lib.current_layer_index = 0
+        else:
+            self._project_lib.current_assembly_index = max(
+                0,
+                min(self._project_lib.current_assembly_index, assembly_count - 1),
+            )
+            layer_count = len(sample[self._project_lib.current_assembly_index].layers)
+            self._project_lib.current_layer_index = max(
+                0,
+                min(self._project_lib.current_layer_index, max(layer_count - 1, 0)),
+            )
+
+        self._clearCacheAndEmitLayersChanged()
+        self.assembliesIndexChanged.emit()
+        self.layersIndexChanged.emit()
+
     # Setters
     @Slot(int)
     def setCurrentAssemblyIndex(self, new_value: int) -> None:
         self._project_lib.current_assembly_index = new_value
-        self._clearCacheAndEmitLayersChanged()
+        self._refreshCurrentAssemblySelectionState()
         self.assembliesTableChanged.emit()
-        self.assembliesIndexChanged.emit()
 
     @Slot(str)
     def setCurrentAssemblyName(self, new_value: str) -> None:
@@ -300,18 +321,16 @@ class Sample(QObject):
     @Slot(str)
     def setCurrentAssemblyType(self, new_value: str) -> None:
         self._assemblies_logic.set_type_at_current_index(new_value)
-        self._clearCacheAndEmitLayersChanged()
+        self._refreshCurrentAssemblySelectionState()
         self.assembliesTableChanged.emit()
-        self.assembliesIndexChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
     @Slot(int, str)
     def setAssemblyTypeAtIndex(self, index: int, new_value: str) -> None:
         if self._assemblies_logic.set_type_at_index(index, new_value):
-            self._clearCacheAndEmitLayersChanged()
+            self._refreshCurrentAssemblySelectionState()
             self.assembliesTableChanged.emit()
-            self.assembliesIndexChanged.emit()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
@@ -344,6 +363,7 @@ class Sample(QObject):
     @Slot(str)
     def removeAssembly(self, value: str) -> None:
         self._assemblies_logic.remove_at_index(value)
+        self._refreshCurrentAssemblySelectionState()
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -351,30 +371,30 @@ class Sample(QObject):
     @Slot()
     def addNewAssembly(self) -> None:
         self._assemblies_logic.add_new()
-        self._clearCacheAndEmitLayersChanged()
+        self._refreshCurrentAssemblySelectionState()
         self.assembliesTableChanged.emit()
-        self.assembliesIndexChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
     @Slot()
     def duplicateSelectedAssembly(self) -> None:
         self._assemblies_logic.duplicate_selected()
-        self._clearCacheAndEmitLayersChanged()
+        self._refreshCurrentAssemblySelectionState()
         self.assembliesTableChanged.emit()
-        self.assembliesIndexChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
     @Slot()
     def moveSelectedAssemblyUp(self) -> None:
         self._assemblies_logic.move_selected_up()
+        self._refreshCurrentAssemblySelectionState()
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
 
     @Slot()
     def moveSelectedAssemblyDown(self) -> None:
         self._assemblies_logic.move_selected_down()
+        self._refreshCurrentAssemblySelectionState()
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
 
