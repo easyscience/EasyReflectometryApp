@@ -79,3 +79,30 @@ def test_assemblies_duplicate_move_and_remove(monkeypatch):
 
     logic.remove_at_index('2')
     assert len(logic._assemblies) == 2
+
+
+def test_assemblies_set_type_at_index_updates_target_row_when_current_index_differs(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
+    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
+
+    materials = make_material_collection(make_material('Air'), make_material('Si'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(name='Top Layer', material=materials[0])]),
+        make_assembly(name='Middle', layers=[make_layer(name='Middle Layer', material=materials[1])]),
+        make_assembly(name='Bottom', layers=[make_layer(name='Bottom Layer', material=materials[1])]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(materials=materials, models=make_model_collection(model))
+    project.current_assembly_index = 2
+    logic = assemblies_module.Assemblies(project)
+
+    assert logic.set_type_at_index(1, 'Surfactant Layer') is True
+
+    assert isinstance(logic._assemblies[1], FakeSurfactantLayer)
+    assert logic._assemblies[1].layers[0].solvent.name == 'Air'
+    assert logic._assemblies[1].layers[1].solvent.name == 'D2O'
+
+    assert isinstance(logic._assemblies[2], FakeMultilayer)
+    assert logic._assemblies[2].name == 'Bottom'
+    assert project.current_assembly_index == 2

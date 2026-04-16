@@ -306,6 +306,15 @@ class Sample(QObject):
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
+    @Slot(int, str)
+    def setAssemblyTypeAtIndex(self, index: int, new_value: str) -> None:
+        if self._assemblies_logic.set_type_at_index(index, new_value):
+            self._clearCacheAndEmitLayersChanged()
+            self.assembliesTableChanged.emit()
+            self.assembliesIndexChanged.emit()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
+
     # Assembly specific
     @Property(str, notify=assembliesTableChanged)
     def currentAssemblyRepeatedLayerReptitions(self) -> str:

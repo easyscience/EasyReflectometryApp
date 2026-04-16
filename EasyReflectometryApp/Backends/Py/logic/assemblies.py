@@ -73,15 +73,18 @@ class Assemblies:
         return False
 
     def set_type_at_current_index(self, new_value: str) -> bool:
-        if new_value == self._assemblies[self.index].type:
+        return self.set_type_at_index(self.index, new_value)
+
+    def set_type_at_index(self, index: int, new_value: str) -> bool:
+        if new_value == self._assemblies[index].type:
             return False
 
         if new_value == 'Multi-layer':
             new_assembly = Multilayer()
-            new_assembly.layers[0].material = self._assemblies[self.index].layers.data[0].material
+            new_assembly.layers[0].material = self._assemblies[index].layers.data[0].material
         elif new_value == 'Repeating Multi-layer':
             new_assembly = RepeatingMultilayer(repetitions=1, name=new_value)
-            new_assembly.layers[0].material = self._assemblies[self.index].layers.data[0].material
+            new_assembly.layers[0].material = self._assemblies[index].layers.data[0].material
         elif new_value == 'Surfactant Layer':
             index_air = self._project_lib.get_index_air()
             index_d2o = self._project_lib.get_index_d2o()
@@ -90,9 +93,9 @@ class Assemblies:
             new_assembly.layers[1].solvent = self._project_lib._materials[index_d2o]
 
         if new_assembly.name is None:
-            new_assembly.name = self._assemblies[self.index].name
+            new_assembly.name = self._assemblies[index].name
 
-        self._assemblies[self.index] = new_assembly
+        self._assemblies[index] = new_assembly
         return True
 
     # Only for repeating multilayer

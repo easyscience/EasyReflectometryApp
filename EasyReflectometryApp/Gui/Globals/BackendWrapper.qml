@@ -141,6 +141,7 @@ QtObject {
     function sampleSetCurrentAssemblyName(value) { activeBackend.sample.setCurrentAssemblyName(value) }
     function sampleSetAssemblyNameAtIndex(index, value) { activeBackend.sample.setAssemblyNameAtIndex(index, value) }
     function sampleSetCurrentAssemblyType(value) { activeBackend.sample.setCurrentAssemblyType(value) }
+    function sampleSetAssemblyTypeAtIndex(index, value) { activeBackend.sample.setAssemblyTypeAtIndex(index, value) }
     function sampleRemoveAssembly(value) { activeBackend.sample.removeAssembly(value) }
     function sampleAddNewAssembly() { activeBackend.sample.addNewAssembly() }
     function sampleDuplicateSelectedAssembly() { activeBackend.sample.duplicateSelectedAssembly() }

@@ -73,7 +73,7 @@ EaElements.GroupBox {
                     property var limitedModel: ["Multi-layer", "Repeating Multi-layer"]
                     model: index === 0 || index === assembliesView.model - 1 ? limitedModel : fullModel
                     onActivated: {
-                        Globals.BackendWrapper.sampleSetCurrentAssemblyType(currentValue)
+                        Globals.BackendWrapper.sampleSetAssemblyTypeAtIndex(index, currentValue)
                     }
                     Component.onCompleted: {
                         currentIndex = indexOfValue(Globals.BackendWrapper.sampleAssemblies[index].type)
