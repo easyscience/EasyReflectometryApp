@@ -9,7 +9,7 @@ import "./Assemblies" as Assemblies
 EaElements.GroupBox {
     title: qsTr("Layer editor: " + Globals.BackendWrapper.sampleCurrentAssemblyName)
     collapsible: true
-    collapsed: false
+    collapsed: true
     property string currentAssemblyType: Globals.BackendWrapper.sampleCurrentAssemblyType
 
     EaElements.GroupColumn {

@@ -10,7 +10,7 @@ import Gui.Globals as Globals
 EaElements.GroupBox {
     title: qsTr("Material editor")
     collapsible: true
-    collapsed: false
+    collapsed: true
 
     EaElements.GroupColumn {
 

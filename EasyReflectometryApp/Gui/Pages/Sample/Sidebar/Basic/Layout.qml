@@ -20,8 +20,4 @@ EaComponents.SideBarColumn {
         id: modelEditor
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
-    Groups.AssemblyEditor{
-        id: assemblyEditor
-        enabled: Globals.BackendWrapper.analysisIsFitFinished
-    }
 }

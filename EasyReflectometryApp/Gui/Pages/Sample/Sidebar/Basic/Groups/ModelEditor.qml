@@ -6,11 +6,14 @@ import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
+import "./Assemblies" as Assemblies
 
 EaElements.GroupBox {
     title: qsTr("Model editor: " + Globals.BackendWrapper.sampleCurrentModelName)
     collapsible: true
-    collapsed: false
+    collapsed: true
+
+    property string currentAssemblyType: Globals.BackendWrapper.sampleCurrentAssemblyType
 
     EaElements.GroupColumn {
 
@@ -129,6 +132,24 @@ EaElements.GroupBox {
                 ToolTip.text: qsTr("Move assembly down")
                 onClicked: Globals.BackendWrapper.sampleMoveSelectedAssemblyDown()
             }
+        }
+
+        // Layer editor
+        EaElements.Label {
+            text: qsTr("Layer editor: " + Globals.BackendWrapper.sampleCurrentAssemblyName)
+            font.bold: true
+        }
+
+        Assemblies.MultiLayer {
+            visible: currentAssemblyType === 'Multi-layer'
+        }
+
+        Assemblies.RepeatingMultiLayer {
+            visible: currentAssemblyType === 'Repeating Multi-layer'
+        }
+
+        Assemblies.SurfactantLayer {
+            visible: currentAssemblyType === 'Surfactant Layer'
         }
     }
 }
