@@ -119,7 +119,7 @@ EaElements.GroupBox {
             }
 
             EaElements.SideBarButton {
-                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex !== 0 && Globals.BackendWrapper.sampleAssemblies.length > 0 ) ? true : false//When item is selected
+                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex > 1 && Globals.BackendWrapper.sampleCurrentAssemblyIndex < Globals.BackendWrapper.sampleAssemblies.length - 1 && Globals.BackendWrapper.sampleAssemblies.length > 0) ? true : false
                 width: EaStyle.Sizes.tableRowHeight
                 fontIcon: "arrow-up"
                 ToolTip.text: qsTr("Move assembly up")
@@ -127,7 +127,7 @@ EaElements.GroupBox {
             }
 
             EaElements.SideBarButton {
-                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex + 1 !== Globals.BackendWrapper.sampleAssemblies.length && Globals.BackendWrapper.sampleAssemblies.length > 0 ) ? true : false//When item is selected
+                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex > 0 && Globals.BackendWrapper.sampleCurrentAssemblyIndex < Globals.BackendWrapper.sampleAssemblies.length - 2 && Globals.BackendWrapper.sampleAssemblies.length > 0) ? true : false
                 width: EaStyle.Sizes.tableRowHeight
                 fontIcon: "arrow-down"
                 ToolTip.text: qsTr("Move assembly down")
