@@ -51,6 +51,17 @@ EaComponents.ApplicationWindow {
             fontIcon: "cog"
             ToolTip.text: qsTr("Application preferences")
             onClicked: EaGlobals.Vars.showAppPreferencesDialog = true
+        },
+        EaElements.ToolButton {
+            fontIcon: 'question-circle'
+            ToolTip.text: qsTr('Get online help')
+            onClicked: Qt.openUrlExternally(Globals.ApplicationInfo.about.docsUrl)
+        },
+
+        EaElements.ToolButton {
+            fontIcon: 'bug'
+            ToolTip.text: qsTr('Report a bug or issue')
+            onClicked: Qt.openUrlExternally(Globals.ApplicationInfo.about.issuesUrl)
         }
 
     ]
