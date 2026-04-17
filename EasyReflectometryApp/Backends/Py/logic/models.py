@@ -58,6 +58,8 @@ class Models:
         return False
 
     def set_name_at_index(self, index: int, new_value: str) -> bool:
+        if not (0 <= index < len(self._models)):
+            return False
         if self._models[index].name != new_value:
             self._models[index].name = new_value
             return True

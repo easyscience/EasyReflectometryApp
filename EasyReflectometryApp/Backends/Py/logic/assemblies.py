@@ -95,10 +95,7 @@ class Assemblies:
             self.index = self.index + 1
 
     def set_name_at_current_index(self, new_value: str) -> bool:
-        if self._assemblies[self.index].name != new_value:
-            self._assemblies[self.index].name = new_value
-            return True
-        return False
+        return self.set_name_at_index(self.index, new_value)
 
     def set_name_at_index(self, index: int, new_value: str) -> bool:
         if not self._has_valid_assembly_index(index):

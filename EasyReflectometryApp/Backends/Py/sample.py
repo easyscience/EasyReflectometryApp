@@ -320,11 +320,11 @@ class Sample(QObject):
 
     @Slot(str)
     def setCurrentAssemblyType(self, new_value: str) -> None:
-        self._assemblies_logic.set_type_at_current_index(new_value)
-        self._refreshCurrentAssemblySelectionState()
-        self.assembliesTableChanged.emit()
-        self.externalRefreshPlot.emit()
-        self.externalSampleChanged.emit()
+        if self._assemblies_logic.set_type_at_current_index(new_value):
+            self._refreshCurrentAssemblySelectionState()
+            self.assembliesTableChanged.emit()
+            self.externalRefreshPlot.emit()
+            self.externalSampleChanged.emit()
 
     @Slot(int, str)
     def setAssemblyTypeAtIndex(self, index: int, new_value: str) -> None:
