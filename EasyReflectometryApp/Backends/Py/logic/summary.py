@@ -48,7 +48,8 @@ class Summary:
     @property
     def as_html(self) -> str:
         base_html = self._summary.compile_html_summary()
-        return self._inject_multimodel_multiexperiment_sections(base_html)
+        return base_html
+        # return self._inject_multimodel_multiexperiment_sections(base_html)
 
     def save_as_html(self, file_path: str | None = None) -> None:
         if not self._project_lib.path.exists():
@@ -57,7 +58,7 @@ class Summary:
         target_path = Path(file_path) if file_path else self.file_path.with_suffix('.html')
         target_path.parent.mkdir(parents=True, exist_ok=True)
         html_content = self._summary.compile_html_summary(figures=True)
-        html_content = self._inject_multimodel_multiexperiment_sections(html_content)
+        # html_content = self._inject_multimodel_multiexperiment_sections(html_content)
 
         with open(target_path, 'w', encoding='utf-8') as report_file:
             report_file.write(html_content)
