@@ -349,16 +349,16 @@ EaElements.GroupBox {
         if (selectedExperimentIndices.length === 0) {
             return
         }
-        
-        // If only one experiment is selected, use the existing single-selection logic
+
+        // Always notify backend of the current selection (single or multi)
+        Globals.BackendWrapper.analysisSetSelectedExperimentIndices(selectedExperimentIndices)
+
         if (selectedExperimentIndices.length === 1) {
             var currentIndex = selectedExperimentIndices[0]
 
             // If we were in multi-selection mode and now switching to single selection,
             // force a plot refresh by toggling the current index
             if (wasMultiSelected) {
-                // console.log("Switching from multi-selection to single selection - forcing plot refresh")
-                // Force refresh by temporarily setting a different index and then back
                 var tempIndex = (currentIndex === 0) ? 1 : 0
                 if (tempIndex < Globals.BackendWrapper.analysisExperimentsAvailable.length) {
                     Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(tempIndex)
@@ -372,50 +372,14 @@ EaElements.GroupBox {
         } else {
             // Mark that we're in multi-selection mode
             wasMultiSelected = true
-            // For multiple experiments, call the new backend method
-            // console.log("Multi-experiment selection - checking backend method availability")
-            // console.log("Backend wrapper analysis available:", typeof Globals.BackendWrapper.analysis)
-            // console.log("analysisSetSelectedExperimentIndices available:", typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices)
-            
-            // Try multiple approaches to call the backend method
-            var methodCalled = false
-            
-            // Approach 1: Direct call to top-level method
-            if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
-                // console.log("Approach 1: Calling analysisSetSelectedExperimentIndices with:", selectedExperimentIndices)
-                Globals.BackendWrapper.analysisSetSelectedExperimentIndices(selectedExperimentIndices)
-                methodCalled = true
-            }
-            
-            // Approach 2: Try through analysis object
-            if (!methodCalled && Globals.BackendWrapper.analysis && 
-                typeof Globals.BackendWrapper.analysis.setSelectedExperimentIndices === 'function') {
-                // console.log("Approach 2: Calling through analysis object with:", selectedExperimentIndices)
-                Globals.BackendWrapper.analysis.setSelectedExperimentIndices(selectedExperimentIndices)
-                methodCalled = true
-            }
-            
-            if (methodCalled) {
-                console.log("Multi-experiment selection applied:", selectedExperimentIndices)
-            } else {
-                // Fallback: set the first selected experiment as current
-                Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(selectedExperimentIndices[0])
-                console.log("Multi-experiment selection - fallback to single selection")
-                console.log("Selected experiments:", selectedExperimentIndices)
-                // console.log("Available backend methods:", Object.keys(Globals.BackendWrapper))
-            }
+            Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(selectedExperimentIndices[0])
         }
     }
     
     function clearAllSelections() {
-        console.log("clearAllSelections called - clearing to empty array")
         wasMultiSelected = false
         selectedExperimentIndices = []
-        // Notify backend that selection is cleared
-        if (typeof Globals.BackendWrapper.analysisSetSelectedExperimentIndices === 'function') {
-            // console.log("Calling backend with empty array to clear selection")
-            Globals.BackendWrapper.analysisSetSelectedExperimentIndices([])
-        }
+        Globals.BackendWrapper.analysisSetSelectedExperimentIndices([])
     }
     
     function selectAllExperiments() {

@@ -12,6 +12,7 @@ import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Charts as EaCharts
 
 import Gui.Globals as Globals
+import "../../../Logic/MeasuredScatter.js" as MeasuredScatter
 
 
 Rectangle {
@@ -33,6 +34,9 @@ Rectangle {
         bkgSerie.color: measSerie.color
         measSerie.width: 1
         bkgSerie.width: 1
+
+        // Keep scatter series color in sync with selected experiment
+        onCurrentExperimentColorChanged: MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
 
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
@@ -74,6 +78,9 @@ Rectangle {
         function updateReferenceLines() {
             Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, false)
         }
+
+        // Scatter series for measured data (single experiment, linear mode)
+        property var measuredScatterSerie: null
 
         // Multi-experiment support
         property var multiExperimentSeries: []
@@ -267,13 +274,13 @@ Rectangle {
             } else if (useLogQAxis) {
                 // Single experiment, log mode: create dynamic series on log axis
                 measured.visible = false
+                if (measuredScatterSerie) measuredScatterSerie.visible = false
                 errorUpper.visible = false
                 errorLower.visible = false
 
-                var newMeasured = chartView.createSeries(ChartView.SeriesTypeLine, "measured_log", axisXLog, chartView.axisY)
-                newMeasured.color = chartView.currentExperimentColor
-                newMeasured.width = measured.width
-                newMeasured.useOpenGL = chartView.useOpenGL
+                var newMeasured = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                         "measured_log", axisXLog, chartView.axisY,
+                                                         chartView.currentExperimentColor)
 
                 var newErrorUpper = chartView.createSeries(ChartView.SeriesTypeLine, "errorUpper_log", axisXLog, chartView.axisY)
                 newErrorUpper.color = errorUpper.color
@@ -297,13 +304,18 @@ Rectangle {
                 Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', newErrorLower)
                 Globals.BackendWrapper.plottingRefreshExperiment()
             } else {
-                // Single experiment, linear mode: restore static series
-                measured.visible = true
+                // Single experiment, linear mode: restore scatter series
+                measured.visible = false
+                if (!measuredScatterSerie) {
+                    console.warn("ExperimentView.recreateForLogMode: measuredScatterSerie is null - linear mode will render no measured points")
+                } else {
+                    measuredScatterSerie.visible = true
+                }
                 errorUpper.visible = true
                 errorLower.visible = true
 
-                // Re-register static series
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measured)
+                // Re-register scatter series for measured, static series for errors
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
                 Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', errorUpper)
                 Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', errorLower)
                 Globals.BackendWrapper.plottingRefreshExperiment()
@@ -351,9 +363,21 @@ Rectangle {
 
             if (!isMultiExperimentMode) {
                 // Show default series for single experiment
-                measured.visible = true
+                measured.visible = false
+                if (!measuredScatterSerie) {
+                    console.warn("ExperimentView.updateMultiExperimentSeries: measuredScatterSerie is null - single mode will render no measured points")
+                } else {
+                    measuredScatterSerie.visible = true
+                    MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
+                }
                 errorUpper.visible = true
                 errorLower.visible = true
+
+                // Re-register scatter series and refresh data
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', errorUpper)
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', errorLower)
+                Globals.BackendWrapper.plottingRefreshExperiment()
                 return
             }
 
@@ -362,14 +386,27 @@ Rectangle {
             // If no data available yet, keep default series visible as fallback
             if (experimentDataList.length === 0) {
                 console.log("No experiment data available - keeping default series visible")
-                measured.visible = true
+                measured.visible = false
+                if (!measuredScatterSerie) {
+                    console.warn("ExperimentView.updateMultiExperimentSeries: measuredScatterSerie is null - no-data fallback will render no measured points")
+                } else {
+                    measuredScatterSerie.visible = true
+                }
                 errorUpper.visible = true
                 errorLower.visible = true
+
+                // Re-register and refresh so this branch matches the
+                // single-experiment branch above.
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', errorUpper)
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', errorLower)
+                Globals.BackendWrapper.plottingRefreshExperiment()
                 return
             }
 
             // Hide default series in multi-experiment mode (only after we have data)
             measured.visible = false
+            if (measuredScatterSerie) measuredScatterSerie.visible = false
             errorUpper.visible = false
             errorLower.visible = false
 
@@ -404,14 +441,11 @@ Rectangle {
 
             var xAxis = currentXAxis()
 
-            // Create measured data series
-            var measuredSerie = chartView.createSeries(ChartView.SeriesTypeLine, 
-                                                     `${expName} - Data`, 
-                                                     xAxis, chartView.axisY)
-            measuredSerie.color = color
-            measuredSerie.width = 2
-            measuredSerie.capStyle = Qt.RoundCap
-            measuredSerie.useOpenGL = chartView.useOpenGL
+            // Create measured data series (scatter points)
+            var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                       `${expName} - Data`,
+                                                       xAxis, chartView.axisY,
+                                                       color)
 
             // Create error bound series (lighter colors)
             var errorColor = Qt.darker(color, 1.3)
@@ -658,7 +692,18 @@ Rectangle {
 
         // Data is set in python backend (plotting_1d.py)
         Component.onCompleted: {
+            // Create scatter series for measured data (single experiment, linear mode)
+            measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                          "measured_scatter",
+                                                          chartView.axisX, chartView.axisY,
+                                                          currentExperimentColor)
+            if (!measuredScatterSerie) {
+                console.warn("ExperimentView: failed to create measuredScatterSerie - measured data will not render")
+            }
+            measured.visible = false
+
             Globals.References.pages.experiment.mainContent.experimentView = chartView
+
             Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage',
                                                                'errorUpperSerie',
                                                                errorUpper)
@@ -667,7 +712,7 @@ Rectangle {
                                                                errorLower)
             Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage',
                                                                'measuredSerie',
-                                                               measured)
+                                                               measuredScatterSerie)
 
             // Initialize multi-experiment support
             // console.log("ExperimentView initialized - checking multi-experiment mode...")
