@@ -8,20 +8,20 @@ import "./Groups" as Groups
 
 EaComponents.SideBarColumn {
     Groups.LoadSample{
+        collapsed: false
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
     Groups.MaterialEditor{
+        collapsed: true
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
     Groups.ModelSelector{
+        collapsed: true
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
     Groups.ModelEditor {
         id: modelEditor
-        enabled: Globals.BackendWrapper.analysisIsFitFinished
-    }
-    Groups.AssemblyEditor{
-        id: assemblyEditor
+        collapsed: true
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
 }

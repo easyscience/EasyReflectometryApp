@@ -54,7 +54,7 @@ EaElements.GroupBox {
                 EaComponents.TableViewTextInput {
                     horizontalAlignment: Text.AlignLeft
                     text: Globals.BackendWrapper.sampleModels[index].label
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentModelName(text)
+                    onEditingFinished: Globals.BackendWrapper.sampleSetModelNameAtIndex(index, text)
                 }
 
                 EaComponents.TableViewButton {

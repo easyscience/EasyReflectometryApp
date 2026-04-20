@@ -17,8 +17,10 @@ QtObject {
                 'url': 'https://ess.eu',
                 'icon': Qt.resolvedUrl('../Resources/Logo/ESS.png'),
                 'heightScale': 3.0
-            }
-        ]
+            },
+        ],
+        'docsUrl': 'https://easyscience.github.io/EasyReflectometryApp/',
+        'issuesUrl': 'https://github.com/easyscience/EasyReflectometryApp/issues'
     }
 
 }

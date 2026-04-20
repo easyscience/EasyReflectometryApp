@@ -18,6 +18,7 @@ QtObject {
     // Sample page plot control settings
     property bool reverseSldZAxis: false
     property bool logarithmicQAxis: false
+    property int experimentMarkerStyle: 0  // 0: dots, 1: circles, 2: line
 
     // Shared experiment color palette — used by Data Explorer table, Experiment chart, and Analysis charts
     readonly property var experimentColorPalette: [

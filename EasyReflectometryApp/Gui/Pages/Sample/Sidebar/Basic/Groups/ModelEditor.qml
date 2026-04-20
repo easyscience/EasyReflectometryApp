@@ -6,11 +6,14 @@ import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
+import "./Assemblies" as Assemblies
 
 EaElements.GroupBox {
     title: qsTr("Model editor: " + Globals.BackendWrapper.sampleCurrentModelName)
     collapsible: true
-    collapsed: false
+    collapsed: true
+
+    property string currentAssemblyType: Globals.BackendWrapper.sampleCurrentAssemblyType
 
     EaElements.GroupColumn {
 
@@ -61,16 +64,17 @@ EaElements.GroupBox {
                 EaComponents.TableViewTextInput {
                     horizontalAlignment: Text.AlignLeft
                     text: Globals.BackendWrapper.sampleAssemblies[index].label
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentAssemblyName(text)
+                    onEditingFinished: Globals.BackendWrapper.sampleSetAssemblyNameAtIndex(index, text)
                 }
 
                 EaComponents.TableViewComboBox{
+                    readonly property int rowIndex: index
                     horizontalAlignment: Text.AlignLeft
                     property var fullModel: ["Multi-layer", "Repeating Multi-layer", "Surfactant Layer"]
                     property var limitedModel: ["Multi-layer", "Repeating Multi-layer"]
                     model: index === 0 || index === assembliesView.model - 1 ? limitedModel : fullModel
-                    onActivated: {
-                        Globals.BackendWrapper.sampleSetCurrentAssemblyType(currentValue)
+                    onActivated: function(comboIndex) {
+                        Globals.BackendWrapper.sampleSetAssemblyTypeAtIndex(rowIndex, model[comboIndex])
                     }
                     Component.onCompleted: {
                         currentIndex = indexOfValue(Globals.BackendWrapper.sampleAssemblies[index].type)
@@ -115,7 +119,7 @@ EaElements.GroupBox {
             }
 
             EaElements.SideBarButton {
-                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex !== 0 && Globals.BackendWrapper.sampleAssemblies.length > 0 ) ? true : false//When item is selected
+                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex > 1 && Globals.BackendWrapper.sampleCurrentAssemblyIndex < Globals.BackendWrapper.sampleAssemblies.length - 1 && Globals.BackendWrapper.sampleAssemblies.length > 0) ? true : false
                 width: EaStyle.Sizes.tableRowHeight
                 fontIcon: "arrow-up"
                 ToolTip.text: qsTr("Move assembly up")
@@ -123,12 +127,30 @@ EaElements.GroupBox {
             }
 
             EaElements.SideBarButton {
-                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex + 1 !== Globals.BackendWrapper.sampleAssemblies.length && Globals.BackendWrapper.sampleAssemblies.length > 0 ) ? true : false//When item is selected
+                enabled: (Globals.BackendWrapper.sampleCurrentAssemblyIndex > 0 && Globals.BackendWrapper.sampleCurrentAssemblyIndex < Globals.BackendWrapper.sampleAssemblies.length - 2 && Globals.BackendWrapper.sampleAssemblies.length > 0) ? true : false
                 width: EaStyle.Sizes.tableRowHeight
                 fontIcon: "arrow-down"
                 ToolTip.text: qsTr("Move assembly down")
                 onClicked: Globals.BackendWrapper.sampleMoveSelectedAssemblyDown()
             }
+        }
+
+        // Layer editor
+        EaElements.Label {
+            text: qsTr("Layer editor: " + Globals.BackendWrapper.sampleCurrentAssemblyName)
+            font.bold: true
+        }
+
+        Assemblies.MultiLayer {
+            visible: currentAssemblyType === 'Multi-layer'
+        }
+
+        Assemblies.RepeatingMultiLayer {
+            visible: currentAssemblyType === 'Repeating Multi-layer'
+        }
+
+        Assemblies.SurfactantLayer {
+            visible: currentAssemblyType === 'Surfactant Layer'
         }
     }
 }

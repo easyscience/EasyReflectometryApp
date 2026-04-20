@@ -57,15 +57,39 @@ class Material:
             return True
         return False
 
+    def set_name_at_index(self, index: int, new_value: str) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        if self._materials[index].name != new_value:
+            self._materials[index].name = new_value
+            return True
+        return False
+
     def set_sld_at_current_index(self, new_value: float) -> bool:
         if self._materials[self.index].sld.value != new_value:
             self._materials[self.index].sld.value = new_value
             return True
         return False
 
+    def set_sld_at_index(self, index: int, new_value: float) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        if self._materials[index].sld.value != new_value:
+            self._materials[index].sld.value = new_value
+            return True
+        return False
+
     def set_isld_at_current_index(self, new_value: float) -> bool:
         if self._materials[self.index].isld.value != new_value:
             self._materials[self.index].isld.value = new_value
+            return True
+        return False
+
+    def set_isld_at_index(self, index: int, new_value: float) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        if self._materials[index].isld.value != new_value:
+            self._materials[index].isld.value = new_value
             return True
         return False
 

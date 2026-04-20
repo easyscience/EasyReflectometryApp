@@ -57,11 +57,12 @@ EaElements.GroupColumn {
             }
 
             EaComponents.TableViewComboBox{
+                readonly property int rowIndex: index
                 property string currentAssemblyName: Globals.BackendWrapper.sampleCurrentAssemblyName
                 horizontalAlignment: Text.AlignLeft
                 model: Globals.BackendWrapper.sampleMaterialNames
-                onActivated: {
-                    Globals.BackendWrapper.sampleSetCurrentLayerMaterial(currentIndex)
+                onActivated: function(comboIndex) {
+                    Globals.BackendWrapper.sampleSetLayerMaterialAtIndex(rowIndex, comboIndex)
                 }
                 onModelChanged: {
                     currentIndex = indexOfValue(Globals.BackendWrapper.sampleLayers[index].material)
@@ -79,7 +80,7 @@ EaElements.GroupColumn {
                 enabled: Globals.BackendWrapper.sampleLayers[index].thickness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].thickness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].thickness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerThickness(text)
+                onEditingFinished: Globals.BackendWrapper.sampleSetLayerThicknessAtIndex(index, text)
             }
 
             EaComponents.TableViewTextInput {
@@ -87,7 +88,7 @@ EaElements.GroupColumn {
                 enabled: Globals.BackendWrapper.sampleLayers[index].roughness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].roughness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].roughness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerRoughness(text)
+                onEditingFinished: Globals.BackendWrapper.sampleSetLayerRoughnessAtIndex(index, text)
             }
 
             EaComponents.TableViewButton {

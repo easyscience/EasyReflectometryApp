@@ -12,6 +12,7 @@ import EasyApp.Gui.Elements as EaElements
 import EasyApp.Gui.Charts as EaCharts
 
 import Gui.Globals as Globals
+import "../../../Logic/MeasuredScatter.js" as MeasuredScatter
 
 
 Rectangle {
@@ -32,6 +33,12 @@ Rectangle {
         measSerie.style: Qt.DotLine
         bkgSerie.width: 1
         bkgSerie.style: Qt.DotLine
+
+        // Track current experiment color for scatter series
+        property color currentExperimentColor: Globals.Variables.experimentColor(
+            Globals.BackendWrapper.analysisExperimentsCurrentIndex
+        )
+        onCurrentExperimentColorChanged: MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
 
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
@@ -74,6 +81,9 @@ Rectangle {
             Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, true)
         }
 
+        // Scatter series for measured data (single experiment, linear mode)
+        property var measuredScatterSerie: null
+
         // Multi-experiment support
         property var multiExperimentSeries: []
         property bool isMultiExperimentMode: {
@@ -115,6 +125,14 @@ Rectangle {
             }
             function onSamplePageResetAxes() {
                 analysisResetAxesTimer.start()
+            }
+        }
+
+        // Recreate series when marker style changes
+        Connections {
+            target: Globals.Variables
+            function onExperimentMarkerStyleChanged() {
+                chartView.recreateSeriesForCurrentMode()
             }
         }
 
@@ -179,12 +197,12 @@ Rectangle {
             } else if (useLogQAxis) {
                 // Single experiment, log mode: create dynamic series on log axis
                 measured.visible = false
+                if (measuredScatterSerie) measuredScatterSerie.visible = false
                 calculated.visible = false
 
-                var newMeasured = chartView.createSeries(ChartView.SeriesTypeLine, "measured_log", axisXLog, chartView.axisY)
-                newMeasured.color = measured.color
-                newMeasured.width = measured.width
-                newMeasured.useOpenGL = chartView.useOpenGL
+                var newMeasured = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                         "measured_log", axisXLog, chartView.axisY,
+                                                         measured.color, Globals.Variables.experimentMarkerStyle)
 
                 var newCalculated = chartView.createSeries(ChartView.SeriesTypeLine, "calculated_log", axisXLog, chartView.axisY)
                 newCalculated.color = calculated.color
@@ -201,11 +219,16 @@ Rectangle {
                 Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', newCalculated)
                 Globals.BackendWrapper.plottingRefreshAnalysis()
             } else {
-                // Single experiment, linear mode: restore static series
-                measured.visible = true
+                // Single experiment, linear mode: restore scatter series
+                measured.visible = false
+                if (!measuredScatterSerie) {
+                    console.warn("AnalysisView.recreateForLogMode: measuredScatterSerie is null - linear mode will render no measured points")
+                } else {
+                    measuredScatterSerie.visible = true
+                }
                 calculated.visible = true
 
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measured)
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
                 Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
                 Globals.BackendWrapper.plottingRefreshAnalysis()
             }
@@ -261,8 +284,19 @@ Rectangle {
             if (!isMultiExperimentMode) {
                 // Show default series for single experiment
                 console.log("Analysis: Single experiment mode - showing default series")
-                measured.visible = true
+                measured.visible = false
+                if (!measuredScatterSerie) {
+                    console.warn("AnalysisView.updateMultiExperimentSeries: measuredScatterSerie is null - single mode will render no measured points")
+                } else {
+                    measuredScatterSerie.visible = true
+                    MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
+                }
                 calculated.visible = true
+
+                // Re-register scatter series and refresh data
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
+                Globals.BackendWrapper.plottingRefreshAnalysis()
                 return
             }
 
@@ -273,13 +307,25 @@ Rectangle {
             // If no data available yet, keep default series visible as fallback
             if (experimentDataList.length === 0) {
                 console.log("Analysis: No experiment data available - keeping default series visible")
-                measured.visible = true
+                measured.visible = false
+                if (!measuredScatterSerie) {
+                    console.warn("AnalysisView.updateMultiExperimentSeries: measuredScatterSerie is null - no-data fallback will render no measured points")
+                } else {
+                    measuredScatterSerie.visible = true
+                }
                 calculated.visible = true
+
+                // Re-register the scatter series and refresh so the chart
+                // matches what the single-experiment branch above does.
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
+                Globals.BackendWrapper.plottingRefreshAnalysis()
                 return
             }
 
             // Hide default series in multi-experiment mode (only after we have data)
             measured.visible = false
+            if (measuredScatterSerie) measuredScatterSerie.visible = false
             calculated.visible = false
             console.log("Analysis: Hidden default series, creating " + experimentDataList.length + " experiment series")
 
@@ -316,16 +362,11 @@ Rectangle {
                              ? modelColors[expIndex]
                              : color
 
-            // Create measured data series
-            var measuredSerie = chartView.createSeries(ChartView.SeriesTypeLine, 
-                                                     `${expName} - Measured`, 
-                                                     xAxis, chartView.axisY)
-            measuredSerie.color = color
-            measuredSerie.width = 2
-            measuredSerie.opacity = 0.95
-            measuredSerie.style = Qt.DotLine
-            measuredSerie.capStyle = Qt.RoundCap
-            measuredSerie.useOpenGL = chartView.useOpenGL
+            // Create measured data series (scatter points)
+            var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                       `${expName} - Measured`,
+                                                       xAxis, chartView.axisY,
+                                                       color, Globals.Variables.experimentMarkerStyle)
 
             // Create calculated data series using the model's own color
             var calculatedSerie = chartView.createSeries(ChartView.SeriesTypeLine,
@@ -531,12 +572,48 @@ Rectangle {
             textFormat: Text.RichText
         }
 
+        function recreateSeriesForCurrentMode() {
+            if (isMultiExperimentMode) {
+                // Multi-experiment mode: recreate all multi-experiment series
+                updateMultiExperimentSeries()
+            } else if (useLogQAxis) {
+                // Single experiment, log mode: recreate log mode series
+                recreateForLogMode()
+            } else {
+                // Single experiment, linear mode: recreate scatter series
+                if (measuredScatterSerie) {
+                    chartView.removeSeries(measuredScatterSerie)
+                    measuredScatterSerie = null
+                }
+                measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                              "measured_scatter",
+                                                              chartView.axisX, chartView.axisY,
+                                                              measured.color, Globals.Variables.experimentMarkerStyle)
+                if (measuredScatterSerie) {
+                    measuredScatterSerie.visible = true
+                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                    Globals.BackendWrapper.plottingRefreshAnalysis()
+                }
+            }
+        }
+
         // Data is set in python backend (plotting_1d.py)
         Component.onCompleted: {
+            // Create scatter series for measured data (single experiment, linear mode)
+            measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                          "measured_scatter",
+                                                          chartView.axisX, chartView.axisY,
+                                                          measured.color, Globals.Variables.experimentMarkerStyle)
+            if (!measuredScatterSerie) {
+                console.warn("AnalysisView: failed to create measuredScatterSerie - measured data will not render")
+            }
+            measured.visible = false
+
             Globals.References.pages.analysis.mainContent.analysisView = chartView
+
             Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                'measuredSerie',
-                                                               measured)
+                                                               measuredScatterSerie)
             Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                'calculatedSerie',
                                                                calculated)
@@ -551,10 +628,22 @@ Rectangle {
 
         // Update series when chart becomes visible
         onVisibleChanged: {
-            if (visible && isMultiExperimentMode) {
-                updateMultiExperimentSeries()
-            }
             if (visible) {
+                if (isMultiExperimentMode) {
+                    updateMultiExperimentSeries()
+                } else {
+                    // Ensure scatter series has correct color and data after tab switch
+                    if (!measuredScatterSerie) {
+                        console.warn("AnalysisView.onVisibleChanged: measuredScatterSerie is null - tab switch will render no measured points")
+                    } else {
+                        MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
+                        measuredScatterSerie.visible = true
+                    }
+                    measured.visible = false
+                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
+                    Globals.BackendWrapper.plottingRefreshAnalysis()
+                }
                 updateReferenceLines()
             }
         }

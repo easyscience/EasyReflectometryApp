@@ -61,7 +61,7 @@ EaElements.GroupColumn {
                 horizontalAlignment: Text.AlignHCenter
                 text: Globals.BackendWrapper.sampleLayers[index].formula
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerFormula(text)
+                onEditingFinished: Globals.BackendWrapper.sampleSetLayerFormulaAtIndex(index, text)
             }
 
             EaComponents.TableViewTextInput {
@@ -69,7 +69,7 @@ EaElements.GroupColumn {
                 enabled: Globals.BackendWrapper.sampleLayers[index].thickness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].thickness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].thickness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerThickness(text)
+                onEditingFinished: Globals.BackendWrapper.sampleSetLayerThicknessAtIndex(index, text)
             }
 
             EaComponents.TableViewTextInput {
@@ -77,14 +77,14 @@ EaElements.GroupColumn {
                 enabled: Globals.BackendWrapper.sampleLayers[index].roughness_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].roughness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].roughness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerRoughness(text)
+                onEditingFinished: Globals.BackendWrapper.sampleSetLayerRoughnessAtIndex(index, text)
             }
 
             EaComponents.TableViewTextInput {
                 horizontalAlignment: Text.AlignHCenter
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].solvation)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].solvation).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerSolvation(text)
+                onEditingFinished: Globals.BackendWrapper.sampleSetLayerSolvationAtIndex(index, text)
             }
 
             EaComponents.TableViewTextInput {
@@ -92,15 +92,16 @@ EaElements.GroupColumn {
                 enabled: Globals.BackendWrapper.sampleLayers[index].apm_enabled === "True"
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].apm)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].apm).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
-                onEditingFinished: Globals.BackendWrapper.sampleSetCurrentLayerAPM(text)
+                onEditingFinished: Globals.BackendWrapper.sampleSetLayerAPMAtIndex(index, text)
             }
 
             EaComponents.TableViewComboBox{
+                readonly property int rowIndex: index
                 property string currentAssemblyName: Globals.BackendWrapper.sampleCurrentAssemblyName
                 horizontalAlignment: Text.AlignLeft
                 model: Globals.BackendWrapper.sampleMaterialNames
-                onActivated: {
-                    Globals.BackendWrapper.sampleSetCurrentLayerSolvent(currentIndex)
+                onActivated: function(comboIndex) {
+                    Globals.BackendWrapper.sampleSetLayerSolventAtIndex(rowIndex, comboIndex)
                 }
                 onModelChanged: {
                     currentIndex = indexOfValue(Globals.BackendWrapper.sampleLayers[index].solvent)
