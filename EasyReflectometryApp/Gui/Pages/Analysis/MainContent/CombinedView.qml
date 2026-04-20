@@ -115,6 +115,14 @@ Rectangle {
                     }
                 }
 
+                // Recreate series when marker style changes
+                Connections {
+                    target: Globals.Variables
+                    function onExperimentMarkerStyleChanged() {
+                        analysisChartView.recreateSeriesForCurrentMode()
+                    }
+                }
+
                 // Background reference line series
                 LineSeries {
                     id: backgroundRefLine
@@ -245,7 +253,7 @@ Rectangle {
                     var measuredSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
                                                                `${expName} - Measured`,
                                                                xAxis, analysisChartView.axisY,
-                                                               color)
+                                                               color, Globals.Variables.experimentMarkerStyle)
 
                     // Create calculated data series using the model's own color
                     var calculatedSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine,
@@ -343,7 +351,7 @@ Rectangle {
 
                         var newMeasured = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
                                                                  "measured_log", analysisAxisXLog, analysisChartView.axisY,
-                                                                 measured.color)
+                                                                 measured.color, Globals.Variables.experimentMarkerStyle)
 
                         var newCalculated = analysisChartView.createSeries(ChartView.SeriesTypeLine, "calculated_log", analysisAxisXLog, analysisChartView.axisY)
                         newCalculated.color = calculated.color
@@ -588,7 +596,7 @@ Rectangle {
                     measuredScatterSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
                                                                   "measured_scatter",
                                                                   analysisChartView.axisX, analysisChartView.axisY,
-                                                                  measured.color)
+                                                                  measured.color, Globals.Variables.experimentMarkerStyle)
                     if (!measuredScatterSerie) {
                         console.warn("CombinedView: failed to create measuredScatterSerie - measured data will not render")
                     }
@@ -609,6 +617,31 @@ Rectangle {
                     
                     // Initialize reference lines
                     updateReferenceLines()
+                }
+
+                function recreateSeriesForCurrentMode() {
+                    if (isMultiExperimentMode) {
+                        // Multi-experiment mode: recreate all multi-experiment series
+                        updateMultiExperimentSeries()
+                    } else if (useLogQAxis) {
+                        // Single experiment, log mode: recreate log mode series
+                        recreateForLogMode()
+                    } else {
+                        // Single experiment, linear mode: recreate scatter series
+                        if (measuredScatterSerie) {
+                            analysisChartView.removeSeries(measuredScatterSerie)
+                            measuredScatterSerie = null
+                        }
+                        measuredScatterSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
+                                                                      "measured_scatter",
+                                                                      analysisChartView.axisX, analysisChartView.axisY,
+                                                                      measured.color, Globals.Variables.experimentMarkerStyle)
+                        if (measuredScatterSerie) {
+                            measuredScatterSerie.visible = true
+                            Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                            Globals.BackendWrapper.plottingRefreshAnalysis()
+                        }
+                    }
                 }
             }
         }

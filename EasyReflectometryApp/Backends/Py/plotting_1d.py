@@ -562,22 +562,6 @@ class Plotting1d(QObject):
             )
         return qml_data_list
 
-    @Property(float, notify=sampleChartRangesChanged)
-    def residualMinX(self):
-        return self._get_residual_range()[0]
-
-    @Property(float, notify=sampleChartRangesChanged)
-    def residualMaxX(self):
-        return self._get_residual_range()[1]
-
-    @Property(float, notify=sampleChartRangesChanged)
-    def residualMinY(self):
-        return self._get_residual_range()[2]
-
-    @Property(float, notify=sampleChartRangesChanged)
-    def residualMaxY(self):
-        return self._get_residual_range()[3]
-
     @Slot(str, str, 'QVariant')
     def setQtChartsSerieRef(self, page: str, serie: str, ref: QObject):
         self._chartRefs['QtCharts'][page][serie] = ref
@@ -757,41 +741,6 @@ class Plotting1d(QObject):
         except Exception as e:
             console.debug(f'Error getting residual data points for index {experiment_index}: {e}')
             return []
-
-    def _get_residual_range(self) -> tuple[float, float, float, float]:
-        """Return residual plot ranges for the current selection."""
-        try:
-            if self.is_multi_experiment_mode:
-                selected_indices = getattr(self._proxy._analysis, '_selected_experiment_indices', [])
-            else:
-                selected_indices = [self._project_lib.current_experiment_index]
-
-            all_points = []
-            for experiment_index in selected_indices:
-                all_points.extend(self.getResidualDataPoints(experiment_index))
-
-            if not all_points:
-                return 0.0, 1.0, -1.0, 1.0
-
-            x_values = np.asarray([point['x'] for point in all_points], dtype=float)
-            y_values = np.asarray([point['y'] for point in all_points], dtype=float)
-            if x_values.size == 0 or y_values.size == 0:
-                return 0.0, 1.0, -1.0, 1.0
-
-            min_x = float(np.min(x_values))
-            max_x = float(np.max(x_values))
-            min_y = float(np.min(y_values))
-            max_y = float(np.max(y_values))
-
-            if min_y == max_y:
-                margin = max(abs(min_y) * 0.05, 1.0)
-            else:
-                margin = (max_y - min_y) * 0.05
-
-            return min_x, max_x, min_y - margin, max_y + margin
-        except Exception as e:
-            console.debug(f'Error getting residual range: {e}')
-            return 0.0, 1.0, -1.0, 1.0
 
     def refreshSamplePage(self):
         # Clear cached data so it gets recalculated

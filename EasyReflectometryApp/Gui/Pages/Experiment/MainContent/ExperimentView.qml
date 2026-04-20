@@ -75,8 +75,37 @@ Rectangle {
             }
         }
 
-        function updateReferenceLines() {
-            Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, false)
+        // Recreate series when marker style changes
+        Connections {
+            target: Globals.Variables
+            function onExperimentMarkerStyleChanged() {
+                chartView.recreateSeriesForCurrentMode()
+            }
+        }
+
+        function recreateSeriesForCurrentMode() {
+            if (isMultiExperimentMode) {
+                // Multi-experiment mode: recreate all multi-experiment series
+                updateMultiExperimentSeries()
+            } else if (useLogQAxis) {
+                // Single experiment, log mode: recreate log mode series
+                recreateForLogMode()
+            } else {
+                // Single experiment, linear mode: recreate scatter series
+                if (measuredScatterSerie) {
+                    chartView.removeSeries(measuredScatterSerie)
+                    measuredScatterSerie = null
+                }
+                measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                              "measured_scatter",
+                                                              chartView.axisX, chartView.axisY,
+                                                              currentExperimentColor, Globals.Variables.experimentMarkerStyle)
+                if (measuredScatterSerie) {
+                    measuredScatterSerie.visible = true
+                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
+                    Globals.BackendWrapper.plottingRefreshExperiment()
+                }
+            }
         }
 
         // Scatter series for measured data (single experiment, linear mode)
@@ -280,7 +309,7 @@ Rectangle {
 
                 var newMeasured = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                          "measured_log", axisXLog, chartView.axisY,
-                                                         chartView.currentExperimentColor)
+                                                         chartView.currentExperimentColor, Globals.Variables.experimentMarkerStyle)
 
                 var newErrorUpper = chartView.createSeries(ChartView.SeriesTypeLine, "errorUpper_log", axisXLog, chartView.axisY)
                 newErrorUpper.color = errorUpper.color
@@ -445,7 +474,7 @@ Rectangle {
             var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                        `${expName} - Data`,
                                                        xAxis, chartView.axisY,
-                                                       color)
+                                                       color, Globals.Variables.experimentMarkerStyle)
 
             // Create error bound series (lighter colors)
             var errorColor = Qt.darker(color, 1.3)
@@ -696,7 +725,7 @@ Rectangle {
             measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                           "measured_scatter",
                                                           chartView.axisX, chartView.axisY,
-                                                          currentExperimentColor)
+                                                          currentExperimentColor, Globals.Variables.experimentMarkerStyle)
             if (!measuredScatterSerie) {
                 console.warn("ExperimentView: failed to create measuredScatterSerie - measured data will not render")
             }

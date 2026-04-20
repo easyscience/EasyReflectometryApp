@@ -128,6 +128,14 @@ Rectangle {
             }
         }
 
+        // Recreate series when marker style changes
+        Connections {
+            target: Globals.Variables
+            function onExperimentMarkerStyleChanged() {
+                chartView.recreateSeriesForCurrentMode()
+            }
+        }
+
         Timer {
             id: analysisResetAxesTimer
             interval: 75
@@ -194,7 +202,7 @@ Rectangle {
 
                 var newMeasured = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                          "measured_log", axisXLog, chartView.axisY,
-                                                         measured.color)
+                                                         measured.color, Globals.Variables.experimentMarkerStyle)
 
                 var newCalculated = chartView.createSeries(ChartView.SeriesTypeLine, "calculated_log", axisXLog, chartView.axisY)
                 newCalculated.color = calculated.color
@@ -358,7 +366,7 @@ Rectangle {
             var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                        `${expName} - Measured`,
                                                        xAxis, chartView.axisY,
-                                                       color)
+                                                       color, Globals.Variables.experimentMarkerStyle)
 
             // Create calculated data series using the model's own color
             var calculatedSerie = chartView.createSeries(ChartView.SeriesTypeLine,
@@ -564,13 +572,38 @@ Rectangle {
             textFormat: Text.RichText
         }
 
+        function recreateSeriesForCurrentMode() {
+            if (isMultiExperimentMode) {
+                // Multi-experiment mode: recreate all multi-experiment series
+                updateMultiExperimentSeries()
+            } else if (useLogQAxis) {
+                // Single experiment, log mode: recreate log mode series
+                recreateForLogMode()
+            } else {
+                // Single experiment, linear mode: recreate scatter series
+                if (measuredScatterSerie) {
+                    chartView.removeSeries(measuredScatterSerie)
+                    measuredScatterSerie = null
+                }
+                measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                              "measured_scatter",
+                                                              chartView.axisX, chartView.axisY,
+                                                              measured.color, Globals.Variables.experimentMarkerStyle)
+                if (measuredScatterSerie) {
+                    measuredScatterSerie.visible = true
+                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                    Globals.BackendWrapper.plottingRefreshAnalysis()
+                }
+            }
+        }
+
         // Data is set in python backend (plotting_1d.py)
         Component.onCompleted: {
             // Create scatter series for measured data (single experiment, linear mode)
             measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                           "measured_scatter",
                                                           chartView.axisX, chartView.axisY,
-                                                          measured.color)
+                                                          measured.color, Globals.Variables.experimentMarkerStyle)
             if (!measuredScatterSerie) {
                 console.warn("AnalysisView: failed to create measuredScatterSerie - measured data will not render")
             }

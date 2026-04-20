@@ -8,20 +8,20 @@ import "./Groups" as Groups
 
 EaComponents.SideBarColumn {
     Groups.LoadSample{
-        forceAutoCollapse: true
+        collapsed: false
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
     Groups.MaterialEditor{
-        forceAutoCollapse: true
+        collapsed: true
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
     Groups.ModelSelector{
-        forceAutoCollapse: true
+        collapsed: true
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
     Groups.ModelEditor {
         id: modelEditor
-        forceAutoCollapse: true
+        collapsed: true
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
 }
