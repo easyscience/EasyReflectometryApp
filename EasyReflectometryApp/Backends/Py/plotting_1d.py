@@ -463,9 +463,11 @@ class Plotting1d(QObject):
     def _get_residual_range(self) -> tuple:
         """Return (min_x, max_x, min_y, max_y) for the residual chart.
 
-        X range matches the filtered analysis domain.  Y range is computed
-        from residual values across all currently selected experiments, with
-        a 10 % margin.  Safe fallback values are returned when data is empty.
+        X range matches the full analysis chart domain so residuals line up
+        vertically with the reflectivity chart above, even when an experiment
+        covers only part of the model q-range. Y range is computed from
+        residual values across all currently selected experiments, with a
+        10 % margin. Safe fallback values are returned when data is empty.
 
         The result is cached until invalidated by ``_invalidate_residual_range_cache``.
         """
@@ -474,6 +476,14 @@ class Plotting1d(QObject):
 
         min_x, max_x = float('inf'), float('-inf')
         min_y, max_y = float('inf'), float('-inf')
+
+        try:
+            analysis_min_x, analysis_max_x = self._get_all_models_sample_range()[0:2]
+            if analysis_min_x != float('inf') and analysis_max_x != float('-inf'):
+                min_x = analysis_min_x
+                max_x = analysis_max_x
+        except Exception as e:
+            console.debug(f'Error getting analysis x range for residuals: {e}')
 
         try:
             indices = []
@@ -496,8 +506,14 @@ class Plotting1d(QObject):
                             residual = (calc - meas) / meas
                         else:
                             residual = calc - meas
-                        min_x = min(min_x, q)
-                        max_x = max(max_x, q)
+                        if min_x == float('inf'):
+                            min_x = q
+                        else:
+                            min_x = min(min_x, q)
+                        if max_x == float('-inf'):
+                            max_x = q
+                        else:
+                            max_x = max(max_x, q)
                         min_y = min(min_y, residual)
                         max_y = max(max_y, residual)
                 except Exception as e:
