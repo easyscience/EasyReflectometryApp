@@ -28,7 +28,6 @@ EaElements.GroupBox {
             }
 
             Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.startFittingButton = this
-            Loader { source: "../Popups/FitStatusDialog.qml" }
         }
 
     }

@@ -287,6 +287,13 @@ QtObject {
     readonly property string analysisFitErrorMessage: activeBackend.analysis.fitErrorMessage
     readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
     readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
+    readonly property int analysisFitIteration: activeBackend.analysis.fitIteration
+    readonly property real analysisFitInterimChi2: activeBackend.analysis.fitInterimChi2
+    readonly property real analysisFitInterimReducedChi2: activeBackend.analysis.fitInterimReducedChi2
+    readonly property string analysisFitProgressMessage: activeBackend.analysis.fitProgressMessage
+    readonly property bool analysisFitHasInterimUpdate: activeBackend.analysis.fitHasInterimUpdate
+    readonly property bool analysisFitHasPreviewUpdate: activeBackend.analysis.fitHasPreviewUpdate
+    readonly property var analysisFitPreviewParameterValues: activeBackend.analysis.fitPreviewParameterValues
     readonly property var analysisFitResults: activeBackend.analysis.fitResults
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
