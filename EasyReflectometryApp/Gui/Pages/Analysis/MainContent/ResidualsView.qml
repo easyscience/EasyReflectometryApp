@@ -95,9 +95,16 @@ Rectangle {
 
         ValueAxis {
             id: axisY
-            titleText: "(Model − Experiment) / σ"
-            property double minAfterReset: Globals.BackendWrapper.plottingResidualMinY - chartView.yRange * 0.05
-            property double maxAfterReset: Globals.BackendWrapper.plottingResidualMaxY + chartView.yRange * 0.05
+            // titleText: "(Model − Experiment) / σ"
+            titleText: "(M-E)/σ"
+            property double minAfterReset: {
+                const maxAbs = Math.max(Math.abs(Globals.BackendWrapper.plottingResidualMinY), Math.abs(Globals.BackendWrapper.plottingResidualMaxY))
+                return -maxAbs - maxAbs * 0.05
+            }
+            property double maxAfterReset: {
+                const maxAbs = Math.max(Math.abs(Globals.BackendWrapper.plottingResidualMinY), Math.abs(Globals.BackendWrapper.plottingResidualMaxY))
+                return maxAbs + maxAbs * 0.05
+            }
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -135,7 +142,7 @@ Rectangle {
             useOpenGL: EaGlobals.Vars.useOpenGL
             color: EaStyle.Colors.chartGridLine
             width: 1
-            style: Qt.DashLine
+            style: Qt.DotLine
 
             Component.onCompleted: {
                 // Span the full residual X domain

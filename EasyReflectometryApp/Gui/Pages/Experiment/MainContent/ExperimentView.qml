@@ -66,6 +66,10 @@ Rectangle {
             visible: Globals.BackendWrapper.plottingScaleShown
         }
 
+        function updateReferenceLines() {
+            Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, false)
+        }
+
         // Update reference lines when visibility changes
         Connections {
             target: Globals.BackendWrapper.activeBackend?.plotting ?? null
@@ -351,7 +355,7 @@ Rectangle {
             }
 
             // Update reference lines on correct axis
-            updateReferenceLines()
+            chartView.updateReferenceLines()
             Qt.callLater(resetAxes)
         }
 
@@ -748,7 +752,7 @@ Rectangle {
             updateMultiExperimentSeries()
 
             // Initialize reference lines
-            updateReferenceLines()
+            chartView.updateReferenceLines()
         }
 
         // Update series when chart becomes visible
@@ -757,7 +761,7 @@ Rectangle {
                 updateMultiExperimentSeries()
             }
             if (visible) {
-                updateReferenceLines()
+                chartView.updateReferenceLines()
             }
         }
     }

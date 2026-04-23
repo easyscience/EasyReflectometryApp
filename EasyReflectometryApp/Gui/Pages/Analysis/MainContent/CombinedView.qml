@@ -294,12 +294,12 @@ Rectangle {
                     }
                 }
                 
-                property double xRange: Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
+                property double xRange: isNaN(Globals.BackendWrapper.plottingAnalysisMaxX) || isNaN(Globals.BackendWrapper.plottingAnalysisMinX) ? 1.0 : Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
                 axisX.title: "q (Å⁻¹)"
-                axisX.min: Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
-                axisX.max: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
-                axisX.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
-                axisX.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
+                axisX.min: isNaN(Globals.BackendWrapper.plottingAnalysisMinX) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
+                axisX.max: isNaN(Globals.BackendWrapper.plottingAnalysisMaxX) ? 1.0 : Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
+                axisX.minAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMinX) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
+                axisX.maxAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMaxX) ? 1.0 : Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
 
                 // Logarithmic axis control
                 property bool useLogQAxis: Globals.Variables.logarithmicQAxis
@@ -403,12 +403,12 @@ Rectangle {
                     }
                 }
 
-                property double yRange: Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
+                property double yRange: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) || isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? 10.0 : Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
                 axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
-                axisY.min: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
-                axisY.max: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
-                axisY.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
-                axisY.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
+                axisY.min: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
+                axisY.max: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
+                axisY.minAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
+                axisY.maxAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
 
                 calcSerie.onHovered: (point, state) => showMainTooltip(analysisChartView, analysisDataToolTip, point, state)
                 calcSerie.color: {
@@ -419,7 +419,7 @@ Rectangle {
                         return colors[idx]
                     }
 
-                    return undefined
+                    return "#ff0000"
                 }
 
                 // Tool buttons
