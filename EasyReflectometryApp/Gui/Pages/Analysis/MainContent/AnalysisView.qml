@@ -472,7 +472,7 @@ Rectangle {
                 height: EaStyle.Sizes.toolButtonHeight
                 width: EaStyle.Sizes.toolButtonHeight
                 borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "undo"
+                fontIcon: "home"
                 ToolTip.text: qsTr("Reset axes")
                 onClicked: chartView.resetAxes()
             }
