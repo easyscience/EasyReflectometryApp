@@ -1,6 +1,5 @@
 import warnings
 
-from EasyApp.Logic.Utils.Utils import generalizePath
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.orso_utils import load_orso_model
 from orsopy.fileio import orso
@@ -9,6 +8,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
+from .helpers import IO
 from .logic.project import Project as ProjectLogic
 
 
@@ -85,7 +85,7 @@ class Project(QObject):
 
     @Slot(str)
     def load(self, path: str) -> None:
-        self._logic.load(generalizePath(path))
+        self._logic.load(IO.generalizePath(path))
         self.createdChanged.emit()
         self.nameChanged.emit()
         self.descriptionChanged.emit()
@@ -110,7 +110,7 @@ class Project(QObject):
     @Slot(str, bool)
     def sampleLoad(self, url: str, append: bool = True) -> None:
         # Load ORSO file content
-        orso_data = orso.load_orso(generalizePath(url))
+        orso_data = orso.load_orso(IO.generalizePath(url))
         # Load the sample model
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter('always')

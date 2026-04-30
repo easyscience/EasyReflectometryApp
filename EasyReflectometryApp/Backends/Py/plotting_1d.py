@@ -1,5 +1,5 @@
 import numpy as np
-from EasyApp.Logic.Logging import console
+from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.data import DataSet1D
 from PySide6.QtCore import Property
