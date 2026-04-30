@@ -2,8 +2,8 @@ import QtQuick 2.14
 import QtQuick.Controls 2.14
 //import QtQml.XmlListModel
 
-//import easyApp.Gui.Style 1.0 as EaStyle
-import EasyApp.Gui.Components 1.0 as EaComponents
+//import EasyApplication.Gui.Style 1.0 as EaStyle
+import EasyApplication.Gui.Components 1.0 as EaComponents
 
 import Gui.Globals as Globals
 import "./Groups" as Groups

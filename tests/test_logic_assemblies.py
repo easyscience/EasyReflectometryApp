@@ -59,6 +59,73 @@ def test_assemblies_add_new_and_type_transitions(monkeypatch):
     assert logic.set_conformal_roughness('True') is True
 
 
+def test_assemblies_add_new_inserts_after_current_row_and_keeps_subphase_last(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
+    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
+
+    materials = make_material_collection(make_material('Air'), make_material('Si'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Superphase', layers=[make_layer(name='Top Layer', material=materials[0])]),
+        make_assembly(name='Middle', layers=[make_layer(name='Middle Layer', material=materials[0])]),
+        make_assembly(name='Subphase', layers=[make_layer(name='Bottom Layer', material=materials[1])]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(materials=materials, models=make_model_collection(model))
+    project.current_assembly_index = 1
+    logic = assemblies_module.Assemblies(project)
+
+    logic.add_new()
+
+    assert [assembly.name for assembly in logic._assemblies] == ['Superphase', 'Middle', 'Assembly 4', 'Subphase']
+    assert logic._assemblies[2].layers[0].material.name == 'Si'
+
+
+def test_assemblies_duplicate_selected_inserts_after_current_row_and_keeps_subphase_last(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
+    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
+
+    sample = make_sample(
+        make_assembly(name='Superphase', layers=[make_layer(name='Top Layer')]),
+        make_assembly(name='Middle', layers=[make_layer(name='Middle Layer')]),
+        make_assembly(name='Subphase', layers=[make_layer(name='Bottom Layer')]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(models=make_model_collection(model))
+    project.current_assembly_index = 1
+    logic = assemblies_module.Assemblies(project)
+
+    logic.duplicate_selected()
+
+    assert [assembly.name for assembly in logic._assemblies] == ['Superphase', 'Middle', 'Middle', 'Subphase']
+
+
+def test_assemblies_add_and_duplicate_selected_subphase_insert_before_last(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
+    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
+
+    materials = make_material_collection(make_material('Air'), make_material('Si'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Superphase', layers=[make_layer(name='Top Layer', material=materials[0])]),
+        make_assembly(name='Middle', layers=[make_layer(name='Middle Layer', material=materials[0])]),
+        make_assembly(name='Subphase', layers=[make_layer(name='Bottom Layer', material=materials[1])]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(materials=materials, models=make_model_collection(model))
+    project.current_assembly_index = 2
+    logic = assemblies_module.Assemblies(project)
+
+    logic.add_new()
+    assert [assembly.name for assembly in logic._assemblies] == ['Superphase', 'Middle', 'Assembly 4', 'Subphase']
+    assert logic._assemblies[-1].name == 'Subphase'
+
+    logic.duplicate_selected()
+    assert [assembly.name for assembly in logic._assemblies] == ['Superphase', 'Middle', 'Assembly 4', 'Assembly 4', 'Subphase']
+    assert logic._assemblies[-1].name == 'Subphase'
+
+
 def test_assemblies_duplicate_move_and_remove(monkeypatch):
     monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
     monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
@@ -79,3 +146,52 @@ def test_assemblies_duplicate_move_and_remove(monkeypatch):
 
     logic.remove_at_index('2')
     assert len(logic._assemblies) == 2
+
+
+def test_assemblies_set_type_at_index_updates_target_row_when_current_index_differs(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
+    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
+
+    materials = make_material_collection(make_material('Air'), make_material('Si'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(name='Top Layer', material=materials[0])]),
+        make_assembly(name='Middle', layers=[make_layer(name='Middle Layer', material=materials[1])]),
+        make_assembly(name='Bottom', layers=[make_layer(name='Bottom Layer', material=materials[1])]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(materials=materials, models=make_model_collection(model))
+    project.current_assembly_index = 2
+    logic = assemblies_module.Assemblies(project)
+
+    assert logic.set_type_at_index(1, 'Surfactant Layer') is True
+
+    assert isinstance(logic._assemblies[1], FakeSurfactantLayer)
+    assert logic._assemblies[1].layers[0].solvent.name == 'Air'
+    assert logic._assemblies[1].layers[1].solvent.name == 'D2O'
+
+    assert isinstance(logic._assemblies[2], FakeMultilayer)
+    assert logic._assemblies[2].name == 'Bottom'
+    assert project.current_assembly_index == 2
+
+
+def test_assemblies_index_based_setters_ignore_invalid_indices(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
+    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
+
+    materials = make_material_collection(make_material('Air'), make_material('Si'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(name='Top Layer', material=materials[0])]),
+        make_assembly(name='Middle', layers=[make_layer(name='Middle Layer', material=materials[1])]),
+    )
+    model = make_model(sample=sample)
+    project = make_project(materials=materials, models=make_model_collection(model))
+    logic = assemblies_module.Assemblies(project)
+
+    assert logic.set_name_at_index(5, 'Ignored') is False
+    assert logic.set_type_at_index(4, 'Surfactant Layer') is False
+    assert logic.set_type_at_index(0, 'Unsupported') is False
+
+    assert logic._assemblies[0].name == 'Top'
+    assert isinstance(logic._assemblies[0], FakeMultilayer)

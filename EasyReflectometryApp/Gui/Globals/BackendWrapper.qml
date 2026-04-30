@@ -103,8 +103,11 @@ QtObject {
     function sampleSetCurrentMaterialIndex(value) { activeBackend.sample.setCurrentMaterialIndex(value) }
 
     function sampleSetCurrentMaterialName(value) { activeBackend.sample.setCurrentMaterialName(value) }
-    function sampleSetCurrentMaterialSld(value) { activeBackend.sample.setCurrentMaterialSld(value) } 
+    function sampleSetMaterialNameAtIndex(index, value) { activeBackend.sample.setMaterialNameAtIndex(index, value) }
+    function sampleSetCurrentMaterialSld(value) { activeBackend.sample.setCurrentMaterialSld(value) }
+    function sampleSetMaterialSldAtIndex(index, value) { activeBackend.sample.setMaterialSldAtIndex(index, value) }
     function sampleSetCurrentMaterialISld(value) { activeBackend.sample.setCurrentMaterialISld(value) }
+    function sampleSetMaterialISldAtIndex(index, value) { activeBackend.sample.setMaterialISldAtIndex(index, value) }
     function sampleRemoveMaterial(value) { activeBackend.sample.removeMaterial(value) }
     function sampleAddNewMaterial() { activeBackend.sample.addNewMaterial() }
     function sampleDuplicateSelectedMaterial() { activeBackend.sample.duplicateSelectedMaterial() }
@@ -120,6 +123,7 @@ QtObject {
     function sampleSetCurrentModelIndex(value) { activeBackend.sample.setCurrentModelIndex(value) }
 
     function sampleSetCurrentModelName(value) { activeBackend.sample.setCurrentModelName(value) }
+    function sampleSetModelNameAtIndex(index, value) { activeBackend.sample.setModelNameAtIndex(index, value) }
     function sampleRemoveModel(value) { activeBackend.sample.removeModel(value) }
     function sampleAddNewModel() { activeBackend.sample.addNewModel() }
     function sampleDuplicateSelectedModel() { activeBackend.sample.duplicateSelectedModel() }
@@ -135,7 +139,9 @@ QtObject {
     function sampleSetCurrentAssemblyIndex(value) { activeBackend.sample.setCurrentAssemblyIndex(value) }
 
     function sampleSetCurrentAssemblyName(value) { activeBackend.sample.setCurrentAssemblyName(value) }
+    function sampleSetAssemblyNameAtIndex(index, value) { activeBackend.sample.setAssemblyNameAtIndex(index, value) }
     function sampleSetCurrentAssemblyType(value) { activeBackend.sample.setCurrentAssemblyType(value) }
+    function sampleSetAssemblyTypeAtIndex(index, value) { activeBackend.sample.setAssemblyTypeAtIndex(index, value) }
     function sampleRemoveAssembly(value) { activeBackend.sample.removeAssembly(value) }
     function sampleAddNewAssembly() { activeBackend.sample.addNewAssembly() }
     function sampleDuplicateSelectedAssembly() { activeBackend.sample.duplicateSelectedAssembly() }
@@ -162,12 +168,19 @@ QtObject {
     function sampleMoveSelectedLayerDown() { activeBackend.sample.moveSelectedLayerDown() }
 
     function sampleSetCurrentLayerFormula(value) { activeBackend.sample.setCurrentLayerFormula(value) }
+    function sampleSetLayerFormulaAtIndex(index, value) { activeBackend.sample.setLayerFormulaAtIndex(index, value) }
     function sampleSetCurrentLayerMaterial(value) { activeBackend.sample.setCurrentLayerMaterial(value) }
+    function sampleSetLayerMaterialAtIndex(index, value) { activeBackend.sample.setLayerMaterialAtIndex(index, value) }
     function sampleSetCurrentLayerSolvent(value) { activeBackend.sample.setCurrentLayerSolvent(value) }
+    function sampleSetLayerSolventAtIndex(index, value) { activeBackend.sample.setLayerSolventAtIndex(index, value) }
     function sampleSetCurrentLayerThickness(value) { activeBackend.sample.setCurrentLayerThickness(value) }
+    function sampleSetLayerThicknessAtIndex(index, value) { activeBackend.sample.setLayerThicknessAtIndex(index, value) }
     function sampleSetCurrentLayerRoughness(value) { activeBackend.sample.setCurrentLayerRoughness(value) }
+    function sampleSetLayerRoughnessAtIndex(index, value) { activeBackend.sample.setLayerRoughnessAtIndex(index, value) }
     function sampleSetCurrentLayerAPM(value) { activeBackend.sample.setCurrentLayerAPM(value) }
+    function sampleSetLayerAPMAtIndex(index, value) { activeBackend.sample.setLayerAPMAtIndex(index, value) }
     function sampleSetCurrentLayerSolvation(value) { activeBackend.sample.setCurrentLayerSolvation(value) }
+    function sampleSetLayerSolvationAtIndex(index, value) { activeBackend.sample.setLayerSolvationAtIndex(index, value) }
 
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
@@ -274,6 +287,13 @@ QtObject {
     readonly property string analysisFitErrorMessage: activeBackend.analysis.fitErrorMessage
     readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
     readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
+    readonly property int analysisFitIteration: activeBackend.analysis.fitIteration
+    readonly property real analysisFitInterimChi2: activeBackend.analysis.fitInterimChi2
+    readonly property real analysisFitInterimReducedChi2: activeBackend.analysis.fitInterimReducedChi2
+    readonly property string analysisFitProgressMessage: activeBackend.analysis.fitProgressMessage
+    readonly property bool analysisFitHasInterimUpdate: activeBackend.analysis.fitHasInterimUpdate
+    readonly property bool analysisFitHasPreviewUpdate: activeBackend.analysis.fitHasPreviewUpdate
+    readonly property var analysisFitPreviewParameterValues: activeBackend.analysis.fitPreviewParameterValues
     readonly property var analysisFitResults: activeBackend.analysis.fitResults
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }

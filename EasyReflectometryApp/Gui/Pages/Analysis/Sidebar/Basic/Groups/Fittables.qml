@@ -6,11 +6,11 @@ import QtQuick
 import QtQuick.Controls
 import QtCharts
 
-import EasyApp.Gui.Logic as EaLogic
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Logic as EaLogic
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
@@ -335,9 +335,7 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     text: formatError(Globals.BackendWrapper.analysisFitableParameters[index].error)
-                    color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                           Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
-                           EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
+                    color: EaStyle.Colors.themeForegroundDisabled
                 }
 
                 EaComponents.TableViewParameter {

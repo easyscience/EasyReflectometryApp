@@ -91,9 +91,6 @@ jobs:
       # - name: Run app in testmode and quit
       #   shell: bash
       #   run: |
-      #     cd ..
-      #     git clone --single-branch --branch get-rid-of-qt5compat https://github.com/easyscience/EasyApp.git
-      #     cd EasyReflectometryApp
       #     python EasyReflectometryApp/main.py --testmode
 
       - name: Create freezed python app bundle with PyInstaller
@@ -114,37 +111,26 @@ jobs:
 #          ${{ secrets.APPLE_CERT_DATA }} ${{ secrets.APPLE_CERT_PASSWORD }}
 #          ${{ secrets.APPLE_NOTARY_USER }} ${{ secrets.APPLE_NOTARY_PASSWORD }}
 
-      - name: Install DigiCert Client tools from Github Custom Actions marketplace
-        if: |
-          runner.os == 'windows' && github.event_name == 'push'
-        uses: digicert/ssm-code-signing@v1.0.1
-
-      - name: Set up P12 certificate
-        if: |
-          runner.os == 'windows' && github.event_name == 'push'
+      - name: Setup SM_CLIENT_CERT_FILE from base64 secret data
+        if: runner.os == 'Windows'
         run: |
-          echo "${{ secrets.WINDOWS_CERT_DATA }}" | base64 --decode > /d/Certificate_pkcs12.p12
+          echo "${{ secrets.KEYLOCKER_CERT_DATA }}" | base64 --decode > /d/Certificate_pkcs12.p12
         shell: bash
 
-      - name: Set keylocker variables
-        if: |
-          runner.os == 'windows' && github.event_name == 'push'
-        id: variables
-        run: |
-          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          echo "SM_HOST=${{ secrets.KEYLOCKER_HOST }}" >> "$GITHUB_ENV"
-          echo "SM_API_KEY=${{ secrets.KEYLOCKER_API_KEY }}" >> "$GITHUB_ENV"
-          echo "SM_CLIENT_CERT_FILE=D:\\Certificate_pkcs12.p12" >> "$GITHUB_ENV"
-          echo "SM_CLIENT_CERT_PASSWORD=${{ secrets.WINDOWS_CERT_PASSWORD }}" >> "$GITHUB_ENV"
-        shell: bash
 
-      - name: Sign the binary using keypair alias
-        if: |
-          runner.os == 'windows' && github.event_name == 'push' && env.BRANCH_NAME == 'master'
-        run: |
-           smctl sign --keypair-alias key_911959544 --input  ${{ env.SETUP_EXE_PATH }}
-        shell: cmd
-
+      - name: Setup Software Trust Manager
+        if: runner.os == 'Windows'
+        uses: digicert/code-signing-software-trust-action@v1
+        with:
+              simple-signing-mode: true
+              # If the below 2 parameters are supplied, then smctl executable is invoked to attempt the signing.
+              input: ${{ env.SETUP_EXE_PATH }}
+              keypair-alias: ${{ secrets.KEYLOCKER_KEYPAIR_ALIAS }}
+        env:
+              SM_HOST: ${{ secrets.KEYLOCKER_HOST }}
+              SM_API_KEY: ${{ secrets.KEYLOCKER_API_KEY }}
+              SM_CLIENT_CERT_FILE: D:\\Certificate_pkcs12.p12
+              SM_CLIENT_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
 
       - name: Create zip archive of offline app installer for distribution
         run: >

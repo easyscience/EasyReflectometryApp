@@ -52,6 +52,12 @@ class Experiment(QObject):
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
 
+    @Slot(str)
+    def setResolution(self, new_value: str) -> None:
+        if self._model_logic.set_resolution_at_current_index(new_value):
+            self.experimentChanged.emit()
+            self.externalExperimentChanged.emit()
+
     # Actions
     @Slot(str)
     def load(self, paths: str) -> None:

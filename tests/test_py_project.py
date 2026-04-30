@@ -64,7 +64,7 @@ def test_setters_emit_only_on_change(monkeypatch, qcore_application):
 
 def test_load_create_reset_and_signals(monkeypatch, qcore_application):
     project = _build_project(monkeypatch)
-    monkeypatch.setattr(project_module, 'generalizePath', lambda path: f'gen:{path}')
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: f'gen:{path}')
 
     counts = {'created': 0, 'external_created': 0, 'external_loaded': 0, 'external_reset': 0}
     project.createdChanged.connect(lambda: counts.__setitem__('created', counts['created'] + 1))
@@ -86,7 +86,7 @@ def test_load_create_reset_and_signals(monkeypatch, qcore_application):
 
 def test_sample_load_append_and_replace(monkeypatch, qcore_application):
     project = _build_project(monkeypatch)
-    monkeypatch.setattr(project_module, 'generalizePath', lambda path: f'gen:{path}')
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: f'gen:{path}')
     monkeypatch.setattr(project_module.orso, 'load_orso', lambda path: f'orso:{path}')
     monkeypatch.setattr(project_module, 'load_orso_model', lambda _orso_data: 'sample-model')
 
@@ -103,7 +103,7 @@ def test_sample_load_append_and_replace(monkeypatch, qcore_application):
 
 def test_sample_load_emits_warning_when_model_missing(monkeypatch, qcore_application):
     project = _build_project(monkeypatch)
-    monkeypatch.setattr(project_module, 'generalizePath', lambda path: path)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
     monkeypatch.setattr(project_module.orso, 'load_orso', lambda _path: 'orso-data')
 
     def _warn_and_return_none(_orso_data):

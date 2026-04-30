@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 import "./Groups" as Groups

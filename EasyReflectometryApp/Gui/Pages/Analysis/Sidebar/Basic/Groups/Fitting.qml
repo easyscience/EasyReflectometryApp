@@ -5,8 +5,8 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
@@ -28,7 +28,6 @@ EaElements.GroupBox {
             }
 
             Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.startFittingButton = this
-            Loader { source: "../Popups/FitStatusDialog.qml" }
         }
 
     }

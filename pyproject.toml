@@ -4,7 +4,7 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'EasyReflectometryApp'
-version = '1.2.0'
+version = '1.3.0'
 release_data = '10 March 2026'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
@@ -31,8 +31,8 @@ classifiers = [
 
 requires-python = '>=3.11'
 dependencies = [
-  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@footer_component',
-  'easyreflectometry @ git+https://github.com/EasyScience/EasyReflectometryLib.git@develop',
+  'easyapplication',
+  'easyreflectometry',
   'asteval',
   'PySide6',
   'toml',

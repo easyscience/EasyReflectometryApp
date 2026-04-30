@@ -241,6 +241,7 @@ def _make_project_stub(q, r_exp, r_calc, q_min=0.0, q_max=1.0, ye=None):
     proj.current_model_index = 0
     proj.experimental_data_for_model_at_index.return_value = _make_exp_data_stub(q, r_exp, ye)
     proj.model_data_for_model_at_index.return_value = _DataSet1DStub(name='calc', x=q, y=r_calc)
+    proj.sample_data_for_model_at_index.return_value = _DataSet1DStub(name='sample', x=np.array([q_min, q_max]), y=np.array([1.0, 1.0]))
     proj.models = [MagicMock()]
     return proj
 
@@ -448,8 +449,22 @@ class TestGetResidualRange:
         p = _make_plotting_stub(proj)
 
         rng = p._get_residual_range()
-        assert pytest.approx(rng[0], rel=1e-6) == q.min()
-        assert pytest.approx(rng[1], rel=1e-6) == q.max()
+        assert pytest.approx(rng[0], rel=1e-6) == 0.0
+        assert pytest.approx(rng[1], rel=1e-6) == 1.0
+
+    def test_x_range_uses_full_analysis_domain_when_experiment_is_subset(self):
+        q = np.array([0.10, 0.20, 0.30])
+        r_exp = np.array([1e-1, 1e-2, 1e-3])
+        r_calc = np.array([1.1e-1, 1.1e-2, 1.1e-3])
+        proj = _make_project_stub(q, r_exp, r_calc, q_min=0.0, q_max=1.0)
+        p = _make_plotting_stub(proj)
+
+        rng = p._get_residual_range()
+        residual_points = p.getResidualDataPoints(0)
+
+        assert pytest.approx(rng[0], rel=1e-6) == 0.0
+        assert pytest.approx(rng[1], rel=1e-6) == 1.0
+        assert [point['x'] for point in residual_points] == pytest.approx([0.10, 0.20, 0.30], rel=1e-6)
 
     def test_y_range_has_margin(self):
         q = np.array([0.10])

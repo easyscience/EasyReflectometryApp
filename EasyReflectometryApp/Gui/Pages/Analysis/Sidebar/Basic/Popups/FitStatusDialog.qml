@@ -6,9 +6,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
@@ -22,6 +22,10 @@ EaElements.Dialog {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     onAccepted: {
+        Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
+    }
+
+    onRejected: {
         Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
     }
 

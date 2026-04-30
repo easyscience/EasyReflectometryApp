@@ -2,15 +2,20 @@ import QtQuick
 import QtQuick.Controls
 //import QtQuick.XmlListModel 2.15
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
 EaComponents.ContentPage {
+
+    Loader {
+        source: 'Sidebar/Basic/Popups/FitStatusDialog.qml'
+    }
 
     mainView: EaComponents.MainContent {
         tabs: [
@@ -25,7 +30,7 @@ EaComponents.ContentPage {
         ]
     }
 
-    sideBar: EaComponents.SideBar {
+    sideBar: Gui.SideBarWithFooter {
         tabs: [
             EaElements.TabButton { text: qsTr("Basic controls") },
             EaElements.TabButton { text: qsTr("Extra controls") } //; enabled: Globals.Proxies.main.analysis.defined }
@@ -49,7 +54,6 @@ EaComponents.ContentPage {
                 }
 
                 Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.startFittingButton = this
-                Loader { source: 'Sidebar/Basic/Popups/FitStatusDialog.qml' }
             }
         }
 
