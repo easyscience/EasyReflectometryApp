@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 

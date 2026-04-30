@@ -1,9 +1,8 @@
 import logging
-from pathlib import Path
 from html import escape
+from pathlib import Path
 
 import numpy as np
-
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.summary import Summary as SummaryLib
 

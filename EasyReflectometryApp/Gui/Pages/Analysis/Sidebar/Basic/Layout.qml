@@ -4,9 +4,9 @@
 
 import QtQuick
 
-import EasyApp.Gui.Style 1.0 as EaStyle
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Style 1.0 as EaStyle
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
 import "./Groups" as Groups
 import Gui.Globals as Globals

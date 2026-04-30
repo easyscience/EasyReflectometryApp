@@ -2,8 +2,8 @@ import QtQuick 2.14
 import QtQuick.Controls 2.14
 import QtQuick.Dialogs as Dialogs1
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 

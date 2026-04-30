@@ -7,9 +7,9 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtCore
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Logic as EaLogic
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Logic as EaLogic
 
 import Gui.Globals as Globals
 

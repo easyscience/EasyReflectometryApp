@@ -6,7 +6,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-import EasyApp.Gui.Style as EaStyle
+import EasyApplication.Gui.Style as EaStyle
 
 import Gui as Gui
 import Gui.Globals as Globals

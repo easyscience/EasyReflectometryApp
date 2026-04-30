@@ -91,9 +91,6 @@ jobs:
       # - name: Run app in testmode and quit
       #   shell: bash
       #   run: |
-      #     cd ..
-      #     git clone --single-branch --branch get-rid-of-qt5compat https://github.com/easyscience/EasyApp.git
-      #     cd EasyReflectometryApp
       #     python EasyReflectometryApp/main.py --testmode
 
       - name: Create freezed python app bundle with PyInstaller
