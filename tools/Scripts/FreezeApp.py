@@ -43,13 +43,14 @@ def excludedModules():
 
 
 def addedData():
+    easy_application_path = EasyApp.__path__[0]
     # Add main data
     data = [
         {'from': CONFIG.package_name, 'to': CONFIG.package_name},
         {'from': refnx.__path__[0], 'to': 'refnx'},
         {'from': refl1d.__path__[0], 'to': 'refl1d'},
         {'from': periodictable.__path__[0], 'to': 'periodictable'},  #            {'from': cryspy.__path__[0], 'to': 'cryspy'},
-        {'from': EasyApp.__path__[0], 'to': 'easyapplication'},
+        {'from': easy_application_path, 'to': os.path.basename(easy_application_path)},
         {'from': 'utils.py', 'to': '.'},
         {'from': 'pyproject.toml', 'to': '.'},
     ]
