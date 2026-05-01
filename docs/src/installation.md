@@ -13,8 +13,8 @@ If the relevant EasyReflectometry installation does not work on your system, the
 1. Clone EasyReflectometryApp repo from GitHub
     > git clone https://github.com/easyScience/EasyReflectometryApp
 2. Go to EasyReflectometryApp directory
-3. Create miniforge conda environment with the name era_313 for EasyReflectometryApp
-    > conda create --name era_313 python=3.13
+3. Create miniforge conda environment with the name era_312 for EasyReflectometryApp
+    > conda create --name era_312 python=3.12
 4. Create environment for EasyReflectometryApp and install it and its dependences using pip
     > pip install -e .
 5. Launch EasyReflectometry application in the created environment
