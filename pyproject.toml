@@ -4,8 +4,8 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'EasyReflectometryApp'
-version = '1.2.0'
-release_data = '10 March 2026'
+version = '1.3.0'
+release_data = '1 May 2026'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
     {name = "Andrew R. McCluskey"}, 
@@ -31,14 +31,19 @@ classifiers = [
 
 requires-python = '>=3.11'
 dependencies = [
-  'EasyApp @ git+https://github.com/EasyScience/EasyApp.git@develop',
-  'easyreflectometry @ git+https://github.com/EasyScience/EasyReflectometryLib.git@develop',
+  'easyapplication',
+  'easyreflectometry',
   'asteval',
   'PySide6',
   'toml',
 ]
 
 [project.optional-dependencies]
+test = [
+    'pytest',
+    'pytest-cov',
+]
+
 ci = [
   'pyinstaller',
   'licensename',
@@ -190,7 +195,7 @@ libs = { macos = 'libsDarwin', ubuntu = 'libsLinux', windows = 'libsWin32' }
 missing_calculator_libs = { macos = [], ubuntu = [], windows = [] }
 missing_pyside6_files = { macos = ['libshiboken6.abi3.*.dylib'], ubuntu = [], windows = ['shiboken6.abi3.dll', 'MSVCP140.dll'] }
 missing_pyside6_plugins = { macos = [], ubuntu = ['Qt/plugins/xcbglintegrations'], windows = [] } # EGL and GLX plugins
-missing_other_libraries = {macos = [], ubuntu = [], windows = ['libs/libiomp5md.dll', 'libs/opengl32.dll', 'libs/VC_redist.x64.exe'] }
+missing_other_libraries = {macos = [], ubuntu = [], windows = [] }
 auto_exclude = { macos = ['_tkinter'], ubuntu = ['_tkinter'], windows = [''], all = [ 'lib2to3', '_bisect',
                 '_codecs_cn', '_codecs_hk', '_codecs_iso2022', '_codecs_jp', '_codecs_kr', '_codecs_tw',
                 '_curses', '_elementtree', '_hashlib', '_heapq', '_multibytecodec', '_opcode', '_queue',

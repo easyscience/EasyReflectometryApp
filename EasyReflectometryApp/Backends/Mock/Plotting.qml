@@ -21,6 +21,11 @@ QtObject {
     property double analysisMinY: -40.
     property double analysisMaxY: 40.
 
+    property double residualMinX: 0.01
+    property double residualMaxX: 0.30
+    property double residualMinY: -0.1
+    property double residualMaxY: 0.1
+
     property int modelCount: 1
 
     // Plot mode properties
@@ -130,6 +135,15 @@ QtObject {
         return [
             { 'x': sampleMinX, 'y': 0.0 },
             { 'x': sampleMaxX, 'y': 0.0 }
+        ]
+    }
+
+    function getResidualDataPoints(index) {
+        console.debug(`getResidualDataPoints ${index}`)
+        return [
+            { 'x': 0.01, 'y':  0.002 },
+            { 'x': 0.15, 'y': -0.001 },
+            { 'x': 0.30, 'y':  0.003 }
         ]
     }
 

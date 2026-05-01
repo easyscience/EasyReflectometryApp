@@ -1,11 +1,12 @@
-# 5SPDX-FileCopyrightText: 2025 EasyReflectometryApp contributors
+# 5SPDX-FileCopyrightText: 2026 EasyReflectometryApp contributors
 # SPDX-License-Identifier: BSD-3-Clause
-# © 2025 Contributors to the EasyReflectometryApp project <https://github.com/easyscience/EasyReflectometryApp>
+# © 2026 Contributors to the EasyReflectometryApp project <https://github.com/easyscience/EasyReflectometryApp>
 import argparse
 import sys
 from pathlib import Path
 
-from EasyApp.Logic.Logging import console
+import EasyApplication
+from EasyApplication.Logic.Logging import console
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import qInstallMessageHandler
 from PySide6.QtGui import QIcon
@@ -24,6 +25,9 @@ except ImportError:  # Running from installer
     INSTALLER = True
 
 CURRENT_DIR = Path(__file__).parent  # path to qml components of the current project
+# Path to the directory that *contains* the installed EasyApplication package, so that
+# QML statements like `import EasyApplication.Gui.Style` can be resolved.
+EASYAPP_IMPORT_DIR = Path(EasyApplication.__path__[0]).parent
 
 
 if __name__ == '__main__':
@@ -51,11 +55,12 @@ if __name__ == '__main__':
         path_main_qml = QUrl.fromLocalFile(CURRENT_DIR / 'EasyReflectometryApp' / 'Gui' / 'ApplicationWindow.qml')
         engine.addImportPath(CURRENT_DIR / 'EasyReflectometryApp')
         engine.addImportPath(CURRENT_DIR)
+        engine.addImportPath(str(EASYAPP_IMPORT_DIR))
         console.debug('Paths added where QML searches for components')
     else:  # Running locally
-        path_main_qml = path_main_qml = CURRENT_DIR / 'Gui' / 'ApplicationWindow.qml'
+        path_main_qml = CURRENT_DIR / 'Gui' / 'ApplicationWindow.qml'
         engine.addImportPath(CURRENT_DIR)
-        engine.addImportPath(CURRENT_DIR / '..' / '..' / 'EasyApp' / 'src')
+        engine.addImportPath(str(EASYAPP_IMPORT_DIR))
         console.debug('Paths added where QML searches for components')
 
     engine.load(path_main_qml)

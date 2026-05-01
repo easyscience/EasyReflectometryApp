@@ -118,6 +118,34 @@ class Analysis(QObject):
     def fitChi2(self) -> float:
         return self._fitting_logic.fit_chi2
 
+    @Property(int, notify=fittingChanged)
+    def fitIteration(self) -> int:
+        return self._fitting_logic.fit_iteration
+
+    @Property(float, notify=fittingChanged)
+    def fitInterimChi2(self) -> float:
+        return self._fitting_logic.fit_interim_chi2
+
+    @Property(float, notify=fittingChanged)
+    def fitInterimReducedChi2(self) -> float:
+        return self._fitting_logic.fit_interim_reduced_chi2
+
+    @Property(str, notify=fittingChanged)
+    def fitProgressMessage(self) -> str:
+        return self._fitting_logic.fit_progress_message
+
+    @Property(bool, notify=fittingChanged)
+    def fitHasInterimUpdate(self) -> bool:
+        return self._fitting_logic.fit_has_interim_update
+
+    @Property(bool, notify=fittingChanged)
+    def fitHasPreviewUpdate(self) -> bool:
+        return self._fitting_logic.fit_has_preview_update
+
+    @Property('QVariant', notify=fittingChanged)
+    def fitPreviewParameterValues(self) -> dict:
+        return self._fitting_logic.fit_preview_parameter_values
+
     @Property('QVariant', notify=fittingChanged)
     def fitResults(self) -> dict:
         """Return fit results as a dict for QML consumption."""
@@ -171,9 +199,16 @@ class Analysis(QObject):
         self._fitter_thread.setTerminationEnabled(True)
         self._fitter_thread.finished.connect(self._on_fit_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
+        self._fitter_thread.progressDetail.connect(self._on_fit_progress)
         self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
+
+    @Slot(dict)
+    def _on_fit_progress(self, payload: dict) -> None:
+        """Handle in-flight progress payloads emitted from the worker thread."""
+        self._fitting_logic.on_fit_progress(payload)
+        self.fittingChanged.emit()
 
     @Slot(list)
     def _on_fit_finished(self, results: list) -> None:
@@ -187,12 +222,16 @@ class Analysis(QObject):
     @Slot(str)
     def _on_fit_failed(self, error_message: str) -> None:
         """Handle failed threaded fit."""
+        is_user_cancel = self._fitting_logic.fit_cancelled and 'cancel' in error_message.lower()
+        if is_user_cancel:
+            error_message = 'Fitting cancelled by user'
         self._fitting_logic.on_fit_failed(error_message)
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
         self.externalFittingChanged.emit()
-        self.fitFailed.emit(error_message)
+        if not is_user_cancel:
+            self.fitFailed.emit(error_message)
 
     @Slot()
     def _onStopFit(self) -> None:
@@ -200,8 +239,6 @@ class Analysis(QObject):
         self._fitting_logic.stop_fit()
         if self._fitter_thread is not None:
             self._fitter_thread.stop()
-            self._fitter_thread.deleteLater()
-            self._fitter_thread = None
         self.fittingChanged.emit()
         self.externalFittingChanged.emit()
 
@@ -455,7 +492,7 @@ class Analysis(QObject):
                         if exp_idx < len(self._experiments_logic.available())
                         else f'Experiment {exp_idx + 1}'
                     )
-                    color = color_palette[idx % len(color_palette)]
+                    color = color_palette[exp_idx % len(color_palette)]
 
                     experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
             except (IndexError, AttributeError) as e:

@@ -12,6 +12,7 @@ from .logic.project import Project as ProjectLogic
 class Experiment(QObject):
     experimentChanged = Signal()
     externalExperimentChanged = Signal()
+    qRangeUpdated = Signal()
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -51,6 +52,12 @@ class Experiment(QObject):
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
 
+    @Slot(str)
+    def setResolution(self, new_value: str) -> None:
+        if self._model_logic.set_resolution_at_current_index(new_value):
+            self.experimentChanged.emit()
+            self.externalExperimentChanged.emit()
+
     # Actions
     @Slot(str)
     def load(self, paths: str) -> None:
@@ -59,12 +66,16 @@ class Experiment(QObject):
         if isinstance(paths, str):
             paths = paths.split(',')
 
+        q_range_changed = False
         for path in paths:
             generalized = IO.generalizePath(path)
             if self._project_logic.count_datasets_in_file(generalized) > 1:
-                self._project_logic.load_all_experiments_from_file(generalized)
+                _count, changed = self._project_logic.load_all_experiments_from_file(generalized)
             else:
-                self._project_logic.load_new_experiment(generalized)
+                changed = self._project_logic.load_new_experiment(generalized)
+            if changed:
+                q_range_changed = True
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
-        pass  # debug anchor
+        if q_range_changed:
+            self.qRangeUpdated.emit()

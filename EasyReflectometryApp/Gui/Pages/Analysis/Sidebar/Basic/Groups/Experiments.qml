@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
@@ -162,6 +162,10 @@ EaElements.GroupBox {
                         width: EaStyle.Sizes.fontPixelSize * 11
                         text: index > -1 ? Globals.BackendWrapper.analysisExperimentsAvailable[index] : ""
                         onEditingFinished: Globals.BackendWrapper.analysisSetExperimentNameAtIndex(index, text)
+
+                        // Match experiment line color on the chart
+                        color: Globals.Variables.experimentColor(index)
+                        font.bold: true
                     }
 
                     EaComponents.TableViewLabel {

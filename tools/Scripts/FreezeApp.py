@@ -8,7 +8,7 @@ import site
 import sys
 
 import Config
-import EasyApp
+import EasyApplication as EasyApp
 import Functions
 import periodictable
 import PySide6
@@ -49,7 +49,7 @@ def addedData():
         {'from': refnx.__path__[0], 'to': 'refnx'},
         {'from': refl1d.__path__[0], 'to': 'refl1d'},
         {'from': periodictable.__path__[0], 'to': 'periodictable'},  #            {'from': cryspy.__path__[0], 'to': 'cryspy'},
-        {'from': EasyApp.__path__[0], 'to': 'EasyApp'},
+        {'from': EasyApp.__path__[0], 'to': 'easyapplication'},
         {'from': 'utils.py', 'to': '.'},
         {'from': 'pyproject.toml', 'to': '.'},
     ]

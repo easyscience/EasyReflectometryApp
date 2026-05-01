@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
@@ -54,7 +54,7 @@ EaElements.GroupBox {
                 EaComponents.TableViewTextInput {
                     horizontalAlignment: Text.AlignLeft
                     text: Globals.BackendWrapper.sampleModels[index].label
-                    onEditingFinished: Globals.BackendWrapper.sampleSetCurrentModelName(text)
+                    onEditingFinished: Globals.BackendWrapper.sampleSetModelNameAtIndex(index, text)
                 }
 
                 EaComponents.TableViewButton {

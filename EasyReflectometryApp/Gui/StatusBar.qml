@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
@@ -53,11 +53,37 @@ EaElements.StatusBar {
         valueText: Globals.BackendWrapper.statusVariables ?? ''
         ToolTip.text: qsTr('Number of parameters: total, free and fixed')
     }
+
     EaElements.StatusBarItem {
-        visible: Globals.BackendWrapper.analysisFitChi2 > 0
+        visible: Globals.BackendWrapper.analysisFittingRunning
+        keyIcon: 'play-circle'
+        keyText: qsTr('Fit')
+        valueText: {
+            if (Globals.BackendWrapper.analysisFitHasInterimUpdate) {
+                const iter = Globals.BackendWrapper.analysisFitIteration
+                const rchi2 = Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
+                return qsTr('iter %1 · χ² %2').arg(iter).arg(rchi2)
+            }
+            return qsTr('Fitting running') + '.'.repeat(dotCount % 5)
+        }
+        ToolTip.text: qsTr('Current fitting progress')
+
+        property int dotCount: 0
+        Timer {
+            interval: 600
+            repeat: true
+            running: Globals.BackendWrapper.analysisFittingRunning
+                     && !Globals.BackendWrapper.analysisFitHasInterimUpdate
+            onTriggered: parent.dotCount++
+        }
+        onVisibleChanged: if (!visible) dotCount = 0
+    }
+
+    EaElements.StatusBarItem {
+        visible: !Globals.BackendWrapper.analysisFittingRunning && Globals.BackendWrapper.analysisFitChi2 > 0
         keyIcon: 'chart-line'
-        keyText: qsTr('Chi²')
+        keyText: qsTr('Reduced Chi²')
         valueText: Globals.BackendWrapper.analysisFitChi2.toFixed(2)
-        ToolTip.text: qsTr('Goodness of fit (chi-squared)')
+        ToolTip.text: qsTr('Goodness of fit (reduced chi-squared)')
     }
 }

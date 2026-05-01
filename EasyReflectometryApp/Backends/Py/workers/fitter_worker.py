@@ -48,6 +48,9 @@ class FitterWorker(QThread):
     # Signal emitted to report fitting progress (0-100)
     progress = Signal(int)
 
+    # Detailed fitting progress payload emitted from minimizer callbacks
+    progressDetail = Signal(dict)
+
     def __init__(
         self,
         fitter: Any,
@@ -93,7 +96,10 @@ class FitterWorker(QThread):
         try:
             # Get the method and call it
             method = getattr(self._fitter, self._method_name)
-            result = method(*self._args, **self._kwargs)
+            kwargs = dict(self._kwargs)
+            if self._method_name == 'fit' and 'progress_callback' not in kwargs:
+                kwargs['progress_callback'] = self._progress_callback
+            result = method(*self._args, **kwargs)
 
             # NOTE: This check only catches stop requests that occurred AFTER the fit
             # completed but before we emit the result. It does NOT interrupt the fitting
@@ -115,6 +121,11 @@ class FitterWorker(QThread):
             if not error_message:
                 error_message = f'{type(ex).__name__}: Unknown error during fitting'
             self.failed.emit(error_message)
+
+    def _progress_callback(self, payload: dict) -> bool:
+        """Relay plain progress payloads from the minimizer to Qt signals."""
+        self.progressDetail.emit(dict(payload))
+        return not self._stop_requested
 
     def stop(self) -> None:
         """
@@ -140,11 +151,6 @@ class FitterWorker(QThread):
             potential future improvements (e.g., using subprocess instead of QThread).
         """
         self._stop_requested = True
-        if self.isRunning():
-            # WARNING: terminate() is dangerous but necessary since fitting
-            # libraries don't support graceful cancellation. See docstring above.
-            self.terminate()
-            self.wait()
 
     @property
     def stop_requested(self) -> bool:

@@ -1,19 +1,20 @@
-// SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
+// SPDX-FileCopyrightText: 2026 EasyReflectometry contributors <support@easyreflectometry.org>
 // SPDX-License-Identifier: BSD-3-Clause
-// © 2025 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+// © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtCharts
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Charts as EaCharts
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Charts as EaCharts
 
 import Gui as Gui
 import Gui.Globals as Globals
+import "../../../Logic/MeasuredScatter.js" as MeasuredScatter
 
 
 Rectangle {
@@ -39,8 +40,23 @@ Rectangle {
                 property alias calculated: analysisChartView.calcSerie
                 property alias measured: analysisChartView.measSerie
                 bkgSerie.color: measSerie.color
-                measSerie.width: 1
+                measSerie.color: Globals.Variables.experimentColor(
+                    Globals.BackendWrapper.analysisExperimentsCurrentIndex
+                )
+                measSerie.width: 2
+                measSerie.opacity: 0.95
+                measSerie.style: Qt.DotLine
                 bkgSerie.width: 1
+                bkgSerie.style: Qt.DotLine
+
+                // Scatter series for measured data (single experiment, linear mode)
+                property var measuredScatterSerie: null
+
+                // Track current experiment color for scatter series
+                property color currentExperimentColor: Globals.Variables.experimentColor(
+                    Globals.BackendWrapper.analysisExperimentsCurrentIndex
+                )
+                onCurrentExperimentColorChanged: MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
 
                 anchors.fill: parent
                 anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
@@ -95,7 +111,15 @@ Rectangle {
                     repeat: false
                     onTriggered: {
                         analysisChartView.resetAxes()
-                        sldChart.chartView.resetAxes()
+                        lowerPanel.resetAllAxes()
+                    }
+                }
+
+                // Recreate series when marker style changes
+                Connections {
+                    target: Globals.Variables
+                    function onExperimentMarkerStyleChanged() {
+                        analysisChartView.recreateSeriesForCurrentMode()
                     }
                 }
 
@@ -150,9 +174,20 @@ Rectangle {
                     clearMultiExperimentSeries()
 
                     if (!isMultiExp) {
-                        // Show default series for single experiment
-                        measured.visible = true
+                        // Show default scatter series for single experiment
+                        measured.visible = false
+                        if (!measuredScatterSerie) {
+                            console.warn("CombinedView.updateMultiExperimentSeries: measuredScatterSerie is null - single mode will render no measured points")
+                        } else {
+                            measuredScatterSerie.visible = true
+                            MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
+                        }
                         calculated.visible = true
+
+                        // Re-register scatter series and refresh data
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
+                        Globals.BackendWrapper.plottingRefreshAnalysis()
                         return
                     }
 
@@ -161,13 +196,25 @@ Rectangle {
 
                     // If no data available yet, keep default series visible as fallback
                     if (experimentDataList.length === 0) {
-                        measured.visible = true
+                        measured.visible = false
+                        if (!measuredScatterSerie) {
+                            console.warn("CombinedView.updateMultiExperimentSeries: measuredScatterSerie is null - no-data fallback will render no measured points")
+                        } else {
+                            measuredScatterSerie.visible = true
+                        }
                         calculated.visible = true
+
+                        // Re-register and refresh so this branch matches the
+                        // single-experiment branch above.
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
+                        Globals.BackendWrapper.plottingRefreshAnalysis()
                         return
                     }
 
                     // Hide default series in multi-experiment mode (only after we have data)
                     measured.visible = false
+                    if (measuredScatterSerie) measuredScatterSerie.visible = false
                     calculated.visible = false
 
                     // Create series for each experiment
@@ -194,20 +241,25 @@ Rectangle {
                 }
 
                 function createExperimentSeries(expIndex, expName, color) {
-                    // Create measured data series
-                    var measuredSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine, 
-                                                         `${expName} - Measured`, 
-                                                         analysisChartView.axisX, analysisChartView.axisY)
-                    measuredSerie.color = color
-                    measuredSerie.width = 1
-                    measuredSerie.capStyle = Qt.RoundCap
-                    measuredSerie.useOpenGL = analysisChartView.useOpenGL
+                    var xAxis = currentXAxis()
 
-                    // Create calculated data series (slightly different style)
+                    // Look up the model color for this experiment
+                    var modelColors = Globals.BackendWrapper.modelColorsForExperiment
+                    var modelColor = (modelColors && expIndex >= 0 && expIndex < modelColors.length)
+                                     ? modelColors[expIndex]
+                                     : color
+
+                    // Create measured data series (scatter points)
+                    var measuredSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
+                                                               `${expName} - Measured`,
+                                                               xAxis, analysisChartView.axisY,
+                                                               color, Globals.Variables.experimentMarkerStyle)
+
+                    // Create calculated data series using the model's own color
                     var calculatedSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine,
                                                             `${expName} - Calculated`,
-                                                            analysisChartView.axisX, analysisChartView.axisY)
-                    calculatedSerie.color = color
+                                                            xAxis, analysisChartView.axisY)
+                    calculatedSerie.color = modelColor
                     calculatedSerie.width = 2
                     calculatedSerie.capStyle = Qt.RoundCap
                     calculatedSerie.useOpenGL = analysisChartView.useOpenGL
@@ -242,30 +294,132 @@ Rectangle {
                     }
                 }
                 
-                property double xRange: Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
+                property double xRange: isNaN(Globals.BackendWrapper.plottingAnalysisMaxX) || isNaN(Globals.BackendWrapper.plottingAnalysisMinX) ? 1.0 : Globals.BackendWrapper.plottingAnalysisMaxX - Globals.BackendWrapper.plottingAnalysisMinX
                 axisX.title: "q (Å⁻¹)"
-                axisX.min: Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
-                axisX.max: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
-                axisX.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
-                axisX.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
+                axisX.min: isNaN(Globals.BackendWrapper.plottingAnalysisMinX) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
+                axisX.max: isNaN(Globals.BackendWrapper.plottingAnalysisMaxX) ? 1.0 : Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
+                axisX.minAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMinX) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMinX - xRange * 0.01
+                axisX.maxAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMaxX) ? 1.0 : Globals.BackendWrapper.plottingAnalysisMaxX + xRange * 0.01
 
-                property double yRange: Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
+                // Logarithmic axis control
+                property bool useLogQAxis: Globals.Variables.logarithmicQAxis
+                axisX.visible: !useLogQAxis
+
+                LogValueAxis {
+                    id: analysisAxisXLog
+                    visible: analysisChartView.useLogQAxis
+                    titleText: "q (Å⁻¹)"
+                    property double minAfterReset: Math.max(Globals.BackendWrapper.plottingAnalysisMinX, 1e-6)
+                    property double maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX * 1.1
+                    base: 10
+                    color: EaStyle.Colors.chartAxis
+                    gridLineColor: EaStyle.Colors.chartGridLine
+                    minorGridLineColor: EaStyle.Colors.chartMinorGridLine
+                    labelsColor: EaStyle.Colors.chartLabels
+                    titleBrush: EaStyle.Colors.chartLabels
+                    Component.onCompleted: {
+                        min = minAfterReset
+                        max = maxAfterReset
+                    }
+                }
+
+                // Dynamic series for log mode (single experiment)
+                property var logModeSeries: null
+
+                function currentXAxis() {
+                    return useLogQAxis ? analysisAxisXLog : analysisChartView.axisX
+                }
+
+                onUseLogQAxisChanged: {
+                    recreateForLogMode()
+                }
+
+                function recreateForLogMode() {
+                    // Clean up previous log mode series
+                    if (logModeSeries) {
+                        analysisChartView.removeSeries(logModeSeries.measuredSerie)
+                        analysisChartView.removeSeries(logModeSeries.calculatedSerie)
+                        logModeSeries = null
+                    }
+
+                    if (isMultiExperimentMode) {
+                        updateMultiExperimentSeries()
+                    } else if (useLogQAxis) {
+                        measured.visible = false
+                        if (measuredScatterSerie) measuredScatterSerie.visible = false
+                        calculated.visible = false
+
+                        var newMeasured = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
+                                                                 "measured_log", analysisAxisXLog, analysisChartView.axisY,
+                                                                 measured.color, Globals.Variables.experimentMarkerStyle)
+
+                        var newCalculated = analysisChartView.createSeries(ChartView.SeriesTypeLine, "calculated_log", analysisAxisXLog, analysisChartView.axisY)
+                        newCalculated.color = calculated.color
+                        newCalculated.width = calculated.width
+                        newCalculated.useOpenGL = analysisChartView.useOpenGL
+
+                        logModeSeries = {
+                            measuredSerie: newMeasured,
+                            calculatedSerie: newCalculated
+                        }
+
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', newMeasured)
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', newCalculated)
+                        Globals.BackendWrapper.plottingRefreshAnalysis()
+                    } else {
+                        // Single experiment, linear mode: restore scatter series
+                        measured.visible = false
+                        if (!measuredScatterSerie) {
+                            console.warn("CombinedView.recreateForLogMode: measuredScatterSerie is null - linear mode will render no measured points")
+                        } else {
+                            measuredScatterSerie.visible = true
+                        }
+                        calculated.visible = true
+
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                        Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
+                        Globals.BackendWrapper.plottingRefreshAnalysis()
+                    }
+
+                    updateReferenceLines()
+                    Qt.callLater(resetAxes)
+                }
+
+                function resetAxes() {
+                    if (useLogQAxis) {
+                        if (analysisAxisXLog) {
+                            analysisAxisXLog.min = analysisAxisXLog.minAfterReset
+                            analysisAxisXLog.max = analysisAxisXLog.maxAfterReset
+                        }
+                    } else {
+                        if (analysisChartView.axisX) {
+                            analysisChartView.axisX.min = analysisChartView.axisX.minAfterReset
+                            analysisChartView.axisX.max = analysisChartView.axisX.maxAfterReset
+                        }
+                    }
+                    if (analysisChartView.axisY) {
+                        analysisChartView.axisY.min = analysisChartView.axisY.minAfterReset
+                        analysisChartView.axisY.max = analysisChartView.axisY.maxAfterReset
+                    }
+                }
+
+                property double yRange: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) || isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? 10.0 : Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
                 axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
-                axisY.min: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
-                axisY.max: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
-                axisY.minAfterReset: Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
-                axisY.maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
+                axisY.min: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
+                axisY.max: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
+                axisY.minAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
+                axisY.maxAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
 
                 calcSerie.onHovered: (point, state) => showMainTooltip(analysisChartView, analysisDataToolTip, point, state)
                 calcSerie.color: {
-                    const models = Globals.BackendWrapper.sampleModels
-                    const idx = Globals.BackendWrapper.sampleCurrentModelIndex
+                    const colors = Globals.BackendWrapper.modelColorsForExperiment
+                    const idx = Globals.BackendWrapper.analysisExperimentsCurrentIndex
 
-                    if (models && idx >= 0 && idx < models.length) {
-                        return models[idx].color
+                    if (colors && idx >= 0 && idx < colors.length) {
+                        return colors[idx]
                     }
 
-                    return undefined
+                    return "#ff0000"
                 }
 
                 // Tool buttons
@@ -313,7 +467,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable pan")
                         onClicked: {
                             analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            sldChart.chartView.allowZoom = analysisChartView.allowZoom
+                            lowerPanel.setAllowZoom(analysisChartView.allowZoom)
                         }
                     }
 
@@ -327,7 +481,7 @@ Rectangle {
                         ToolTip.text: qsTr("Enable box zoom")
                         onClicked: {
                             analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            sldChart.chartView.allowZoom = analysisChartView.allowZoom
+                            lowerPanel.setAllowZoom(analysisChartView.allowZoom)
                         }
                     }
 
@@ -336,11 +490,11 @@ Rectangle {
                         height: EaStyle.Sizes.toolButtonHeight
                         width: EaStyle.Sizes.toolButtonHeight
                         borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "backspace"
+                        fontIcon: "home"
                         ToolTip.text: qsTr("Reset axes")
                         onClicked: {
                             analysisChartView.resetAxes()
-                            sldChart.chartView.resetAxes()
+                            lowerPanel.resetAllAxes()
                         }
                     }
                 }
@@ -367,12 +521,12 @@ Rectangle {
                         // Single experiment legend
                         EaElements.Label {
                             visible: !analysisChartView.isMultiExperimentMode
-                            text: '━  I (Measured)'
+                            text: Globals.Variables.lineStyleSymbol(analysisChartView.measSerie.style) + '  I (Measured)'
                             color: analysisChartView.measSerie.color
                         }
                         EaElements.Label {
                             visible: !analysisChartView.isMultiExperimentMode
-                            text: '━ (Calculated)'
+                            text: Globals.Variables.lineStyleSymbol(analysisChartView.calcSerie.style) + ' (Calculated)'
                             color: analysisChartView.calcSerie.color
                         }
 
@@ -416,12 +570,12 @@ Rectangle {
                             }
 
                             EaElements.Label {
-                                text: qsTr("━ Measured (thin)")
+                                text: Globals.Variables.lineStyleSymbol(analysisChartView.measSerie.style) + ' ' + qsTr("Measured")
                                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
                                 color: EaStyle.Colors.themeForegroundMinor
                             }
                             EaElements.Label {
-                                text: qsTr("━ Calculated (thick)")
+                                text: Globals.Variables.lineStyleSymbol(analysisChartView.calcSerie.style) + ' ' + qsTr("Calculated")
                                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
                                 color: EaStyle.Colors.themeForegroundMinor
                             }
@@ -438,13 +592,25 @@ Rectangle {
 
                 // Data is set in python backend (plotting_1d.py)
                 Component.onCompleted: {
+                    // Create scatter series for measured data (single experiment, linear mode)
+                    measuredScatterSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
+                                                                  "measured_scatter",
+                                                                  analysisChartView.axisX, analysisChartView.axisY,
+                                                                  measured.color, Globals.Variables.experimentMarkerStyle)
+                    if (!measuredScatterSerie) {
+                        console.warn("CombinedView: failed to create measuredScatterSerie - measured data will not render")
+                    }
+                    measured.visible = false
+
                     Globals.References.pages.analysis.mainContent.analysisView = analysisChartView
+
                     Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                        'measuredSerie',
-                                                                       measured)
+                                                                       measuredScatterSerie)
                     Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                        'calculatedSerie',
                                                                        calculated)
+                    Globals.BackendWrapper.plottingRefreshAnalysis()
 
                     // Initialize multi-experiment support
                     updateMultiExperimentSeries()
@@ -452,23 +618,41 @@ Rectangle {
                     // Initialize reference lines
                     updateReferenceLines()
                 }
+
+                function recreateSeriesForCurrentMode() {
+                    if (isMultiExperimentMode) {
+                        // Multi-experiment mode: recreate all multi-experiment series
+                        updateMultiExperimentSeries()
+                    } else if (useLogQAxis) {
+                        // Single experiment, log mode: recreate log mode series
+                        recreateForLogMode()
+                    } else {
+                        // Single experiment, linear mode: recreate scatter series
+                        if (measuredScatterSerie) {
+                            analysisChartView.removeSeries(measuredScatterSerie)
+                            measuredScatterSerie = null
+                        }
+                        measuredScatterSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
+                                                                      "measured_scatter",
+                                                                      analysisChartView.axisX, analysisChartView.axisY,
+                                                                      measured.color, Globals.Variables.experimentMarkerStyle)
+                        if (measuredScatterSerie) {
+                            measuredScatterSerie.visible = true
+                            Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
+                            Globals.BackendWrapper.plottingRefreshAnalysis()
+                        }
+                    }
+                }
             }
         }
 
-        // SLD Chart (1/3 height)
-        Gui.SldChart {
-            id: sldChart
+        // Lower panel: SLD tab + Residuals tab
+        SldView {
+            id: lowerPanel
 
             SplitView.fillHeight: true
             SplitView.preferredHeight: parent.height * 0.33
             SplitView.minimumHeight: 80
-
-            showLegend: Globals.Variables.showLegendOnAnalysisPage
-            onShowLegendChanged: Globals.Variables.showLegendOnAnalysisPage = showLegend
-
-            Component.onCompleted: {
-                Globals.References.pages.analysis.mainContent.sldView = sldChart.chartView
-            }
         }
     }
 

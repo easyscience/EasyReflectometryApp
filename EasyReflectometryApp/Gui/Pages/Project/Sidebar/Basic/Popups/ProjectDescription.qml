@@ -1,8 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
@@ -24,6 +24,7 @@ EaComponents.ProjectDescriptionDialog {
         Globals.BackendWrapper.projectSetLocation(projectLocation)
 
         Globals.BackendWrapper.projectCreate()
+        Globals.References.resetActive = true
         Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = true
     }
 

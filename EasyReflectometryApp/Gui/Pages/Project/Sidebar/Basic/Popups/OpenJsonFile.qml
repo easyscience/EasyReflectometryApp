@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
@@ -16,6 +16,7 @@ FileDialog{
     nameFilters: [ 'JSON files (*.json)']
 
     onAccepted: {
+        Globals.References.resetActive = true
         Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = true
         Globals.References.applicationWindow.appBarCentralTabs.experimentButton.enabled = true
         Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = true

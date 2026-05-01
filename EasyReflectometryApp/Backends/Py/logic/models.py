@@ -11,7 +11,10 @@ from .helpers import get_original_name
 class Models:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
-        self._models = project_lib._models
+
+    @property
+    def _models(self) -> ModelCollection:
+        return self._project_lib._models
 
     @property
     def index(self) -> int:
@@ -51,6 +54,14 @@ class Models:
     def set_name_at_current_index(self, new_value: str) -> bool:
         if self._models[self.index].name != new_value:
             self._models[self.index].name = new_value
+            return True
+        return False
+
+    def set_name_at_index(self, index: int, new_value: str) -> bool:
+        if not (0 <= index < len(self._models)):
+            return False
+        if self._models[index].name != new_value:
+            self._models[index].name = new_value
             return True
         return False
 

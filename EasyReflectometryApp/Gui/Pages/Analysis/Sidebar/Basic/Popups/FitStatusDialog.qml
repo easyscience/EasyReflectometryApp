@@ -1,14 +1,14 @@
-// SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
+// SPDX-FileCopyrightText: 2026 EasyReflectometry contributors <support@easyreflectometry.org>
 // SPDX-License-Identifier: BSD-3-Clause
-// © 2025 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+// © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Elements as EaElements
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
@@ -22,6 +22,10 @@ EaElements.Dialog {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     onAccepted: {
+        Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
+    }
+
+    onRejected: {
         Globals.BackendWrapper.analysisSetShowFitResultsDialog(false)
     }
 
@@ -45,7 +49,7 @@ EaElements.Dialog {
 
         EaElements.Label {
             visible: Globals.BackendWrapper.analysisFitSuccess
-            text: "Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
+            text: "Reduced Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
         }
 
         EaElements.Label {

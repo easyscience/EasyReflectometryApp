@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui as Gui
 import Gui.Globals as Globals
@@ -38,26 +38,9 @@ EaComponents.ApplicationWindow {
 
         EaElements.ToolButton {
             enabled: Globals.References.resetActive
-            fontIcon: "backspace"
+            fontIcon: "undo"
             ToolTip.text: qsTr("Reset to initial state without project, models and data")
-            onClicked: {
-                if (Globals.References.applicationWindow.appBarCentralTabs.sampleButton !== null) {
-                    Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = false
-                }
-                if (Globals.References.applicationWindow.appBarCentralTabs.experimentButton !== null) {
-                    Globals.References.applicationWindow.appBarCentralTabs.experimentButton.enabled = false
-                }
-                if (Globals.References.applicationWindow.appBarCentralTabs.analysisButton !== null) {
-                    Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = false
-                }
-                if (Globals.References.applicationWindow.appBarCentralTabs.summaryButton !== null) {
-                    Globals.References.applicationWindow.appBarCentralTabs.summaryButton.enabled = false
-                }
-
-                Globals.BackendWrapper.projectReset()
-                Globals.References.applicationWindow.appBarCentralTabs.projectButton.toggle()
-                Globals.References.resetActive = false
-            }
+            onClicked: resetStateDialog.open()
         }
     ]
 
@@ -68,6 +51,17 @@ EaComponents.ApplicationWindow {
             fontIcon: "cog"
             ToolTip.text: qsTr("Application preferences")
             onClicked: EaGlobals.Vars.showAppPreferencesDialog = true
+        },
+        EaElements.ToolButton {
+            fontIcon: 'question-circle'
+            ToolTip.text: qsTr('Get online help')
+            onClicked: Qt.openUrlExternally(Globals.ApplicationInfo.about.docsUrl)
+        },
+
+        EaElements.ToolButton {
+            fontIcon: 'bug'
+            ToolTip.text: qsTr('Report a bug or issue')
+            onClicked: Qt.openUrlExternally(Globals.ApplicationInfo.about.issuesUrl)
         }
 
     ]
@@ -170,6 +164,47 @@ EaComponents.ApplicationWindow {
     ///////
 
     onClosing: Qt.quit()
+
+    EaElements.Dialog {
+        id: resetStateDialog
+
+        title: qsTr("Reset state")
+
+        EaElements.Label {
+            horizontalAlignment: Text.AlignHCenter
+            text: qsTr("Are you sure you want to reset the application to its\noriginal state without project, sample and data?\n\nThis operation cannot be undone.")
+        }
+
+        footer: EaElements.DialogButtonBox {
+            EaElements.Button {
+                text: qsTr("Cancel")
+                onClicked: resetStateDialog.close()
+            }
+
+            EaElements.Button {
+                text: qsTr("OK")
+                onClicked: {
+                    if (Globals.References.applicationWindow.appBarCentralTabs.sampleButton !== null) {
+                        Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = false
+                    }
+                    if (Globals.References.applicationWindow.appBarCentralTabs.experimentButton !== null) {
+                        Globals.References.applicationWindow.appBarCentralTabs.experimentButton.enabled = false
+                    }
+                    if (Globals.References.applicationWindow.appBarCentralTabs.analysisButton !== null) {
+                        Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = false
+                    }
+                    if (Globals.References.applicationWindow.appBarCentralTabs.summaryButton !== null) {
+                        Globals.References.applicationWindow.appBarCentralTabs.summaryButton.enabled = false
+                    }
+
+                    Globals.BackendWrapper.projectReset()
+                    Globals.References.applicationWindow.appBarCentralTabs.projectButton.toggle()
+                    Globals.References.resetActive = false
+                    resetStateDialog.close()
+                }
+            }
+        }
+    }
 
     Component.onCompleted: {
         console.debug(`Application window loaded ::: ${this}`)

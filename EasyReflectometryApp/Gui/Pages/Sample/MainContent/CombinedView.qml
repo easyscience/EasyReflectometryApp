@@ -1,16 +1,16 @@
-// SPDX-FileCopyrightText: 2025 EasyReflectometry contributors <support@easyreflectometry.org>
+// SPDX-FileCopyrightText: 2026 EasyReflectometry contributors <support@easyreflectometry.org>
 // SPDX-License-Identifier: BSD-3-Clause
-// © 2025 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+// © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtCharts
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Charts as EaCharts
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Globals as EaGlobals
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Charts as EaCharts
 
 import Gui as Gui
 import Gui.Globals as Globals
@@ -203,7 +203,7 @@ Rectangle {
                         height: EaStyle.Sizes.toolButtonHeight
                         width: EaStyle.Sizes.toolButtonHeight
                         borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "backspace"
+                        fontIcon: "home"
                         ToolTip.text: qsTr("Reset axes")
                         onClicked: {
                             sampleChartView.resetAxes()

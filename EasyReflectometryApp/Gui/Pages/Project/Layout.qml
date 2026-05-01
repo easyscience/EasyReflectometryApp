@@ -1,10 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 
-import EasyApp.Gui.Style as EaStyle
-import EasyApp.Gui.Globals as EaGlobals
-import EasyApp.Gui.Elements as EaElements
-import EasyApp.Gui.Components as EaComponents
+import EasyApplication.Gui.Elements as EaElements
+import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
@@ -13,7 +11,7 @@ EaComponents.ContentPage {
 
     defaultInfo: Globals.BackendWrapper.projectCreated ?
                      '' :
-                     qsTr('Using default project\n' + Globals.BackendWrapper.projectName)
+                     qsTr('No project defined\n')
 
     mainView: EaComponents.MainContent {
         tabs: [

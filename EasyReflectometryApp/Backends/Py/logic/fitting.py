@@ -2,8 +2,10 @@ import logging
 from typing import TYPE_CHECKING
 from typing import List
 from typing import Optional
+from typing import cast
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.utils import count_free_parameters
 from easyscience.fitting import FitResults
 from easyscience.fitting.minimizers.utils import FitError
 
@@ -25,13 +27,20 @@ class Fitting:
         self._fit_error_message: Optional[str] = None
         self._fit_cancelled = False
         self._stop_requested = False
+        self._fit_iteration = 0
+        self._fit_interim_chi2 = 0.0
+        self._fit_interim_reduced_chi2 = 0.0
+        self._fit_running_message = ''
+        self._fit_preview_parameter_values: dict = {}
+        self._fit_has_preview_update = False
+        self._fit_has_interim_update = False
 
     @property
     def status(self) -> str:
         if self._result is None:
             return ''
         else:
-            return self._result.success
+            return str(self._result.success)
 
     @property
     def running(self) -> bool:
@@ -67,6 +76,61 @@ class Fitting:
         """Return True if fit was cancelled by user."""
         return self._fit_cancelled
 
+    @property
+    def fit_iteration(self) -> int:
+        return self._fit_iteration
+
+    @property
+    def fit_interim_chi2(self) -> float:
+        return self._fit_interim_chi2
+
+    @property
+    def fit_interim_reduced_chi2(self) -> float:
+        return self._fit_interim_reduced_chi2
+
+    @property
+    def fit_progress_message(self) -> str:
+        return self._fit_running_message
+
+    @property
+    def fit_preview_parameter_values(self) -> dict:
+        return dict(self._fit_preview_parameter_values)
+
+    @property
+    def fit_has_preview_update(self) -> bool:
+        return self._fit_has_preview_update
+
+    @property
+    def fit_has_interim_update(self) -> bool:
+        return self._fit_has_interim_update
+
+    def on_fit_progress(self, payload: dict) -> None:
+        """Update transient state from an in-flight fit progress payload."""
+        self._fit_iteration = int(payload.get('iteration', 0) or 0)
+        self._fit_interim_chi2 = float(payload.get('chi2', 0.0) or 0.0)
+        self._fit_interim_reduced_chi2 = float(
+            payload.get('reduced_chi2', self._fit_interim_chi2) or self._fit_interim_chi2
+        )
+        self._fit_preview_parameter_values = dict(payload.get('parameter_values', {}) or {})
+        self._fit_has_preview_update = bool(payload.get('refresh_plots', False))
+        self._fit_has_interim_update = True
+
+        if self._fit_iteration > 0:
+            self._fit_running_message = (
+                f'Fitting... iter {self._fit_iteration}, Chi2 = {self._fit_interim_chi2:.6g}'
+            )
+        else:
+            self._fit_running_message = 'Fitting...'
+
+    def clear_fit_progress(self) -> None:
+        self._fit_iteration = 0
+        self._fit_interim_chi2 = 0.0
+        self._fit_interim_reduced_chi2 = 0.0
+        self._fit_running_message = ''
+        self._fit_preview_parameter_values = {}
+        self._fit_has_preview_update = False
+        self._fit_has_interim_update = False
+
     def on_fit_failed(self, error_message: str) -> None:
         """Handle fitting failure callback.
 
@@ -78,6 +142,7 @@ class Fitting:
         self._running = False
         self._finished = True
         self._show_results_dialog = True
+        self.clear_fit_progress()
 
     def stop_fit(self) -> None:
         """Request fitting to stop and clean up state."""
@@ -89,6 +154,7 @@ class Fitting:
         self._fit_cancelled = True
         self._fit_error_message = 'Fitting cancelled by user'
         self._show_results_dialog = True
+        self.clear_fit_progress()
 
     def reset_stop_flag(self) -> None:
         """Reset the stop request flag before starting a new fit."""
@@ -105,6 +171,10 @@ class Fitting:
         self._finished = False
         self._show_results_dialog = False
         self._fit_error_message = None
+        self._result = None
+        self._results = []
+        self.clear_fit_progress()
+        self._fit_running_message = 'Fitting...'
 
     def _ordered_experiments(self) -> list:
         """Return experiments as an ordered list of experiment objects.
@@ -118,7 +188,7 @@ class Fitting:
         if hasattr(experiments, 'items'):
             items = list(experiments.items())
             try:
-                items.sort(key=lambda item: item[0])
+                items = sorted(items)
             except TypeError:
                 pass
             return [experiment for _, experiment in items]
@@ -201,7 +271,7 @@ class Fitting:
             logger.exception('Error preparing threaded fit')
             return None, None, None, None, None
 
-    def on_fit_finished(self, results: List[FitResults]) -> None:
+    def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
         """Handle successful completion of fitting.
 
         :param results: List of FitResults from the multi-fitter.
@@ -210,6 +280,7 @@ class Fitting:
         self._finished = True
         self._show_results_dialog = True
         self._fit_error_message = None
+        self.clear_fit_progress()
 
         # Store result(s) - handle both single and multiple results
         if isinstance(results, list) and len(results) > 0:
@@ -219,30 +290,39 @@ class Fitting:
             engine_name = getattr(results[0], 'minimizer_engine', 'unknown')
             logger.info('Fit finished: engine=%s, chi2=%s, success=%s', engine_name, self.fit_chi2, results[0].success)
         else:
-            self._result = results
-            self._results = [results] if results else []
+            single_result = cast(Optional[FitResults], results)
+            self._result = single_result
+            self._results = [single_result] if single_result is not None else []
 
     @property
     def fit_n_pars(self) -> int:
-        """Return total number of refined parameters across all fits."""
-        if self._results:
-            return sum(r.n_pars for r in self._results)
+        """Return the global number of refined parameters for the fit."""
+        if len(self._results) > 1:
+            return count_free_parameters(self._project_lib)
         if self._result is None:
             return 0
         return self._result.n_pars
 
     @property
     def fit_chi2(self) -> float:
-        """Return total chi-squared across all fits."""
+        """Return reduced chi-squared across all fits."""
         if self._results:
             try:
-                return float(sum(r.chi2 for r in self._results))
+                if len(self._results) == 1:
+                    return float(self._results[0].reduced_chi)
+                total_chi2 = float(sum(result.chi2 for result in self._results))
+                total_points = sum(len(result.x) for result in self._results)
+                n_params = self._results[0].n_pars
+                total_dof = total_points - n_params
+                if total_dof <= 0:
+                    return 0.0
+                return total_chi2 / total_dof
             except (ValueError, TypeError):
                 return 0.0
         if self._result is None:
             return 0.0
         try:
-            return float(self._result.chi2)
+            return float(self._result.reduced_chi)
         except (ValueError, TypeError):
             return 0.0
 
