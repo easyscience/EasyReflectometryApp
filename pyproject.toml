@@ -5,7 +5,7 @@ build-backend = 'hatchling.build'
 [project]
 name = 'EasyReflectometryApp'
 version = '1.3.0'
-release_data = '10 March 2026'
+release_data = '1 May 2026'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
     {name = "Andrew R. McCluskey"}, 
