@@ -10,6 +10,7 @@ import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 
+import Gui.Components as GuiComponents
 import Gui.Globals as Globals
 
 
@@ -165,71 +166,10 @@ Rectangle {
             onHovered: (point, state) => showMainTooltip(chartView, dataToolTip, point, state)
         }
 
-        // Tool buttons
-        Row {
-            id: toolButtons
-            z: 1
-
-            x: chartView.plotArea.x + chartView.plotArea.width - width
-            y: chartView.plotArea.y - height - EaStyle.Sizes.fontPixelSize
-
-            spacing: 0.25 * EaStyle.Sizes.fontPixelSize
-
-            EaElements.TabButton {
-                checked: root.showLegend
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "align-left"
-                ToolTip.text: root.showLegend ? qsTr("Hide legend") : qsTr("Show legend")
-                onClicked: root.showLegend = checked
-            }
-
-            EaElements.TabButton {
-                checked: chartView.allowHover
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "comment-alt"
-                ToolTip.text: qsTr("Show coordinates tooltip on hover")
-                onClicked: chartView.allowHover = checked
-            }
-
-            Item { height: 1; width: 0.5 * EaStyle.Sizes.fontPixelSize }  // spacer
-
-            EaElements.TabButton {
-                checked: !chartView.allowZoom
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "arrows-alt"
-                ToolTip.text: qsTr("Enable pan")
-                onClicked: chartView.allowZoom = !checked
-            }
-
-            EaElements.TabButton {
-                checked: chartView.allowZoom
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "expand"
-                ToolTip.text: qsTr("Enable box zoom")
-                onClicked: chartView.allowZoom = checked
-            }
-
-            EaElements.TabButton {
-                checkable: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "home"
-                ToolTip.text: qsTr("Reset axes")
-                onClicked: chartView.resetAxes()
-            }
+        GuiComponents.ChartToolbar {
+            chartView: chartView
+            showLegend: root.showLegend
+            onShowLegendChanged: root.showLegend = showLegend
         }
 
         // Legend
@@ -253,14 +193,35 @@ Rectangle {
 
                 // Single experiment
                 EaElements.Label {
-                    visible: !isMultiExperimentMode
+                    visible: !isPolarizationMode && !isMultiExperimentMode
                     text: '━  ' + qsTr('Residual')
                     color: singleResidualSerie.color
                 }
 
+                Repeater {
+                    model: isPolarizationMode ? visiblePolarizationChannels() : []
+                    delegate: Row {
+                        spacing: EaStyle.Sizes.fontPixelSize * 0.3
+
+                        Rectangle {
+                            width: EaStyle.Sizes.fontPixelSize * 0.8
+                            height: 3
+                            color: modelData.color || '#1f77b4'
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        EaElements.Label {
+                            text: `${modelData.label || modelData.key} ${qsTr('residual')}`
+                            font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.8
+                            color: EaStyle.Colors.themeForeground
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+                }
+
                 // Multi-experiment
                 Repeater {
-                    model: isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentDataList : []
+                    model: !isPolarizationMode && isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentDataList : []
                     delegate: Row {
                         spacing: EaStyle.Sizes.fontPixelSize * 0.3
 
@@ -288,106 +249,8 @@ Rectangle {
             textFormat: Text.RichText
         }
 
-        // Zoom rectangle
-        Rectangle {
-            id: recZoom
-
-            property int xScaleZoom: 0
-            property int yScaleZoom: 0
-
-            visible: false
-            transform: Scale {
-                origin.x: 0
-                origin.y: 0
-                xScale: recZoom.xScaleZoom
-                yScale: recZoom.yScaleZoom
-            }
-            border.color: EaStyle.Colors.appBorder
-            border.width: 1
-            opacity: 0.9
-            color: 'transparent'
-
-            Rectangle {
-                anchors.fill: parent
-                opacity: 0.5
-                color: recZoom.border.color
-            }
-        }
-
-        // Zoom with left mouse button
-        MouseArea {
-            id: zoomMouseArea
-
-            enabled: chartView.allowZoom
-            anchors.fill: chartView
-            acceptedButtons: Qt.LeftButton
-            onPressed: {
-                recZoom.x = mouseX
-                recZoom.y = mouseY
-                recZoom.visible = true
-            }
-            onMouseXChanged: {
-                if (mouseX > recZoom.x) {
-                    recZoom.xScaleZoom = 1
-                    recZoom.width = Math.min(mouseX, chartView.width) - recZoom.x
-                } else {
-                    recZoom.xScaleZoom = -1
-                    recZoom.width = recZoom.x - Math.max(mouseX, 0)
-                }
-            }
-            onMouseYChanged: {
-                if (mouseY > recZoom.y) {
-                    recZoom.yScaleZoom = 1
-                    recZoom.height = Math.min(mouseY, chartView.height) - recZoom.y
-                } else {
-                    recZoom.yScaleZoom = -1
-                    recZoom.height = recZoom.y - Math.max(mouseY, 0)
-                }
-            }
-            onReleased: {
-                const x = Math.min(recZoom.x, mouseX) - chartView.anchors.leftMargin
-                const y = Math.min(recZoom.y, mouseY) - chartView.anchors.topMargin
-                const width = recZoom.width
-                const height = recZoom.height
-                chartView.zoomIn(Qt.rect(x, y, width, height))
-                recZoom.visible = false
-            }
-        }
-
-        // Pan with left mouse button
-        MouseArea {
-            property real pressedX
-            property real pressedY
-            property int threshold: 1
-
-            enabled: !zoomMouseArea.enabled
-            anchors.fill: chartView
-            acceptedButtons: Qt.LeftButton
-            onPressed: {
-                pressedX = mouseX
-                pressedY = mouseY
-            }
-            onMouseXChanged: Qt.callLater(update)
-            onMouseYChanged: Qt.callLater(update)
-
-            function update() {
-                const dx = mouseX - pressedX
-                const dy = mouseY - pressedY
-                pressedX = mouseX
-                pressedY = mouseY
-
-                if (dx > threshold)      chartView.scrollLeft(dx)
-                else if (dx < -threshold) chartView.scrollRight(-dx)
-                if (dy > threshold)      chartView.scrollUp(dy)
-                else if (dy < -threshold) chartView.scrollDown(-dy)
-            }
-        }
-
-        // Reset axes with right mouse button
-        MouseArea {
-            anchors.fill: chartView
-            acceptedButtons: Qt.RightButton
-            onClicked: chartView.resetAxes()
+        GuiComponents.ChartMouseControls {
+            chartView: chartView
         }
     }
 
@@ -396,6 +259,7 @@ Rectangle {
         try { return Globals.BackendWrapper.plottingIsMultiExperimentMode || false }
         catch (e) { return false }
     }
+    property bool isPolarizationMode: Globals.BackendWrapper.polarizationAvailable
 
     // Re-populate charts when backend signals a data/range refresh
     Connections {
@@ -404,6 +268,12 @@ Rectangle {
         function onSampleChartRangesChanged() {
             refreshResidualChart()
         }
+    }
+
+    Connections {
+        target: Globals.BackendWrapper
+        function onPolarizationDisplayChanged() { refreshResidualChart() }
+        function onPolarizationDataChanged() { refreshResidualChart() }
     }
 
     Component.onCompleted: {
@@ -419,10 +289,62 @@ Rectangle {
         zeroLine.append(Globals.BackendWrapper.plottingResidualMinX, 0)
         zeroLine.append(Globals.BackendWrapper.plottingResidualMaxX, 0)
 
-        if (isMultiExperimentMode) {
+        if (isPolarizationMode) {
+            _refreshPolarizationResiduals()
+        } else if (isMultiExperimentMode) {
             _refreshMultiExperiment()
         } else {
             _refreshSingleExperiment()
+        }
+    }
+
+    function _refreshPolarizationResiduals() {
+        singleResidualSerie.clear()
+        singleResidualSerie.visible = false
+        _clearMultiExperimentSeries()
+
+        if (logResidualSerie) {
+            chartView.removeSeries(logResidualSerie)
+            logResidualSerie = null
+        }
+
+        var xAxisToUse = chartView.currentXAxis()
+        var experiments = []
+        if (isMultiExperimentMode) {
+            experiments = Globals.BackendWrapper.plottingIndividualExperimentDataList
+        } else {
+            const expIndex = Globals.BackendWrapper.analysisExperimentsCurrentIndex
+            experiments = [{
+                index: expIndex,
+                name: `Exp ${expIndex + 1}`,
+                hasData: true
+            }]
+        }
+
+        for (let expPos = 0; expPos < experiments.length; expPos++) {
+            const expData = experiments[expPos]
+            if (!expData.hasData) continue
+
+            const channels = visibleChannelsForExperiment(expData.index)
+            for (let channelIndex = 0; channelIndex < channels.length; channelIndex++) {
+                const channel = channels[channelIndex]
+                const labelPrefix = expData.name || `Exp ${expData.index + 1}`
+                const serie = chartView.createSeries(ChartView.SeriesTypeLine,
+                                                      `${labelPrefix} - ${channel.label || channel.key}`,
+                                                      xAxisToUse, axisY)
+                serie.color = channel.color || '#1f77b4'
+                serie.width = 1
+                serie.style = isMultiExperimentMode ? experimentLineStyle(expData.index) : Qt.SolidLine
+                serie.useOpenGL = EaGlobals.Vars.useOpenGL
+                serie.hovered.connect((point, state) => showMainTooltip(chartView, dataToolTip, point, state))
+
+                const points = Globals.BackendWrapper.plottingGetPolarizationResidualDataPoints(expData.index, channel.key)
+                for (let pointIndex = 0; pointIndex < points.length; pointIndex++) {
+                    serie.append(points[pointIndex].x, points[pointIndex].y)
+                }
+
+                residualSeries.push(serie)
+            }
         }
     }
 
@@ -500,6 +422,41 @@ Rectangle {
             if (residualSeries[i]) chartView.removeSeries(residualSeries[i])
         }
         residualSeries = []
+    }
+
+    function visibleChannelsForExperiment(expIndex) {
+        const selectedKeys = Globals.BackendWrapper.polarizationVisibleChannelKeys || []
+        const channels = Globals.BackendWrapper.polarizationGetExperimentChannels(expIndex) || []
+        const visibleChannels = []
+        for (let i = 0; i < channels.length; i++) {
+            const channel = channels[i]
+            if (!channel || channel.enabled === false) continue
+            if (selectedKeys.indexOf(channel.key) === -1) continue
+            visibleChannels.push(channel)
+        }
+        return visibleChannels
+    }
+
+    function visiblePolarizationChannels() {
+        const selectedKeys = Globals.BackendWrapper.polarizationVisibleChannelKeys || []
+        const channels = Globals.BackendWrapper.polarizationChannels || []
+        const visibleChannels = []
+        for (let i = 0; i < channels.length; i++) {
+            const channel = channels[i]
+            if (!channel || channel.enabled === false) continue
+            if (selectedKeys.indexOf(channel.key) === -1) continue
+            visibleChannels.push(channel)
+        }
+        return visibleChannels
+    }
+
+    function experimentLineStyle(expIndex) {
+        switch (expIndex % 4) {
+        case 1: return Qt.DashLine
+        case 2: return Qt.DotLine
+        case 3: return Qt.DashDotLine
+        default: return Qt.SolidLine
+        }
     }
 
     function showMainTooltip(chart, tooltip, point, state) {

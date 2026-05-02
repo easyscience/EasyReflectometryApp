@@ -21,12 +21,18 @@ Item {
     // Called by CombinedView to reset both lower tabs together
     function resetAllAxes() {
         sldChart.chartView.resetAxes()
+        if (spinAsymmetryLoader.item) {
+            spinAsymmetryLoader.item.chartView.resetAxes()
+        }
         residualsView.chartView.resetAxes()
     }
 
     // Called by CombinedView to sync pan/zoom mode from the top toolbar
     function setAllowZoom(value) {
         sldChart.chartView.allowZoom = value
+        if (spinAsymmetryLoader.item) {
+            spinAsymmetryLoader.item.setAllowZoom(value)
+        }
         residualsView.chartView.allowZoom = value
     }
 
@@ -47,6 +53,13 @@ Item {
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
             }
             TabButton {
+                visible: Globals.BackendWrapper.polarizationAvailable
+                width: visible ? implicitWidth : 0
+                text: qsTr("Spin asymmetry")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                implicitHeight: EaStyle.Sizes.toolButtonHeight
+            }
+            TabButton {
                 text: qsTr("Residuals")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
@@ -56,12 +69,26 @@ Item {
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: tabBar.currentIndex
+            currentIndex: Globals.BackendWrapper.polarizationAvailable ?
+                          tabBar.currentIndex :
+                          (tabBar.currentIndex === 0 ? 0 : 2)
 
             Gui.SldChart {
                 id: sldChart
                 showLegend: Globals.Variables.showLegendOnAnalysisPage
                 onShowLegendChanged: Globals.Variables.showLegendOnAnalysisPage = showLegend
+            }
+
+            Loader {
+                id: spinAsymmetryLoader
+                active: Globals.BackendWrapper.polarizationAvailable
+                source: "SpinAsymmetryView.qml"
+
+                onActiveChanged: {
+                    if (!active && tabBar.currentIndex === 1) {
+                        tabBar.currentIndex = 0
+                    }
+                }
             }
 
             ResidualsView {

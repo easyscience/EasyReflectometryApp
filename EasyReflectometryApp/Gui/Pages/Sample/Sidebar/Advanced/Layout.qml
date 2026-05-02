@@ -5,10 +5,15 @@ import QtQuick.Controls 2.14
 //import EasyApplication.Gui.Style 1.0 as EaStyle
 import EasyApplication.Gui.Components 1.0 as EaComponents
 
+import Gui.Components as GuiComponents
 import Gui.Globals as Globals
 import "./Groups" as Groups
 
 EaComponents.SideBarColumn {
+    GuiComponents.PolarizationChannelSelector {}
+
+    GuiComponents.SldComponentSelector {}
+
     Groups.QRange{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }

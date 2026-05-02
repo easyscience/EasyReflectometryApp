@@ -13,6 +13,7 @@ import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Charts as EaCharts
 
 import Gui as Gui
+import Gui.Components as GuiComponents
 import Gui.Globals as Globals
 import "../../../Logic/MeasuredScatter.js" as MeasuredScatter
 
@@ -72,6 +73,7 @@ Rectangle {
                         return false
                     }
                 }
+                property bool isPolarizationMode: Globals.BackendWrapper.polarizationAvailable
 
                 // Watch for changes in multi-experiment mode property
                 onIsMultiExperimentModeChanged: {
@@ -84,6 +86,21 @@ Rectangle {
                     enabled: target !== null
                     function onMultiExperimentSelectionChanged() {
                         analysisChartView.updateMultiExperimentSeries()
+                    }
+                }
+
+                Connections {
+                    target: Globals.BackendWrapper
+                    function onPolarizationDisplayChanged() {
+                        analysisChartView.updateMultiExperimentSeries()
+                        combinedAnalysisResetAxesTimer.start()
+                    }
+                    function onPolarizationDataChanged() {
+                        if (analysisChartView.isPolarizationMode) {
+                            analysisChartView.refreshDynamicSeriesData()
+                        } else {
+                            Globals.BackendWrapper.plottingRefreshAnalysis()
+                        }
                     }
                 }
 
@@ -173,7 +190,7 @@ Rectangle {
                     // Clear existing multi-experiment series
                     clearMultiExperimentSeries()
 
-                    if (!isMultiExp) {
+                    if (!analysisChartView.isPolarizationMode && !isMultiExp) {
                         // Show default scatter series for single experiment
                         measured.visible = false
                         if (!measuredScatterSerie) {
@@ -188,6 +205,46 @@ Rectangle {
                         Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)
                         Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'calculatedSerie', calculated)
                         Globals.BackendWrapper.plottingRefreshAnalysis()
+                        return
+                    }
+
+                    if (analysisChartView.isPolarizationMode) {
+                        if (logModeSeries) {
+                            analysisChartView.removeSeries(logModeSeries.measuredSerie)
+                            analysisChartView.removeSeries(logModeSeries.calculatedSerie)
+                            logModeSeries = null
+                        }
+
+                        measured.visible = false
+                        if (measuredScatterSerie) measuredScatterSerie.visible = false
+                        calculated.visible = false
+
+                        var polarizationExperiments = []
+                        if (isMultiExp) {
+                            polarizationExperiments = Globals.BackendWrapper.plottingIndividualExperimentDataList
+                        } else {
+                            var currentExperimentIndex = Globals.BackendWrapper.analysisExperimentsCurrentIndex
+                            polarizationExperiments = [{
+                                index: currentExperimentIndex,
+                                name: `Exp ${currentExperimentIndex + 1}`,
+                                color: currentExperimentColor,
+                                hasData: true
+                            }]
+                        }
+
+                        for (var p = 0; p < polarizationExperiments.length; p++) {
+                            var polarizationExperiment = polarizationExperiments[p]
+                            if (!polarizationExperiment.hasData) continue
+
+                            var channels = visibleChannelsForExperiment(polarizationExperiment.index)
+                            for (var c = 0; c < channels.length; c++) {
+                                createExperimentSeries(polarizationExperiment.index,
+                                                       polarizationExperiment.name,
+                                                       polarizationExperiment.color,
+                                                       channels[c],
+                                                       c)
+                            }
+                        }
                         return
                     }
 
@@ -240,29 +297,84 @@ Rectangle {
                     multiExperimentSeries = []
                 }
 
-                function createExperimentSeries(expIndex, expName, color) {
+                function visibleChannelsForExperiment(expIndex) {
+                    if (!analysisChartView.isPolarizationMode) {
+                        return [{
+                            key: 'default',
+                            label: '',
+                            color: '#1f77b4',
+                            enabled: true,
+                            hasMeasured: true,
+                            hasCalculated: true
+                        }]
+                    }
+
+                    var selectedKeys = Globals.BackendWrapper.polarizationVisibleChannelKeys || []
+                    var channels = Globals.BackendWrapper.polarizationGetExperimentChannels(expIndex) || []
+                    var visibleChannels = []
+                    for (var i = 0; i < channels.length; i++) {
+                        var channel = channels[i]
+                        if (!channel || channel.enabled === false) continue
+                        if (selectedKeys.indexOf(channel.key) === -1) continue
+                        visibleChannels.push(channel)
+                    }
+                    return visibleChannels
+                }
+
+                function visiblePolarizationChannels() {
+                    if (!analysisChartView.isPolarizationMode) return []
+
+                    var selectedKeys = Globals.BackendWrapper.polarizationVisibleChannelKeys || []
+                    var channels = Globals.BackendWrapper.polarizationChannels || []
+                    var visibleChannels = []
+                    for (var i = 0; i < channels.length; i++) {
+                        var channel = channels[i]
+                        if (!channel || channel.enabled === false) continue
+                        if (selectedKeys.indexOf(channel.key) === -1) continue
+                        visibleChannels.push(channel)
+                    }
+                    return visibleChannels
+                }
+
+                function createExperimentSeries(expIndex, expName, color, channel, channelIndex) {
                     var xAxis = currentXAxis()
+                    var usePolarizationChannel = analysisChartView.isPolarizationMode && channel && channel.key !== 'default'
+                    var seriesColor = usePolarizationChannel ? (channel.color || color) : color
+                    var labelPrefix = expName || `Exp ${expIndex + 1}`
+                    var channelSuffix = usePolarizationChannel ? ` - ${channel.label || channel.key}` : ''
 
                     // Look up the model color for this experiment
                     var modelColors = Globals.BackendWrapper.modelColorsForExperiment
                     var modelColor = (modelColors && expIndex >= 0 && expIndex < modelColors.length)
                                      ? modelColors[expIndex]
                                      : color
+                    if (usePolarizationChannel) {
+                        modelColor = seriesColor
+                    }
 
                     // Create measured data series (scatter points)
-                    var measuredSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
-                                                               `${expName} - Measured`,
+                    var measuredSerie = null
+                    if (!channel || channel.hasMeasured !== false) {
+                        measuredSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
+                                                               `${labelPrefix}${channelSuffix} - Measured`,
                                                                xAxis, analysisChartView.axisY,
-                                                               color, Globals.Variables.experimentMarkerStyle)
+                                                               seriesColor, Globals.Variables.experimentMarkerStyle)
+                    }
 
                     // Create calculated data series using the model's own color
-                    var calculatedSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine,
-                                                            `${expName} - Calculated`,
-                                                            xAxis, analysisChartView.axisY)
-                    calculatedSerie.color = modelColor
-                    calculatedSerie.width = 2
-                    calculatedSerie.capStyle = Qt.RoundCap
-                    calculatedSerie.useOpenGL = analysisChartView.useOpenGL
+                    var calculatedSerie = null
+                    if (!channel || channel.hasCalculated !== false) {
+                        calculatedSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine,
+                                                                `${labelPrefix}${channelSuffix} - Calculated`,
+                                                                xAxis, analysisChartView.axisY)
+                        calculatedSerie.color = modelColor
+                        calculatedSerie.width = 2
+                        calculatedSerie.style = analysisChartView.isPolarizationMode && analysisChartView.isMultiExperimentMode
+                                                 ? experimentLineStyle(expIndex)
+                                                 : Qt.SolidLine
+                        calculatedSerie.capStyle = Qt.RoundCap
+                        calculatedSerie.useOpenGL = analysisChartView.useOpenGL
+                    }
 
                     // Store references
                     var seriesSet = {
@@ -270,7 +382,10 @@ Rectangle {
                         calculatedSerie: calculatedSerie,
                         expIndex: expIndex,
                         expName: expName,
-                        color: color
+                        color: seriesColor,
+                        channelKey: channel ? channel.key : 'default',
+                        channelLabel: channel ? channel.label : '',
+                        channelIndex: channelIndex || 0
                     }
                     multiExperimentSeries.push(seriesSet)
 
@@ -280,17 +395,47 @@ Rectangle {
 
                 function populateExperimentSeries(seriesSet) {
                     // Get data points from backend (includes both measured and calculated)
-                    var dataPoints = Globals.BackendWrapper.plottingGetAnalysisDataPoints(seriesSet.expIndex)
+                    var dataPoints = analysisChartView.isPolarizationMode
+                                     ? Globals.BackendWrapper.plottingGetAnalysisChannelDataPoints(seriesSet.expIndex, seriesSet.channelKey)
+                                     : Globals.BackendWrapper.plottingGetAnalysisDataPoints(seriesSet.expIndex)
 
                     // Clear existing points
-                    seriesSet.measuredSerie.clear()
-                    seriesSet.calculatedSerie.clear()
+                    if (seriesSet.measuredSerie) seriesSet.measuredSerie.clear()
+                    if (seriesSet.calculatedSerie) seriesSet.calculatedSerie.clear()
 
                     // Add data points
                     for (var i = 0; i < dataPoints.length; i++) {
                         var point = dataPoints[i]
-                        seriesSet.measuredSerie.append(point.x, point.measured)
-                        seriesSet.calculatedSerie.append(point.x, point.calculated)
+                        var measuredY = staggeredY(point.measured, seriesSet.channelIndex)
+                        var calculatedY = staggeredY(point.calculated, seriesSet.channelIndex)
+                        if (seriesSet.measuredSerie && isFinite(measuredY)) {
+                            seriesSet.measuredSerie.append(point.x, measuredY)
+                        }
+                        if (seriesSet.calculatedSerie && isFinite(calculatedY)) {
+                            seriesSet.calculatedSerie.append(point.x, calculatedY)
+                        }
+                    }
+                }
+
+                function refreshDynamicSeriesData() {
+                    for (var i = 0; i < multiExperimentSeries.length; i++) {
+                        populateExperimentSeries(multiExperimentSeries[i])
+                    }
+                }
+
+                function staggeredY(value, channelIndex) {
+                    if (value === undefined || value === null || isNaN(value)) return NaN
+                    if (!analysisChartView.isPolarizationMode) return value
+                    if (!Globals.BackendWrapper.polarizationStaggerEnabled) return value
+                    return value + channelIndex * Globals.BackendWrapper.polarizationStaggerFactor
+                }
+
+                function experimentLineStyle(expIndex) {
+                    switch (expIndex % 4) {
+                    case 1: return Qt.DashLine
+                    case 2: return Qt.DotLine
+                    case 3: return Qt.DashDotLine
+                    default: return Qt.SolidLine
                     }
                 }
                 
@@ -342,7 +487,7 @@ Rectangle {
                         logModeSeries = null
                     }
 
-                    if (isMultiExperimentMode) {
+                    if (isMultiExperimentMode || analysisChartView.isPolarizationMode) {
                         updateMultiExperimentSeries()
                     } else if (useLogQAxis) {
                         measured.visible = false
@@ -422,81 +567,12 @@ Rectangle {
                     return "#ff0000"
                 }
 
-                // Tool buttons
-                Row {
-                    id: analysisToolButtons
-
-                    x: analysisChartView.plotArea.x + analysisChartView.plotArea.width - width
-                    y: analysisChartView.plotArea.y - height - EaStyle.Sizes.fontPixelSize
-
-                    spacing: 0.25 * EaStyle.Sizes.fontPixelSize
-
-                    EaElements.TabButton {
-                        checked: Globals.Variables.showLegendOnAnalysisPage
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "align-left"
-                        ToolTip.text: Globals.Variables.showLegendOnAnalysisPage ?
-                                          qsTr("Hide legend") :
-                                          qsTr("Show legend")
-                        onClicked: Globals.Variables.showLegendOnAnalysisPage = checked
-                    }
-
-                    EaElements.TabButton {
-                        checked: analysisChartView.allowHover
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "comment-alt"
-                        ToolTip.text: qsTr("Show coordinates tooltip on hover")
-                        onClicked: analysisChartView.allowHover = !analysisChartView.allowHover
-                    }
-
-                    Item { height: 1; width: 0.5 * EaStyle.Sizes.fontPixelSize }  // spacer
-
-                    EaElements.TabButton {
-                        checked: !analysisChartView.allowZoom
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "arrows-alt"
-                        ToolTip.text: qsTr("Enable pan")
-                        onClicked: {
-                            analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            lowerPanel.setAllowZoom(analysisChartView.allowZoom)
-                        }
-                    }
-
-                    EaElements.TabButton {
-                        checked: analysisChartView.allowZoom
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "expand"
-                        ToolTip.text: qsTr("Enable box zoom")
-                        onClicked: {
-                            analysisChartView.allowZoom = !analysisChartView.allowZoom
-                            lowerPanel.setAllowZoom(analysisChartView.allowZoom)
-                        }
-                    }
-
-                    EaElements.TabButton {
-                        checkable: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "home"
-                        ToolTip.text: qsTr("Reset axes")
-                        onClicked: {
-                            analysisChartView.resetAxes()
-                            lowerPanel.resetAllAxes()
-                        }
-                    }
+                GuiComponents.ChartToolbar {
+                    chartView: analysisChartView
+                    showLegend: Globals.Variables.showLegendOnAnalysisPage
+                    onShowLegendChanged: Globals.Variables.showLegendOnAnalysisPage = showLegend
+                    onInteractionModeChanged: lowerPanel.setAllowZoom(allowZoom)
+                    onResetClicked: lowerPanel.resetAllAxes()
                 }
 
                 // Legend
@@ -520,19 +596,69 @@ Rectangle {
 
                         // Single experiment legend
                         EaElements.Label {
-                            visible: !analysisChartView.isMultiExperimentMode
+                            visible: !analysisChartView.isMultiExperimentMode && !analysisChartView.isPolarizationMode
                             text: Globals.Variables.lineStyleSymbol(analysisChartView.measSerie.style) + '  I (Measured)'
                             color: analysisChartView.measSerie.color
                         }
                         EaElements.Label {
-                            visible: !analysisChartView.isMultiExperimentMode
+                            visible: !analysisChartView.isMultiExperimentMode && !analysisChartView.isPolarizationMode
                             text: Globals.Variables.lineStyleSymbol(analysisChartView.calcSerie.style) + ' (Calculated)'
                             color: analysisChartView.calcSerie.color
                         }
 
+                        Column {
+                            visible: analysisChartView.isPolarizationMode
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.2
+
+                            EaElements.Label {
+                                text: qsTr("Polarization channels:")
+                                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                                font.bold: true
+                                color: EaStyle.Colors.themeForeground
+                            }
+
+                            Repeater {
+                                model: analysisChartView.visiblePolarizationChannels()
+                                delegate: Row {
+                                    spacing: EaStyle.Sizes.fontPixelSize * 0.3
+
+                                    Rectangle {
+                                        width: EaStyle.Sizes.fontPixelSize * 0.8
+                                        height: 3
+                                        color: modelData.color || '#1f77b4'
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+
+                                    EaElements.Label {
+                                        text: `${modelData.label || modelData.key} (${modelData.description || ''})`
+                                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.8
+                                        color: EaStyle.Colors.themeForeground
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: parent.width - 2 * EaStyle.Sizes.fontPixelSize
+                                height: 1
+                                color: EaStyle.Colors.chartGridLine
+                            }
+
+                            EaElements.Label {
+                                text: '\u22c5 \u22c5 \u22c5 ' + qsTr("Measured")
+                                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
+                                color: EaStyle.Colors.themeForegroundMinor
+                            }
+                            EaElements.Label {
+                                text: '\u2501 ' + qsTr("Calculated")
+                                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
+                                color: EaStyle.Colors.themeForegroundMinor
+                            }
+                        }
+
                         // Multi-experiment legend
                         Column {
-                            visible: analysisChartView.isMultiExperimentMode
+                            visible: analysisChartView.isMultiExperimentMode && !analysisChartView.isPolarizationMode
                             spacing: EaStyle.Sizes.fontPixelSize * 0.2
 
                             EaElements.Label {

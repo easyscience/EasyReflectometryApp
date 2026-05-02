@@ -519,6 +519,7 @@ QtObject {
 
     Component.onCompleted: {
         connectSamplePageDataChanged()
+        connectPolarizationSignals()
     }
 
     // Multi-experiment plotting support
@@ -560,6 +561,161 @@ QtObject {
         } catch (e) {
             console.warn("plottingGetResidualDataPoints failed:", e)
             return []
+        }
+    }
+
+    ///////////////
+    // Polarization display hooks
+    ///////////////
+    readonly property bool polarizationAvailable: {
+        try {
+            return activeBackend.polarization.available || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var polarizationChannels: {
+        try {
+            return activeBackend.polarization.channels || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property var polarizationVisibleChannelKeys: {
+        try {
+            return activeBackend.polarization.visibleChannelKeys || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property bool polarizationStaggerEnabled: {
+        try {
+            return activeBackend.polarization.staggerEnabled || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property real polarizationStaggerFactor: {
+        try {
+            return activeBackend.polarization.staggerFactor || 0.5
+        } catch (e) {
+            return 0.5
+        }
+    }
+    readonly property var polarizationSldComponents: {
+        try {
+            return activeBackend.polarization.sldComponents || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property var polarizationVisibleSldComponentKeys: {
+        try {
+            return activeBackend.polarization.visibleSldComponentKeys || []
+        } catch (e) {
+            return []
+        }
+    }
+
+    signal polarizationDisplayChanged()
+    signal polarizationDataChanged()
+
+    function polarizationSetChannelVisible(channelKey, visible) {
+        try {
+            activeBackend.polarization.setChannelVisible(channelKey, visible)
+        } catch (e) {
+            console.warn("polarizationSetChannelVisible failed:", e)
+        }
+    }
+    function polarizationSetVisibleChannelKeys(channelKeys) {
+        try {
+            activeBackend.polarization.setVisibleChannelKeys(channelKeys)
+        } catch (e) {
+            console.warn("polarizationSetVisibleChannelKeys failed:", e)
+        }
+    }
+    function polarizationSetStaggerEnabled(value) {
+        try {
+            activeBackend.polarization.setStaggerEnabled(value)
+        } catch (e) {
+            console.warn("polarizationSetStaggerEnabled failed:", e)
+        }
+    }
+    function polarizationSetStaggerFactor(value) {
+        try {
+            activeBackend.polarization.setStaggerFactor(value)
+        } catch (e) {
+            console.warn("polarizationSetStaggerFactor failed:", e)
+        }
+    }
+    function polarizationSetSldComponentVisible(componentKey, visible) {
+        try {
+            activeBackend.polarization.setSldComponentVisible(componentKey, visible)
+        } catch (e) {
+            console.warn("polarizationSetSldComponentVisible failed:", e)
+        }
+    }
+    function polarizationSetVisibleSldComponentKeys(componentKeys) {
+        try {
+            activeBackend.polarization.setVisibleSldComponentKeys(componentKeys)
+        } catch (e) {
+            console.warn("polarizationSetVisibleSldComponentKeys failed:", e)
+        }
+    }
+    function polarizationGetExperimentChannels(experimentIndex) {
+        try {
+            return activeBackend.polarization.getExperimentChannels(experimentIndex)
+        } catch (e) {
+            console.warn("polarizationGetExperimentChannels failed:", e)
+            return []
+        }
+    }
+    function plottingGetAnalysisChannelDataPoints(experimentIndex, channelKey) {
+        try {
+            return activeBackend.polarization.getAnalysisChannelDataPoints(experimentIndex, channelKey)
+        } catch (e) {
+            console.warn("plottingGetAnalysisChannelDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetSampleChannelDataPoints(modelIndex, channelKey) {
+        try {
+            return activeBackend.polarization.getSampleChannelDataPoints(modelIndex, channelKey)
+        } catch (e) {
+            console.warn("plottingGetSampleChannelDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetSldComponentDataPoints(modelIndex, componentKey) {
+        try {
+            return activeBackend.polarization.getSldComponentDataPoints(modelIndex, componentKey)
+        } catch (e) {
+            console.warn("plottingGetSldComponentDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetSpinAsymmetryDataPoints(experimentIndex) {
+        try {
+            return activeBackend.polarization.getSpinAsymmetryDataPoints(experimentIndex)
+        } catch (e) {
+            console.warn("plottingGetSpinAsymmetryDataPoints failed:", e)
+            return ({ 'x': [], 'measured': [], 'sigma': [], 'calculated': [] })
+        }
+    }
+    function plottingGetPolarizationResidualDataPoints(experimentIndex, channelKey) {
+        try {
+            return activeBackend.polarization.getPolarizationResidualDataPoints(experimentIndex, channelKey)
+        } catch (e) {
+            console.warn("plottingGetPolarizationResidualDataPoints failed:", e)
+            return []
+        }
+    }
+
+    function connectPolarizationSignals() {
+        try {
+            activeBackend.polarization.displayChanged.connect(polarizationDisplayChanged)
+            activeBackend.polarization.dataChanged.connect(polarizationDataChanged)
+        } catch (e) {
         }
     }
 }

@@ -10,6 +10,7 @@ import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 
+import Gui.Components as GuiComponents
 import Gui.Globals as Globals
 
 
@@ -29,6 +30,7 @@ Rectangle {
 
     // Track model count changes to refresh charts
     property int modelCount: Globals.BackendWrapper.sampleModels.length
+    property bool componentAware: Globals.BackendWrapper.polarizationAvailable
 
     // Store dynamically created series
     property var sldSeries: []
@@ -93,73 +95,10 @@ Rectangle {
             axisY.max = axisY.maxAfterReset
         }
 
-        // Tool buttons
-        Row {
-            id: toolButtons
-            z: 1
-
-            x: chartView.plotArea.x + chartView.plotArea.width - width
-            y: chartView.plotArea.y - height - EaStyle.Sizes.fontPixelSize
-
-            spacing: 0.25 * EaStyle.Sizes.fontPixelSize
-
-            EaElements.TabButton {
-                checked: root.showLegend
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "align-left"
-                ToolTip.text: root.showLegend ?
-                                  qsTr("Hide legend") :
-                                  qsTr("Show legend")
-                onClicked: root.showLegend = checked
-            }
-
-            EaElements.TabButton {
-                checked: chartView.allowHover
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "comment-alt"
-                ToolTip.text: qsTr("Show coordinates tooltip on hover")
-                onClicked: chartView.allowHover = checked
-            }
-
-            Item { height: 1; width: 0.5 * EaStyle.Sizes.fontPixelSize }  // spacer
-
-            EaElements.TabButton {
-                checked: !chartView.allowZoom
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "arrows-alt"
-                ToolTip.text: qsTr("Enable pan")
-                onClicked: chartView.allowZoom = !checked
-            }
-
-            EaElements.TabButton {
-                checked: chartView.allowZoom
-                autoExclusive: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "expand"
-                ToolTip.text: qsTr("Enable box zoom")
-                onClicked: chartView.allowZoom = checked
-            }
-
-            EaElements.TabButton {
-                checkable: false
-                height: EaStyle.Sizes.toolButtonHeight
-                width: EaStyle.Sizes.toolButtonHeight
-                borderColor: EaStyle.Colors.chartAxis
-                fontIcon: "home"
-                ToolTip.text: qsTr("Reset axes")
-                onClicked: chartView.resetAxes()
-            }
+        GuiComponents.ChartToolbar {
+            chartView: chartView
+            showLegend: root.showLegend
+            onShowLegendChanged: root.showLegend = showLegend
         }
 
         // Legend showing all models
@@ -181,7 +120,15 @@ Rectangle {
                 bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
 
                 Repeater {
-                    model: root.modelCount
+                    model: root.componentAware ? root.visibleSldComponents() : []
+                    EaElements.Label {
+                        text: `━  ${modelData.label || modelData.key} (${modelData.symbol || ''})`
+                        color: modelData.color || EaStyle.Colors.themeAccent
+                    }
+                }
+
+                Repeater {
+                    model: root.componentAware ? [] : root.modelCount
                     EaElements.Label {
                         text: '━  SLD ' + Globals.BackendWrapper.sampleModels[index].label
                         color: Globals.BackendWrapper.sampleModels[index].color
@@ -196,115 +143,17 @@ Rectangle {
             textFormat: Text.RichText
         }
 
-        // Zoom rectangle
-        Rectangle {
-            id: recZoom
-
-            property int xScaleZoom: 0
-            property int yScaleZoom: 0
-
-            visible: false
-            transform: Scale {
-                origin.x: 0
-                origin.y: 0
-                xScale: recZoom.xScaleZoom
-                yScale: recZoom.yScaleZoom
-            }
-            border.color: EaStyle.Colors.appBorder
-            border.width: 1
-            opacity: 0.9
-            color: "transparent"
-
-            Rectangle {
-                anchors.fill: parent
-                opacity: 0.5
-                color: recZoom.border.color
-            }
-        }
-
-        // Zoom with left mouse button
-        MouseArea {
-            id: zoomMouseArea
-
-            enabled: chartView.allowZoom
-            anchors.fill: chartView
-            acceptedButtons: Qt.LeftButton
-            onPressed: {
-                recZoom.x = mouseX
-                recZoom.y = mouseY
-                recZoom.visible = true
-            }
-            onMouseXChanged: {
-                if (mouseX > recZoom.x) {
-                    recZoom.xScaleZoom = 1
-                    recZoom.width = Math.min(mouseX, chartView.width) - recZoom.x
-                } else {
-                    recZoom.xScaleZoom = -1
-                    recZoom.width = recZoom.x - Math.max(mouseX, 0)
-                }
-            }
-            onMouseYChanged: {
-                if (mouseY > recZoom.y) {
-                    recZoom.yScaleZoom = 1
-                    recZoom.height = Math.min(mouseY, chartView.height) - recZoom.y
-                } else {
-                    recZoom.yScaleZoom = -1
-                    recZoom.height = recZoom.y - Math.max(mouseY, 0)
-                }
-            }
-            onReleased: {
-                const x = Math.min(recZoom.x, mouseX) - chartView.anchors.leftMargin
-                const y = Math.min(recZoom.y, mouseY) - chartView.anchors.topMargin
-                const width = recZoom.width
-                const height = recZoom.height
-                chartView.zoomIn(Qt.rect(x, y, width, height))
-                recZoom.visible = false
-            }
-        }
-
-        // Pan with left mouse button
-        MouseArea {
-            property real pressedX
-            property real pressedY
-            property int threshold: 1
-
-            enabled: !zoomMouseArea.enabled
-            anchors.fill: chartView
-            acceptedButtons: Qt.LeftButton
-            onPressed: {
-                pressedX = mouseX
-                pressedY = mouseY
-            }
-            onMouseXChanged: Qt.callLater(update)
-            onMouseYChanged: Qt.callLater(update)
-
-            function update() {
-                const dx = mouseX - pressedX
-                const dy = mouseY - pressedY
-                pressedX = mouseX
-                pressedY = mouseY
-
-                if (dx > threshold)
-                    chartView.scrollLeft(dx)
-                else if (dx < -threshold)
-                    chartView.scrollRight(-dx)
-                if (dy > threshold)
-                    chartView.scrollUp(dy)
-                else if (dy < -threshold)
-                    chartView.scrollDown(-dy)
-            }
-        }
-
-        // Reset axes with right mouse button
-        MouseArea {
-            anchors.fill: chartView
-            acceptedButtons: Qt.RightButton
-            onClicked: chartView.resetAxes()
+        GuiComponents.ChartMouseControls {
+            chartView: chartView
         }
     }
 
     // Create series dynamically when model count changes
     onModelCountChanged: {
+        Qt.callLater(recreateAllSeries)
+    }
+
+    onComponentAwareChanged: {
         Qt.callLater(recreateAllSeries)
     }
 
@@ -324,6 +173,12 @@ Rectangle {
         function onChartAxesResetRequested() {
             resetAxesTimer.start()
         }
+        function onPolarizationDisplayChanged() {
+            Qt.callLater(recreateAllSeries)
+        }
+        function onPolarizationDataChanged() {
+            refreshAllCharts()
+        }
     }
 
     Timer {
@@ -340,11 +195,36 @@ Rectangle {
     function recreateAllSeries() {
         // Remove old series
         for (let i = 0; i < sldSeries.length; i++) {
-            if (sldSeries[i]) {
-                chartView.removeSeries(sldSeries[i])
+            if (sldSeries[i] && sldSeries[i].serie) {
+                chartView.removeSeries(sldSeries[i].serie)
             }
         }
         sldSeries = []
+
+        if (componentAware) {
+            const models = Globals.BackendWrapper.sampleModels
+            const components = visibleSldComponents()
+            for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+                for (let componentIndex = 0; componentIndex < components.length; componentIndex++) {
+                    const component = components[componentIndex]
+                    const label = models.length > 1 ? `${models[modelIndex].label} - ${component.label}` : component.label
+                    const line = chartView.createSeries(ChartView.SeriesTypeLine, label, axisX, axisY)
+                    line.color = component.color || models[modelIndex].color
+                    line.width = 2
+                    line.style = models.length > 1 ? experimentLineStyle(modelIndex) : Qt.SolidLine
+                    line.useOpenGL = EaGlobals.Vars.useOpenGL
+                    line.hovered.connect((point, state) => showMainTooltip(point, state))
+                    sldSeries.push({
+                        serie: line,
+                        modelIndex: modelIndex,
+                        componentKey: component.key
+                    })
+                }
+            }
+
+            refreshAllCharts()
+            return
+        }
 
         // Create new series for each model
         const models = Globals.BackendWrapper.sampleModels
@@ -354,19 +234,21 @@ Rectangle {
             line.width = 2
             line.useOpenGL = EaGlobals.Vars.useOpenGL
             line.hovered.connect((point, state) => showMainTooltip(point, state))
-            sldSeries.push(line)
+            sldSeries.push({ serie: line, modelIndex: k, componentKey: null })
         }
 
         refreshAllCharts()
     }
 
     function refreshAllCharts() {
-        const models = Globals.BackendWrapper.sampleModels
-        for (let i = 0; i < sldSeries.length && i < models.length; i++) {
-            const series = sldSeries[i]
+        for (let i = 0; i < sldSeries.length; i++) {
+            const seriesSet = sldSeries[i]
+            const series = seriesSet ? seriesSet.serie : null
             if (series) {
                 series.clear()
-                const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(i)
+                const points = componentAware && seriesSet.componentKey
+                               ? Globals.BackendWrapper.plottingGetSldComponentDataPoints(seriesSet.modelIndex, seriesSet.componentKey)
+                               : Globals.BackendWrapper.plottingGetSldDataPointsForModel(seriesSet.modelIndex)
                 for (let p = 0; p < points.length; p++) {
                     series.append(points[p].x, points[p].y)
                 }
@@ -384,5 +266,27 @@ Rectangle {
         dataToolTip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
         dataToolTip.parent = chartView
         dataToolTip.visible = state
+    }
+
+    function visibleSldComponents() {
+        const selectedKeys = Globals.BackendWrapper.polarizationVisibleSldComponentKeys || []
+        const components = Globals.BackendWrapper.polarizationSldComponents || []
+        const visibleComponents = []
+        for (let i = 0; i < components.length; i++) {
+            const component = components[i]
+            if (!component || component.enabled === false || component.available === false) continue
+            if (selectedKeys.indexOf(component.key) === -1) continue
+            visibleComponents.push(component)
+        }
+        return visibleComponents
+    }
+
+    function experimentLineStyle(index) {
+        switch (index % 4) {
+        case 1: return Qt.DashLine
+        case 2: return Qt.DotLine
+        case 3: return Qt.DashDotLine
+        default: return Qt.SolidLine
+        }
     }
 }

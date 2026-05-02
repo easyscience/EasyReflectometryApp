@@ -1,0 +1,7 @@
+module Gui.Components
+
+PolarizationChannelSelector PolarizationChannelSelector.qml
+SldComponentSelector SldComponentSelector.qml
+ChartToolbar ChartToolbar.qml
+ChartMouseControls ChartMouseControls.qml
+

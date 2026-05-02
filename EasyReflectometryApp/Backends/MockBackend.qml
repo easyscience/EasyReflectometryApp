@@ -14,6 +14,7 @@ QtObject {
     property var sample: Backend.Sample
     property var status: Backend.Status
     property var plotting: Backend.Plotting
+    property var polarization: Backend.Polarization
     property var helpers: Backend.Helpers
 }
 

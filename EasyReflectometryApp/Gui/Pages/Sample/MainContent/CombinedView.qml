@@ -13,6 +13,7 @@ import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Charts as EaCharts
 
 import Gui as Gui
+import Gui.Components as GuiComponents
 import Gui.Globals as Globals
 
 
@@ -23,6 +24,7 @@ Rectangle {
 
     // Track model count changes to refresh charts
     property int modelCount: Globals.BackendWrapper.sampleModels.length
+    property bool isPolarizationMode: Globals.BackendWrapper.polarizationAvailable
 
     // Store dynamically created series
     property var sampleSeries: []
@@ -134,85 +136,15 @@ Rectangle {
                     Qt.callLater(resetAxes)
                 }
 
-                // Tool buttons
-                Row {
-                    id: sampleToolButtons
-                    z: 1  // Keep buttons above MouseAreas
-
-                    x: sampleChartView.plotArea.x + sampleChartView.plotArea.width - width
-                    y: sampleChartView.plotArea.y - height - EaStyle.Sizes.fontPixelSize
-
-                    spacing: 0.25 * EaStyle.Sizes.fontPixelSize
-
-                    EaElements.TabButton {
-                        checked: Globals.Variables.showLegendOnSamplePage
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "align-left"
-                        ToolTip.text: Globals.Variables.showLegendOnSamplePage ?
-                                          qsTr("Hide legend") :
-                                          qsTr("Show legend")
-                        onClicked: Globals.Variables.showLegendOnSamplePage = checked
-                    }
-
-                    EaElements.TabButton {
-                        checked: sampleChartView.allowHover
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "comment-alt"
-                        ToolTip.text: qsTr("Show coordinates tooltip on hover")
-                        onClicked: sampleChartView.allowHover = checked
-                    }
-
-                    Item { height: 1; width: 0.5 * EaStyle.Sizes.fontPixelSize }  // spacer
-
-                    EaElements.TabButton {
-                        checked: !sampleChartView.allowZoom
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "arrows-alt"
-                        ToolTip.text: qsTr("Enable pan")
-                        onClicked: {
-                            sampleChartView.allowZoom = !checked
-                            sldChart.chartView.allowZoom = !checked
-                        }
-                    }
-
-                    EaElements.TabButton {
-                        checked: sampleChartView.allowZoom
-                        autoExclusive: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "expand"
-                        ToolTip.text: qsTr("Enable box zoom")
-                        onClicked: {
-                            sampleChartView.allowZoom = checked
-                            sldChart.chartView.allowZoom = checked
-                        }
-                    }
-
-                    EaElements.TabButton {
-                        checkable: false
-                        height: EaStyle.Sizes.toolButtonHeight
-                        width: EaStyle.Sizes.toolButtonHeight
-                        borderColor: EaStyle.Colors.chartAxis
-                        fontIcon: "home"
-                        ToolTip.text: qsTr("Reset axes")
-                        onClicked: {
-                            sampleChartView.resetAxes()
-                            sldChart.chartView.resetAxes()
-                        }
-                    }
+                GuiComponents.ChartToolbar {
+                    chartView: sampleChartView
+                    showLegend: Globals.Variables.showLegendOnSamplePage
+                    onShowLegendChanged: Globals.Variables.showLegendOnSamplePage = showLegend
+                    onInteractionModeChanged: sldChart.chartView.allowZoom = allowZoom
+                    onResetClicked: sldChart.chartView.resetAxes()
                 }
 
-                // Legend showing all models
+                // Legend showing all models or channels
                 Rectangle {
                     visible: Globals.Variables.showLegendOnSamplePage
 
@@ -231,7 +163,15 @@ Rectangle {
                         bottomPadding: EaStyle.Sizes.fontPixelSize * 0.5
 
                         Repeater {
-                            model: container.modelCount
+                            model: container.isPolarizationMode ? container.visiblePolarizationChannels() : []
+                            EaElements.Label {
+                                text: `━  ${modelData.label || modelData.key} (${modelData.description || ''})`
+                                color: modelData.color || EaStyle.Colors.themeAccent
+                            }
+                        }
+
+                        Repeater {
+                            model: container.isPolarizationMode ? [] : container.modelCount
                             EaElements.Label {
                                 text: '━  ' + Globals.BackendWrapper.sampleModels[index].label
                                 color: Globals.BackendWrapper.sampleModels[index].color
@@ -247,110 +187,8 @@ Rectangle {
                     textFormat: Text.RichText
                 }
 
-                // Zoom rectangle
-                Rectangle {
-                    id: sampleRecZoom
-
-                    property int xScaleZoom: 0
-                    property int yScaleZoom: 0
-
-                    visible: false
-                    transform: Scale {
-                        origin.x: 0
-                        origin.y: 0
-                        xScale: sampleRecZoom.xScaleZoom
-                        yScale: sampleRecZoom.yScaleZoom
-                    }
-                    border.color: EaStyle.Colors.appBorder
-                    border.width: 1
-                    opacity: 0.9
-                    color: "transparent"
-
-                    Rectangle {
-                        anchors.fill: parent
-                        opacity: 0.5
-                        color: sampleRecZoom.border.color
-                    }
-                }
-
-                // Zoom with left mouse button
-                MouseArea {
-                    id: sampleZoomMouseArea
-
-                    enabled: sampleChartView.allowZoom
-                    anchors.fill: sampleChartView
-                    acceptedButtons: Qt.LeftButton
-                    onPressed: {
-                        sampleRecZoom.x = mouseX
-                        sampleRecZoom.y = mouseY
-                        sampleRecZoom.visible = true
-                    }
-                    onMouseXChanged: {
-                        if (mouseX > sampleRecZoom.x) {
-                            sampleRecZoom.xScaleZoom = 1
-                            sampleRecZoom.width = Math.min(mouseX, sampleChartView.width) - sampleRecZoom.x
-                        } else {
-                            sampleRecZoom.xScaleZoom = -1
-                            sampleRecZoom.width = sampleRecZoom.x - Math.max(mouseX, 0)
-                        }
-                    }
-                    onMouseYChanged: {
-                        if (mouseY > sampleRecZoom.y) {
-                            sampleRecZoom.yScaleZoom = 1
-                            sampleRecZoom.height = Math.min(mouseY, sampleChartView.height) - sampleRecZoom.y
-                        } else {
-                            sampleRecZoom.yScaleZoom = -1
-                            sampleRecZoom.height = sampleRecZoom.y - Math.max(mouseY, 0)
-                        }
-                    }
-                    onReleased: {
-                        const x = Math.min(sampleRecZoom.x, mouseX) - sampleChartView.anchors.leftMargin
-                        const y = Math.min(sampleRecZoom.y, mouseY) - sampleChartView.anchors.topMargin
-                        const width = sampleRecZoom.width
-                        const height = sampleRecZoom.height
-                        sampleChartView.zoomIn(Qt.rect(x, y, width, height))
-                        sampleRecZoom.visible = false
-                    }
-                }
-
-                // Pan with left mouse button
-                MouseArea {
-                    property real pressedX
-                    property real pressedY
-                    property int threshold: 1
-
-                    enabled: !sampleZoomMouseArea.enabled
-                    anchors.fill: sampleChartView
-                    acceptedButtons: Qt.LeftButton
-                    onPressed: {
-                        pressedX = mouseX
-                        pressedY = mouseY
-                    }
-                    onMouseXChanged: Qt.callLater(update)
-                    onMouseYChanged: Qt.callLater(update)
-
-                    function update() {
-                        const dx = mouseX - pressedX
-                        const dy = mouseY - pressedY
-                        pressedX = mouseX
-                        pressedY = mouseY
-
-                        if (dx > threshold)
-                            sampleChartView.scrollLeft(dx)
-                        else if (dx < -threshold)
-                            sampleChartView.scrollRight(-dx)
-                        if (dy > threshold)
-                            sampleChartView.scrollUp(dy)
-                        else if (dy < -threshold)
-                            sampleChartView.scrollDown(-dy)
-                    }
-                }
-
-                // Reset axes with right mouse button
-                MouseArea {
-                    anchors.fill: sampleChartView
-                    acceptedButtons: Qt.RightButton
-                    onClicked: sampleChartView.resetAxes()
+                GuiComponents.ChartMouseControls {
+                    chartView: sampleChartView
                 }
 
                 Component.onCompleted: {
@@ -382,6 +220,10 @@ Rectangle {
         Qt.callLater(recreateAllSeries)
     }
 
+    onIsPolarizationModeChanged: {
+        Qt.callLater(recreateAllSeries)
+    }
+
     // Refresh all chart series when model data changes
     Connections {
         target: Globals.BackendWrapper
@@ -400,6 +242,13 @@ Rectangle {
         function onChartAxesResetRequested() {
             // Reset axes when model is loaded (e.g., from ORSO file)
             sampleCombinedResetAxesTimer.start()
+        }
+        function onPolarizationDisplayChanged() {
+            Qt.callLater(recreateAllSeries)
+            sampleCombinedResetAxesTimer.start()
+        }
+        function onPolarizationDataChanged() {
+            refreshAllCharts()
         }
     }
 
@@ -428,8 +277,8 @@ Rectangle {
     function recreateAllSeries() {
         // Remove old sample series
         for (let i = 0; i < sampleSeries.length; i++) {
-            if (sampleSeries[i]) {
-                sampleChartView.removeSeries(sampleSeries[i])
+            if (sampleSeries[i] && sampleSeries[i].serie) {
+                sampleChartView.removeSeries(sampleSeries[i].serie)
             }
         }
         sampleSeries = []
@@ -439,6 +288,30 @@ Rectangle {
 
         // Create new series for each model
         const models = Globals.BackendWrapper.sampleModels
+        if (container.isPolarizationMode) {
+            const channels = visiblePolarizationChannels()
+            for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+                for (let channelIndex = 0; channelIndex < channels.length; channelIndex++) {
+                    const channel = channels[channelIndex]
+                    const label = models.length > 1 ? `${models[modelIndex].label} - ${channel.label || channel.key}` : (channel.label || channel.key)
+                    const sampleLine = sampleChartView.createSeries(ChartView.SeriesTypeLine, label, sampleXAxisToUse, sampleAxisY)
+                    sampleLine.color = channel.color || models[modelIndex].color
+                    sampleLine.width = 2
+                    sampleLine.style = models.length > 1 ? modelLineStyle(modelIndex) : Qt.SolidLine
+                    sampleLine.useOpenGL = EaGlobals.Vars.useOpenGL
+                    sampleLine.hovered.connect((point, state) => showMainTooltip(sampleChartView, sampleDataToolTip, point, state))
+                    sampleSeries.push({
+                        serie: sampleLine,
+                        modelIndex: modelIndex,
+                        channelKey: channel.key
+                    })
+                }
+            }
+
+            refreshAllCharts()
+            return
+        }
+
         for (let k = 0; k < models.length; k++) {
             // Create sample series
             const sampleLine = sampleChartView.createSeries(ChartView.SeriesTypeLine, models[k].label, sampleXAxisToUse, sampleAxisY)
@@ -447,7 +320,7 @@ Rectangle {
             sampleLine.useOpenGL = EaGlobals.Vars.useOpenGL
             // Connect hovered signal for tooltip
             sampleLine.hovered.connect((point, state) => showMainTooltip(sampleChartView, sampleDataToolTip, point, state))
-            sampleSeries.push(sampleLine)
+            sampleSeries.push({ serie: sampleLine, modelIndex: k, channelKey: null })
         }
 
         // Populate data
@@ -456,14 +329,15 @@ Rectangle {
 
     // Refresh data in all series
     function refreshAllCharts() {
-        const models = Globals.BackendWrapper.sampleModels
-
         // Refresh sample series
-        for (let i = 0; i < sampleSeries.length && i < models.length; i++) {
-            const series = sampleSeries[i]
+        for (let i = 0; i < sampleSeries.length; i++) {
+            const seriesSet = sampleSeries[i]
+            const series = seriesSet ? seriesSet.serie : null
             if (series) {
                 series.clear()
-                const points = Globals.BackendWrapper.plottingGetSampleDataPointsForModel(i)
+                const points = container.isPolarizationMode && seriesSet.channelKey
+                               ? Globals.BackendWrapper.plottingGetSampleChannelDataPoints(seriesSet.modelIndex, seriesSet.channelKey)
+                               : Globals.BackendWrapper.plottingGetSampleDataPointsForModel(seriesSet.modelIndex)
                 for (let p = 0; p < points.length; p++) {
                     series.append(points[p].x, points[p].y)
                 }
@@ -482,5 +356,27 @@ Rectangle {
         tooltip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
         tooltip.parent = chart
         tooltip.visible = state
+    }
+
+    function visiblePolarizationChannels() {
+        const selectedKeys = Globals.BackendWrapper.polarizationVisibleChannelKeys || []
+        const channels = Globals.BackendWrapper.polarizationChannels || []
+        const visibleChannels = []
+        for (let i = 0; i < channels.length; i++) {
+            const channel = channels[i]
+            if (!channel || channel.enabled === false || channel.hasCalculated === false) continue
+            if (selectedKeys.indexOf(channel.key) === -1) continue
+            visibleChannels.push(channel)
+        }
+        return visibleChannels
+    }
+
+    function modelLineStyle(index) {
+        switch (index % 4) {
+        case 1: return Qt.DashLine
+        case 2: return Qt.DotLine
+        case 3: return Qt.DashDotLine
+        default: return Qt.SolidLine
+        }
     }
 }
