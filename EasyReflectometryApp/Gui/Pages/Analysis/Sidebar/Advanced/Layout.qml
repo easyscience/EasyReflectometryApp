@@ -8,9 +8,15 @@ import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
 
 import "./Groups" as Groups
+import Gui.Components as GuiComponents
+import Gui.Globals as Globals
 
 
 EaComponents.SideBarColumn {
+
+    GuiComponents.PolarizationChannelSelector {}
+
+    GuiComponents.SldComponentSelector {}
 
 //    Groups.ParamNames {}
 

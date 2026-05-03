@@ -33,13 +33,17 @@ EASYAPP_IMPORT_DIR = Path(EasyApplication.__path__[0]).parent
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--testmode', action='store_true', help='run the application in test mode')
+    parser.add_argument('-m', '--mock', action='store_true', help='use mock backend to preview polarization UI')
     args = parser.parse_args()
 
     qInstallMessageHandler(console.qmlMessageHandler)
     console.debug('Custom Qt message handler defined')
 
-    qmlRegisterSingletonType(PyBackend, 'Backends', 1, 0, 'PyBackend')
-    console.debug('Backend class is registered to be accessible from QML via the name PyBackend')
+    if not args.mock:
+        qmlRegisterSingletonType(PyBackend, 'Backends', 1, 0, 'PyBackend')
+        console.debug('Backend class is registered to be accessible from QML via the name PyBackend')
+    else:
+        console.debug('Mock backend mode: PyBackend not registered, mock backend will be used')
 
     app = Application(sys.argv)  # Create the QApplication (Not QGuiApplication)
     console.debug(f'Qt Application created {app}')

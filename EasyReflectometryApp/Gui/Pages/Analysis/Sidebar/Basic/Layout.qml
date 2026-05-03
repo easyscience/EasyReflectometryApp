@@ -9,8 +9,6 @@ import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
 
 import "./Groups" as Groups
-import Gui.Components as GuiComponents
-import Gui.Globals as Globals
 
 
 EaComponents.SideBarColumn {
@@ -18,19 +16,6 @@ EaComponents.SideBarColumn {
     Groups.Experiments{
         enabled: true
     }
-
-    GuiComponents.PolarizationChannelSelector {}
-
-    GuiComponents.SldComponentSelector {}
-//        enabled: Globals.BackendWrapper.analysisIsFitFinished
-//    }
-
-//    EaElements.GroupBox {
-//        collapsible: false
-//        last: true
-
-//        Loader { source: 'Experiments.qml' }
-//    }
 
     Groups.Fittables{}
 }
