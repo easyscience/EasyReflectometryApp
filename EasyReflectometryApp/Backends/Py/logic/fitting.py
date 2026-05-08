@@ -10,6 +10,8 @@ from easyscience.fitting import FitResults
 from easyscience.fitting.minimizers.utils import FitError
 
 if TYPE_CHECKING:
+    import scipp as sc
+
     from .minimizers import Minimizers
 
 
@@ -270,6 +272,97 @@ class Fitting:
             self._show_results_dialog = True
             logger.exception('Error preparing threaded fit')
             return None, None, None, None, None
+
+    # ------------------------------------------------------------------
+    # Bayesian sampling helpers
+    # ------------------------------------------------------------------
+
+    def collect_selected_experiments_datagroup(self) -> 'sc.DataGroup':
+        """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.sample()``.
+
+        :return: DataGroup with reflectivity coords and data.
+        :rtype: sc.DataGroup
+        """
+        import scipp as sc
+
+        experiments = self._ordered_experiments()
+        coords = {}
+        data = {}
+        for i, experiment in enumerate(experiments):
+            import numpy as np
+
+            x_vals = np.asarray(experiment.x, dtype=float)
+            xe_vals = np.asarray(experiment.xe, dtype=float)
+            y_vals = np.asarray(experiment.y, dtype=float)
+            ye_vals = np.asarray(experiment.ye, dtype=float)  # variances (σ²)
+
+            coords[f'Qz_{i}'] = sc.array(
+                dims=[f'Qz_{i}'], values=x_vals, variances=xe_vals, unit=sc.Unit('1/angstrom'),
+            )
+            data[f'R_{i}'] = sc.array(
+                dims=[f'Qz_{i}'], values=y_vals, variances=ye_vals,
+            )
+        return sc.DataGroup(data=data, coords=coords, attrs={})
+
+    def prepare_threaded_sample(self, minimizers_logic: 'Minimizers') -> tuple:
+        """Prepare high-level MultiFitter + DataGroup for Bayesian sampling.
+
+        :param minimizers_logic: The minimizers logic instance.
+        :return: Tuple of (multi_fitter, data_group) or (None, None) on error.
+        """
+        try:
+            from easyreflectometry.fitting import MultiFitter
+
+            experiments = self._ordered_experiments()
+            if not experiments:
+                self._fit_error_message = 'No experiments to sample'
+                self._running = False
+                self._finished = True
+                self._show_results_dialog = True
+                return None, None
+
+            models = [experiment.model for experiment in experiments]
+            multi_fitter = MultiFitter(*models)
+
+            # Ensure underlying engine is BUMPS for the sample() call
+            selected = minimizers_logic.selected_minimizer_enum()
+            if selected is not None:
+                multi_fitter.easy_science_multi_fitter.switch_minimizer(selected)
+
+            data_group = self.collect_selected_experiments_datagroup()
+            return multi_fitter, data_group
+        except Exception as e:
+            self._fit_error_message = f'Error preparing sampling: {e}'
+            self._running = False
+            self._finished = True
+            self._show_results_dialog = True
+            logger.exception('Error preparing threaded sample')
+            return None, None
+
+    def prepare_for_threaded_sample(self) -> None:
+        """Set running flags and sampling progress message before launching the worker."""
+        self._running = True
+        self._finished = False
+        self._show_results_dialog = False
+        self._fit_error_message = None
+        self._result = None
+        self._results = []
+        self.clear_fit_progress()
+        self._fit_running_message = 'Sampling… (this may take several minutes)'
+
+    def on_sample_finished(self) -> None:
+        """Handle successful Bayesian sampling completion without FitResults.
+
+        Clears classical fit result state (which is not applicable to sampling)
+        while preserving the shared running / dialog lifecycle.
+        """
+        self._running = False
+        self._finished = True
+        self._show_results_dialog = True
+        self._fit_error_message = None
+        self._result = None
+        self._results = []
+        self.clear_fit_progress()
 
     def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
         """Handle successful completion of fitting.

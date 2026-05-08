@@ -17,6 +17,7 @@ class FakeAvailableMinimizers:
     LMFit = FakeEnumValue('LMFit')
     Bumps = FakeEnumValue('Bumps')
     DFO = FakeEnumValue('DFO')
+    Bumps_simplex = FakeEnumValue('Bumps_simplex')
     DREAM = FakeEnumValue('DREAM')
     SciPy = FakeEnumValue('SciPy')
 
@@ -30,8 +31,11 @@ def test_minimizers_filters_out_blocked_entries(monkeypatch):
 
     logic = minimizers_module.Minimizers(project)
 
-    assert logic.minimizers_available() == ['DREAM', 'SciPy']
-    assert logic.selected_minimizer_enum().name == 'DREAM'
+    # Bayesian sentinel is prepended at index 0
+    assert logic.minimizers_available() == ['BUMPS-DREAM (Bayesian)', 'DREAM', 'SciPy']
+    # Index 0 is Bayesian sentinel: selected_minimizer_enum() falls back to Bumps_simplex
+    assert logic.selected_minimizer_enum().name == 'Bumps_simplex'
+    assert logic.is_bayesian_selected() is True
 
 
 def test_minimizers_set_index_updates_project_and_runtime_properties(monkeypatch):
@@ -41,9 +45,10 @@ def test_minimizers_set_index_updates_project_and_runtime_properties(monkeypatch
 
     logic = minimizers_module.Minimizers(project)
 
-    assert logic.set_minimizer_current_index(1) is True
+    # Index 0 = Bayesian sentinel, index 1 = DREAM, index 2 = SciPy
+    assert logic.set_minimizer_current_index(2) is True
     assert project.minimizer.name == 'SciPy'
-    assert logic.set_minimizer_current_index(1) is False
+    assert logic.set_minimizer_current_index(2) is False
 
     assert logic.tolerance == 1e-6
     assert logic.max_iterations == 5000

@@ -299,6 +299,23 @@ QtObject {
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
     function analysisStopFit() { activeBackend.analysis.stopFit() }
 
+    // Bayesian sampling
+    readonly property bool analysisIsBayesianSelected: activeBackend.analysis.isBayesianSelected
+
+    readonly property int bayesianSamples: activeBackend.analysis.bayesianSamples
+    readonly property int bayesianBurnIn: activeBackend.analysis.bayesianBurnIn
+    readonly property int bayesianPopulation: activeBackend.analysis.bayesianPopulation
+    readonly property int bayesianThinning: activeBackend.analysis.bayesianThinning
+
+    function bayesianSetSamples(v)    { activeBackend.analysis.setBayesianSamples(v) }
+    function bayesianSetBurnIn(v)     { activeBackend.analysis.setBayesianBurnIn(v) }
+    function bayesianSetPopulation(v) { activeBackend.analysis.setBayesianPopulation(v) }
+    function bayesianSetThinning(v)   { activeBackend.analysis.setBayesianThinning(v) }
+
+    readonly property var bayesianPosterior: activeBackend.analysis.bayesianPosterior
+    readonly property bool bayesianResultAvailable: activeBackend.analysis.bayesianResultAvailable
+    readonly property var bayesianMarginals: activeBackend.analysis.bayesianMarginals
+
     // Fit failure signal - forwarded from backend
     signal analysisFitFailed(string message)
 
@@ -396,6 +413,12 @@ QtObject {
     // Reference line visibility
     readonly property bool plottingScaleShown: activeBackend.plotting.scaleShown
     readonly property bool plottingBkgShown: activeBackend.plotting.bkgShown
+
+    // Posterior predictive (Bayesian) overlay data
+    readonly property var posteriorPredictiveQ: activeBackend.plotting.posteriorPredictiveQ
+    readonly property var posteriorPredictiveMedian: activeBackend.plotting.posteriorPredictiveMedian
+    readonly property var posteriorPredictiveLower: activeBackend.plotting.posteriorPredictiveLower
+    readonly property var posteriorPredictiveUpper: activeBackend.plotting.posteriorPredictiveUpper
 
     // Plot mode toggle functions
     function plottingTogglePlotRQ4() { activeBackend.plotting.togglePlotRQ4() }

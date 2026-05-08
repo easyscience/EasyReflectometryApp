@@ -27,6 +27,9 @@ class Plotting1d(QObject):
     sldAxisReversedChanged = Signal()
     referenceLineVisibilityChanged = Signal()
 
+    # Posterior predictive signal
+    posteriorPredictiveDataChanged = Signal()
+
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
         self._project_lib = project_lib
@@ -43,6 +46,12 @@ class Plotting1d(QObject):
         self._scale_shown = False
         self._bkg_shown = False
         self._residual_range_cache = None
+
+        # Posterior predictive state
+        self._posterior_q: list = []
+        self._posterior_median: list = []
+        self._posterior_lower: list = []
+        self._posterior_upper: list = []
         self._chartRefs = {
             'QtCharts': {
                 'samplePage': {
@@ -907,3 +916,62 @@ class Plotting1d(QObject):
             series_calculated.append(q, np.log10(r_calc))
             nr_points = nr_points + 1
         console.debug(IO.formatMsg('sub', 'Calculated curve', f'{nr_points} points', 'on analysis page', 'replaced'))
+
+    # ------------------------------------------------------------------
+    # Posterior predictive (Bayesian)
+    # ------------------------------------------------------------------
+
+    @Property('QVariantList', notify=posteriorPredictiveDataChanged)
+    def posteriorPredictiveQ(self) -> list:
+        return self._posterior_q
+
+    @Property('QVariantList', notify=posteriorPredictiveDataChanged)
+    def posteriorPredictiveMedian(self) -> list:
+        return self._posterior_median
+
+    @Property('QVariantList', notify=posteriorPredictiveDataChanged)
+    def posteriorPredictiveLower(self) -> list:
+        return self._posterior_lower
+
+    @Property('QVariantList', notify=posteriorPredictiveDataChanged)
+    def posteriorPredictiveUpper(self) -> list:
+        return self._posterior_upper
+
+    def set_posterior_predictive(self, q, median, lower, upper) -> None:
+        """Publish posterior predictive reflectivity curves to QML.
+
+        Applies the same chart-space transforms (R(q)×q⁴, log10) used by
+        the existing analysis series, so the posterior overlay stays in sync
+        with plot-mode toggles.
+        """
+        import numpy as np
+
+        q = np.asarray(q, dtype=float)
+        median = np.asarray(median, dtype=float)
+        lower = np.asarray(lower, dtype=float)
+        upper = np.asarray(upper, dtype=float)
+
+        # Apply R(q)×q⁴ transform if enabled
+        median = self._apply_rq4(q, median)
+        lower = self._apply_rq4(q, lower)
+        upper = self._apply_rq4(q, upper)
+
+        # Clip non-positive values before log10
+        eps = 1e-30
+        median_log = np.where(median > 0, np.log10(median), np.log10(eps))
+        lower_log = np.where(lower > 0, np.log10(lower), np.log10(eps))
+        upper_log = np.where(upper > 0, np.log10(upper), np.log10(eps))
+
+        self._posterior_q = q.tolist()
+        self._posterior_median = median_log.tolist()
+        self._posterior_lower = lower_log.tolist()
+        self._posterior_upper = upper_log.tolist()
+        self.posteriorPredictiveDataChanged.emit()
+
+    def clear_posterior_predictive(self) -> None:
+        """Clear the posterior predictive data."""
+        self._posterior_q = []
+        self._posterior_median = []
+        self._posterior_lower = []
+        self._posterior_upper = []
+        self.posteriorPredictiveDataChanged.emit()

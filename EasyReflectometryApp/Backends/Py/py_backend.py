@@ -41,6 +41,7 @@ class PyBackend(QObject):
 
         # Wire cross-cutting references before connecting signals
         self._status._status_logic.set_minimizers_logic(self._analysis._minimizers_logic)
+        self._analysis.set_plotting(self._plotting_1d)
 
         # Must be last to ensure all backend parts are created
         self._connect_backend_parts()

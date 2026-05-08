@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
+from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiments import Experiments as ExperimentLogic
 from .logic.fitting import Fitting as FittingLogic
@@ -41,6 +42,8 @@ class Analysis(QObject):
         self._calculators_logic = CalculatorsLogic(project_lib)
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
+        self._bayesian_logic = BayesianLogic()
+        self._plotting = None  # Set by PyBackend after construction
         self._chached_parameters = None
         self._chached_enabled_parameters = None
         # Thread management for background fitting
@@ -59,6 +62,13 @@ class Analysis(QObject):
             self._selected_experiment_indices = [0]
         else:
             self._selected_experiment_indices = []
+
+    def set_plotting(self, plotting) -> None:
+        """Store a reference to the Plotting1d instance for posterior predictive publishing.
+
+        Called by PyBackend after construction.
+        """
+        self._plotting = plotting
 
     def _ordered_experiments(self) -> list:
         """Return experiments as an ordered list of experiment objects.
@@ -155,6 +165,93 @@ class Analysis(QObject):
             'chi2': self._fitting_logic.fit_chi2,
         }
 
+    # ------------------------------------------------------------------
+    # Bayesian sampling properties
+    # ------------------------------------------------------------------
+
+    @Property(bool, notify=minimizerChanged)
+    def isBayesianSelected(self) -> bool:
+        return self._minimizers_logic.is_bayesian_selected()
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianSamples(self) -> int:
+        return self._bayesian_logic.samples
+
+    @Slot(int)
+    def setBayesianSamples(self, value: int) -> None:
+        self._bayesian_logic.samples = value
+        self.minimizerChanged.emit()
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianBurnIn(self) -> int:
+        return self._bayesian_logic.burn
+
+    @Slot(int)
+    def setBayesianBurnIn(self, value: int) -> None:
+        self._bayesian_logic.burn = value
+        self.minimizerChanged.emit()
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianPopulation(self) -> int:
+        return self._bayesian_logic.population
+
+    @Slot(int)
+    def setBayesianPopulation(self, value: int) -> None:
+        self._bayesian_logic.population = value
+        self.minimizerChanged.emit()
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianThinning(self) -> int:
+        return self._bayesian_logic.thin
+
+    @Slot(int)
+    def setBayesianThinning(self, value: int) -> None:
+        self._bayesian_logic.thin = value
+        self.minimizerChanged.emit()
+
+    @Property(bool, notify=fittingChanged)
+    def bayesianResultAvailable(self) -> bool:
+        return self._bayesian_logic.has_result
+
+    @Property('QVariant', notify=fittingChanged)
+    def bayesianPosterior(self) -> dict | None:
+        p = self._bayesian_logic.posterior
+        if p is None:
+            return None
+        return {
+            'paramNames': p['param_names'],
+            'nDraws': int(p['draws'].shape[0]),
+        }
+
+    @Property('QVariant', notify=fittingChanged)
+    def bayesianMarginals(self) -> list:
+        if not self._bayesian_logic.has_result:
+            return []
+        import numpy as np
+
+        p = self._bayesian_logic.posterior
+        out = []
+        for k, name in enumerate(p['param_names']):
+            col = p['draws'][:, k]
+            counts, edges = np.histogram(col, bins=40, density=True)
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            out.append(
+                dict(
+                    name=name,
+                    mean=float(col.mean()),
+                    std=float(col.std()),
+                    ci_low=float(np.quantile(col, 0.025)),
+                    ci_high=float(np.quantile(col, 0.975)),
+                    binCenters=centers.tolist(),
+                    counts=counts.tolist(),
+                )
+            )
+        return out
+
+    # ------------------------------------------------------------------
+    # Fitting start / stop (classical + Bayesian dispatch)
+    # ------------------------------------------------------------------
+
     @Slot(None)
     def fittingStartStop(self) -> None:
         # If already running, stop the fit
@@ -170,7 +267,12 @@ class Analysis(QObject):
         self._start_threaded_fit()
 
     def _start_threaded_fit(self) -> None:
-        """Start fitting in a background thread."""
+        """Start fitting in a background thread, dispatching to sampling when Bayesian is selected."""
+        if self._minimizers_logic.is_bayesian_selected():
+            self._start_threaded_sample()
+            return
+
+        # Classical fitting path
         # Reset flags and prepare for fit using proper encapsulation
         self._fitting_logic.reset_stop_flag()
         self._fitting_logic.prepare_for_threaded_fit()
@@ -241,6 +343,81 @@ class Analysis(QObject):
             self._fitter_thread.stop()
         self.fittingChanged.emit()
         self.externalFittingChanged.emit()
+
+    # ------------------------------------------------------------------
+    # Bayesian sampling dispatch and result handling
+    # ------------------------------------------------------------------
+
+    def _start_threaded_sample(self) -> None:
+        """Start Bayesian MCMC sampling in a background thread."""
+        self._fitting_logic.prepare_for_threaded_sample()
+        self.fittingChanged.emit()
+
+        multi_fitter, data_group = self._fitting_logic.prepare_threaded_sample(self._minimizers_logic)
+
+        if multi_fitter is None:
+            self.fittingChanged.emit()
+            if self._fitting_logic.fit_error_message:
+                self.fitFailed.emit(self._fitting_logic.fit_error_message)
+            return
+
+        self._fitter_thread = FitterWorker(
+            fitter=multi_fitter,  # the high-level reflectometry MultiFitter
+            method_name='sample',
+            args=(data_group,),  # sc.DataGroup
+            kwargs={
+                'samples': self._bayesian_logic.samples,
+                'burn': self._bayesian_logic.burn,
+                'thin': self._bayesian_logic.thin,
+                'population': self._bayesian_logic.population,
+            },
+            parent=self,
+        )
+        self._fitter_thread.setTerminationEnabled(True)
+        self._fitter_thread.finished.connect(self._on_sample_finished)
+        self._fitter_thread.failed.connect(self._on_fit_failed)
+        self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.start()
+
+    @Slot(list)
+    def _on_sample_finished(self, results: list) -> None:
+        """Handle successful completion of Bayesian sampling."""
+        posterior = results[0]  # {'draws', 'param_names', 'state', 'logp'}
+        self._bayesian_logic._posterior = posterior
+        self._fitting_logic.on_sample_finished()
+        self._fitter_thread = None
+        self._compute_and_publish_posterior_predictive()
+        self.fittingChanged.emit()
+        self.externalFittingChanged.emit()
+
+    def _compute_and_publish_posterior_predictive(self) -> None:
+        """Compute posterior predictive reflectivity and publish to plotting."""
+        if self._plotting is None:
+            return
+        from easyreflectometry.analysis.bayesian import posterior_predictive_reflectivity
+
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            return
+
+        experiments = self._ordered_experiments()
+        if not experiments:
+            return
+
+        # Use the first selected experiment for the overlay
+        experiment = experiments[0]
+        q = experiment.x
+        model = experiment.model
+
+        median, lo, hi = posterior_predictive_reflectivity(
+            posterior['draws'],
+            posterior['param_names'],
+            model=model,
+            q_values=q,
+            n_samples=200,
+        )
+        self._plotting.set_posterior_predictive(q, median, lo, hi)
 
     def prefitCheck(self) -> bool:
         """

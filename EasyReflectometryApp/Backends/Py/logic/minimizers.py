@@ -1,6 +1,8 @@
 from easyreflectometry import Project as ProjectLib
 from easyscience import AvailableMinimizers
 
+BAYESIAN_LABEL = 'BUMPS-DREAM (Bayesian)'
+
 
 class Minimizers:
     def __init__(self, project_lib: ProjectLib):
@@ -19,24 +21,37 @@ class Minimizers:
             self._list_available_minimizers.remove(AvailableMinimizers.DFO)
         except ValueError:
             pass
+        # Prepend Bayesian sentinel (None) as first entry
+        self._list_available_minimizers = [None] + self._list_available_minimizers
 
     def minimizers_available(self) -> list[str]:
-        return [minimizer.name for minimizer in self._list_available_minimizers]
+        return [BAYESIAN_LABEL if m is None else m.name for m in self._list_available_minimizers]
 
     def minimizer_current_index(self) -> int:
         return self._minimizer_current_index
 
+    def is_bayesian_selected(self) -> bool:
+        return self._list_available_minimizers[self._minimizer_current_index] is None
+
     def selected_minimizer_enum(self):
-        """Return the AvailableMinimizers enum for the currently selected minimizer."""
-        if 0 <= self._minimizer_current_index < len(self._list_available_minimizers):
-            return self._list_available_minimizers[self._minimizer_current_index]
-        return None
+        """Return the AvailableMinimizers enum for the currently selected minimizer.
+
+        Falls back to ``Bumps_simplex`` when the Bayesian sentinel (``None``)
+        is selected, so callers that do not check ``is_bayesian_selected()``
+        still receive a valid engine.
+        """
+        entry = self._list_available_minimizers[self._minimizer_current_index]
+        return entry if entry is not None else AvailableMinimizers.Bumps_simplex
 
     def set_minimizer_current_index(self, new_value: int) -> bool:
         if new_value != self._minimizer_current_index:
             self._minimizer_current_index = new_value
-            enum_new_minimizer = self._list_available_minimizers[new_value]
-            self._project_lib.minimizer = enum_new_minimizer
+            entry = self._list_available_minimizers[new_value]
+            if entry is None:
+                # Bayesian mode: ensure underlying engine is Bumps for sample()
+                self._project_lib.minimizer = AvailableMinimizers.Bumps_simplex
+            else:
+                self._project_lib.minimizer = entry
             return True
         return False
 

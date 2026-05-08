@@ -68,6 +68,10 @@ class StubAnalysis(QObject):
         self._selected = [0]
         self.received_indices = None
         self.clear_calls = 0
+        self._plotting_accepted = None
+
+    def set_plotting(self, plotting):
+        self._plotting_accepted = plotting
 
     @property
     def experimentsSelectedCount(self):

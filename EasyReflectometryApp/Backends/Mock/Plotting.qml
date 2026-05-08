@@ -37,6 +37,13 @@ QtObject {
     property bool scaleShown: false
     property bool bkgShown: false
 
+    // Posterior predictive (Bayesian) overlay data
+    readonly property var posteriorPredictiveQ: []
+    readonly property var posteriorPredictiveMedian: []
+    readonly property var posteriorPredictiveLower: []
+    readonly property var posteriorPredictiveUpper: []
+    signal posteriorPredictiveDataChanged()
+
     // Signals for plot mode changes
     signal plotModeChanged()
     signal axisTypeChanged()

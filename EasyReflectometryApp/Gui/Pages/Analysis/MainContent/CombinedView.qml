@@ -156,6 +156,59 @@ Rectangle {
                     }
                 }
 
+                // Posterior predictive overlay (Bayesian)
+                LineSeries {
+                    id: ppMedianSerie
+                    name: qsTr("Posterior median")
+                    axisX: analysisChartView.currentXAxis()
+                    axisY: analysisChartView.axisY
+                    color: "#E67E22"
+                    width: 2
+                    visible: Globals.BackendWrapper.bayesianResultAvailable
+                }
+
+                AreaSeries {
+                    id: ppBandSerie
+                    name: qsTr("95% credible interval")
+                    axisX: analysisChartView.currentXAxis()
+                    axisY: analysisChartView.axisY
+                    color: Qt.rgba(0.902, 0.494, 0.133, 0.25)  // orange with alpha
+                    borderWidth: 0
+                    upperSeries: LineSeries {
+                        id: ppUpperSerie
+                        axisX: analysisChartView.currentXAxis()
+                        axisY: analysisChartView.axisY
+                        visible: Globals.BackendWrapper.bayesianResultAvailable
+                    }
+                    lowerSeries: LineSeries {
+                        id: ppLowerSerie
+                        axisX: analysisChartView.currentXAxis()
+                        axisY: analysisChartView.axisY
+                        visible: Globals.BackendWrapper.bayesianResultAvailable
+                    }
+                    visible: Globals.BackendWrapper.bayesianResultAvailable
+                }
+
+                Connections {
+                    target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+                    enabled: target !== null
+                    function onPosteriorPredictiveDataChanged() {
+                        ppMedianSerie.clear()
+                        ppUpperSerie.clear()
+                        ppLowerSerie.clear()
+                        var q  = Globals.BackendWrapper.posteriorPredictiveQ
+                        var m  = Globals.BackendWrapper.posteriorPredictiveMedian
+                        var lo = Globals.BackendWrapper.posteriorPredictiveLower
+                        var hi = Globals.BackendWrapper.posteriorPredictiveUpper
+                        if (!q || !m || !lo || !hi) return
+                        for (var i = 0; i < q.length; ++i) {
+                            ppMedianSerie.append(q[i], m[i])
+                            ppLowerSerie.append(q[i], lo[i])
+                            ppUpperSerie.append(q[i], hi[i])
+                        }
+                    }
+                }
+
                 function updateReferenceLines() {
                     Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, true)
                 }
@@ -502,6 +555,7 @@ Rectangle {
                 // Legend
                 Rectangle {
                     visible: Globals.Variables.showLegendOnAnalysisPage
+                          || Globals.BackendWrapper.bayesianResultAvailable
 
                     x: analysisChartView.plotArea.x + analysisChartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
                     y: analysisChartView.plotArea.y + EaStyle.Sizes.fontPixelSize

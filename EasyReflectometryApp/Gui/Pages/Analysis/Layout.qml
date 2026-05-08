@@ -19,12 +19,20 @@ EaComponents.ContentPage {
 
     mainView: EaComponents.MainContent {
         tabs: [
-            EaElements.TabButton { text: qsTr('Reflectivity') }
+            EaElements.TabButton { text: qsTr('Reflectivity') },
+            EaElements.TabButton {
+                text: qsTr('Bayesian Posterior')
+                enabled: Globals.BackendWrapper.bayesianResultAvailable
+            }
        ]
 
         items: [
             Loader {
                 source: `MainContent/CombinedView.qml`
+                onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
+            },
+            Loader {
+                source: `MainContent/BayesianPosteriorView.qml`
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             }
         ]

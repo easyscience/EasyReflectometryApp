@@ -37,6 +37,9 @@ class StubMinimizersLogic:
     def selected_minimizer_enum(self):
         return None
 
+    def is_bayesian_selected(self):
+        return False
+
 
 class StubWorker(QObject):
     finished = Signal(list)

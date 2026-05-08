@@ -34,6 +34,16 @@ QtObject {
     readonly property var fitPreviewParameterValues: ({})
     readonly property var fitResults: ({ success: true, nvarys: 3, chi2: 1.2345 })
 
+    // Bayesian sampling
+    readonly property bool isBayesianSelected: false
+    readonly property int bayesianSamples: 10000
+    readonly property int bayesianBurnIn: 2000
+    readonly property int bayesianPopulation: 10
+    readonly property int bayesianThinning: 1
+    readonly property var bayesianPosterior: null
+    readonly property bool bayesianResultAvailable: false
+    readonly property var bayesianMarginals: []
+
     // Fit failure signal (mirrors Python backend)
     signal fitFailed(string message)
 
@@ -122,5 +132,17 @@ QtObject {
     function setShowFitResultsDialog(value) {
         showFitResultsDialog = value
         console.debug(`setShowFitResultsDialog ${value}`)
+    }
+    function setBayesianSamples(value) {
+        console.debug(`setBayesianSamples ${value}`)
+    }
+    function setBayesianBurnIn(value) {
+        console.debug(`setBayesianBurnIn ${value}`)
+    }
+    function setBayesianPopulation(value) {
+        console.debug(`setBayesianPopulation ${value}`)
+    }
+    function setBayesianThinning(value) {
+        console.debug(`setBayesianThinning ${value}`)
     }
 }
