@@ -826,3 +826,815 @@ minor deviations from the original plan:
 - Log-Q axis posterior overlay in `AnalysisView.qml` / `CombinedView.qml`
 - Full R-hat / ESS convergence diagnostics from `arviz`
 - SLD profile posterior overlay
+
+---
+
+## 11. Phase 2 — Bayesian Posterior Subtabs & Full Diagnostics
+
+### 11.0 Requirements Coverage
+
+This phase-2 plan explicitly covers every item from the original GUI request.
+
+| Original requirement | Covered by | Delivery mode |
+|---|---|---|
+| Pairwise correlations and marginal distributions | §11.3 `Marginals` + §11.4 `Corner Plot` | Subtabs inside the existing **Bayesian Posterior** tab |
+| MCMC chains for convergence | §11.5 `Traces` | Subtab inside the existing **Bayesian Posterior** tab |
+| 2D parameter heatmap | §11.6 `2D Heatmap` | Subtab inside the existing **Bayesian Posterior** tab |
+| Gelman-Rubin convergence diagnostic | §11.7 `Diagnostics` | Subtab inside the existing **Bayesian Posterior** tab |
+| Posterior-predictive reflectivity with credible intervals | §11.8.1 | Overlay on the main reflectivity chart, matching the notebook workflow |
+| Posterior-predictive SLD profile with credible intervals | §11.8.2 | Overlay on the main SLD chart, matching the notebook workflow |
+
+Interpretation of the requirement:
+
+- The **existing Bayesian Posterior tab** becomes a container for Bayesian-analysis subtabs.
+- The **posterior-predictive reflectivity** and **posterior-predictive SLD profile** are intentionally **not** separate Bayesian subtabs, because the requirement says those credible intervals should be overlaid on the main charts as in the notebook.
+- The notebook in [reflectometry-lib/docs/src/tutorials/advancedfitting/bayesian_bumps.ipynb](../reflectometry-lib/docs/src/tutorials/advancedfitting/bayesian_bumps.ipynb) is used as the behaviour reference for both the reflectivity and SLD overlays.
+
+### 11.1 Motivation
+
+Phase 1 delivered the minimum viable Bayesian GUI: sampling dispatch, marginal
+histograms, and a posterior-predictive reflectivity band overlay. However, the
+Bayesian Posterior tab currently only shows a flat grid of per-parameter
+histograms — the same information that classical fitting already provides via
+parameter error bars. A proper Bayesian workflow requires:
+
+- **Pairwise correlations & marginal distributions** — to see parameter
+  degeneracies (the hallmark of Bayesian analysis).
+- **MCMC trace plots** — to visually assess chain convergence.
+- **2D parameter heatmap** — to zoom into a specific parameter pair.
+- **Gelman-Rubin R-hat** — a quantitative convergence diagnostic.
+- **Posterior-predictive SLD profile** — credible bands on the SLD chart,
+  complementing the reflectivity overlay already in `CombinedView.qml`.
+
+### 11.2 Architecture Decision: Subtabs within Bayesian Posterior
+
+Currently `Layout.qml` defines two top-level tabs: **Reflectivity** and
+**Bayesian Posterior**. The Bayesian Posterior tab loads
+`BayesianPosteriorView.qml` as a single flat view.
+
+**Proposed change**: Transform `BayesianPosteriorView.qml` into a tab
+container with its own `TabBar` + `StackLayout` hosting these subtabs:
+
+| # | Subtab Label               | Content                                              |
+|---|----------------------------|------------------------------------------------------|
+| 1 | **Marginals**              | Existing per-parameter histogram grid (refactored)   |
+| 2 | **Corner Plot**            | Pairwise scatter matrix + 1D marginals on diagonal   |
+| 3 | **Traces**                 | MCMC chain trace plots (one per parameter)           |
+| 4 | **2D Heatmap**             | Joint posterior density for a user-selected pair     |
+| 5 | **Diagnostics**            | Summary table: R-hat, ESS, acceptance rate, etc.     |
+
+The subtab bar sits at the top of the Bayesian Posterior content area, above
+the `StackLayout` that hosts each sub-view. This keeps the navigation flat
+(one extra click from the main tab bar) and allows each sub-view to be
+developed independently.
+
+```
+┌─ Analysis Page ─────────────────────────────────────────────┐
+│ [Reflectivity]  [Bayesian Posterior]                         │
+│                                                              │
+│  ┌─ Bayesian Posterior Subtabs ────────────────────────────┐ │
+│  │ [Marginals] [Corner Plot] [Traces] [2D Heatmap] [Diag] │ │
+│  │                                                          │ │
+│  │  (active sub-view content)                               │ │
+│  │                                                          │ │
+│  └──────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 11.3 Subtab 1: Marginals (Refactor Existing)
+
+Move the current `Flow` + `Repeater` over `bayesianMarginals` from
+`BayesianPosteriorView.qml` into a dedicated `BayesianMarginalsView.qml`
+component. Enhance it:
+
+- Display 95% credible interval as vertical dashed lines on each histogram.
+- Use `EaStyle.Colors` for histogram bar colour (not hardcoded `#3498db`).
+- Show per-parameter summary text: `mean ± std [CI_low, CI_high]`.
+- Use a responsive `GridLayout` (columns = `min(3, n_params)`) instead of
+  `Flow` for a more structured grid.
+
+**Backend**: No changes — the existing `bayesianMarginals` property already
+provides `name`, `mean`, `std`, `ci_low`, `ci_high`, `binCenters`, `counts`.
+
+**Files**:
+- New: `BayesianMarginalsView.qml` (extracted from `BayesianPosteriorView.qml`)
+- Modified: `BayesianPosteriorView.qml` — becomes the tab container
+
+### 11.4 Subtab 2: Corner Plot (Pairwise Correlations)
+
+#### 11.4.1 Strategy: PNG Rendering
+
+Building a scatter-plot matrix in Qt Charts is feasible for ≤4 parameters but
+becomes expensive for 6+ parameters (n² subplots, each a `ChartView`). The
+standard scientific approach is to render a corner plot via the `corner`
+Python library and display it as a QML `Image`.
+
+**Approach**: Generate a PNG in the Python backend after sampling completes,
+expose the file path or a base64 data URL to QML.
+
+#### 11.4.2 Backend Changes
+
+**`analysis.py`** — new property and helper:
+
+```python
+import io
+import base64
+import tempfile
+from pathlib import Path
+
+@Property(str, notify=fittingChanged)
+def bayesianCornerPlotUrl(self) -> str:
+    """Return a data: URL for the corner plot PNG, or empty string."""
+    if not self._bayesian_logic.has_result:
+        return ''
+    return self._bayesian_logic.corner_plot_url or ''
+
+# Called from _on_sample_finished():
+def _render_corner_plot(self) -> None:
+    """Render corner plot to a temporary PNG and store its data URL."""
+    from easyreflectometry.analysis.bayesian import plot_corner
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    posterior = self._bayesian_logic.posterior
+    fig = plt.figure(figsize=(max(6, len(posterior['param_names']) * 1.8),
+                             max(6, len(posterior['param_names']) * 1.8)))
+    plot_corner(posterior['draws'], posterior['param_names'])
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    b64 = base64.b64encode(buf.read()).decode('ascii')
+    self._bayesian_logic.corner_plot_url = f'data:image/png;base64,{b64}'
+```
+
+Add a `corner_plot_url: str` attribute to `logic/bayesian.py` (`Bayesian`
+class), cleared in `clear()`.
+
+**Important**: The corner plot rendering should be done **once** in
+`_on_sample_finished()` (not on every property read) to avoid blocking the
+GUI. The result is cached as a string.
+
+#### 11.4.3 QML
+
+**`BayesianCornerView.qml`** (new file):
+
+```qml
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
+import Gui.Globals as Globals
+
+Rectangle {
+    color: EaStyle.Colors.chartBackground
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: EaStyle.Sizes.fontPixelSize
+        spacing: EaStyle.Sizes.fontPixelSize
+
+        EaElements.Label {
+            text: qsTr("Pairwise Parameter Correlations & Marginal Distributions")
+            font: EaStyle.Fonts.headingFont
+        }
+
+        Image {
+            id: cornerImage
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            fillMode: Image.PreserveAspectFit
+            source: Globals.BackendWrapper.bayesianCornerPlotUrl || ''
+            cache: false
+            visible: source != ''
+
+            BusyIndicator {
+                anchors.centerIn: parent
+                running: cornerImage.source == '' && Globals.BackendWrapper.bayesianResultAvailable
+            }
+        }
+
+        EaElements.Label {
+            visible: cornerImage.source == '' && !Globals.BackendWrapper.bayesianResultAvailable
+            text: qsTr("No Bayesian results available.")
+            color: EaStyle.Colors.themeForegroundMinor
+        }
+    }
+}
+```
+
+**BackendWrapper.qml** — add forwarding:
+
+```qml
+readonly property string bayesianCornerPlotUrl: activeBackend.analysis.bayesianCornerPlotUrl
+```
+
+#### 11.4.4 Fallback: Interactive Qt Charts Corner (Optional Future)
+
+If PNG rendering is not desired, a pure-QML corner plot can be built with a
+`GridLayout` of `ChartView` instances. The diagonal shows a histogram
+(`BarSeries`) and the off-diagonals show a `ScatterSeries`. This is deferred
+to a future iteration because:
+
+- Memory: `n_params²` `ChartView` instances, each with its own OpenGL context.
+- Performance: Updating n² series with thousands of scatter points is slow.
+- The `corner` library PNG is the standard in scientific Python.
+
+### 11.5 Subtab 3: Trace Plots (MCMC Chain Convergence)
+
+#### 11.5.1 Strategy
+
+MCMC trace plots show the sampled parameter value vs. draw index. They let
+users visually check that chains have converged (no drift, good mixing). The
+standard approach uses `arviz.plot_trace`.
+
+For the GUI we have two options:
+1. **PNG rendering** via `arviz.plot_trace` — same pattern as corner plot.
+2. **Qt Charts `LineSeries`** — push chain data as `QVariantList` to QML.
+
+**Recommendation**: Use PNG rendering (consistent with corner plot, avoids
+pushing large chain arrays to QML). The raw chain data stays in Python.
+
+#### 11.5.2 Backend Changes
+
+**`analysis.py`**:
+
+```python
+@Property(str, notify=fittingChanged)
+def bayesianTracePlotUrl(self) -> str:
+    if not self._bayesian_logic.has_result:
+        return ''
+    return self._bayesian_logic.trace_plot_url or ''
+```
+
+**`_render_trace_plot()`** (called from `_on_sample_finished()`):
+
+```python
+def _render_trace_plot(self) -> None:
+    """Render MCMC trace plots to PNG via arviz."""
+    try:
+        from easyreflectometry.analysis.bayesian import plot_trace
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        posterior = self._bayesian_logic.posterior
+        n_params = len(posterior['param_names'])
+        fig, axes = plt.subplots(n_params, 1,
+                                 figsize=(10, 2.5 * n_params),
+                                 squeeze=False)
+        plot_trace(posterior['draws'], posterior['param_names'])
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        plt.close(fig)
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode('ascii')
+        self._bayesian_logic.trace_plot_url = f'data:image/png;base64,{b64}'
+    except ImportError:
+        self._bayesian_logic.trace_plot_url = ''
+        logger.info('arviz not installed — trace plot unavailable')
+```
+
+**`logic/bayesian.py`**: Add `trace_plot_url: str` attribute.
+
+#### 11.5.3 QML
+
+**`BayesianTraceView.qml`** — analogous to `BayesianCornerView.qml` but
+displaying the trace plot PNG.
+
+#### 11.5.4 Fallback When arviz Is Not Installed
+
+Show a friendly message:
+> *"Trace plots require the `arviz` library. Install it with:*
+> *`pip install easyreflectometry[bayesian]`"*
+
+### 11.6 Subtab 4: 2D Parameter Heatmap
+
+#### 11.6.1 Strategy
+
+Allow the user to select two parameters from dropdowns, then display their
+joint posterior density as a 2D heatmap. This is the same as zooming into one
+off-diagonal cell of the corner plot but with higher resolution.
+
+#### 11.6.2 Backend Changes
+
+**`analysis.py`** — new properties and a slot:
+
+```python
+@Property('QVariantList', notify=fittingChanged)
+def bayesianParamNames(self) -> list[str]:
+    """Return parameter names for the heatmap axis dropdowns."""
+    if not self._bayesian_logic.has_result:
+        return []
+    return self._bayesian_logic.posterior['param_names']
+
+# Heatmap data: computed on demand for a selected parameter pair
+@Property('QVariant', notify=heatmapChanged)
+def bayesianHeatmapData(self) -> dict | None:
+    return self._bayesian_logic.heatmap_data
+
+@Slot(int, int)
+def computeBayesianHeatmap(self, paramX: int, paramY: int) -> None:
+    """Compute 2D histogram for the selected parameter pair."""
+    import numpy as np
+    posterior = self._bayesian_logic.posterior
+    if posterior is None:
+        return
+    draws = posterior['draws']
+    x = draws[:, paramX]
+    y = draws[:, paramY]
+    H, xedges, yedges = np.histogram2d(x, y, bins=50, density=True)
+    self._bayesian_logic.heatmap_data = {
+        'xLabel': posterior['param_names'][paramX],
+        'yLabel': posterior['param_names'][paramY],
+        'xCenters': (0.5 * (xedges[:-1] + xedges[1:])).tolist(),
+        'yCenters': (0.5 * (yedges[:-1] + yedges[1:])).tolist(),
+        'zValues': H.T.tolist(),  # transposed for consistent display
+    }
+    self.heatmapChanged.emit()
+```
+
+A new signal `heatmapChanged = Signal()` is added to `Analysis`.
+
+**`logic/bayesian.py`**: Add `heatmap_data: dict | None` attribute.
+
+#### 11.6.3 QML
+
+**`BayesianHeatmapView.qml`** (new file):
+
+```qml
+Rectangle {
+    color: EaStyle.Colors.chartBackground
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: EaStyle.Sizes.fontPixelSize
+        spacing: EaStyle.Sizes.fontPixelSize
+
+        // Parameter selection row
+        RowLayout {
+            EaElements.Label { text: qsTr("X-axis:") }
+            EaElements.ComboBox {
+                id: paramXCombo
+                model: Globals.BackendWrapper.bayesianParamNames
+                onCurrentIndexChanged: updateHeatmap()
+            }
+            EaElements.Label { text: qsTr("Y-axis:") }
+            EaElements.ComboBox {
+                id: paramYCombo
+                model: Globals.BackendWrapper.bayesianParamNames
+                currentIndex: Math.min(1, model.length - 1)
+                onCurrentIndexChanged: updateHeatmap()
+            }
+        }
+
+        // 2D Heatmap using Qt Charts (or Plotly WebEngineView)
+        // Use a colour-mapped grid. Qt Charts does not have a native heatmap
+        // series, so two alternatives:
+        //
+        // Option A (recommended): Plotly2dHeatmap from EasyApp, using the
+        //   existing Plotly WebEngineView infrastructure.
+        //
+        // Option B: Render as PNG via matplotlib imshow and display as Image.
+    }
+}
+```
+
+**Recommendation**: Use **Option A** (Plotly WebEngineView) since EasyApp
+already ships `Plotly2dHeatmap.qml` and `Plotly2dHeatmap.html`. This provides
+interactive hover, zoom, and pan for free.
+
+**If Plotly not desired**, Option B is simpler: render via matplotlib and
+display as `Image`. This is the pragmatic choice for a first iteration.
+
+#### 11.6.4 BackendWrapper.qml Additions
+
+```qml
+readonly property var bayesianParamNames: activeBackend.analysis.bayesianParamNames
+readonly property var bayesianHeatmapData: activeBackend.analysis.bayesianHeatmapData
+function bayesianComputeHeatmap(x, y) { activeBackend.analysis.computeBayesianHeatmap(x, y) }
+```
+
+### 11.7 Subtab 5: Convergence Diagnostics
+
+#### 11.7.1 Content
+
+A scrollable text panel presenting:
+
+| Diagnostic | Source | Description |
+|---|---|---|
+| **R-hat (Gelman-Rubin)** | `arviz.rhat` / `PosteriorResults.gelman_rubin()` | Per-parameter convergence; <1.1 = good |
+| **Effective Sample Size (ESS)** | `arviz.ess` (future) | Number of independent draws |
+| **Acceptance Rate** | BUMPS `state.acceptance_rate` | DREAM proposal acceptance fraction |
+| **Number of Draws** | `draws.shape[0]` | After burn-in and thinning |
+| **Number of Parameters** | `draws.shape[1]` | Dimensionality |
+| **Burn-in Steps** | User setting | From Bayesian controls |
+| **Thinning** | User setting | From Bayesian controls |
+| **Population (Chains)** | User setting | DREAM population count |
+
+#### 11.7.2 Backend Changes
+
+**`analysis.py`** — compute once in `_on_sample_finished()` and store as dict:
+
+```python
+@Property('QVariant', notify=fittingChanged)
+def bayesianDiagnostics(self) -> dict:
+    return self._bayesian_logic.diagnostics or {}
+
+def _compute_diagnostics(self) -> None:
+    """Compute convergence diagnostics from the posterior and state."""
+    posterior = self._bayesian_logic.posterior
+    diagnostics = {
+        'nDraws': int(posterior['draws'].shape[0]),
+        'nParams': int(posterior['draws'].shape[1]),
+        'burnIn': self._bayesian_logic.burn,
+        'thin': self._bayesian_logic.thin,
+        'population': self._bayesian_logic.population,
+        'samples': self._bayesian_logic.samples,
+    }
+
+    # Extract acceptance rate from BUMPS state if available
+    state = posterior.get('state')
+    if state is not None:
+        try:
+            diagnostics['acceptanceRate'] = float(state.acceptance_rate)
+        except (AttributeError, TypeError):
+            pass
+
+    # R-hat via arviz (wrapped in PosteriorResults)
+    try:
+        from easyreflectometry.analysis.bayesian import PosteriorResults
+        pr = PosteriorResults(posterior['draws'], posterior['param_names'])
+        rhat = pr.gelman_rubin()
+        if rhat is not None:
+            diagnostics['rhat'] = rhat
+    except ImportError:
+        pass
+
+    self._bayesian_logic.diagnostics = diagnostics
+```
+
+**`logic/bayesian.py`**: Add `diagnostics: dict` attribute, cleared in `clear()`.
+
+#### 11.7.3 QML
+
+**`BayesianDiagnosticsView.qml`** (new file):
+
+```qml
+Rectangle {
+    color: EaStyle.Colors.chartBackground
+
+    Flickable {
+        anchors.fill: parent
+        anchors.margins: EaStyle.Sizes.fontPixelSize
+        contentHeight: diagColumn.implicitHeight
+
+        ColumnLayout {
+            id: diagColumn
+            width: parent.width
+            spacing: EaStyle.Sizes.fontPixelSize
+
+            EaElements.Label {
+                text: qsTr("MCMC Convergence Diagnostics")
+                font: EaStyle.Fonts.headingFont
+            }
+
+            // Sampling settings section
+            EaElements.GroupBox {
+                title: qsTr("Sampling Configuration")
+                ColumnLayout {
+                    Repeater {
+                        model: [
+                            { label: qsTr("Requested samples"), key: "samples" },
+                            { label: qsTr("Burn-in steps"), key: "burnIn" },
+                            { label: qsTr("Thinning"), key: "thin" },
+                            { label: qsTr("Population (chains)"), key: "population" },
+                            { label: qsTr("Retained draws"), key: "nDraws" },
+                            { label: qsTr("Parameters"), key: "nParams" },
+                        ]
+                        RowLayout {
+                            EaElements.Label { text: modelData.label; Layout.fillWidth: true }
+                            EaElements.Label {
+                                text: Globals.BackendWrapper.bayesianDiagnostics[modelData.key] ?? '—'
+                                font.bold: true
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Acceptance rate
+            EaElements.GroupBox {
+                title: qsTr("Acceptance Rate")
+                visible: Globals.BackendWrapper.bayesianDiagnostics.acceptanceRate !== undefined
+                EaElements.Label {
+                    text: (Globals.BackendWrapper.bayesianDiagnostics.acceptanceRate * 100).toFixed(1) + '%'
+                }
+            }
+
+            // Gelman-Rubin R-hat table
+            EaElements.GroupBox {
+                title: qsTr("Gelman-Rubin R̂ (Convergence)")
+                visible: Globals.BackendWrapper.bayesianDiagnostics.rhat !== undefined
+                ColumnLayout {
+                    Repeater {
+                        model: Object.keys(Globals.BackendWrapper.bayesianDiagnostics.rhat || {})
+                        RowLayout {
+                            EaElements.Label { text: modelData; Layout.fillWidth: true }
+                            EaElements.Label {
+                                text: Globals.BackendWrapper.bayesianDiagnostics.rhat[modelData].toFixed(4)
+                                color: Globals.BackendWrapper.bayesianDiagnostics.rhat[modelData] < 1.1
+                                       ? EaStyle.Colors.success : EaStyle.Colors.warning
+                                font.bold: true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+**BackendWrapper.qml** — add:
+
+```qml
+readonly property var bayesianDiagnostics: activeBackend.analysis.bayesianDiagnostics
+```
+
+### 11.8 Posterior-Predictive Overlays on Main Charts
+
+#### 11.8.1 Reflectivity Overlay (Already Implemented)
+
+`CombinedView.qml` already has `ppMedianSerie` (LineSeries), `ppBandSerie`
+(AreaSeries with upper/lower LineSeries), connected to
+`posteriorPredictiveDataChanged`. This is functional.
+
+**Remaining work**:
+- Add the same overlay to the standalone `AnalysisView.qml` (currently only in
+  `CombinedView.qml`).
+- Support the log-Q axis mode (recreate the series against `axisXLog` when
+  `useLogQAxis` toggles).
+- Ensure the overlay series are cleared when a new fit/sample starts.
+
+#### 11.8.2 SLD Profile Overlay (New)
+
+The SLD chart (in `SldView.qml` / the lower panel of `CombinedView.qml`)
+currently shows only the classical SLD profile. We need to add a posterior
+predictive SLD band — analogous to the reflectivity overlay.
+
+##### Backend
+
+**`analysis.py`** — extend `_compute_and_publish_posterior_predictive()` to
+also compute the SLD profile:
+
+```python
+def _compute_and_publish_posterior_predictive(self) -> None:
+    """Compute posterior predictive reflectivity AND SLD, publish to plotting."""
+    if self._plotting is None:
+        return
+    from easyreflectometry.analysis.bayesian import (
+        posterior_predictive_reflectivity,
+        posterior_predictive_sld_profile,
+    )
+    posterior = self._bayesian_logic.posterior
+    if posterior is None:
+        return
+
+    experiments = self._ordered_experiments()
+    if not experiments:
+        return
+
+    experiment = experiments[0]
+    model = experiment.model
+    q = experiment.x
+
+    # Reflectivity
+    r_median, r_lo, r_hi = posterior_predictive_reflectivity(
+        posterior['draws'], posterior['param_names'],
+        model=model, q_values=q, n_samples=200,
+    )
+    self._plotting.set_posterior_predictive(q, r_median, r_lo, r_hi)
+
+    # SLD profile
+    z, sld_median, sld_lo, sld_hi = posterior_predictive_sld_profile(
+        posterior['draws'], posterior['param_names'],
+        model=model, n_samples=200,
+    )
+    self._plotting.set_posterior_predictive_sld(z, sld_median, sld_lo, sld_hi)
+```
+
+**`plotting_1d.py`** — add SLD posterior predictive support (parallel to the
+existing reflectivity posterior predictive):
+
+```python
+# New signal
+posteriorPredictiveSldDataChanged = Signal()
+
+# New state
+self._posterior_sld_z: list = []
+self._posterior_sld_median: list = []
+self._posterior_sld_lower: list = []
+self._posterior_sld_upper: list = []
+
+def set_posterior_predictive_sld(self, z, median, lo, hi) -> None:
+    self._posterior_sld_z = z.tolist() if hasattr(z, 'tolist') else list(z)
+    self._posterior_sld_median = median.tolist() if hasattr(median, 'tolist') else list(median)
+    self._posterior_sld_lower = lo.tolist() if hasattr(lo, 'tolist') else list(lo)
+    self._posterior_sld_upper = hi.tolist() if hasattr(hi, 'tolist') else list(hi)
+    self.posteriorPredictiveSldDataChanged.emit()
+
+def clear_posterior_predictive_sld(self) -> None:
+    self._posterior_sld_z = []
+    self._posterior_sld_median = []
+    self._posterior_sld_lower = []
+    self._posterior_sld_upper = []
+    self.posteriorPredictiveSldDataChanged.emit()
+
+@Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+def posteriorPredictiveSldZ(self): return self._posterior_sld_z
+
+@Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+def posteriorPredictiveSldMedian(self): return self._posterior_sld_median
+
+@Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+def posteriorPredictiveSldLower(self): return self._posterior_sld_lower
+
+@Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+def posteriorPredictiveSldUpper(self): return self._posterior_sld_upper
+```
+
+##### QML — SldView.qml overlay
+
+Add the same `LineSeries` + `AreaSeries` pattern to the SLD chart:
+
+```qml
+// Posterior predictive SLD overlay (Bayesian)
+LineSeries {
+    id: ppSldMedianSerie
+    name: qsTr("Posterior median SLD")
+    axisX: chartView.axisX
+    axisY: chartView.axisY
+    color: "#E67E22"
+    width: 2
+    visible: Globals.BackendWrapper.bayesianResultAvailable
+}
+
+AreaSeries {
+    id: ppSldBandSerie
+    name: qsTr("95% credible interval")
+    axisX: chartView.axisX
+    axisY: chartView.axisY
+    color: Qt.rgba(0.902, 0.494, 0.133, 0.25)
+    borderWidth: 0
+    upperSeries: LineSeries { id: ppSldUpperSerie }
+    lowerSeries: LineSeries { id: ppSldLowerSerie }
+    visible: Globals.BackendWrapper.bayesianResultAvailable
+}
+
+Connections {
+    target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+    enabled: target !== null
+    function onPosteriorPredictiveSldDataChanged() {
+        ppSldMedianSerie.clear()
+        ppSldUpperSerie.clear()
+        ppSldLowerSerie.clear()
+        var z  = Globals.BackendWrapper.posteriorPredictiveSldZ
+        var m  = Globals.BackendWrapper.posteriorPredictiveSldMedian
+        var lo = Globals.BackendWrapper.posteriorPredictiveSldLower
+        var hi = Globals.BackendWrapper.posteriorPredictiveSldUpper
+        if (!z || !m || !lo || !hi) return
+        for (var i = 0; i < z.length; ++i) {
+            ppSldMedianSerie.append(z[i], m[i])
+            ppSldLowerSerie.append(z[i], lo[i])
+            ppSldUpperSerie.append(z[i], hi[i])
+        }
+    }
+}
+```
+
+The same overlay must be added to the SLD chart in `CombinedView.qml`'s lower
+panel (`SldView.qml`), and to any standalone SLD chart view.
+
+### 11.9 Data Flow Summary
+
+```
+Sampling completes
+  │
+  ├─► _on_sample_finished()
+  │     ├─► Store posterior dict in Bayesian state
+  │     ├─► _compute_diagnostics()        → bayesianDiagnostics (dict)
+  │     ├─► _render_corner_plot()         → bayesianCornerPlotUrl (base64 PNG)
+  │     ├─► _render_trace_plot()          → bayesianTracePlotUrl (base64 PNG)
+  │     └─► _compute_and_publish_posterior_predictive()
+  │           ├─► posterior_predictive_reflectivity()
+  │           │     → Plotting1d.set_posterior_predictive()
+  │           │       → posteriorPredictiveDataChanged signal
+  │           │         → CombinedView.qml refreshes ppMedianSerie/ppBandSerie
+  │           └─► posterior_predictive_sld_profile()
+  │                 → Plotting1d.set_posterior_predictive_sld()
+  │                   → posteriorPredictiveSldDataChanged signal
+  │                     → SldView.qml refreshes ppSldMedianSerie/ppSldBandSerie
+  │
+  └─► fittingChanged.emit()
+        → QML bindings refresh
+          → BayesianPosteriorView subtabs show new data
+```
+
+### 11.10 Files to Add / Modify (Phase 2)
+
+#### New Files
+
+| File | Description |
+|---|---|
+| `Gui/Pages/Analysis/MainContent/BayesianMarginalsView.qml` | Refactored marginal histogram grid |
+| `Gui/Pages/Analysis/MainContent/BayesianCornerView.qml` | Corner plot PNG display |
+| `Gui/Pages/Analysis/MainContent/BayesianTraceView.qml` | Trace plot PNG display |
+| `Gui/Pages/Analysis/MainContent/BayesianHeatmapView.qml` | 2D parameter heatmap |
+| `Gui/Pages/Analysis/MainContent/BayesianDiagnosticsView.qml` | Convergence diagnostics panel |
+
+#### Modified Files
+
+| File | Change |
+|---|---|
+| `Backends/Py/logic/bayesian.py` | Add `corner_plot_url`, `trace_plot_url`, `heatmap_data`, `diagnostics` attributes |
+| `Backends/Py/analysis.py` | Add corner/trace PNG rendering, heatmap computation, diagnostics computation, SLD posterior predictive, `heatmapChanged` signal |
+| `Backends/Py/plotting_1d.py` | Add SLD posterior predictive properties + signal, `set_posterior_predictive_sld()`, `clear_posterior_predictive_sld()` |
+| `Gui/Globals/BackendWrapper.qml` | Forward `bayesianCornerPlotUrl`, `bayesianTracePlotUrl`, `bayesianParamNames`, `bayesianHeatmapData`, `bayesianDiagnostics`, `posteriorPredictiveSld*`, `bayesianComputeHeatmap()` |
+| `Gui/Pages/Analysis/MainContent/BayesianPosteriorView.qml` | Become a tab container with `TabBar` + `StackLayout` hosting the 5 sub-views |
+| `Gui/Pages/Analysis/MainContent/CombinedView.qml` | Add SLD posterior overlay to lower panel |
+| `Gui/Pages/Analysis/MainContent/SldView.qml` | Add SLD posterior overlay |
+| `Gui/Pages/Analysis/MainContent/AnalysisView.qml` | Add reflectivity posterior overlay (mirror CombinedView) |
+| `Mock/Analysis.qml` | Stub new properties |
+| `Mock/Plotting.qml` | Stub SLD posterior predictive properties |
+
+### 11.11 Implementation Order (Phase 2)
+
+1. **Refactor BayesianPosteriorView** into a tab container. Create the 5 stub
+   sub-views. Wire the `TabBar` + `StackLayout`. This unblocks parallel
+   development of each sub-view.
+
+2. **Backend: bayesian.py attributes** — add `corner_plot_url`,
+   `trace_plot_url`, `heatmap_data`, `diagnostics` to the `Bayesian` state
+   container. Wire `clear()` to reset all.
+
+3. **Diagnostics subtab** — simplest to implement (text-only). Add
+   `_compute_diagnostics()` to `analysis.py`, expose `bayesianDiagnostics`
+   property, build `BayesianDiagnosticsView.qml`.
+
+4. **Corner plot subtab** — add `_render_corner_plot()` to `analysis.py`,
+   expose `bayesianCornerPlotUrl`, build `BayesianCornerView.qml`.
+
+5. **Trace plot subtab** — add `_render_trace_plot()` to `analysis.py`,
+   expose `bayesianTracePlotUrl`, build `BayesianTraceView.qml`.
+
+6. **2D Heatmap subtab** — add `bayesianParamNames`, `bayesianHeatmapData`,
+   `computeBayesianHeatmap()` to `analysis.py`, build `BayesianHeatmapView.qml`
+   with combo boxes and Plotly/Image display.
+
+7. **SLD posterior predictive overlay** — add SLD data to `plotting_1d.py`,
+   overlay series to `SldView.qml` and `CombinedView.qml` lower panel.
+
+8. **Reflectivity overlay in AnalysisView.qml** — mirror the existing
+   CombinedView overlay into the standalone AnalysisView.
+
+9. **Mock backend stubs** — add stub properties to `Mock/Analysis.qml` and
+   `Mock/Plotting.qml`.
+
+10. **Integration testing** — run a full DREAM sampling workflow in the GUI
+    and verify all 5 subtabs populate correctly.
+
+### 11.12 Risks & Mitigations
+
+| # | Risk | Mitigation |
+|---|------|-----------|
+| 1 | `matplotlib.use('Agg')` may conflict if the GUI imports matplotlib elsewhere. | Use a subprocess or render in the worker thread before the main thread touches matplotlib. Alternatively, use a `matplotlib` lock. |
+| 2 | Corner/trace PNGs may be large (several MB as base64). | Use 100 DPI and `bbox_inches='tight'`. Consider writing to a temp file and exposing a `file://` URL instead of a data URL. |
+| 3 | `corner` or `arviz` may not be installed on user machines. | All rendering methods catch `ImportError` and expose an empty URL; QML shows a helpful install message. |
+| 4 | The 2D heatmap via Plotly WebEngineView adds a dependency on the WebEngine module. | Fall back to PNG rendering (matplotlib `imshow`) if WebEngine is not preferred. |
+| 5 | `posterior_predictive_sld_profile()` calls `model.interface.sld_profile()` which may mutate internal model state. | The library function already saves/restores parameter state in a `try/finally` block (see `bayesian.py` lines 331-369). |
+| 6 | Rendering corner/trace plots on the main thread could block the UI for seconds. | Defer rendering to a `QTimer.singleShot` after `fittingChanged` is emitted, or render in a background `QThread`. For the first iteration, rendering with 100 DPI for ≤10 params takes <1s, which is acceptable. |
+| 7 | The posterior dict may contain `logp` and `state` that are not JSON-serializable (BUMPS objects). | These stay in Python; only primitive types (lists of floats, strings) are pushed to QML properties. |
+
+### 11.13 Future Enhancements (Phase 3)
+
+- **Interactive corner plot** in Qt Charts (GridLayout of scatter+histogram
+  ChartViews) for users who prefer native widgets over PNG.
+- **Save/load DREAM state** — serialize `state` (BUMPS `DreamState`) to the
+  project file so users can resume or extend a sampling run.
+- **Per-experiment posterior** — when multiple experiments are loaded, allow
+  selecting which experiment's model to use for posterior predictive checks.
+- **Live sampling progress** — if BUMPS DREAM eventually supports a
+  per-iteration callback, show a live-updating trace plot that grows as
+  samples are drawn.
+- **Prior specification GUI** — allow users to set prior distributions on
+  parameters (beyond simple uniform bounds).
+- **Model comparison** — WAIC/LOO cross-validation statistics for comparing
+  competing models.

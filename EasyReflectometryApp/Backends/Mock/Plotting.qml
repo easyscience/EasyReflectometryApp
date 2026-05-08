@@ -44,6 +44,13 @@ QtObject {
     readonly property var posteriorPredictiveUpper: []
     signal posteriorPredictiveDataChanged()
 
+    // Phase 2: SLD posterior predictive (Bayesian) overlay
+    readonly property var posteriorPredictiveSldZ: []
+    readonly property var posteriorPredictiveSldMedian: []
+    readonly property var posteriorPredictiveSldLower: []
+    readonly property var posteriorPredictiveSldUpper: []
+    signal posteriorPredictiveSldDataChanged()
+
     // Signals for plot mode changes
     signal plotModeChanged()
     signal axisTypeChanged()

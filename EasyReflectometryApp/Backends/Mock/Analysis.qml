@@ -44,6 +44,17 @@ QtObject {
     readonly property bool bayesianResultAvailable: false
     readonly property var bayesianMarginals: []
 
+    // Phase 2: corner/trace plot PNGs, diagnostics, heatmap
+    readonly property string bayesianCornerPlotUrl: ''
+    readonly property string bayesianTracePlotUrl: ''
+    readonly property var bayesianDiagnostics: ({})
+    readonly property var bayesianParamNames: []
+    readonly property var bayesianHeatmapData: null
+    readonly property string bayesianHeatmapPlotUrl: ''
+    function bayesianComputeHeatmap(x, y) {
+        console.debug(`bayesianComputeHeatmap ${x}, ${y}`)
+    }
+
     // Fit failure signal (mirrors Python backend)
     signal fitFailed(string message)
 

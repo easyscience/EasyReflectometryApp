@@ -26,6 +26,8 @@ Rectangle {
 
     // Expose the ChartView so callers can store a reference / call resetAxes
     readonly property alias chartView: chartView
+    readonly property alias chartAxisX: axisX
+    readonly property alias chartAxisY: axisY
 
     // Track model count changes to refresh charts
     property int modelCount: Globals.BackendWrapper.sampleModels.length
@@ -301,6 +303,39 @@ Rectangle {
             acceptedButtons: Qt.RightButton
             onClicked: chartView.resetAxes()
         }
+
+        // Phase 2: Posterior predictive SLD overlay (Bayesian)
+        LineSeries {
+            id: ppSldMedianSerie
+            name: qsTr("Posterior median SLD")
+            axisX: root.chartAxisX
+            axisY: root.chartAxisY
+            color: "#E67E22"
+            width: 2
+            visible: Globals.BackendWrapper.bayesianResultAvailable
+        }
+
+        AreaSeries {
+            id: ppSldBandSerie
+            name: qsTr("95% credible interval")
+            axisX: root.chartAxisX
+            axisY: root.chartAxisY
+            color: Qt.rgba(0.902, 0.494, 0.133, 0.25)
+            borderWidth: 0
+            upperSeries: LineSeries {
+                id: ppSldUpperSerie
+                axisX: root.chartAxisX
+                axisY: root.chartAxisY
+                visible: Globals.BackendWrapper.bayesianResultAvailable
+            }
+            lowerSeries: LineSeries {
+                id: ppSldLowerSerie
+                axisX: root.chartAxisX
+                axisY: root.chartAxisY
+                visible: Globals.BackendWrapper.bayesianResultAvailable
+            }
+            visible: Globals.BackendWrapper.bayesianResultAvailable
+        }
     }
 
     // Create series dynamically when model count changes
@@ -335,6 +370,7 @@ Rectangle {
 
     Component.onCompleted: {
         Qt.callLater(recreateAllSeries)
+        Qt.callLater(refreshPosteriorPredictiveSldOverlay)
     }
 
     function recreateAllSeries() {
@@ -384,5 +420,29 @@ Rectangle {
         dataToolTip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
         dataToolTip.parent = chartView
         dataToolTip.visible = state
+    }
+
+    function refreshPosteriorPredictiveSldOverlay() {
+        ppSldMedianSerie.clear()
+        ppSldUpperSerie.clear()
+        ppSldLowerSerie.clear()
+        const z  = Globals.BackendWrapper.posteriorPredictiveSldZ
+        const m  = Globals.BackendWrapper.posteriorPredictiveSldMedian
+        const lo = Globals.BackendWrapper.posteriorPredictiveSldLower
+        const hi = Globals.BackendWrapper.posteriorPredictiveSldUpper
+        if (!z || !m || !lo || !hi) return
+        for (let i = 0; i < z.length; ++i) {
+            ppSldMedianSerie.append(z[i], m[i])
+            ppSldLowerSerie.append(z[i], lo[i])
+            ppSldUpperSerie.append(z[i], hi[i])
+        }
+    }
+
+    Connections {
+        target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+        enabled: target !== null
+        function onPosteriorPredictiveSldDataChanged() {
+            refreshPosteriorPredictiveSldOverlay()
+        }
     }
 }

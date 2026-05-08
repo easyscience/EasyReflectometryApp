@@ -193,19 +193,23 @@ Rectangle {
                     target: Globals.BackendWrapper.activeBackend?.plotting ?? null
                     enabled: target !== null
                     function onPosteriorPredictiveDataChanged() {
-                        ppMedianSerie.clear()
-                        ppUpperSerie.clear()
-                        ppLowerSerie.clear()
-                        var q  = Globals.BackendWrapper.posteriorPredictiveQ
-                        var m  = Globals.BackendWrapper.posteriorPredictiveMedian
-                        var lo = Globals.BackendWrapper.posteriorPredictiveLower
-                        var hi = Globals.BackendWrapper.posteriorPredictiveUpper
-                        if (!q || !m || !lo || !hi) return
-                        for (var i = 0; i < q.length; ++i) {
-                            ppMedianSerie.append(q[i], m[i])
-                            ppLowerSerie.append(q[i], lo[i])
-                            ppUpperSerie.append(q[i], hi[i])
-                        }
+                        analysisChartView.refreshPosteriorPredictiveOverlay()
+                    }
+                }
+
+                function refreshPosteriorPredictiveOverlay() {
+                    ppMedianSerie.clear()
+                    ppUpperSerie.clear()
+                    ppLowerSerie.clear()
+                    const q  = Globals.BackendWrapper.posteriorPredictiveQ
+                    const m  = Globals.BackendWrapper.posteriorPredictiveMedian
+                    const lo = Globals.BackendWrapper.posteriorPredictiveLower
+                    const hi = Globals.BackendWrapper.posteriorPredictiveUpper
+                    if (!q || !m || !lo || !hi) return
+                    for (let i = 0; i < q.length; ++i) {
+                        ppMedianSerie.append(q[i], m[i])
+                        ppLowerSerie.append(q[i], lo[i])
+                        ppUpperSerie.append(q[i], hi[i])
                     }
                 }
 
@@ -671,6 +675,9 @@ Rectangle {
                     
                     // Initialize reference lines
                     updateReferenceLines()
+
+                    // Initialize posterior predictive overlay if results already exist
+                    Qt.callLater(refreshPosteriorPredictiveOverlay)
                 }
 
                 function recreateSeriesForCurrentMode() {

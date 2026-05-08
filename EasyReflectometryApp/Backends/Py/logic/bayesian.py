@@ -15,6 +15,12 @@ class Bayesian:
         self._population: int = self.DEFAULTS['population']
         self._thin: int = self.DEFAULTS['thin']
         self._posterior: dict | None = None
+        # Phase 2 — cached rendered assets and diagnostics
+        self.corner_plot_url: str = ''
+        self.trace_plot_url: str = ''
+        self.heatmap_plot_url: str = ''
+        self.heatmap_data: dict | None = None
+        self.diagnostics: dict = {}
 
     # ------------------------------------------------------------------
     # Hyper-parameters
@@ -77,5 +83,10 @@ class Bayesian:
         return self._posterior is not None
 
     def clear(self) -> None:
-        """Clear the stored posterior result."""
+        """Clear the stored posterior result and all rendered / computed assets."""
         self._posterior = None
+        self.corner_plot_url = ''
+        self.trace_plot_url = ''
+        self.heatmap_plot_url = ''
+        self.heatmap_data = None
+        self.diagnostics = {}

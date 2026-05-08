@@ -5,7 +5,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtCharts
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
@@ -20,96 +19,76 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: EaStyle.Sizes.fontPixelSize
-        spacing: EaStyle.Sizes.fontPixelSize
+        spacing: 0
 
         // Convergence summary header
         EaElements.Label {
+            Layout.fillWidth: true
+            Layout.margins: EaStyle.Sizes.fontPixelSize
             visible: Globals.BackendWrapper.bayesianResultAvailable
                      && Globals.BackendWrapper.bayesianPosterior !== null
-            text: "Bayesian MCMC Sampling Results\n"
-                + "Posterior draws: " + Globals.BackendWrapper.bayesianPosterior.nDraws
-                + "  |  Parameters: " + Globals.BackendWrapper.bayesianPosterior.paramNames.join(", ")
+            text: Globals.BackendWrapper.bayesianPosterior
+                ? "Bayesian MCMC Sampling Results\n"
+                    + "Posterior draws: " + Globals.BackendWrapper.bayesianPosterior.nDraws
+                    + "  |  Parameters: " + Globals.BackendWrapper.bayesianPosterior.paramNames.join(", ")
+                : ""
             wrapMode: Text.WordWrap
         }
 
         EaElements.Label {
+            Layout.fillWidth: true
+            Layout.margins: EaStyle.Sizes.fontPixelSize
             visible: !Globals.BackendWrapper.bayesianResultAvailable
             text: qsTr("No Bayesian results available. Run a BUMPS-DREAM sampling to see posterior distributions.")
             color: EaStyle.Colors.themeForegroundMinor
             wrapMode: Text.WordWrap
         }
 
-        // Marginal histograms grid
-        Flow {
+        // Subtab bar
+        TabBar {
+            id: subtabBar
+            Layout.fillWidth: true
+            Layout.preferredHeight: EaStyle.Sizes.toolButtonHeight
+            background: Rectangle { color: EaStyle.Colors.chartBackground }
+
+            TabButton {
+                text: qsTr("Marginals")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                implicitHeight: EaStyle.Sizes.toolButtonHeight
+            }
+            TabButton {
+                text: qsTr("Corner Plot")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                implicitHeight: EaStyle.Sizes.toolButtonHeight
+            }
+            TabButton {
+                text: qsTr("Traces")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                implicitHeight: EaStyle.Sizes.toolButtonHeight
+            }
+            TabButton {
+                text: qsTr("2D Heatmap")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                implicitHeight: EaStyle.Sizes.toolButtonHeight
+            }
+            TabButton {
+                text: qsTr("Diagnostics")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                implicitHeight: EaStyle.Sizes.toolButtonHeight
+            }
+        }
+
+        // Sub-view stack
+        StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+            currentIndex: subtabBar.currentIndex
 
-            Repeater {
-                model: Globals.BackendWrapper.bayesianMarginals
-
-                delegate: Rectangle {
-                    width: Math.max(200, Math.min(400, container.width / 2 - EaStyle.Sizes.fontPixelSize))
-                    height: 220
-                    color: EaStyle.Colors.chartBackground
-                    border.color: EaStyle.Colors.chartGridLine
-                    border.width: 1
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        spacing: 2
-
-                        EaElements.Label {
-                            Layout.fillWidth: true
-                            text: modelData.name
-                                    + "  (" + Number(modelData.mean).toFixed(4)
-                                    + " ± " + Number(modelData.std).toFixed(4) + ")"
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-
-                        ChartView {
-                            id: histogramChart
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            legend.visible: false
-                            antialiasing: true
-                            backgroundColor: "transparent"
-
-                            ValueAxis {
-                                id: xAxis
-                                titleText: modelData.name
-                            }
-                            ValueAxis {
-                                id: yAxis
-                                min: 0
-                            }
-
-                            BarSeries {
-                                id: barSeries
-                                axisX: xAxis
-                                axisY: yAxis
-                                barWidth: 0.9
-                                BarSet {
-                                    label: modelData.name
-                                    values: modelData.counts
-                                    color: "#3498db"
-                                }
-                            }
-
-                            Component.onCompleted: {
-                                // Set x-axis range from bin centers
-                                if (modelData.binCenters && modelData.binCenters.length > 0) {
-                                    xAxis.min = modelData.binCenters[0]
-                                    xAxis.max = modelData.binCenters[modelData.binCenters.length - 1]
-                                }
-                                yAxis.max = Math.max.apply(null, modelData.counts) * 1.1
-                            }
-                        }
-                    }
-                }
-            }
+            BayesianMarginalsView { }
+            BayesianCornerView { }
+            BayesianTraceView { }
+            BayesianHeatmapView { }
+            BayesianDiagnosticsView { }
         }
     }
 }

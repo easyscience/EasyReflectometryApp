@@ -1,3 +1,5 @@
+import logging
+
 from typing import List
 from typing import Optional
 
@@ -16,6 +18,8 @@ from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
 from .logic.parameters import Parameters as ParametersLogic
 from .workers import FitterWorker
+
+logger = logging.getLogger(__name__)
 
 
 class Analysis(QObject):
@@ -248,6 +252,76 @@ class Analysis(QObject):
             )
         return out
 
+    # Phase 2: corner/trace plot PNGs, diagnostics, heatmap
+
+    @Property(str, notify=fittingChanged)
+    def bayesianCornerPlotUrl(self) -> str:
+        """Return a file URL for the corner plot PNG, or empty string."""
+        if not self._bayesian_logic.has_result:
+            return ''
+        if not self._bayesian_logic.corner_plot_url:
+            self._render_corner_plot()
+        return self._bayesian_logic.corner_plot_url
+
+    @Property(str, notify=fittingChanged)
+    def bayesianTracePlotUrl(self) -> str:
+        """Return a file URL for the trace plot PNG, or empty string."""
+        if not self._bayesian_logic.has_result:
+            return ''
+        if not self._bayesian_logic.trace_plot_url:
+            self._render_trace_plot()
+        return self._bayesian_logic.trace_plot_url
+
+    @Property('QVariant', notify=fittingChanged)
+    def bayesianDiagnostics(self) -> dict:
+        """Return convergence diagnostics dict."""
+        if self._bayesian_logic.has_result and not self._bayesian_logic.diagnostics:
+            self._compute_diagnostics()
+        return self._bayesian_logic.diagnostics
+
+    @Property('QVariantList', notify=fittingChanged)
+    def bayesianParamNames(self) -> list:
+        """Return parameter names for heatmap axis dropdowns."""
+        if not self._bayesian_logic.has_result:
+            return []
+        return list(self._bayesian_logic.posterior['param_names'])
+
+    heatmapChanged = Signal()
+
+    @Property('QVariant', notify=heatmapChanged)
+    def bayesianHeatmapData(self) -> dict | None:
+        """Return 2D histogram data for the heatmap view."""
+        return self._bayesian_logic.heatmap_data
+
+    @Property(str, notify=heatmapChanged)
+    def bayesianHeatmapPlotUrl(self) -> str:
+        """Return a file URL for the rendered 2D heatmap PNG, or empty string."""
+        return self._bayesian_logic.heatmap_plot_url
+
+    @Slot(int, int)
+    def computeBayesianHeatmap(self, paramX: int, paramY: int) -> None:
+        """Compute 2D histogram for the selected parameter pair."""
+        import numpy as np
+
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            return
+        draws = np.asarray(posterior['draws'])
+        if draws.ndim == 3:
+            draws = draws.reshape(-1, draws.shape[-1])
+        x = draws[:, paramX]
+        y = draws[:, paramY]
+        H, xedges, yedges = np.histogram2d(x, y, bins=50, density=True)
+        self._bayesian_logic.heatmap_data = {
+            'xLabel': posterior['param_names'][paramX],
+            'yLabel': posterior['param_names'][paramY],
+            'xCenters': (0.5 * (xedges[:-1] + xedges[1:])).tolist(),
+            'yCenters': (0.5 * (yedges[:-1] + yedges[1:])).tolist(),
+            'zValues': H.T.tolist(),
+        }
+        self._render_heatmap_plot(paramX, paramY)
+        self.heatmapChanged.emit()
+
     # ------------------------------------------------------------------
     # Fitting start / stop (classical + Bayesian dispatch)
     # ------------------------------------------------------------------
@@ -395,15 +469,22 @@ class Analysis(QObject):
         self._bayesian_logic._posterior = posterior
         self._fitting_logic.on_sample_finished()
         self._fitter_thread = None
+        # Phase 2: compute posterior predictive, diagnostics, and rendered plots
         self._compute_and_publish_posterior_predictive()
+        self._compute_diagnostics()
+        self._render_corner_plot()
+        self._render_trace_plot()
         self.fittingChanged.emit()
         self.externalFittingChanged.emit()
 
     def _compute_and_publish_posterior_predictive(self) -> None:
-        """Compute posterior predictive reflectivity and publish to plotting."""
+        """Compute posterior predictive reflectivity and SLD, publish to plotting."""
         if self._plotting is None:
             return
-        from easyreflectometry.analysis.bayesian import posterior_predictive_reflectivity
+        from easyreflectometry.analysis.bayesian import (
+            posterior_predictive_reflectivity,
+            posterior_predictive_sld_profile,
+        )
 
         posterior = self._bayesian_logic.posterior
         if posterior is None:
@@ -426,6 +507,182 @@ class Analysis(QObject):
             n_samples=200,
         )
         self._plotting.set_posterior_predictive(q, median, lo, hi)
+
+        z, sld_median, sld_lo, sld_hi = posterior_predictive_sld_profile(
+            posterior['draws'],
+            posterior['param_names'],
+            model=model,
+            n_samples=200,
+        )
+        self._plotting.set_posterior_predictive_sld(z, sld_median, sld_lo, sld_hi)
+
+    def _compute_diagnostics(self) -> None:
+        """Compute convergence diagnostics from the posterior and state."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.diagnostics = {}
+            return
+
+        diagnostics = {
+            'nDraws': int(posterior['draws'].shape[0]),
+            'nParams': int(posterior['draws'].shape[1]),
+            'burnIn': self._bayesian_logic.burn,
+            'thin': self._bayesian_logic.thin,
+            'population': self._bayesian_logic.population,
+            'samples': self._bayesian_logic.samples,
+        }
+
+        # Extract acceptance rate from BUMPS state if available
+        state = posterior.get('state')
+        if state is not None:
+            try:
+                diagnostics['acceptanceRate'] = float(getattr(state, 'acceptance_rate', None) or 0.0)
+            except (AttributeError, TypeError, ValueError):
+                pass
+
+        draws = posterior['draws']
+        if getattr(draws, 'ndim', 0) == 3 and draws.shape[0] >= 2:
+            try:
+                from easyreflectometry.analysis.bayesian import PosteriorResults
+
+                pr = PosteriorResults(draws, posterior['param_names'])
+                rhat = pr.gelman_rubin()
+                if rhat is not None:
+                    finite_rhat = {name: value for name, value in rhat.items() if value == value}
+                    if finite_rhat:
+                        diagnostics['rhat'] = finite_rhat
+                    else:
+                        diagnostics['rhatStatus'] = 'Unavailable: R-hat requires at least two finite chains.'
+            except ImportError:
+                diagnostics['rhatStatus'] = 'Unavailable: arviz is not installed.'
+        else:
+            diagnostics['rhatStatus'] = 'Unavailable: the sampler returned flattened draws without chain identities.'
+
+        self._bayesian_logic.diagnostics = diagnostics
+
+    def _plot_file_path(self, stem: str):
+        """Return a stable temporary file path for a rendered Bayesian plot."""
+        from pathlib import Path
+        import tempfile
+
+        out_dir = Path(tempfile.gettempdir()) / 'EasyReflectometryApp' / 'bayesian'
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return out_dir / f'{stem}.png'
+
+    def _plot_file_url(self, stem: str) -> str:
+        """Return a stable temporary file URL for a rendered Bayesian plot."""
+        return self._plot_file_path(stem).as_uri()
+
+    def _render_corner_plot(self) -> None:
+        """Render corner plot to PNG and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.corner_plot_url = ''
+            return
+        try:
+            from easyreflectometry.analysis.bayesian import plot_corner
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+
+            n_params = len(posterior['param_names'])
+            size = max(6, n_params * 1.8)
+            plt.figure(figsize=(size, size))
+            plot_corner(posterior['draws'], posterior['param_names'], fig=plt.gcf())
+            fig = plt.gcf()
+            plt.tight_layout()
+
+            path = self._plot_file_path('corner')
+            fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
+            plt.close(fig)
+            self._bayesian_logic.corner_plot_url = path.as_uri()
+        except ImportError:
+            self._bayesian_logic.corner_plot_url = ''
+            logger.info('corner library not installed — corner plot unavailable')
+        except Exception:
+            self._bayesian_logic.corner_plot_url = ''
+            logger.exception('Failed to render corner plot')
+
+    def _render_trace_plot(self) -> None:
+        """Render MCMC trace plot to PNG and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.trace_plot_url = ''
+            return
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+
+            import numpy as np
+
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 3:
+                chains, n_draws, n_params = draws.shape
+            else:
+                chains, n_draws, n_params = 1, draws.shape[0], draws.shape[1]
+                draws = draws.reshape(1, n_draws, n_params)
+
+            n_params = len(posterior['param_names'])
+            fig, axes = plt.subplots(n_params, 1, figsize=(10, 2.2 * max(n_params, 1)), squeeze=False)
+            x = np.arange(n_draws)
+            for index, name in enumerate(posterior['param_names']):
+                axis = axes[index, 0]
+                for chain in range(chains):
+                    axis.plot(x, draws[chain, :, index], linewidth=0.8, alpha=0.8)
+                axis.set_ylabel(name)
+                axis.grid(True, alpha=0.25)
+            axes[-1, 0].set_xlabel('Draw')
+            fig.tight_layout()
+
+            path = self._plot_file_path('trace')
+            fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
+            plt.close(fig)
+            self._bayesian_logic.trace_plot_url = path.as_uri()
+        except ImportError:
+            self._bayesian_logic.trace_plot_url = ''
+            logger.info('arviz library not installed — trace plot unavailable')
+        except Exception:
+            self._bayesian_logic.trace_plot_url = ''
+            logger.exception('Failed to render trace plot')
+
+    def _render_heatmap_plot(self, paramX: int, paramY: int) -> None:
+        """Render selected 2D posterior density heatmap to PNG and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.heatmap_plot_url = ''
+            return
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 3:
+                draws = draws.reshape(-1, draws.shape[-1])
+
+            x = draws[:, paramX]
+            y = draws[:, paramY]
+            x_label = posterior['param_names'][paramX]
+            y_label = posterior['param_names'][paramY]
+
+            fig, axis = plt.subplots(figsize=(8, 6))
+            heatmap = axis.hist2d(x, y, bins=60, density=True, cmap='viridis')
+            fig.colorbar(heatmap[3], ax=axis, label='Posterior density')
+            axis.set_xlabel(x_label)
+            axis.set_ylabel(y_label)
+            axis.set_title(f'Joint posterior: {x_label} vs {y_label}')
+            axis.grid(False)
+            fig.tight_layout()
+
+            path = self._plot_file_path(f'heatmap_{paramX}_{paramY}')
+            fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
+            plt.close(fig)
+            self._bayesian_logic.heatmap_plot_url = path.as_uri()
+        except Exception:
+            self._bayesian_logic.heatmap_plot_url = ''
+            logger.exception('Failed to render Bayesian heatmap')
 
     def prefitCheck(self) -> bool:
         """

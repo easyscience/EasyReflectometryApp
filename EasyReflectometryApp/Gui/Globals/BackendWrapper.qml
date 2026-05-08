@@ -316,6 +316,21 @@ QtObject {
     readonly property bool bayesianResultAvailable: activeBackend.analysis.bayesianResultAvailable
     readonly property var bayesianMarginals: activeBackend.analysis.bayesianMarginals
 
+    // Phase 2: corner/trace plot PNGs, diagnostics, heatmap
+    readonly property string bayesianCornerPlotUrl: activeBackend.analysis.bayesianCornerPlotUrl
+    readonly property string bayesianTracePlotUrl: activeBackend.analysis.bayesianTracePlotUrl
+    readonly property var bayesianDiagnostics: activeBackend.analysis.bayesianDiagnostics
+    readonly property var bayesianParamNames: activeBackend.analysis.bayesianParamNames
+    readonly property var bayesianHeatmapData: activeBackend.analysis.bayesianHeatmapData
+    readonly property string bayesianHeatmapPlotUrl: activeBackend.analysis.bayesianHeatmapPlotUrl
+    function bayesianComputeHeatmap(x, y) { activeBackend.analysis.computeBayesianHeatmap(x, y) }
+
+    // Phase 2: SLD posterior predictive
+    readonly property var posteriorPredictiveSldZ: activeBackend.plotting.posteriorPredictiveSldZ
+    readonly property var posteriorPredictiveSldMedian: activeBackend.plotting.posteriorPredictiveSldMedian
+    readonly property var posteriorPredictiveSldLower: activeBackend.plotting.posteriorPredictiveSldLower
+    readonly property var posteriorPredictiveSldUpper: activeBackend.plotting.posteriorPredictiveSldUpper
+
     // Fit failure signal - forwarded from backend
     signal analysisFitFailed(string message)
 

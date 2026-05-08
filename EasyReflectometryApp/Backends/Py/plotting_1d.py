@@ -29,6 +29,7 @@ class Plotting1d(QObject):
 
     # Posterior predictive signal
     posteriorPredictiveDataChanged = Signal()
+    posteriorPredictiveSldDataChanged = Signal()
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -52,6 +53,12 @@ class Plotting1d(QObject):
         self._posterior_median: list = []
         self._posterior_lower: list = []
         self._posterior_upper: list = []
+
+        # Posterior predictive SLD state
+        self._posterior_sld_z: list = []
+        self._posterior_sld_median: list = []
+        self._posterior_sld_lower: list = []
+        self._posterior_sld_upper: list = []
         self._chartRefs = {
             'QtCharts': {
                 'samplePage': {
@@ -969,9 +976,56 @@ class Plotting1d(QObject):
         self.posteriorPredictiveDataChanged.emit()
 
     def clear_posterior_predictive(self) -> None:
-        """Clear the posterior predictive data."""
+        """Clear the posterior predictive reflectivity data."""
         self._posterior_q = []
         self._posterior_median = []
         self._posterior_lower = []
         self._posterior_upper = []
         self.posteriorPredictiveDataChanged.emit()
+
+    # ------------------------------------------------------------------
+    # Posterior predictive SLD profile (Phase 2)
+    # ------------------------------------------------------------------
+
+    @Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+    def posteriorPredictiveSldZ(self) -> list:
+        return self._posterior_sld_z
+
+    @Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+    def posteriorPredictiveSldMedian(self) -> list:
+        return self._posterior_sld_median
+
+    @Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+    def posteriorPredictiveSldLower(self) -> list:
+        return self._posterior_sld_lower
+
+    @Property('QVariantList', notify=posteriorPredictiveSldDataChanged)
+    def posteriorPredictiveSldUpper(self) -> list:
+        return self._posterior_sld_upper
+
+    def set_posterior_predictive_sld(self, z, median, lower, upper) -> None:
+        """Publish posterior predictive SLD profile curves to QML.
+
+        Unlike reflectivity, SLD data is published without any chart-space
+        transform, matching the existing SLD chart series convention.
+        """
+        import numpy as np
+
+        z = np.asarray(z, dtype=float)
+        median = np.asarray(median, dtype=float)
+        lower = np.asarray(lower, dtype=float)
+        upper = np.asarray(upper, dtype=float)
+
+        self._posterior_sld_z = z.tolist()
+        self._posterior_sld_median = median.tolist()
+        self._posterior_sld_lower = lower.tolist()
+        self._posterior_sld_upper = upper.tolist()
+        self.posteriorPredictiveSldDataChanged.emit()
+
+    def clear_posterior_predictive_sld(self) -> None:
+        """Clear the posterior predictive SLD data."""
+        self._posterior_sld_z = []
+        self._posterior_sld_median = []
+        self._posterior_sld_lower = []
+        self._posterior_sld_upper = []
+        self.posteriorPredictiveSldDataChanged.emit()
