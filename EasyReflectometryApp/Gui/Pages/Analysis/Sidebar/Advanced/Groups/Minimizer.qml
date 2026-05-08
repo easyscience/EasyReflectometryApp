@@ -95,10 +95,7 @@ EaElements.GroupBox {
             topInset: samplesLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
-            onAccepted: {
-                Globals.BackendWrapper.bayesianSetSamples(Number(text))
-                focus = false
-            }
+            onEditingFinished: Globals.BackendWrapper.bayesianSetSamples(Number(text))
             text: Globals.BackendWrapper.bayesianSamples
             EaElements.Label {
                 id: samplesLabel
@@ -112,10 +109,7 @@ EaElements.GroupBox {
             topInset: burninLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
-            onAccepted: {
-                Globals.BackendWrapper.bayesianSetBurnIn(Number(text))
-                focus = false
-            }
+            onEditingFinished: Globals.BackendWrapper.bayesianSetBurnIn(Number(text))
             text: Globals.BackendWrapper.bayesianBurnIn
             EaElements.Label {
                 id: burninLabel
@@ -129,10 +123,7 @@ EaElements.GroupBox {
             topInset: populationLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
-            onAccepted: {
-                Globals.BackendWrapper.bayesianSetPopulation(Number(text))
-                focus = false
-            }
+            onEditingFinished: Globals.BackendWrapper.bayesianSetPopulation(Number(text))
             text: Globals.BackendWrapper.bayesianPopulation
             EaElements.Label {
                 id: populationLabel
@@ -146,10 +137,7 @@ EaElements.GroupBox {
             topInset: thinningLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
-            onAccepted: {
-                Globals.BackendWrapper.bayesianSetThinning(Number(text))
-                focus = false
-            }
+            onEditingFinished: Globals.BackendWrapper.bayesianSetThinning(Number(text))
             text: Globals.BackendWrapper.bayesianThinning
             EaElements.Label {
                 id: thinningLabel

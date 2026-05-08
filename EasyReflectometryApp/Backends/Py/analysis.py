@@ -361,6 +361,14 @@ class Analysis(QObject):
                 self.fitFailed.emit(self._fitting_logic.fit_error_message)
             return
 
+        logger.info(
+            'Bayesian DREAM: samples=%d burn=%d thin=%d population=%d',
+            self._bayesian_logic.samples,
+            self._bayesian_logic.burn,
+            self._bayesian_logic.thin,
+            self._bayesian_logic.population,
+        )
+
         self._fitter_thread = FitterWorker(
             fitter=multi_fitter,  # the high-level reflectometry MultiFitter
             method_name='sample',
