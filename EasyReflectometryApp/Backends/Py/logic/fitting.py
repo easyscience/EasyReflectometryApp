@@ -36,6 +36,10 @@ class Fitting:
         self._fit_preview_parameter_values: dict = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
+        self._sample_step = 0
+        self._sample_total_steps = 0
+        self._sample_running_message = ''
+        self._sample_has_update = False
 
     @property
     def status(self) -> str:
@@ -106,6 +110,30 @@ class Fitting:
     def fit_has_interim_update(self) -> bool:
         return self._fit_has_interim_update
 
+    # ------------------------------------------------------------------
+    # Bayesian sampling progress
+    # ------------------------------------------------------------------
+
+    @property
+    def sample_step(self) -> int:
+        return self._sample_step
+
+    @property
+    def sample_progress_message(self) -> str:
+        return self._sample_running_message
+
+    @property
+    def sample_has_update(self) -> bool:
+        return self._sample_has_update
+
+    @property
+    def sample_total_steps(self) -> int:
+        return self._sample_total_steps
+
+    # ------------------------------------------------------------------
+    # Progress handling
+    # ------------------------------------------------------------------
+
     def on_fit_progress(self, payload: dict) -> None:
         """Update transient state from an in-flight fit progress payload."""
         self._fit_iteration = int(payload.get('iteration', 0) or 0)
@@ -132,6 +160,7 @@ class Fitting:
         self._fit_preview_parameter_values = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
+        self.clear_sample_progress()
 
     def on_fit_failed(self, error_message: str) -> None:
         """Handle fitting failure callback.
@@ -348,7 +377,8 @@ class Fitting:
         self._result = None
         self._results = []
         self.clear_fit_progress()
-        self._fit_running_message = 'Sampling… (this may take several minutes)'
+        self.clear_sample_progress()
+        self._sample_running_message = 'Sampling… (this may take several minutes)'
 
     def on_sample_finished(self) -> None:
         """Handle successful Bayesian sampling completion without FitResults.
@@ -363,6 +393,27 @@ class Fitting:
         self._result = None
         self._results = []
         self.clear_fit_progress()
+
+    def on_sample_progress(self, payload: dict) -> None:
+        """Update transient state from an in-flight DREAM sampling progress payload."""
+        self._sample_step = int(payload.get('iteration', 0) or 0)
+        self._sample_total_steps = int(payload.get('total_steps', 0) or 0)
+        self._sample_has_update = True
+        self._fit_has_interim_update = True
+        total = self._sample_total_steps
+        if self._sample_step > 0:
+            if total > 0:
+                self._sample_running_message = f'DREAM step {self._sample_step} of {total}'
+            else:
+                self._sample_running_message = f'DREAM step {self._sample_step}'
+        else:
+            self._sample_running_message = 'Sampling…'
+
+    def clear_sample_progress(self) -> None:
+        self._sample_step = 0
+        self._sample_total_steps = 0
+        self._sample_running_message = ''
+        self._sample_has_update = False
 
     def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
         """Handle successful completion of fitting.

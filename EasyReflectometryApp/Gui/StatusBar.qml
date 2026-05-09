@@ -60,6 +60,15 @@ EaElements.StatusBar {
         keyText: qsTr('Fit')
         valueText: {
             if (Globals.BackendWrapper.analysisFitHasInterimUpdate) {
+                if (Globals.BackendWrapper.analysisIsBayesianSelected
+                    && Globals.BackendWrapper.analysisSampleProgressHasUpdate) {
+                    const step = Globals.BackendWrapper.analysisSampleProgressStep
+                    const total = Globals.BackendWrapper.analysisSampleProgressTotalSteps
+                    if (total > 0) {
+                        return qsTr('DREAM step %1 of %2').arg(step).arg(total)
+                    }
+                    return qsTr('DREAM step %1').arg(step)
+                }
                 const iter = Globals.BackendWrapper.analysisFitIteration
                 const rchi2 = Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
                 return qsTr('iter %1 · χ² %2').arg(iter).arg(rchi2)

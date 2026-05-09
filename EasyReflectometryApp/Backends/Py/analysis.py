@@ -177,6 +177,26 @@ class Analysis(QObject):
     def isBayesianSelected(self) -> bool:
         return self._minimizers_logic.is_bayesian_selected()
 
+    # ------------------------------------------------------------------
+    # Bayesian sampling progress properties
+    # ------------------------------------------------------------------
+
+    @Property(int, notify=fittingChanged)
+    def sampleProgressStep(self) -> int:
+        return self._fitting_logic.sample_step
+
+    @Property(str, notify=fittingChanged)
+    def sampleProgressMessage(self) -> str:
+        return self._fitting_logic.sample_progress_message
+
+    @Property(bool, notify=fittingChanged)
+    def sampleProgressHasUpdate(self) -> bool:
+        return self._fitting_logic.sample_has_update
+
+    # ------------------------------------------------------------------
+    # Bayesian sampling parameter properties
+    # ------------------------------------------------------------------
+
     @Property(int, notify=minimizerChanged)
     def bayesianSamples(self) -> int:
         return self._bayesian_logic.samples
@@ -223,7 +243,7 @@ class Analysis(QObject):
         if p is None:
             return None
         return {
-            'paramNames': p['param_names'],
+            'paramNames': self._bayesian_display_name_list(),
             'nDraws': int(p['draws'].shape[0]),
         }
 
@@ -234,8 +254,9 @@ class Analysis(QObject):
         import numpy as np
 
         p = self._bayesian_logic.posterior
+        display_names = self._bayesian_display_name_list()
         out = []
-        for k, name in enumerate(p['param_names']):
+        for k, name in enumerate(display_names):
             col = p['draws'][:, k]
             counts, edges = np.histogram(col, bins=40, density=True)
             centers = 0.5 * (edges[:-1] + edges[1:])
@@ -253,6 +274,35 @@ class Analysis(QObject):
         return out
 
     # Phase 2: corner/trace plot PNGs, diagnostics, heatmap
+
+    def _bayesian_display_names(self) -> dict[str, str]:
+        """Build mapping from unique_name to human-readable display name.
+
+        Uses the unfiltered parameter list (``all_parameters()``) so that every
+        sampled parameter can be resolved, independent of the current table
+        filter state.
+        """
+        mapping: dict[str, str] = {}
+        try:
+            for p in self._parameters_logic.all_parameters():
+                unique = p.get('unique_name', '')
+                display = p.get('name', unique)
+                if unique:
+                    mapping[unique] = display
+        except Exception:
+            logger.exception('Failed to build Bayesian parameter display-name mapping')
+        return mapping
+
+    def _bayesian_display_name_list(self) -> list[str]:
+        """Return the posterior parameter names translated to display names."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            return []
+        mapping = self._bayesian_display_names()
+        result: list[str] = []
+        for name in posterior['param_names']:
+            result.append(mapping.get(name) or name)
+        return result
 
     @Property(str, notify=fittingChanged)
     def bayesianCornerPlotUrl(self) -> str:
@@ -281,10 +331,8 @@ class Analysis(QObject):
 
     @Property('QVariantList', notify=fittingChanged)
     def bayesianParamNames(self) -> list:
-        """Return parameter names for heatmap axis dropdowns."""
-        if not self._bayesian_logic.has_result:
-            return []
-        return list(self._bayesian_logic.posterior['param_names'])
+        """Return parameter names for heatmap axis dropdowns (display names)."""
+        return self._bayesian_display_name_list()
 
     heatmapChanged = Signal()
 
@@ -311,10 +359,11 @@ class Analysis(QObject):
             draws = draws.reshape(-1, draws.shape[-1])
         x = draws[:, paramX]
         y = draws[:, paramY]
+        display_names = self._bayesian_display_name_list()
         H, xedges, yedges = np.histogram2d(x, y, bins=50, density=True)
         self._bayesian_logic.heatmap_data = {
-            'xLabel': posterior['param_names'][paramX],
-            'yLabel': posterior['param_names'][paramY],
+            'xLabel': display_names[paramX] if paramX < len(display_names) else posterior['param_names'][paramX],
+            'yLabel': display_names[paramY] if paramY < len(display_names) else posterior['param_names'][paramY],
             'xCenters': (0.5 * (xedges[:-1] + xedges[1:])).tolist(),
             'yCenters': (0.5 * (yedges[:-1] + yedges[1:])).tolist(),
             'zValues': H.T.tolist(),
@@ -383,7 +432,10 @@ class Analysis(QObject):
     @Slot(dict)
     def _on_fit_progress(self, payload: dict) -> None:
         """Handle in-flight progress payloads emitted from the worker thread."""
-        self._fitting_logic.on_fit_progress(payload)
+        if payload.get('sampling'):
+            self._fitting_logic.on_sample_progress(payload)
+        else:
+            self._fitting_logic.on_fit_progress(payload)
         self.fittingChanged.emit()
 
     @Slot(list)
@@ -458,6 +510,7 @@ class Analysis(QObject):
         self._fitter_thread.setTerminationEnabled(True)
         self._fitter_thread.finished.connect(self._on_sample_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
+        self._fitter_thread.progressDetail.connect(self._on_fit_progress)
         self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
@@ -548,7 +601,10 @@ class Analysis(QObject):
                 pr = PosteriorResults(draws, posterior['param_names'])
                 rhat = pr.gelman_rubin()
                 if rhat is not None:
-                    finite_rhat = {name: value for name, value in rhat.items() if value == value}
+                    # Translate unique_name keys to display names
+                    mapping = self._bayesian_display_names()
+                    mapped_rhat = {mapping.get(name) or name: value for name, value in rhat.items()}
+                    finite_rhat = {name: value for name, value in mapped_rhat.items() if value == value}
                     if finite_rhat:
                         diagnostics['rhat'] = finite_rhat
                     else:
@@ -559,6 +615,10 @@ class Analysis(QObject):
             diagnostics['rhatStatus'] = 'Unavailable: the sampler returned flattened draws without chain identities.'
 
         self._bayesian_logic.diagnostics = diagnostics
+
+    @Property(int, notify=fittingChanged)
+    def sampleProgressTotalSteps(self) -> int:
+        return self._fitting_logic.sample_total_steps
 
     def _plot_file_path(self, stem: str):
         """Return a stable temporary file path for a rendered Bayesian plot."""
@@ -585,10 +645,11 @@ class Analysis(QObject):
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
 
-            n_params = len(posterior['param_names'])
+            display_names = self._bayesian_display_name_list()
+            n_params = len(display_names)
             size = max(6, n_params * 1.8)
             plt.figure(figsize=(size, size))
-            plot_corner(posterior['draws'], posterior['param_names'], fig=plt.gcf())
+            plot_corner(posterior['draws'], display_names, fig=plt.gcf())
             fig = plt.gcf()
             plt.tight_layout()
 
@@ -623,10 +684,11 @@ class Analysis(QObject):
                 chains, n_draws, n_params = 1, draws.shape[0], draws.shape[1]
                 draws = draws.reshape(1, n_draws, n_params)
 
-            n_params = len(posterior['param_names'])
+            display_names = self._bayesian_display_name_list()
+            n_params = len(display_names)
             fig, axes = plt.subplots(n_params, 1, figsize=(10, 2.2 * max(n_params, 1)), squeeze=False)
             x = np.arange(n_draws)
-            for index, name in enumerate(posterior['param_names']):
+            for index, name in enumerate(display_names):
                 axis = axes[index, 0]
                 for chain in range(chains):
                     axis.plot(x, draws[chain, :, index], linewidth=0.8, alpha=0.8)
@@ -664,8 +726,9 @@ class Analysis(QObject):
 
             x = draws[:, paramX]
             y = draws[:, paramY]
-            x_label = posterior['param_names'][paramX]
-            y_label = posterior['param_names'][paramY]
+            display_names = self._bayesian_display_name_list()
+            x_label = display_names[paramX] if paramX < len(display_names) else posterior['param_names'][paramX]
+            y_label = display_names[paramY] if paramY < len(display_names) else posterior['param_names'][paramY]
 
             fig, axis = plt.subplots(figsize=(8, 6))
             heatmap = axis.hist2d(x, y, bins=60, density=True, cmap='viridis')

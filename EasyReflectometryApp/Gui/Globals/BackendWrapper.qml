@@ -600,4 +600,10 @@ QtObject {
             return []
         }
     }
+
+    // Bayesian sampling progress
+    readonly property int analysisSampleProgressStep: activeBackend.analysis.sampleProgressStep
+    readonly property string analysisSampleProgressMessage: activeBackend.analysis.sampleProgressMessage
+    readonly property bool analysisSampleProgressHasUpdate: activeBackend.analysis.sampleProgressHasUpdate
+    readonly property int analysisSampleProgressTotalSteps: activeBackend.analysis.sampleProgressTotalSteps
 }

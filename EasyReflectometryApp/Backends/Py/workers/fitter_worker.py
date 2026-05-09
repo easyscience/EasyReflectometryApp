@@ -97,14 +97,16 @@ class FitterWorker(QThread):
             # Get the method and call it
             method = getattr(self._fitter, self._method_name)
             kwargs = dict(self._kwargs)
-            if self._method_name == 'fit' and 'progress_callback' not in kwargs:
+            if self._method_name in ('fit', 'sample') and 'progress_callback' not in kwargs:
                 kwargs['progress_callback'] = self._progress_callback
+            if self._method_name == 'sample' and 'abort_test' not in kwargs:
+                kwargs['abort_test'] = lambda: self._stop_requested
+            elif self._method_name == 'fit' and 'abort_test' not in kwargs and self._uses_bumps_minimizer():
+                kwargs['abort_test'] = lambda: self._stop_requested
             result = method(*self._args, **kwargs)
 
-            # NOTE: This check only catches stop requests that occurred AFTER the fit
-            # completed but before we emit the result. It does NOT interrupt the fitting
-            # algorithm mid-execution since lmfit/scipy don't support cancellation callbacks.
-            # The effective cancellation window is only before the fit starts (checked above).
+            # For BUMPS fit/sample, abort_test interrupts mid-run and method() returns early;
+            # for lmfit/dfo this still only catches stops requested after the fit completed.
             if self._stop_requested:
                 self.failed.emit('Fitting cancelled by user')
                 return
@@ -126,6 +128,11 @@ class FitterWorker(QThread):
         """Relay plain progress payloads from the minimizer to Qt signals."""
         self.progressDetail.emit(dict(payload))
         return not self._stop_requested
+
+    def _uses_bumps_minimizer(self) -> bool:
+        """Return True if the underlying minimizer is BUMPS (and therefore accepts abort_test)."""
+        minimizer = getattr(self._fitter, 'minimizer', None)
+        return getattr(minimizer, 'package', None) == 'bumps'
 
     def stop(self) -> None:
         """
