@@ -32,7 +32,7 @@ classifiers = [
 requires-python = '>=3.12'
 dependencies = [
   'easyapplication',
-  'easyreflectometry',
+  'easyreflectometry @ git+https://github.com/easyscience/reflectometry-lib.git@bayesian',
   'asteval',
   'PySide6',
   'toml',
