@@ -49,10 +49,12 @@ EaElements.Dialog {
         EaElements.Label {
             visible: Globals.BackendWrapper.bayesianResultAvailable
                            && Globals.BackendWrapper.bayesianPosterior !== null
-            text: Globals.BackendWrapper.bayesianPosterior
-                ? "Posterior draws: " + Globals.BackendWrapper.bayesianPosterior.nDraws
-                    + "\nParameters: " + Globals.BackendWrapper.bayesianPosterior.paramNames.join(", ")
-                : ""
+            text: {
+                if (!Globals.BackendWrapper.bayesianPosterior) return ''
+                const pp = Globals.BackendWrapper.bayesianPosterior
+                const params = pp.paramNames.map(function(n) { return '   • ' + n }).join('\n')
+                return 'Posterior draws: ' + pp.nDraws + '\nParameters:\n' + params
+            }
         }
 
         // Classical fit content (hidden when Bayesian result is shown)

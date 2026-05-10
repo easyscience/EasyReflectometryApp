@@ -36,6 +36,10 @@ dependencies = [
   'asteval',
   'PySide6',
   'toml',
+  'numpy',
+  'matplotlib',
+  'corner>=2.2',
+  'arviz>=0.18',
 ]
 
 [project.optional-dependencies]

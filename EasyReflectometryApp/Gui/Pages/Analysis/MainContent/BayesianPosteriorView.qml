@@ -27,11 +27,12 @@ Rectangle {
             Layout.margins: EaStyle.Sizes.fontPixelSize
             visible: Globals.BackendWrapper.bayesianResultAvailable
                      && Globals.BackendWrapper.bayesianPosterior !== null
-            text: Globals.BackendWrapper.bayesianPosterior
-                ? "Bayesian MCMC Sampling Results\n"
-                    + "Posterior draws: " + Globals.BackendWrapper.bayesianPosterior.nDraws
-                    + "  |  Parameters: " + Globals.BackendWrapper.bayesianPosterior.paramNames.join(", ")
-                : ""
+            text: {
+                if (!Globals.BackendWrapper.bayesianPosterior) return ''
+                const pp = Globals.BackendWrapper.bayesianPosterior
+                return 'Bayesian MCMC Sampling Results\n'
+                    + 'Posterior draws: ' + pp.nDraws
+            }
             wrapMode: Text.WordWrap
         }
 
