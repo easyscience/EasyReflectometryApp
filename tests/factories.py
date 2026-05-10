@@ -243,12 +243,13 @@ class FakeCalculatorController:
 
 
 class FakeExperiment:
-    def __init__(self, name, model=None, x=None, y=None, ye=None):
+    def __init__(self, name, model=None, x=None, y=None, ye=None, xe=None):
         self.name = name
         self.model = model
         self.x = [] if x is None else x
         self.y = [] if y is None else y
         self.ye = [] if ye is None else ye
+        self.xe = [] if xe is None else xe
 
 
 class FakeMinimizerValue:

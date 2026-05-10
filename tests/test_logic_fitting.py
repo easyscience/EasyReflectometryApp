@@ -205,3 +205,186 @@ def test_start_stop_handles_success_and_fiterror():
     project.fitter = SimpleNamespace(fit_single_data_set_1d=_raise_fit_error)
     logic.start_stop()
     assert 'fit failed' in logic.fit_error_message
+
+
+# ===================================================================
+# Bayesian sampling preparation
+# ===================================================================
+
+def test_prepare_threaded_sample_handles_empty_experiments():
+    project = make_project(experiments={})
+    logic = fitting_module.Fitting(project)
+
+    result = logic.prepare_threaded_sample(StubMinimizersLogic())
+
+    assert result == (None, None)
+    assert logic.fit_error_message == 'No experiments to sample'
+    assert logic.fit_finished is True
+    assert logic.show_results_dialog is True
+
+
+def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
+    install_fake_multifitter(monkeypatch)
+    model_a = make_model(name='A')
+    experiments = {
+        0: make_experiment('Exp A', model=model_a,
+                           x=np.array([1.0, 2.0]), y=np.array([4.0, 5.0]), ye=np.array([0.1, 0.2])),
+    }
+    project = make_project(experiments=experiments)
+    logic = fitting_module.Fitting(project)
+
+    # Mock the datagroup collection to avoid scipp dependency
+    monkeypatch.setattr(logic, 'collect_selected_experiments_datagroup', lambda: 'fake-data-group')
+
+    multi_fitter, data_group = logic.prepare_threaded_sample(StubMinimizersLogic())
+
+    assert multi_fitter is not None
+    assert multi_fitter.models == (model_a,)
+    assert data_group == 'fake-data-group'
+
+
+def test_collect_selected_experiments_datagroup_builds_sc_structs(monkeypatch):
+    # Fake scipp to avoid import issues
+    import numpy as np
+
+    # We need to make scipp available; we'll mock the import within the method
+    model = make_model(name='M1')
+    experiments = {
+        0: make_experiment('Exp 1', model=model,
+                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([0.01, 0.04])),
+    }
+    project = make_project(experiments=experiments)
+    logic = fitting_module.Fitting(project)
+
+    # Create a minimal sc.DataGroup stand-in
+    class FakeSCUnit:
+        def __init__(self, unit_str):
+            self._str = unit_str
+        def __eq__(self, other):
+            return isinstance(other, FakeSCUnit) and other._str == self._str
+
+    class FakeSCArray:
+        _registry = []
+        def __init__(self, *, dims, values, variances=None, unit=None):
+            self.dims = dims
+            self.values = values
+            self.variances = variances
+            self.unit = unit
+            FakeSCArray._registry.append(self)
+
+    class FakeSCDataGroup(dict):
+        def __init__(self, data=None, coords=None, attrs=None):
+            super().__init__()
+            self.data = data or {}
+            self.coords = coords or {}
+            self.attrs = attrs or {}
+        def __repr__(self):
+            return f'DataGroup({dict(self.data)})'
+
+    FakeSCArray._registry = []
+
+    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
+    monkeypatch.setattr('scipp.array', FakeSCArray)
+    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
+
+    dg = logic.collect_selected_experiments_datagroup()
+
+    # Verify FakeSCArray was called to create coords and data
+    assert len(FakeSCArray._registry) >= 2  # coords + data entries
+    # Coords entries have 'Qz' in their dims
+    coord_calls = [a for a in FakeSCArray._registry if 'Qz' in str(a.dims)]
+    assert len(coord_calls) >= 1
+    # Data entries have variances (ye_vals)
+    data_calls = [a for a in FakeSCArray._registry if a.variances is not None]
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.prepare_for_threaded_sample()
+
+    assert logic.running is True
+    assert logic.fit_finished is False
+    assert logic.show_results_dialog is False
+    assert logic.sample_progress_message == 'Sampling… (this may take several minutes)'
+
+
+# ===================================================================
+# Bayesian sampling progress
+# ===================================================================
+
+def test_on_sample_progress_updates_step_and_total():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({'iteration': 42, 'total_steps': 1000})
+
+    assert logic.sample_step == 42
+    assert logic.sample_total_steps == 1000
+    assert logic.sample_has_update is True
+
+
+def test_on_sample_progress_handles_zero_defaults():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({})
+
+    assert logic.sample_step == 0
+    assert logic.sample_total_steps == 0
+
+
+def test_on_sample_progress_handles_none_values():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({'iteration': None, 'total_steps': None})
+
+    assert logic.sample_step == 0
+    assert logic.sample_total_steps == 0
+
+
+# ===================================================================
+# Bayesian sampling completion lifecycle
+# ===================================================================
+
+def test_on_sample_finished_clears_fit_state_and_shows_dialog():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    # Simulate that a fit was running
+    logic.prepare_for_threaded_sample()
+    assert logic.running is True
+
+    logic.on_sample_finished()
+
+    assert logic.running is False
+    assert logic.fit_finished is True
+    assert logic.show_results_dialog is True
+    assert logic.fit_error_message == ''
+    assert logic.fit_success is False  # default
+    assert logic.sample_step == 0      # cleared via clear_fit_progress
+    assert logic.sample_has_update is False
+
+
+def test_on_sample_finished_preserves_none_result():
+    """on_sample_finished does not set a FitResult — Bayesian results are stored elsewhere."""
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_finished()
+
+    assert logic._result is None
+    assert logic._results == []
+
+
+def test_clear_sample_progress_works():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({'iteration': 50, 'total_steps': 500})
+    assert logic.sample_step == 50
+
+    logic.clear_sample_progress()
+
+    assert logic.sample_step == 0
+    assert logic.sample_total_steps == 0
+    assert logic.sample_progress_message == ''
