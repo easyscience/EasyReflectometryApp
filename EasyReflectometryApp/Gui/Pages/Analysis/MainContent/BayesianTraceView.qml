@@ -22,11 +22,22 @@ Rectangle {
         anchors.margins: EaStyle.Sizes.fontPixelSize
         spacing: EaStyle.Sizes.fontPixelSize
 
-        EaElements.Label {
+        RowLayout {
             Layout.fillWidth: true
-            text: qsTr("MCMC Chain Trace Plots")
-            font: EaStyle.Fonts.headingFont
             visible: Globals.BackendWrapper.bayesianTracePlotUrl !== ''
+
+            EaElements.Label {
+                Layout.fillWidth: true
+                text: qsTr("MCMC Chain Trace Plots")
+                font: EaStyle.Fonts.headingFont
+            }
+
+            EaElements.Button {
+                text: qsTr("Save")
+                onClicked: Globals.BackendWrapper.bayesianSavePlot(
+                    Globals.BackendWrapper.bayesianTracePlotUrl
+                )
+            }
         }
 
         Image {

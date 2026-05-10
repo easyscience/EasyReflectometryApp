@@ -1,4 +1,5 @@
 import logging
+import os
 
 from typing import List
 from typing import Optional
@@ -1156,3 +1157,52 @@ class Analysis(QObject):
             self._parameters_logic.set_current_index(parameters_length - 1)
             self.parametersIndexChanged.emit()
         self.parametersChanged.emit()
+
+    # ------------------------------------------------------------------
+    # Bayesian plot saving
+    # ------------------------------------------------------------------
+
+    @Slot(str, result=bool)
+    def saveBayesianPlot(self, source_url: str) -> bool:
+        """Open a native save dialog to save a rendered Bayesian plot PNG.
+
+        :param source_url: ``file://`` URL of the rendered plot (e.g. from
+            ``bayesianCornerPlotUrl``, ``bayesianTracePlotUrl``,
+            ``bayesianHeatmapPlotUrl``).
+        :returns: ``True`` if the file was saved successfully.
+        """
+        import shutil
+        from pathlib import Path
+
+        if not source_url or not source_url.startswith('file://'):
+            logger.warning('Invalid Bayesian plot URL for saving: %s', source_url)
+            return False
+
+        source_path = Path(source_url.replace('file:///', '', 1) if source_url.startswith('file:///')
+                           else source_url.replace('file://', '', 1))
+        # Handle Windows paths: file:///C:/... → C:/...
+        if os.name == 'nt' and str(source_path).startswith('/'):
+            source_path = Path(str(source_path)[1:])
+
+        if not source_path.exists():
+            logger.warning('Bayesian plot file not found: %s', source_path)
+            return False
+
+        suggested = source_path.name or 'bayesian_plot.png'
+        dialog = QtWidgets.QFileDialog()
+        save_path, _ = dialog.getSaveFileName(
+            None,
+            'Save Bayesian plot',
+            str(Path.home() / suggested),
+            'PNG Images (*.png)',
+        )
+        if not save_path:
+            return False
+
+        try:
+            shutil.copy2(str(source_path), save_path)
+            logger.info('Bayesian plot saved to %s', save_path)
+            return True
+        except OSError as exc:
+            logger.exception('Failed to save Bayesian plot to %s', save_path, exc)
+            return False

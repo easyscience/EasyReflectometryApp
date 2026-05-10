@@ -24,7 +24,7 @@ Rectangle {
         anchors.margins: EaStyle.Sizes.fontPixelSize
         spacing: EaStyle.Sizes.fontPixelSize
 
-        // Parameter selection row
+        // Parameter selection row + save button
         RowLayout {
             Layout.fillWidth: true
             visible: Globals.BackendWrapper.bayesianResultAvailable
@@ -47,6 +47,14 @@ Rectangle {
                 model: Globals.BackendWrapper.bayesianParamNames
                 currentIndex: Math.min(1, model ? model.length - 1 : 0)
                 onCurrentIndexChanged: updateHeatmap()
+            }
+
+            EaElements.Button {
+                text: qsTr("Save")
+                enabled: Globals.BackendWrapper.bayesianHeatmapPlotUrl !== ''
+                onClicked: Globals.BackendWrapper.bayesianSavePlot(
+                    Globals.BackendWrapper.bayesianHeatmapPlotUrl
+                )
             }
         }
 

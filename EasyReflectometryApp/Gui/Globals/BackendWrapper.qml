@@ -324,6 +324,7 @@ QtObject {
     readonly property var bayesianHeatmapData: activeBackend.analysis.bayesianHeatmapData
     readonly property string bayesianHeatmapPlotUrl: activeBackend.analysis.bayesianHeatmapPlotUrl
     function bayesianComputeHeatmap(x, y) { activeBackend.analysis.computeBayesianHeatmap(x, y) }
+    function bayesianSavePlot(sourceUrl)  { activeBackend.analysis.saveBayesianPlot(sourceUrl) }
 
     // Phase 2: SLD posterior predictive
     readonly property var posteriorPredictiveSldZ: activeBackend.plotting.posteriorPredictiveSldZ
