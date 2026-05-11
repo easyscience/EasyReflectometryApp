@@ -13,6 +13,11 @@ from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQml import qmlRegisterSingletonType
 
+# Suppress matplotlib debug/verbose logging (especially font lookup spam)
+import logging as _logging
+_logging.getLogger('matplotlib').setLevel(_logging.WARNING)
+_logging.getLogger('matplotlib.font_manager').setLevel(_logging.WARNING)
+
 try:  # Running locally
     from Backends.Py import PyBackend
     from Backends.Py.helpers import Application

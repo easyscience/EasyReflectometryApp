@@ -81,6 +81,77 @@ Rectangle {
             Globals.BackendWrapper.updateRefLines(backgroundRefLine, scaleRefLine, true)
         }
 
+        // Posterior predictive overlay (Bayesian)
+        LineSeries {
+            id: ppUpperSerie
+            axisX: chartView.currentXAxis()
+            axisY: chartView.axisY
+            visible: Globals.BackendWrapper.bayesianResultAvailable
+        }
+
+        LineSeries {
+            id: ppLowerSerie
+            axisX: chartView.currentXAxis()
+            axisY: chartView.axisY
+            visible: Globals.BackendWrapper.bayesianResultAvailable
+        }
+
+        LineSeries {
+            id: ppMedianSerie
+            name: qsTr("Posterior median")
+            axisX: chartView.currentXAxis()
+            axisY: chartView.axisY
+            color: "#E67E22"
+            width: 5
+            visible: Globals.BackendWrapper.bayesianResultAvailable
+        }
+
+        AreaSeries {
+            id: ppBandSerie
+            name: qsTr("95% credible interval")
+            axisX: chartView.currentXAxis()
+            axisY: chartView.axisY
+            color: Qt.rgba(0.902, 0.494, 0.133, 0.25)  // orange with alpha
+            borderWidth: 0
+            upperSeries: ppUpperSerie
+            lowerSeries: ppLowerSerie
+            visible: Globals.BackendWrapper.bayesianResultAvailable
+        }
+
+        Connections {
+            target: Globals.BackendWrapper
+            function onPosteriorPredictiveDataChanged() {
+                chartView.refreshPosteriorPredictiveOverlay()
+            }
+        }
+
+        function refreshPosteriorPredictiveOverlay() {
+            ppMedianSerie.clear()
+            ppUpperSerie.clear()
+            ppLowerSerie.clear()
+            const q  = Globals.BackendWrapper.posteriorPredictiveQ
+            const m  = Globals.BackendWrapper.posteriorPredictiveMedian
+            const lo = Globals.BackendWrapper.posteriorPredictiveLower
+            const hi = Globals.BackendWrapper.posteriorPredictiveUpper
+            console.log("AnalysisView.refreshPosteriorPredictiveOverlay: q.length=" + (q ? q.length : "null")
+                        + " m.length=" + (m ? m.length : "null")
+                        + " bayesianResultAvailable=" + Globals.BackendWrapper.bayesianResultAvailable)
+            if (!q || !m || !lo || !hi) {
+                console.warn("AnalysisView.refreshPosteriorPredictiveOverlay: posterior data is null/empty")
+                return
+            }
+            if (q.length === 0) {
+                console.warn("AnalysisView.refreshPosteriorPredictiveOverlay: posterior data arrays are empty")
+                return
+            }
+            for (let i = 0; i < q.length; ++i) {
+                ppMedianSerie.append(q[i], m[i])
+                ppLowerSerie.append(q[i], lo[i])
+                ppUpperSerie.append(q[i], hi[i])
+            }
+            console.log("AnalysisView.refreshPosteriorPredictiveOverlay: appended " + q.length + " points")
+        }
+
         // Scatter series for measured data (single experiment, linear mode)
         property var measuredScatterSerie: null
 
@@ -235,6 +306,7 @@ Rectangle {
 
             updateReferenceLines()
             Qt.callLater(resetAxes)
+            Qt.callLater(refreshPosteriorPredictiveOverlay)
         }
 
         function resetAxes() {
@@ -483,6 +555,7 @@ Rectangle {
         // Legend
         Rectangle {
             visible: Globals.Variables.showLegendOnAnalysisPage
+                  || Globals.BackendWrapper.bayesianResultAvailable
 
             x: chartView.plotArea.x + chartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
             y: chartView.plotArea.y + EaStyle.Sizes.fontPixelSize
@@ -509,6 +582,36 @@ Rectangle {
                     visible: !chartView.isMultiExperimentMode
                     text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + ' (Calculated)'
                     color: chartView.calcSerie.color
+                }
+
+                // Bayesian posterior predictive legend
+                Row {
+                    visible: !chartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                    spacing: EaStyle.Sizes.fontPixelSize * 0.3
+                    Rectangle {
+                        width: EaStyle.Sizes.fontPixelSize * 1.2
+                        height: 2
+                        color: "#E67E22"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    EaElements.Label {
+                        text: qsTr("Posterior median")
+                        color: EaStyle.Colors.themeForegroundMinor
+                    }
+                }
+                Row {
+                    visible: !chartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                    spacing: EaStyle.Sizes.fontPixelSize * 0.3
+                    Rectangle {
+                        width: EaStyle.Sizes.fontPixelSize * 1.2
+                        height: EaStyle.Sizes.fontPixelSize * 0.6
+                        color: Qt.rgba(0.902, 0.494, 0.133, 0.25)
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    EaElements.Label {
+                        text: qsTr("95% credible interval")
+                        color: EaStyle.Colors.themeForegroundMinor
+                    }
                 }
 
                 // Multi-experiment legend
@@ -595,6 +698,7 @@ Rectangle {
                     Globals.BackendWrapper.plottingRefreshAnalysis()
                 }
             }
+            Qt.callLater(refreshPosteriorPredictiveOverlay)
         }
 
         // Data is set in python backend (plotting_1d.py)
@@ -624,6 +728,9 @@ Rectangle {
             
             // Initialize reference lines
             updateReferenceLines()
+
+            // Initialize posterior predictive overlay
+            refreshPosteriorPredictiveOverlay()
         }
 
         // Update series when chart becomes visible
@@ -645,6 +752,7 @@ Rectangle {
                     Globals.BackendWrapper.plottingRefreshAnalysis()
                 }
                 updateReferenceLines()
+                refreshPosteriorPredictiveOverlay()
             }
         }
     }

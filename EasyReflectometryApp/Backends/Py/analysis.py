@@ -519,17 +519,21 @@ class Analysis(QObject):
     @Slot(list)
     def _on_sample_finished(self, results: list) -> None:
         """Handle successful completion of Bayesian sampling."""
-        posterior = results[0]  # {'draws', 'param_names', 'state', 'logp'}
-        self._bayesian_logic._posterior = posterior
-        self._fitting_logic.on_sample_finished()
-        self._fitter_thread = None
-        # Phase 2: compute posterior predictive, diagnostics, and rendered plots
-        self._compute_and_publish_posterior_predictive()
-        self._compute_diagnostics()
-        self._render_corner_plot()
-        self._render_trace_plot()
-        self.fittingChanged.emit()
-        self.externalFittingChanged.emit()
+        try:
+            posterior = results[0]  # {'draws', 'param_names', 'state', 'logp'}
+            self._bayesian_logic._posterior = posterior
+            self._fitting_logic.on_sample_finished()
+            self._fitter_thread = None
+            # Phase 2: compute posterior predictive, diagnostics, and rendered plots
+            self._compute_and_publish_posterior_predictive()
+            self._compute_diagnostics()
+            self._render_corner_plot()
+            self._render_trace_plot()
+        except Exception:
+            logger.exception('Error during posterior computation / rendering')
+        finally:
+            self.fittingChanged.emit()
+            self.externalFittingChanged.emit()
 
     def _compute_and_publish_posterior_predictive(self) -> None:
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
@@ -542,10 +546,12 @@ class Analysis(QObject):
 
         posterior = self._bayesian_logic.posterior
         if posterior is None:
+            logger.warning('_compute_and_publish_posterior_predictive: no posterior available')
             return
 
         experiments = self._ordered_experiments()
         if not experiments:
+            logger.warning('_compute_and_publish_posterior_predictive: no experiments available')
             return
 
         # Use the first selected experiment for the overlay
@@ -553,22 +559,40 @@ class Analysis(QObject):
         q = experiment.x
         model = experiment.model
 
-        median, lo, hi = posterior_predictive_reflectivity(
-            posterior['draws'],
-            posterior['param_names'],
-            model=model,
-            q_values=q,
-            n_samples=200,
+        logger.info(
+            '_compute_and_publish_posterior_predictive: draws shape=%s, n_params=%d, q_points=%d',
+            posterior['draws'].shape,
+            len(posterior['param_names']),
+            len(q),
         )
-        self._plotting.set_posterior_predictive(q, median, lo, hi)
 
-        z, sld_median, sld_lo, sld_hi = posterior_predictive_sld_profile(
-            posterior['draws'],
-            posterior['param_names'],
-            model=model,
-            n_samples=200,
-        )
-        self._plotting.set_posterior_predictive_sld(z, sld_median, sld_lo, sld_hi)
+        try:
+            median, lo, hi = posterior_predictive_reflectivity(
+                posterior['draws'],
+                posterior['param_names'],
+                model=model,
+                q_values=q,
+                n_samples=200,
+            )
+            logger.info(
+                'Posterior predictive reflectivity computed: q=%d, median shape=%s',
+                len(q), median.shape,
+            )
+            self._plotting.set_posterior_predictive(q, median, lo, hi)
+        except Exception:
+            logger.exception('Failed to compute or publish posterior predictive reflectivity')
+            return
+
+        try:
+            z, sld_median, sld_lo, sld_hi = posterior_predictive_sld_profile(
+                posterior['draws'],
+                posterior['param_names'],
+                model=model,
+                n_samples=200,
+            )
+            self._plotting.set_posterior_predictive_sld(z, sld_median, sld_lo, sld_hi)
+        except Exception:
+            logger.exception('Failed to compute or publish posterior predictive SLD profile')
 
     def _compute_diagnostics(self) -> None:
         """Compute convergence diagnostics from the posterior and state."""
@@ -595,25 +619,61 @@ class Analysis(QObject):
                 pass
 
         draws = posterior['draws']
-        if getattr(draws, 'ndim', 0) == 3 and draws.shape[0] >= 2:
-            try:
-                from easyreflectometry.analysis.bayesian import PosteriorResults
+        state = posterior.get('state')
 
-                pr = PosteriorResults(draws, posterior['param_names'])
-                rhat = pr.gelman_rubin()
+        # Try to obtain 3D draws (chains × draws × params) needed by arviz R-hat.
+        # The BUMPS MCMCDraw.chains() returns (n_generations, n_chains, n_params).
+        draws_3d = None
+        if getattr(draws, 'ndim', 0) == 3 and draws.shape[0] >= 2:
+            draws_3d = draws
+        elif state is not None and hasattr(state, 'chains'):
+            try:
+                import numpy as np
+
+                _draw_counts, chains_3d, _logp_3d = state.chains()
+                # chains_3d: (n_generations, n_chains, n_params)
+                if chains_3d.shape[1] >= 2:  # at least 2 chains
+                    # Transpose to arviz convention: (n_chains, n_draws, n_params)
+                    draws_3d = np.moveaxis(chains_3d, 0, 1)
+                else:
+                    diagnostics['rhatStatus'] = 'Unavailable: only one chain was sampled (increase Population).'
+            except Exception:
+                draws_3d = None
+
+        if draws_3d is not None:
+            try:
+                import arviz as _arviz
+
+                # Build arviz InferenceData from 3D draws (n_chains, n_draws, n_params)
+                import numpy as np
+
+                posterior_dict = {}
+                for i, name in enumerate(posterior['param_names']):
+                    posterior_dict[name] = draws_3d[:, :, i]
+                idata = _arviz.from_dict({'posterior': posterior_dict})
+                rhat = _arviz.rhat(idata)
                 if rhat is not None:
-                    # Translate unique_name keys to display names
+                    # arviz.rhat returns an xarray Dataset; extract scalar values
                     mapping = self._bayesian_display_names()
-                    mapped_rhat = {mapping.get(name) or name: value for name, value in rhat.items()}
+                    mapped_rhat = {}
+                    for name in posterior['param_names']:
+                        val = float(rhat[name].values)
+                        display = mapping.get(name, name)
+                        mapped_rhat[display] = val
                     finite_rhat = {name: value for name, value in mapped_rhat.items() if value == value}
                     if finite_rhat:
                         diagnostics['rhat'] = finite_rhat
                     else:
-                        diagnostics['rhatStatus'] = 'Unavailable: R-hat requires at least two finite chains.'
+                        diagnostics['rhatStatus'] = 'Unavailable: all R-hat values are NaN/Inf.'
+                else:
+                    diagnostics['rhatStatus'] = 'Unavailable: arviz.rhat returned None.'
             except ImportError:
                 diagnostics['rhatStatus'] = 'Unavailable: arviz is not installed.'
+            except Exception as exc:
+                diagnostics['rhatStatus'] = f'Unavailable: R-hat computation failed ({exc}).'
         else:
-            diagnostics['rhatStatus'] = 'Unavailable: the sampler returned flattened draws without chain identities.'
+            if 'rhatStatus' not in diagnostics:
+                diagnostics['rhatStatus'] = 'Unavailable: the sampler returned flattened draws without chain identities.'
 
         self._bayesian_logic.diagnostics = diagnostics
 

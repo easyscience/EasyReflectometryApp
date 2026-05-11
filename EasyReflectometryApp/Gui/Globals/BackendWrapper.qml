@@ -539,6 +539,10 @@ QtObject {
     signal plotModeChanged()
     // Signal to request QML to reset chart axes (e.g., after model load)
     signal chartAxesResetRequested()
+    // Signal for posterior predictive (Bayesian) overlay data updates
+    signal posteriorPredictiveDataChanged()
+    // Signal for posterior predictive SLD (Bayesian) overlay data updates
+    signal posteriorPredictiveSldDataChanged()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
@@ -553,6 +557,12 @@ QtObject {
         }
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.chartAxesResetRequested) {
             activeBackend.plotting.chartAxesResetRequested.connect(chartAxesResetRequested)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.posteriorPredictiveDataChanged) {
+            activeBackend.plotting.posteriorPredictiveDataChanged.connect(posteriorPredictiveDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.posteriorPredictiveSldDataChanged) {
+            activeBackend.plotting.posteriorPredictiveSldDataChanged.connect(posteriorPredictiveSldDataChanged)
         }
     }
 

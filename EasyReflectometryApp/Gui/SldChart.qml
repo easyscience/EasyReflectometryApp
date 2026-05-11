@@ -439,8 +439,7 @@ Rectangle {
     }
 
     Connections {
-        target: Globals.BackendWrapper.activeBackend?.plotting ?? null
-        enabled: target !== null
+        target: Globals.BackendWrapper
         function onPosteriorPredictiveSldDataChanged() {
             refreshPosteriorPredictiveSldOverlay()
         }

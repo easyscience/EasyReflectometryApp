@@ -687,6 +687,44 @@ class TestBayesianDiagnostics:
         analysis_with_posterior._bayesian_logic.clear()
         assert analysis_with_posterior._bayesian_logic.diagnostics == {}
 
+    def test_rhat_from_state_chains_3d(self, analysis_with_posterior):
+        """When draws are 2D but state.chains() returns 3D, R-hat should be computed."""
+        chains_3d = np.array([
+            [[1.0, 2.0], [1.1, 2.1], [0.9, 1.9], [1.05, 2.05]],
+            [[0.9, 1.9], [1.0, 2.0], [1.1, 2.1], [0.95, 1.95]],
+        ])  # (n_generations=4, n_chains=2, n_params=2)
+        mock_state = SimpleNamespace()
+        mock_state.chains = lambda: (None, chains_3d, None)
+        # Use 2D posterior but attach a state with .chains()
+        posterior_2d_with_state = dict(SAMPLE_POSTERIOR_2D)
+        posterior_2d_with_state['state'] = mock_state
+        analysis_with_posterior._bayesian_logic._posterior = posterior_2d_with_state
+        analysis_with_posterior._compute_diagnostics()
+        diag = analysis_with_posterior._bayesian_logic.diagnostics
+        # Should attempt R-hat; either succeed (if arviz installed) or report arviz missing
+        if 'rhat' in diag:
+            assert isinstance(diag['rhat'], dict)
+            assert len(diag['rhat']) > 0
+        else:
+            assert 'rhatStatus' in diag
+
+    def test_rhat_state_chains_single_chain(self, analysis_with_posterior):
+        """Single chain from state.chains() should report 'increase Population'."""
+        chains_3d = np.array([
+            [[1.0, 2.0]],
+            [[1.1, 2.1]],
+            [[0.9, 1.9]],
+            [[1.05, 2.05]],
+        ])  # (n_generations=4, n_chains=1, n_params=2)
+        mock_state = SimpleNamespace()
+        mock_state.chains = lambda: (None, chains_3d, None)
+        posterior_2d_with_state = dict(SAMPLE_POSTERIOR_2D)
+        posterior_2d_with_state['state'] = mock_state
+        analysis_with_posterior._bayesian_logic._posterior = posterior_2d_with_state
+        analysis_with_posterior._compute_diagnostics()
+        diag = analysis_with_posterior._bayesian_logic.diagnostics
+        assert 'increase Population' in diag.get('rhatStatus', '')
+
 
 # ===================================================================
 # Posterior predictive

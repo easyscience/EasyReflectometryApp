@@ -163,7 +163,7 @@ Rectangle {
                     axisX: analysisChartView.currentXAxis()
                     axisY: analysisChartView.axisY
                     color: "#E67E22"
-                    width: 2
+                    width: 5
                     visible: Globals.BackendWrapper.bayesianResultAvailable
                 }
 
@@ -190,8 +190,7 @@ Rectangle {
                 }
 
                 Connections {
-                    target: Globals.BackendWrapper.activeBackend?.plotting ?? null
-                    enabled: target !== null
+                    target: Globals.BackendWrapper
                     function onPosteriorPredictiveDataChanged() {
                         analysisChartView.refreshPosteriorPredictiveOverlay()
                     }
