@@ -62,6 +62,9 @@ Rectangle {
                 anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
                 useOpenGL: EaGlobals.Vars.useOpenGL
+                
+                // Disable built-in Qt Charts legend - we use our custom legend instead
+                legend.visible: false
 
                 // Multi-experiment support
                 property var multiExperimentSeries: []
@@ -558,7 +561,6 @@ Rectangle {
                 // Legend
                 Rectangle {
                     visible: Globals.Variables.showLegendOnAnalysisPage
-                          || Globals.BackendWrapper.bayesianResultAvailable
 
                     x: analysisChartView.plotArea.x + analysisChartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
                     y: analysisChartView.plotArea.y + EaStyle.Sizes.fontPixelSize

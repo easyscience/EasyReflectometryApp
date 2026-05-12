@@ -43,6 +43,9 @@ Rectangle {
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
         useOpenGL: EaGlobals.Vars.useOpenGL
+        
+        // Disable built-in Qt Charts legend - we use our custom legend instead
+        legend.visible: false
 
         // Background reference line series
         LineSeries {
@@ -555,7 +558,6 @@ Rectangle {
         // Legend
         Rectangle {
             visible: Globals.Variables.showLegendOnAnalysisPage
-                  || Globals.BackendWrapper.bayesianResultAvailable
 
             x: chartView.plotArea.x + chartView.plotArea.width - width - EaStyle.Sizes.fontPixelSize
             y: chartView.plotArea.y + EaStyle.Sizes.fontPixelSize
