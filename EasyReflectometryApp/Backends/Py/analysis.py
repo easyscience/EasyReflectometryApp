@@ -559,6 +559,7 @@ class Analysis(QObject):
             posterior_predictive_reflectivity,
             posterior_predictive_sld_profile,
         )
+        import numpy as np
 
         posterior = self._bayesian_logic.posterior
         if posterior is None:
@@ -570,40 +571,60 @@ class Analysis(QObject):
             logger.warning('_compute_and_publish_posterior_predictive: no experiments available')
             return
 
-        # Use the first selected experiment for the overlay
-        experiment = experiments[0]
-        q = experiment.x
-        model = experiment.model
+        # Compute posterior predictive reflectivity for all experiments
+        q_all = []
+        median_all = []
+        lo_all = []
+        hi_all = []
 
+        total_q_points = sum(len(np.asarray(experiment.x)) for experiment in experiments)
         logger.info(
-            '_compute_and_publish_posterior_predictive: draws shape=%s, n_params=%d, q_points=%d',
+            '_compute_and_publish_posterior_predictive: draws shape=%s, n_params=%d, '
+            'n_experiments=%d, total_q_points=%d',
             posterior['draws'].shape,
             len(posterior['param_names']),
-            len(q),
+            len(experiments),
+            total_q_points,
         )
 
         try:
-            median, lo, hi = posterior_predictive_reflectivity(
-                posterior['draws'],
-                posterior['param_names'],
-                model=model,
-                q_values=q,
-                n_samples=200,
-            )
-            logger.info(
-                'Posterior predictive reflectivity computed: q=%d, median shape=%s',
-                len(q), median.shape,
-            )
-            self._plotting.set_posterior_predictive(q, median, lo, hi)
+
+            for i, experiment in enumerate(experiments):
+                q_i = np.asarray(experiment.x)
+                model_i = experiment.model
+
+                median_i, lo_i, hi_i = posterior_predictive_reflectivity(
+                    posterior['draws'],
+                    posterior['param_names'],
+                    model=model_i,
+                    q_values=q_i,
+                    n_samples=200,
+                )
+                logger.info(
+                    'Posterior predictive for experiment %d: q=%d, median shape=%s',
+                    i, len(q_i), median_i.shape,
+                )
+
+                q_all.append(q_i)
+                median_all.append(median_i)
+                lo_all.append(lo_i)
+                hi_all.append(hi_i)
+
+            q_concat = np.concatenate(q_all)
+            median_concat = np.concatenate(median_all)
+            lo_concat = np.concatenate(lo_all)
+            hi_concat = np.concatenate(hi_all)
+            self._plotting.set_posterior_predictive(q_concat, median_concat, lo_concat, hi_concat)
         except Exception:
             logger.exception('Failed to compute or publish posterior predictive reflectivity')
             return
 
+        # SLD profile: use the first experiment's model (SLD is shared across experiments)
         try:
             z, sld_median, sld_lo, sld_hi = posterior_predictive_sld_profile(
                 posterior['draws'],
                 posterior['param_names'],
-                model=model,
+                model=experiments[0].model,
                 n_samples=200,
             )
             self._plotting.set_posterior_predictive_sld(z, sld_median, sld_lo, sld_hi)
