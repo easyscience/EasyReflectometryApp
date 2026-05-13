@@ -235,6 +235,19 @@ class Analysis(QObject):
         self._bayesian_logic.thin = value
         self.minimizerChanged.emit()
 
+    @Property(str, notify=minimizerChanged)
+    def bayesianInitializer(self) -> str:
+        return self._bayesian_logic.initializer
+
+    @Slot(str)
+    def setBayesianInitializer(self, value: str) -> None:
+        self._bayesian_logic.initializer = value
+        self.minimizerChanged.emit()
+
+    @Property('QVariantList', notify=minimizerChanged)
+    def bayesianInitializerOptions(self) -> list:
+        return ['eps', 'cov', 'lhs', 'random']
+
     @Property(bool, notify=fittingChanged)
     def bayesianResultAvailable(self) -> bool:
         return self._bayesian_logic.has_result
@@ -490,11 +503,12 @@ class Analysis(QObject):
             return
 
         logger.info(
-            'Bayesian DREAM: samples=%d burn=%d thin=%d population=%d',
+            'Bayesian DREAM: samples=%d burn=%d thin=%d population=%d initializer=%s',
             self._bayesian_logic.samples,
             self._bayesian_logic.burn,
             self._bayesian_logic.thin,
             self._bayesian_logic.population,
+            self._bayesian_logic.initializer,
         )
 
         self._fitter_thread = FitterWorker(
@@ -506,6 +520,7 @@ class Analysis(QObject):
                 'burn': self._bayesian_logic.burn,
                 'thin': self._bayesian_logic.thin,
                 'population': self._bayesian_logic.population,
+                'initializer': self._bayesian_logic.initializer,
             },
             parent=self,
         )
@@ -702,7 +717,7 @@ class Analysis(QObject):
             self._bayesian_logic.corner_plot_url = ''
             return
         try:
-            from easyreflectometry.analysis.bayesian import plot_corner
+            from easyreflectometry.analysis.bayesian import plot_cornerEasy
             import matplotlib
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
@@ -1038,18 +1053,18 @@ class Analysis(QObject):
 
         experiment_data_list = []
 
-        # Define a color palette for experiments
+        # Define a muted/pastel color palette for experiments
         color_palette = [
-            '#1f77b4',  # Blue
-            '#ff7f0e',  # Orange
-            '#2ca02c',  # Green
-            '#d62728',  # Red
-            '#9467bd',  # Purple
-            '#8c564b',  # Brown
-            '#e377c2',  # Pink
-            '#7f7f7f',  # Gray
-            '#bcbd22',  # Olive
-            '#17becf',  # Cyan
+            '#7BA6C4',  # Soft Blue
+            '#E8B889',  # Soft Orange
+            '#8DBF8D',  # Soft Green
+            '#D48787',  # Soft Red
+            '#B296B8',  # Soft Purple
+            '#A68F7F',  # Soft Brown
+            '#D4A8BC',  # Soft Pink
+            '#A5A5A5',  # Soft Gray
+            '#B8B87D',  # Soft Olive
+            '#7BB8B8',  # Soft Cyan
         ]
 
         for idx, exp_idx in enumerate(self._selected_experiment_indices):

@@ -312,6 +312,10 @@ QtObject {
     function bayesianSetPopulation(v) { activeBackend.analysis.setBayesianPopulation(v) }
     function bayesianSetThinning(v)   { activeBackend.analysis.setBayesianThinning(v) }
 
+    readonly property string bayesianInitializer: activeBackend.analysis.bayesianInitializer
+    readonly property var bayesianInitializerOptions: activeBackend.analysis.bayesianInitializerOptions
+    function setBayesianInitializer(v) { activeBackend.analysis.setBayesianInitializer(v) }
+
     readonly property var bayesianPosterior: activeBackend.analysis.bayesianPosterior
     readonly property bool bayesianResultAvailable: activeBackend.analysis.bayesianResultAvailable
     readonly property var bayesianMarginals: activeBackend.analysis.bayesianMarginals

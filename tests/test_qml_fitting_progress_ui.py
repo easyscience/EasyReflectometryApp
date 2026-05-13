@@ -45,9 +45,9 @@ def test_fit_buttons_toggle_between_start_and_cancel_via_start_stop_action():
         ROOT / 'EasyReflectometryApp' / 'Gui' / 'Pages' / 'Analysis' / 'Sidebar' / 'Basic' / 'Groups' / 'Fitting.qml'
     ).read_text(encoding='utf-8')
 
-    assert "Globals.BackendWrapper.analysisFittingRunning ? qsTr('Cancel fitting') : qsTr('Start fitting')" in layout_qml
+    assert "Globals.BackendWrapper.analysisFittingRunning ? qsTr('Cancel fitting') : (Globals.BackendWrapper.analysisIsBayesianSelected ? qsTr('Start sampling') : qsTr('Start fitting'))" in layout_qml
     assert 'Globals.BackendWrapper.analysisFittingStartStop()' in layout_qml
-    assert "Globals.BackendWrapper.analysisFittingRunning  ? qsTr('Cancel fitting') : qsTr('Start fitting')" in fitting_group_qml
+    assert "Globals.BackendWrapper.analysisFittingRunning ? qsTr('Cancel fitting') : (Globals.BackendWrapper.analysisIsBayesianSelected ? qsTr('Start sampling') : qsTr('Start fitting'))" in fitting_group_qml
     assert 'Globals.BackendWrapper.analysisFittingStartStop()' in fitting_group_qml
 
 

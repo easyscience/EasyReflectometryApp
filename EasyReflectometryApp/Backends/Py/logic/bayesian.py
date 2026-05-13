@@ -1,5 +1,7 @@
 """State container for Bayesian DREAM hyper-parameters and posterior results."""
 
+_VALID_INITIALIZERS = ('eps', 'cov', 'lhs', 'random')
+
 
 class Bayesian:
     """Holds DREAM hyper-parameters and the last posterior result.
@@ -7,13 +9,14 @@ class Bayesian:
     This is purely a state container — execution is delegated to the worker.
     """
 
-    DEFAULTS = dict(samples=10000, burn=2000, population=10, thin=1)
+    DEFAULTS = dict(samples=10000, burn=2000, population=10, thin=1, initializer='eps')
 
     def __init__(self):
         self._samples: int = self.DEFAULTS['samples']
         self._burn: int = self.DEFAULTS['burn']
         self._population: int = self.DEFAULTS['population']
         self._thin: int = self.DEFAULTS['thin']
+        self._initializer: str = self.DEFAULTS['initializer']
         self._posterior: dict | None = None
         # Phase 2 — cached rendered assets and diagnostics
         self.corner_plot_url: str = ''
@@ -69,6 +72,19 @@ class Bayesian:
             self._thin = value
         else:
             raise ValueError('thin must be a positive integer')
+
+    @property
+    def initializer(self) -> str:
+        return self._initializer
+
+    @initializer.setter
+    def initializer(self, value: str) -> None:
+        if value in _VALID_INITIALIZERS:
+            self._initializer = value
+        else:
+            raise ValueError(
+                f'Unknown initializer {value!r}. Valid options: {_VALID_INITIALIZERS}'
+            )
 
     # ------------------------------------------------------------------
     # Posterior result

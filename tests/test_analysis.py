@@ -12,6 +12,10 @@ class StubParametersLogic:
     def __init__(self, _project_lib):
         pass
 
+    @property
+    def parameters(self):
+        return []
+
 
 class StubCalculatorsLogic:
     def __init__(self, _project_lib):
@@ -171,3 +175,158 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     assert analysis.fitErrorMessage == 'Fitting cancelled by user'
     assert received == []
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
+
+
+# ---------------------------------------------------------------------------
+# Bayesian sampling dispatch tests
+# ---------------------------------------------------------------------------
+
+
+class StubBayesianMinimizersLogic(StubMinimizersLogic):
+    """Minimizers stub that reports Bayesian mode is active."""
+
+    def is_bayesian_selected(self):
+        return True
+
+
+def _make_analysis_bayesian(monkeypatch):
+    """Create an Analysis instance configured for Bayesian sampling."""
+    project = make_project()
+    monkeypatch.setattr(analysis_module, 'ParametersLogic', StubParametersLogic)
+    monkeypatch.setattr(analysis_module, 'CalculatorsLogic', StubCalculatorsLogic)
+    monkeypatch.setattr(analysis_module, 'ExperimentLogic', StubExperimentLogic)
+    monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubBayesianMinimizersLogic)
+    monkeypatch.setattr(analysis_module, 'FitterWorker', StubWorker)
+    analysis = analysis_module.Analysis(project)
+    analysis._clearCacheAndEmitParametersChanged = MagicMock()
+    return analysis
+
+
+def test_start_threaded_sample_forwards_bayesian_kwargs(monkeypatch, qcore_application):
+    """_start_threaded_sample passes samples, burn, thin, population, initializer to worker."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+    # Set non-default Bayesian hyper-params
+    analysis._bayesian_logic.samples = 5000
+    analysis._bayesian_logic.burn = 1000
+    analysis._bayesian_logic.thin = 5
+    analysis._bayesian_logic.population = 8
+    analysis._bayesian_logic.initializer = 'lhs'
+
+    analysis._start_threaded_sample()
+
+    worker = StubWorker.instances[-1]
+    assert worker.method_name == 'sample'
+    assert worker.args == ('data-group',)
+    assert worker.kwargs == {
+        'samples': 5000,
+        'burn': 1000,
+        'thin': 5,
+        'population': 8,
+        'initializer': 'lhs',
+    }
+    assert worker.start_calls == 1
+    assert analysis.fittingRunning is True
+
+
+def test_start_threaded_sample_uses_defaults_when_not_set(monkeypatch, qcore_application):
+    """_start_threaded_sample uses Bayesian DEFAULTS when no custom values are set."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+
+    analysis._start_threaded_sample()
+
+    worker = StubWorker.instances[-1]
+    assert worker.kwargs == {
+        'samples': 10000,
+        'burn': 2000,
+        'thin': 1,
+        'population': 10,
+        'initializer': 'eps',
+    }
+
+
+def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_application):
+    """Progress payloads with sampling=True update Bayesian-specific progress properties."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+
+    analysis._start_threaded_sample()
+    worker = StubWorker.instances[-1]
+    worker.progressDetail.emit({
+        'iteration': 25,
+        'total_steps': 100,
+        'chi2': 4.2,
+        'reduced_chi2': 1.8,
+        'sampling': True,
+    })
+
+    assert analysis.sampleProgressStep == 25
+    assert analysis.sampleProgressMessage != ''
+    assert analysis.sampleProgressHasUpdate is True
+
+
+def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcore_application):
+    """fittingStartStop calls _start_threaded_sample when Bayesian minimizer is selected."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+
+    # Mock prefitCheck to avoid complex real checks
+    analysis.prefitCheck = MagicMock(return_value=True)
+
+    # fittingStartStop should detect Bayesian mode and dispatch to sample
+    analysis.fittingStartStop()
+
+    worker = StubWorker.instances[-1]
+    assert worker.method_name == 'sample'
+    assert 'samples' in worker.kwargs
+    assert 'burn' in worker.kwargs
+    assert 'thin' in worker.kwargs
+    assert 'population' in worker.kwargs
+    assert 'initializer' in worker.kwargs
+
+
+def test_start_threaded_sample_error_emits_fit_failed(monkeypatch, qcore_application):
+    """When prepare_threaded_sample returns None, fitFailed signal is emitted."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(return_value=(None, None))
+    # Make prepare_threaded_sample return None and set error message (as real code does)
+    def _prepare_and_fail(*args, **kwargs):
+        analysis._fitting_logic._fit_error_message = 'No experiments to sample'
+        return None, None
+
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(side_effect=_prepare_and_fail)
+
+    received = []
+    analysis.fitFailed.connect(received.append)
+
+    analysis._start_threaded_sample()
+
+    assert len(received) == 1
+    assert 'No experiments to sample' in received[0]
+
+
+def test_bayesian_initializer_property_round_trip(monkeypatch, qcore_application):
+    """bayesianInitializer property and setter work through the QML-facing layer."""
+    analysis = _make_analysis_bayesian(monkeypatch)
+    assert analysis.bayesianInitializer == 'eps'
+    assert analysis.bayesianInitializerOptions == ['eps', 'cov', 'lhs', 'random']
+
+    analysis.setBayesianInitializer('lhs')
+    assert analysis.bayesianInitializer == 'lhs'
+
+    analysis.setBayesianInitializer('cov')
+    assert analysis.bayesianInitializer == 'cov'

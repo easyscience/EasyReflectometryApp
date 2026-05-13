@@ -91,7 +91,7 @@ EaElements.GroupBox {
         height: visible ? implicitHeight : 0
 
         EaElements.TextField {
-            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
             topInset: samplesLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
@@ -105,7 +105,7 @@ EaElements.GroupBox {
         }
 
         EaElements.TextField {
-            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
             topInset: burninLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
@@ -113,13 +113,13 @@ EaElements.GroupBox {
             text: Globals.BackendWrapper.bayesianBurnIn
             EaElements.Label {
                 id: burninLabel
-                text: qsTr("Burn-in")
+                text: qsTr("Burn-in steps")
                 color: EaStyle.Colors.themeForegroundMinor
             }
         }
 
         EaElements.TextField {
-            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
             topInset: populationLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
@@ -133,7 +133,7 @@ EaElements.GroupBox {
         }
 
         EaElements.TextField {
-            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
             topInset: thinningLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
@@ -142,6 +142,32 @@ EaElements.GroupBox {
             EaElements.Label {
                 id: thinningLabel
                 text: qsTr("Thinning")
+                color: EaStyle.Colors.themeForegroundMinor
+            }
+        }
+
+        EaElements.ComboBox {
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5
+            topInset: initLabel.height
+            topPadding: topInset + padding
+            model: Globals.BackendWrapper.bayesianInitializerOptions
+            currentIndex: {
+                const options = Globals.BackendWrapper.bayesianInitializerOptions
+                const current = Globals.BackendWrapper.bayesianInitializer
+                for (let i = 0; i < options.length; i++) {
+                    if (options[i] === current) return i
+                }
+                return 0
+            }
+            onCurrentIndexChanged: {
+                const options = Globals.BackendWrapper.bayesianInitializerOptions
+                if (currentIndex >= 0 && currentIndex < options.length) {
+                    Globals.BackendWrapper.setBayesianInitializer(options[currentIndex])
+                }
+            }
+            EaElements.Label {
+                id: initLabel
+                text: qsTr("Initializer")
                 color: EaStyle.Colors.themeForegroundMinor
             }
         }
