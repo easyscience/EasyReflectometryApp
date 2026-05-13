@@ -717,7 +717,7 @@ class Analysis(QObject):
             self._bayesian_logic.corner_plot_url = ''
             return
         try:
-            from easyreflectometry.analysis.bayesian import plot_cornerEasy
+            from easyreflectometry.analysis.bayesian import plot_corner
             import matplotlib
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
