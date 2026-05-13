@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 from typing import List
 from typing import Optional
@@ -717,7 +718,8 @@ class Analysis(QObject):
             path = self._plot_file_path('corner')
             fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
             plt.close(fig)
-            self._bayesian_logic.corner_plot_url = path.as_uri()
+            # Append a timestamp to force QML Image to reload even if the path is identical
+            self._bayesian_logic.corner_plot_url = path.as_uri() + f'?t={time.time_ns()}'
         except ImportError:
             self._bayesian_logic.corner_plot_url = ''
             logger.info('corner library not installed — corner plot unavailable')
@@ -761,7 +763,8 @@ class Analysis(QObject):
             path = self._plot_file_path('trace')
             fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
             plt.close(fig)
-            self._bayesian_logic.trace_plot_url = path.as_uri()
+            # Append a timestamp to force QML Image to reload even if the path is identical
+            self._bayesian_logic.trace_plot_url = path.as_uri() + f'?t={time.time_ns()}'
         except ImportError:
             self._bayesian_logic.trace_plot_url = ''
             logger.info('arviz library not installed — trace plot unavailable')
@@ -803,7 +806,7 @@ class Analysis(QObject):
             path = self._plot_file_path(f'heatmap_{paramX}_{paramY}')
             fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
             plt.close(fig)
-            self._bayesian_logic.heatmap_plot_url = path.as_uri()
+            self._bayesian_logic.heatmap_plot_url = path.as_uri() + f'?t={time.time_ns()}'
         except Exception:
             self._bayesian_logic.heatmap_plot_url = ''
             logger.exception('Failed to render Bayesian heatmap')
