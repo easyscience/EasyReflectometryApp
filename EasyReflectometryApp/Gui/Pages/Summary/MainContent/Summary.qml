@@ -47,6 +47,13 @@ Rectangle {
 
             textFormat: TextEdit.RichText
             text: Globals.BackendWrapper.summaryAsHtml
+
+            onLinkActivated: (link) => {
+                if (link.startsWith("nametooltip:")) {
+                    return
+                }
+                Qt.openUrlExternally(link)
+            }
         }
         // Main text area
 
