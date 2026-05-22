@@ -214,6 +214,7 @@ class Analysis(QObject):
     def _on_fit_finished(self, results: list) -> None:
         """Handle successful completion of threaded fit."""
         self._fitting_logic.on_fit_finished(results)
+        self._project_lib._last_fit_results = self._fitting_logic.last_fit_results
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
