@@ -294,8 +294,9 @@ class Fitting:
             self._result = single_result
             self._results = [single_result] if single_result is not None else []
 
-        # Propagate fit results to the project so SummaryLib can access chi2 and errors.
-        self._project_lib._last_fit_results = self._results if self._results else None
+    @property
+    def last_fit_results(self):
+        return self._results if self._results else None
 
     @property
     def fit_n_pars(self) -> int:
