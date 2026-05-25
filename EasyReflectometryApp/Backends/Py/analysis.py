@@ -813,46 +813,38 @@ class Analysis(QObject):
             logger.exception('Failed to render distribution plot')
 
     def _render_trace_plot(self) -> None:
-        """Render MCMC trace plot to PNG and expose it as a file URL."""
+        """Render MCMC trace plot to interactive HTML and expose it as a file URL."""
         posterior = self._bayesian_logic.posterior
         if posterior is None:
             self._bayesian_logic.trace_plot_url = ''
             return
         try:
-            import matplotlib
-            matplotlib.use('Agg')
-            import matplotlib.pyplot as plt
+            from easyreflectometry.analysis.bayesian import plot_trace
 
             import numpy as np
-
             draws = np.asarray(posterior['draws'])
-            if draws.ndim == 3:
-                chains, n_draws, n_params = draws.shape
-            else:
-                chains, n_draws, n_params = 1, draws.shape[0], draws.shape[1]
-                draws = draws.reshape(1, n_draws, n_params)
+            if draws.ndim == 2:
+                draws = draws[np.newaxis, ...]  # (1, n_draws, n_params)
 
             display_names = self._bayesian_display_name_list()
-            n_params = len(display_names)
-            fig, axes = plt.subplots(n_params, 1, figsize=(10, 2.2 * max(n_params, 1)), squeeze=False)
-            x = np.arange(n_draws)
-            for index, name in enumerate(display_names):
-                axis = axes[index, 0]
-                for chain in range(chains):
-                    axis.plot(x, draws[chain, :, index], linewidth=0.8, alpha=0.8)
-                axis.set_ylabel(name)
-                axis.grid(True, alpha=0.25)
-            axes[-1, 0].set_xlabel('Draw')
-            fig.tight_layout()
 
-            path = self._plot_file_path('trace')
-            fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
-            plt.close(fig)
-            # Append a timestamp to force QML Image to reload even if the path is identical
+            fig = plot_trace(draws, display_names, return_figure=True)
+            if fig is None or not hasattr(fig, 'to_html'):
+                self._bayesian_logic.trace_plot_url = ''
+                logger.info('Plotly unavailable — trace plot not rendered')
+                return
+
+            html = fig.to_html(  # type: ignore[union-attr]
+                include_plotlyjs=True,
+                full_html=True,
+                config={'responsive': True},
+            )
+            path = self._plot_file_path('trace', 'html')
+            path.write_text(html, encoding='utf-8')
             self._bayesian_logic.trace_plot_url = path.as_uri() + f'?t={time.time_ns()}'
         except ImportError:
             self._bayesian_logic.trace_plot_url = ''
-            logger.info('arviz library not installed — trace plot unavailable')
+            logger.info('Plotly not installed — trace plot unavailable')
         except Exception:
             self._bayesian_logic.trace_plot_url = ''
             logger.exception('Failed to render trace plot')

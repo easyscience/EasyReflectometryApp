@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtWebEngine
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
@@ -28,7 +29,7 @@ Rectangle {
 
             EaElements.Label {
                 Layout.fillWidth: true
-                text: qsTr("MCMC Chain Trace Plots")
+                text: qsTr("MCMC Chain Traces")
                 font: EaStyle.Fonts.headingFont
             }
 
@@ -40,18 +41,18 @@ Rectangle {
             }
         }
 
-        Image {
-            id: traceImage
+        WebEngineView {
+            id: traceWebView
             Layout.fillWidth: true
             Layout.fillHeight: true
-            fillMode: Image.PreserveAspectFit
-            source: Globals.BackendWrapper.bayesianTracePlotUrl || ''
-            cache: false
-            visible: source !== ''
+            visible: Globals.BackendWrapper.bayesianTracePlotUrl !== ''
+            url: Globals.BackendWrapper.bayesianTracePlotUrl || 'about:blank'
+            settings.showScrollBars: true
 
             BusyIndicator {
                 anchors.centerIn: parent
-                running: traceImage.source === '' && Globals.BackendWrapper.bayesianResultAvailable
+                running: Globals.BackendWrapper.bayesianTracePlotUrl === ''
+                         && Globals.BackendWrapper.bayesianResultAvailable
             }
         }
 
@@ -68,7 +69,7 @@ Rectangle {
             }
         }
 
-        // Placeholder: results available but no plot rendered yet
+        // Placeholder: results available but plot not yet rendered
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -81,15 +82,15 @@ Rectangle {
 
                 EaElements.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Trace plots are being rendered…")
+                    text: qsTr("Trace plot is being rendered…")
                     color: EaStyle.Colors.themeForegroundMinor
                     horizontalAlignment: Text.AlignHCenter
                 }
 
                 EaElements.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Trace plots require the <tt>arviz</tt> library. Install it with:<br>"
-                                + "<tt>pip install easyreflectometry[bayesian]</tt>")
+                    text: qsTr("Interactive trace plots require <tt>plotly</tt>. Install it with:<br>"
+                                + "<tt>pip install plotly</tt>")
                     color: EaStyle.Colors.themeForegroundMinor
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter

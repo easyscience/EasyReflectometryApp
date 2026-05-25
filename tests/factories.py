@@ -298,7 +298,7 @@ class FakeFitResult:
         self.chi2 = chi2
         self.n_pars = n_pars
         self.x = [] if x is None else x
-        self.reduced_chi = reduced_chi
+        self.reduced_chi2 = reduced_chi
         self.minimizer_engine = minimizer_engine
 
 

@@ -642,15 +642,21 @@ class TestRenderTracePlot:
         assert analysis._bayesian_logic.trace_plot_url == ''
 
     def test_handles_import_error_gracefully(self, analysis_with_posterior, caplog):
+        """Trace plot rendering catches ImportError when plotly is missing."""
         caplog.set_level(logging.INFO)
-        # Force trace rendering to attempt matplotlib and fail at arviz
-        with patch('matplotlib.pyplot') as mock_plt:
-            mock_fig = MagicMock()
-            mock_plt.subplots.return_value = (mock_fig, [[MagicMock()]])
-            mock_plt.gcf.return_value = mock_fig
+        import builtins
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == 'easyreflectometry.analysis.bayesian':
+                raise ImportError('No module named plotly')
+            return original_import(name, *args, **kwargs)
+
+        with patch.object(builtins, '__import__', mock_import):
             analysis_with_posterior._render_trace_plot()
-            # matplotlib with Agg should work; the key is that it doesn't crash
-            assert mock_plt.subplots.called
+
+        assert analysis_with_posterior._bayesian_logic.trace_plot_url == ''
+        assert 'not installed' in caplog.text
 
 
 class TestRenderHeatmapPlot:
