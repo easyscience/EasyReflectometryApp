@@ -485,6 +485,50 @@ class TestBayesianTracePlotUrl:
 
 
 # ===================================================================
+# Distribution plot URL
+# ===================================================================
+
+class TestBayesianDistributionPlotUrl:
+    def test_empty_when_no_posterior(self, analysis):
+        assert analysis.bayesianDistributionPlotUrl == ''
+
+    def test_lazy_renders_once(self, analysis_with_posterior):
+        analysis_with_posterior._bayesian_logic.distribution_plot_url = 'file:///cached_dist.html'
+        with patch.object(analysis_with_posterior, '_render_distribution_plot') as mock:
+            url1 = analysis_with_posterior.bayesianDistributionPlotUrl
+            url2 = analysis_with_posterior.bayesianDistributionPlotUrl
+            assert mock.call_count == 0  # already cached, no call needed
+
+    def test_returns_cached_url(self, analysis_with_posterior):
+        analysis_with_posterior._bayesian_logic.distribution_plot_url = 'file:///cached_dist.html'
+        url = analysis_with_posterior.bayesianDistributionPlotUrl
+        assert url == 'file:///cached_dist.html'
+
+
+class TestRenderDistributionPlot:
+    def test_sets_empty_url_when_no_posterior(self, analysis):
+        analysis._render_distribution_plot()
+        assert analysis._bayesian_logic.distribution_plot_url == ''
+
+    def test_handles_import_error_gracefully(self, analysis_with_posterior, caplog):
+        """Distribution plot rendering catches ImportError when plotly is missing."""
+        caplog.set_level(logging.INFO)
+        import builtins
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == 'easyreflectometry.analysis.bayesian':
+                raise ImportError('No module named plotly')
+            return original_import(name, *args, **kwargs)
+
+        with patch.object(builtins, '__import__', mock_import):
+            analysis_with_posterior._render_distribution_plot()
+
+        assert analysis_with_posterior._bayesian_logic.distribution_plot_url == ''
+        assert 'not installed' in caplog.text
+
+
+# ===================================================================
 # Heatmap
 # ===================================================================
 
@@ -551,6 +595,10 @@ class TestPlotFilePath:
         assert 'bayesian' in str(path)
         assert path.name == 'corner.png'
 
+    def test_html_ext(self, analysis):
+        path = analysis._plot_file_path('corner', 'html')
+        assert path.name == 'corner.html'
+
     def test_url_from_stem(self, analysis):
         url = analysis._plot_file_url('corner')
         assert url.startswith('file:///')
@@ -571,22 +619,21 @@ class TestRenderCornerPlot:
         assert analysis._bayesian_logic.corner_plot_url == ''
 
     def test_handles_import_error_gracefully(self, analysis_with_posterior, caplog):
-        """Corner plot rendering catches ImportError when corner lib missing."""
+        """Corner plot rendering catches ImportError when plotly is missing."""
         caplog.set_level(logging.INFO)
-        # Simulate ImportError by making plot_corner raise
         import builtins
         original_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
             if name == 'easyreflectometry.analysis.bayesian':
-                raise ImportError('No module named corner')
+                raise ImportError('No module named plotly')
             return original_import(name, *args, **kwargs)
 
         with patch.object(builtins, '__import__', mock_import):
             analysis_with_posterior._render_corner_plot()
 
         assert analysis_with_posterior._bayesian_logic.corner_plot_url == ''
-        assert 'corner library not installed' in caplog.text
+        assert 'not installed' in caplog.text
 
 
 class TestRenderTracePlot:

@@ -5,7 +5,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtCharts
+import QtWebEngine
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
@@ -18,91 +18,83 @@ Rectangle {
 
     color: EaStyle.Colors.chartBackground
 
-    EaElements.Label {
-        anchors.centerIn: parent
-        visible: !Globals.BackendWrapper.bayesianResultAvailable
-        text: qsTr("No Bayesian results available.")
-        color: EaStyle.Colors.themeForegroundMinor
-    }
-
-    GridLayout {
+    ColumnLayout {
         anchors.fill: parent
         anchors.margins: EaStyle.Sizes.fontPixelSize
-        columnSpacing: EaStyle.Sizes.fontPixelSize * 0.5
-        rowSpacing: EaStyle.Sizes.fontPixelSize * 0.5
-        columns: Math.min(3, Globals.BackendWrapper.bayesianMarginals.length || 1)
-        visible: Globals.BackendWrapper.bayesianResultAvailable
+        spacing: EaStyle.Sizes.fontPixelSize
 
-        Repeater {
-            model: Globals.BackendWrapper.bayesianMarginals
+        RowLayout {
+            Layout.fillWidth: true
+            visible: Globals.BackendWrapper.bayesianDistributionPlotUrl !== ''
 
-            delegate: Rectangle {
+            EaElements.Label {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredWidth: 300
-                Layout.preferredHeight: 220
-                color: EaStyle.Colors.chartBackground
-                border.color: EaStyle.Colors.chartGridLine
-                border.width: 1
+                text: qsTr("Marginal Posterior Distributions")
+                font: EaStyle.Fonts.headingFont
+            }
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 4
-                    spacing: 2
+            EaElements.Button {
+                text: qsTr("Save")
+                onClicked: Globals.BackendWrapper.bayesianSavePlot(
+                    Globals.BackendWrapper.bayesianDistributionPlotUrl
+                )
+            }
+        }
 
-                    EaElements.Label {
-                        Layout.fillWidth: true
-                        text: modelData.name
-                                + "  (" + Number(modelData.mean).toFixed(4)
-                                + " ± " + Number(modelData.std).toFixed(4) + ")"
-                                + "\n95% CI: [" + Number(modelData.ci_low).toFixed(4)
-                                + ", " + Number(modelData.ci_high).toFixed(4) + "]"
-                        horizontalAlignment: Text.AlignHCenter
-                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.85
-                        wrapMode: Text.WordWrap
-                    }
+        WebEngineView {
+            id: distributionWebView
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: Globals.BackendWrapper.bayesianDistributionPlotUrl !== ''
+            url: Globals.BackendWrapper.bayesianDistributionPlotUrl || 'about:blank'
+            settings.showScrollBars: true
 
-                    ChartView {
-                        id: histogramChart
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        legend.visible: false
-                        antialiasing: true
-                        backgroundColor: "transparent"
+            BusyIndicator {
+                anchors.centerIn: parent
+                running: Globals.BackendWrapper.bayesianDistributionPlotUrl === ''
+                         && Globals.BackendWrapper.bayesianResultAvailable
+            }
+        }
 
-                        ValueAxis {
-                            id: xAxis
-                            titleText: modelData.name
-                            labelsFont.pixelSize: EaStyle.Sizes.fontPixelSize * 0.75
-                        }
-                        ValueAxis {
-                            id: yAxis
-                            min: 0
-                            labelsFont.pixelSize: EaStyle.Sizes.fontPixelSize * 0.75
-                        }
+        // Placeholder: no results available
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: !Globals.BackendWrapper.bayesianResultAvailable
 
-                        BarSeries {
-                            id: barSeries
-                            axisX: xAxis
-                            axisY: yAxis
-                            barWidth: 0.9
-                            BarSet {
-                                label: modelData.name
-                                values: modelData.counts
-                                color: EaStyle.Colors.themeAccent || "#3498db"
-                            }
-                        }
+            EaElements.Label {
+                anchors.centerIn: parent
+                text: qsTr("No Bayesian results available.")
+                color: EaStyle.Colors.themeForegroundMinor
+            }
+        }
 
-                        Component.onCompleted: {
-                            if (modelData.binCenters && modelData.binCenters.length > 0) {
-                                xAxis.min = modelData.binCenters[0]
-                                xAxis.max = modelData.binCenters[modelData.binCenters.length - 1]
-                            }
-                            if (modelData.counts && modelData.counts.length > 0) {
-                                yAxis.max = Math.max.apply(null, modelData.counts) * 1.1
-                            }
-                        }
-                    }
+        // Placeholder: results available but plot not yet rendered
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: Globals.BackendWrapper.bayesianDistributionPlotUrl === ''
+                     && Globals.BackendWrapper.bayesianResultAvailable
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: EaStyle.Sizes.fontPixelSize
+
+                EaElements.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Distribution plot is being rendered…")
+                    color: EaStyle.Colors.themeForegroundMinor
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                EaElements.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Interactive distribution plots require <tt>plotly</tt>. Install it with:<br>"
+                                + "<tt>pip install plotly</tt>")
+                    color: EaStyle.Colors.themeForegroundMinor
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 }
             }
         }

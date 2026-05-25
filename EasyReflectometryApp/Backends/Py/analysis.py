@@ -337,6 +337,15 @@ class Analysis(QObject):
             self._render_trace_plot()
         return self._bayesian_logic.trace_plot_url
 
+    @Property(str, notify=fittingChanged)
+    def bayesianDistributionPlotUrl(self) -> str:
+        """Return a file URL for the interactive distribution HTML, or empty string."""
+        if not self._bayesian_logic.has_result:
+            return ''
+        if not self._bayesian_logic.distribution_plot_url:
+            self._render_distribution_plot()
+        return self._bayesian_logic.distribution_plot_url
+
     @Property('QVariant', notify=fittingChanged)
     def bayesianDiagnostics(self) -> dict:
         """Return convergence diagnostics dict."""
@@ -718,50 +727,90 @@ class Analysis(QObject):
     def sampleProgressTotalSteps(self) -> int:
         return self._fitting_logic.sample_total_steps
 
-    def _plot_file_path(self, stem: str):
+    def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""
         from pathlib import Path
         import tempfile
 
         out_dir = Path(tempfile.gettempdir()) / 'EasyReflectometryApp' / 'bayesian'
         out_dir.mkdir(parents=True, exist_ok=True)
-        return out_dir / f'{stem}.png'
+        return out_dir / f'{stem}.{ext}'
 
     def _plot_file_url(self, stem: str) -> str:
         """Return a stable temporary file URL for a rendered Bayesian plot."""
         return self._plot_file_path(stem).as_uri()
 
     def _render_corner_plot(self) -> None:
-        """Render corner plot to PNG and expose it as a file URL."""
+        """Render corner plot to interactive HTML and expose it as a file URL."""
         posterior = self._bayesian_logic.posterior
         if posterior is None:
             self._bayesian_logic.corner_plot_url = ''
             return
         try:
             from easyreflectometry.analysis.bayesian import plot_corner
-            import matplotlib
-            matplotlib.use('Agg')
-            import matplotlib.pyplot as plt
 
             display_names = self._bayesian_display_name_list()
-            n_params = len(display_names)
-            size = max(6, n_params * 1.8)
-            plt.figure(figsize=(size, size))
-            plot_corner(posterior['draws'], display_names, fig=plt.gcf())
-            fig = plt.gcf()
-            plt.tight_layout()
+            import numpy as np
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 3:
+                draws = draws.reshape(-1, draws.shape[-1])
 
-            path = self._plot_file_path('corner')
-            fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
-            plt.close(fig)
-            # Append a timestamp to force QML Image to reload even if the path is identical
+            fig = plot_corner(draws, display_names, return_figure=True)
+            if fig is None:
+                self._bayesian_logic.corner_plot_url = ''
+                logger.info('Plotly unavailable — corner plot not rendered')
+                return
+
+            html = fig.to_html(
+                include_plotlyjs=True,
+                full_html=True,
+                config={'responsive': True},
+            )
+            path = self._plot_file_path('corner', 'html')
+            path.write_text(html, encoding='utf-8')
             self._bayesian_logic.corner_plot_url = path.as_uri() + f'?t={time.time_ns()}'
         except ImportError:
             self._bayesian_logic.corner_plot_url = ''
-            logger.info('corner library not installed — corner plot unavailable')
+            logger.info('Plotly not installed — corner plot unavailable')
         except Exception:
             self._bayesian_logic.corner_plot_url = ''
             logger.exception('Failed to render corner plot')
+
+    def _render_distribution_plot(self) -> None:
+        """Render marginal distribution plot to interactive HTML and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.distribution_plot_url = ''
+            return
+        try:
+            from easyreflectometry.analysis.bayesian import plot_distribution
+
+            display_names = self._bayesian_display_name_list()
+            import numpy as np
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 3:
+                draws = draws.reshape(-1, draws.shape[-1])
+
+            fig = plot_distribution(draws, display_names, return_figure=True)
+            if fig is None:
+                self._bayesian_logic.distribution_plot_url = ''
+                logger.info('Plotly unavailable — distribution plot not rendered')
+                return
+
+            html = fig.to_html(
+                include_plotlyjs=True,
+                full_html=True,
+                config={'responsive': True},
+            )
+            path = self._plot_file_path('distribution', 'html')
+            path.write_text(html, encoding='utf-8')
+            self._bayesian_logic.distribution_plot_url = path.as_uri() + f'?t={time.time_ns()}'
+        except ImportError:
+            self._bayesian_logic.distribution_plot_url = ''
+            logger.info('Plotly not installed — distribution plot unavailable')
+        except Exception:
+            self._bayesian_logic.distribution_plot_url = ''
+            logger.exception('Failed to render distribution plot')
 
     def _render_trace_plot(self) -> None:
         """Render MCMC trace plot to PNG and expose it as a file URL."""
@@ -1288,12 +1337,16 @@ class Analysis(QObject):
             return False
 
         suggested = source_path.name or 'bayesian_plot.png'
+        if source_path.suffix.lower() == '.html':
+            file_filter = 'HTML Files (*.html)'
+        else:
+            file_filter = 'PNG Images (*.png)'
         dialog = QtWidgets.QFileDialog()
         save_path, _ = dialog.getSaveFileName(
             None,
             'Save Bayesian plot',
             str(Path.home() / suggested),
-            'PNG Images (*.png)',
+            file_filter,
         )
         if not save_path:
             return False

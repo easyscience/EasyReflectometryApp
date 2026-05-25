@@ -31,6 +31,7 @@ class TestDefaults:
     def test_default_rendered_assets_empty(self):
         b = Bayesian()
         assert b.corner_plot_url == ''
+        assert b.distribution_plot_url == ''
         assert b.trace_plot_url == ''
         assert b.heatmap_plot_url == ''
         assert b.heatmap_data is None
@@ -163,13 +164,15 @@ class TestClear:
 
     def test_clears_rendered_assets(self):
         b = Bayesian()
-        b.corner_plot_url = 'file:///corner.png'
+        b.corner_plot_url = 'file:///corner.html'
+        b.distribution_plot_url = 'file:///distribution.html'
         b.trace_plot_url = 'file:///trace.png'
         b.heatmap_plot_url = 'file:///heatmap.png'
         b.heatmap_data = {'x': [1, 2]}
         b.diagnostics = {'rhat': {'a': 1.0}}
         b.clear()
         assert b.corner_plot_url == ''
+        assert b.distribution_plot_url == ''
         assert b.trace_plot_url == ''
         assert b.heatmap_plot_url == ''
         assert b.heatmap_data is None

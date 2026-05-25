@@ -44,9 +44,10 @@ QtObject {
     readonly property bool bayesianResultAvailable: false
     readonly property var bayesianMarginals: []
 
-    // Phase 2: corner/trace plot PNGs, diagnostics, heatmap
+    // Phase 2: corner/trace/distribution plots (HTML), diagnostics, heatmap
     readonly property string bayesianCornerPlotUrl: ''
     readonly property string bayesianTracePlotUrl: ''
+    readonly property string bayesianDistributionPlotUrl: ''
     readonly property var bayesianDiagnostics: ({})
     readonly property var bayesianParamNames: []
     readonly property var bayesianHeatmapData: null

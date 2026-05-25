@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtWebEngine
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
@@ -40,18 +41,18 @@ Rectangle {
             }
         }
 
-        Image {
-            id: cornerImage
+        WebEngineView {
+            id: cornerWebView
             Layout.fillWidth: true
             Layout.fillHeight: true
-            fillMode: Image.PreserveAspectFit
-            source: Globals.BackendWrapper.bayesianCornerPlotUrl || ''
-            cache: false
-            visible: source !== ''
+            visible: Globals.BackendWrapper.bayesianCornerPlotUrl !== ''
+            url: Globals.BackendWrapper.bayesianCornerPlotUrl || 'about:blank'
+            settings.showScrollBars: true
 
             BusyIndicator {
                 anchors.centerIn: parent
-                running: cornerImage.source === '' && Globals.BackendWrapper.bayesianResultAvailable
+                running: Globals.BackendWrapper.bayesianCornerPlotUrl === ''
+                         && Globals.BackendWrapper.bayesianResultAvailable
             }
         }
 
@@ -88,8 +89,8 @@ Rectangle {
 
                 EaElements.Label {
                     Layout.fillWidth: true
-                    text: qsTr("Corner plots require the <tt>corner</tt> library. Install it with:<br>"
-                                + "<tt>pip install easyreflectometry[bayesian]</tt>")
+                    text: qsTr("Interactive corner plots require <tt>plotly</tt>. Install it with:<br>"
+                                + "<tt>pip install plotly</tt>")
                     color: EaStyle.Colors.themeForegroundMinor
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter

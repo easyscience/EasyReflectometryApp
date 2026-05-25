@@ -453,7 +453,7 @@ class Fitting:
         if self._results:
             try:
                 if len(self._results) == 1:
-                    return float(self._results[0].reduced_chi)
+                    return float(self._results[0].reduced_chi2)
                 total_chi2 = float(sum(result.chi2 for result in self._results))
                 total_points = sum(len(result.x) for result in self._results)
                 n_params = self._results[0].n_pars
@@ -466,7 +466,7 @@ class Fitting:
         if self._result is None:
             return 0.0
         try:
-            return float(self._result.reduced_chi)
+            return float(self._result.reduced_chi2)
         except (ValueError, TypeError):
             return 0.0
 
