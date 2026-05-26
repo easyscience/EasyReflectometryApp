@@ -589,6 +589,36 @@ Rectangle {
                             color: analysisChartView.calcSerie.color
                         }
 
+                        // Bayesian posterior predictive legend
+                        Row {
+                            visible: !analysisChartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.3
+                            Rectangle {
+                                width: EaStyle.Sizes.fontPixelSize * 1.2
+                                height: 2
+                                color: "#E67E22"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            EaElements.Label {
+                                text: qsTr("Posterior median")
+                                color: EaStyle.Colors.themeForegroundMinor
+                            }
+                        }
+                        Row {
+                            visible: !analysisChartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.3
+                            Rectangle {
+                                width: EaStyle.Sizes.fontPixelSize * 1.2
+                                height: EaStyle.Sizes.fontPixelSize * 0.6
+                                color: Qt.rgba(0.902, 0.494, 0.133, 0.25)
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            EaElements.Label {
+                                text: qsTr("95% credible interval")
+                                color: EaStyle.Colors.themeForegroundMinor
+                            }
+                        }
+
                         // Multi-experiment legend
                         Column {
                             visible: analysisChartView.isMultiExperimentMode

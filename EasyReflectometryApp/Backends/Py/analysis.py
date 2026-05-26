@@ -755,7 +755,7 @@ class Analysis(QObject):
             if draws.ndim == 3:
                 draws = draws.reshape(-1, draws.shape[-1])
 
-            fig = plot_corner(draws, display_names, return_figure=True)
+            fig = plot_corner(draws, display_names)
             if fig is None:
                 self._bayesian_logic.corner_plot_url = ''
                 logger.info('Plotly unavailable — corner plot not rendered')
@@ -1318,8 +1318,10 @@ class Analysis(QObject):
             logger.warning('Invalid Bayesian plot URL for saving: %s', source_url)
             return False
 
-        source_path = Path(source_url.replace('file:///', '', 1) if source_url.startswith('file:///')
-                           else source_url.replace('file://', '', 1))
+        # Strip query string (e.g. ?t=<timestamp> used for cache-busting)
+        clean_url = source_url.split('?')[0]
+        source_path = Path(clean_url.replace('file:///', '', 1) if clean_url.startswith('file:///')
+                           else clean_url.replace('file://', '', 1))
         # Handle Windows paths: file:///C:/... → C:/...
         if os.name == 'nt' and str(source_path).startswith('/'):
             source_path = Path(str(source_path)[1:])
