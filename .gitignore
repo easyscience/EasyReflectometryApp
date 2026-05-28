@@ -50,3 +50,6 @@ settings.ini*
 
 #Snap
 *.snap
+
+# Claude Code personal settings
+.claude/settings.local.json

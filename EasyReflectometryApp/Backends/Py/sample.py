@@ -1172,7 +1172,7 @@ class Sample(QObject):
             for layer_idx, layer in enumerate(assembly.layers):
                 # layer_name = layer.name
                 # Get layer parameters
-                for param in layer.get_parameters():
+                for param in layer.get_all_parameters():
                     param_name = param.name
                     # Create a structural path that's independent of model name
                     path_key = f'{assembly_idx}/{layer_idx}/{param_name}'

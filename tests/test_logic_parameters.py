@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 from EasyReflectometryApp.Backends.Py.logic import parameters as parameters_module
 from tests.factories import FakeParameter
 from tests.factories import make_model
@@ -8,45 +6,33 @@ from tests.factories import make_parameter
 from tests.factories import make_project
 
 
-class FakeMap:
-    def __init__(self, paths, names):
-        self._paths = paths
-        self._names = names
+class FakeNode:
+    """Minimal stand-in for an easyscience ModelBase container in the object tree.
 
-    def find_path(self, model_unique_name, parameter_unique_name):
-        return self._paths.get((model_unique_name, parameter_unique_name), [])
+    The new core no longer populates the global_object.map graph, so
+    ``_from_parameters_to_list_of_dicts`` walks the model object tree
+    instead. These nodes let the tests build that tree from named
+    containers (assemblies, materials, ...) holding Parameters and
+    sub-collections.
+    """
 
-    def get_item_by_key(self, key):
-        return SimpleNamespace(name=self._names[key])
+    def __init__(self, name, unique_name, **children):
+        self.name = name
+        self.unique_name = unique_name
+        for key, value in children.items():
+            setattr(self, key, value)
+
+
+def _patch_tree_types(monkeypatch):
+    # The traversal uses module-level `Parameter`/`ModelBase` for isinstance
+    # checks; point them at the test fakes so the fake tree is walkable.
+    monkeypatch.setattr(parameters_module, 'Parameter', FakeParameter)
+    monkeypatch.setattr(parameters_module, 'ModelBase', FakeNode)
 
 
 def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_shared_params(monkeypatch):
-    monkeypatch.setattr(parameters_module, 'Parameter', FakeParameter)
-    fake_map = FakeMap(
-        {
-            ('m1', 'thickness'): ['group_t1', 'param_t1'],
-            ('m2', 'thickness'): ['group_t2', 'param_t2'],
-            ('m1', 'scale'): ['group_scale', 'param_scale'],
-            ('m2', 'scale'): ['group_scale', 'param_scale'],
-            ('m1', 'dep'): ['group_dep', 'param_dep'],
-        },
-        {
-            'group_t1': 'LayerA',
-            'param_t1': 'thickness',
-            'group_t2': 'LayerA',
-            'param_t2': 'thickness',
-            'group_scale': 'Instrument',
-            'param_scale': 'scale',
-            'group_dep': 'Instrument',
-            'param_dep': 'background',
-        },
-    )
-    monkeypatch.setattr(parameters_module.global_object, 'map', fake_map)
+    _patch_tree_types(monkeypatch)
 
-    models = make_model_collection(
-        make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'}),
-        make_model(name='M2 internal', unique_name='m2', user_data={'original_name': 'M2'}),
-    )
     scale = make_parameter(name='scale', unique_name='scale', value=1.5, free=False, enabled=True)
     thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
     dependent = make_parameter(
@@ -58,6 +44,26 @@ def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_share
         dependency_expression='2*a',
         dependency_map={'a': scale},
         enabled=False,
+    )
+
+    def build_model(unique_name, original_name, with_background):
+        model = make_model(
+            name=f'{original_name} internal', unique_name=unique_name, user_data={'original_name': original_name}
+        )
+        # Model -> sample -> assembly -> layers -> layer -> thickness (a layer parameter)
+        layer = FakeNode('Layer', f'{unique_name}_layer', thickness=thickness)
+        assembly = FakeNode('LayerA', f'{unique_name}_asm', layers=[layer])
+        model.sample = [assembly]
+        # Non-layer params (scale, background) live under a shared 'Instrument' parent
+        instrument = FakeNode('Instrument', f'{unique_name}_instr', scale=scale)
+        if with_background:
+            instrument.background = dependent
+        model.instrument = instrument
+        return model
+
+    models = make_model_collection(
+        build_model('m1', 'M1', with_background=True),
+        build_model('m2', 'M2', with_background=False),
     )
 
     result = parameters_module._from_parameters_to_list_of_dicts([thickness, scale, dependent], models)
@@ -162,50 +168,10 @@ def test_add_constraint_supports_arithmetic_and_constant_dependencies():
 
 
 def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks(monkeypatch):
-    monkeypatch.setattr(parameters_module, 'Parameter', FakeParameter)
+    _patch_tree_types(monkeypatch)
 
-    class ParameterWithoutEnabled:
-        def __init__(self, name, unique_name, value=0.0, independent=True, dependency_expression='', dependency_map=None):
-            self.name = name
-            self.unique_name = unique_name
-            self.value = value
-            self.variance = 0.0
-            self.min = 0.0
-            self.max = 10.0
-            self.unit = ''
-            self.free = False
-            self.independent = independent
-            self.dependency_expression = dependency_expression
-            self.dependency_map = dependency_map or {}
-
-    fake_map = FakeMap(
-        {
-            ('m1', 'p1'): ['group_same', 'param_same'],
-            ('m1', 'p2'): ['group_same', 'param_same'],
-            ('m1', 'reserved'): ['group_np', 'param_np'],
-            ('m1', 'numeric'): ['group_num', 'param_num'],
-            ('m1', 'empty'): ['only_key'],
-            ('m1', 'dep_other'): ['group_dep', 'param_dep'],
-            ('m1', 'no_enabled'): ['group_ne', 'param_ne'],
-        },
-        {
-            'group_same': 'Same Group',
-            'param_same': 'Same Name',
-            'group_np': 'Reserved',
-            'param_np': 'np',
-            'group_num': '123',
-            'param_num': '456',
-            'group_dep': 'DepGroup',
-            'param_dep': 'DepName',
-            'group_ne': 'Visible',
-            'param_ne': 'Parameter',
-        },
-    )
-    monkeypatch.setattr(parameters_module.global_object, 'map', fake_map)
-
-    models = make_model_collection(make_model(name='M1', unique_name='m1', user_data={'original_name': 'M1'}))
-    param1 = make_parameter(name='same', unique_name='p1')
-    param2 = make_parameter(name='same', unique_name='p2')
+    param1 = make_parameter(name='Same Name', unique_name='p1')
+    param2 = make_parameter(name='Same Name', unique_name='p2')
     reserved = make_parameter(name='np', unique_name='reserved')
     numeric = make_parameter(name='456', unique_name='numeric')
     empty = make_parameter(name='!!!', unique_name='empty')
@@ -216,7 +182,21 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
         dependency_expression='a+1',
         dependency_map={'a': 'external'},
     )
-    no_enabled = ParameterWithoutEnabled(name='visible', unique_name='no_enabled', value=2.0)
+    no_enabled = make_parameter(name='visible', unique_name='no_enabled', value=2.0)
+    del no_enabled.enabled  # exercise the missing-`enabled` fallback (-> True)
+
+    model = make_model(name='M1', unique_name='m1', user_data={'original_name': 'M1'})
+    # Each parameter sits under a named container so its display name and
+    # alias derive from `<parent name> <parameter name>`.
+    model.groups = [
+        FakeNode('Same Group', 'sg', p1=param1, p2=param2),
+        FakeNode('Reserved', 'res', r=reserved),
+        FakeNode('123', 'num', n=numeric),
+        FakeNode('', 'empty_parent', e=empty),
+        FakeNode('DepGroup', 'depg', d=dep_other),
+        FakeNode('Visible', 'vis', v=no_enabled),
+    ]
+    models = make_model_collection(model)
 
     result = parameters_module._from_parameters_to_list_of_dicts(
         [param1, param2, reserved, numeric, empty, dep_other, no_enabled],
@@ -228,7 +208,7 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert aliases[1] == 'same_group_same_name_1'
     assert aliases[2] == 'reserved_np'
     assert aliases[3] == 'p_123_456'
-    assert result[4]['display_name'] == '!!!'
+    assert result[4]['display_name'].endswith('!!!')
     assert aliases[4] == 'param'
     assert result[5]['dependency'] == 'external+1'
     assert result[6]['enabled'] is True

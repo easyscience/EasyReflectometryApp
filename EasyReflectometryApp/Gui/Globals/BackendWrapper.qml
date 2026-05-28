@@ -90,6 +90,16 @@ QtObject {
         return null
     }
 
+    // Project load error signal - forwarded from backend
+    signal projectLoadError(string message)
+
+    property var _projectLoadErrorConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectLoadError) {
+            activeBackend.project.projectLoadError.connect(projectLoadError)
+        }
+        return null
+    }
+
 
     ///////////////
     // Sample page

@@ -120,3 +120,26 @@ def test_sample_load_emits_warning_when_model_missing(monkeypatch, qcore_applica
     assert project._logic.added_samples == []
     assert project._logic.replaced_samples == []
     assert received == ['Missing model in ORSO']
+
+
+def test_load_emits_error_on_outdated_file_format(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+
+    def _raise_format_error(_path):
+        raise ValueError('This project file predates file_format=2 and cannot be loaded.')
+
+    monkeypatch.setattr(project._logic, 'load', _raise_format_error)
+
+    errors = []
+    project.projectLoadError.connect(lambda msg: errors.append(msg))
+    loaded = {'count': 0}
+    project.externalProjectLoaded.connect(lambda: loaded.__setitem__('count', loaded['count'] + 1))
+
+    project.load('old_project.json')
+
+    assert errors == [
+        'This project file uses obsolete and unsupported format.\n'
+        'Please re-create the project from its underlying data and save it again.'
+    ]
+    assert loaded['count'] == 0

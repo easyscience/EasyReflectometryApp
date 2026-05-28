@@ -91,7 +91,7 @@ class FakeLayerCollection(list):
         )
         self.insert(index + 1, duplicate)
 
-    def remove(self, index):
+    def remove_at(self, index):
         self.pop(index)
 
     def move_up(self, index):

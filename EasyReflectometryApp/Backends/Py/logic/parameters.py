@@ -1,4 +1,5 @@
 import re
+from collections.abc import MutableSequence
 from typing import Any
 from typing import List
 from typing import Tuple
@@ -6,7 +7,7 @@ from typing import Tuple
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.utils import count_fixed_parameters
 from easyreflectometry.utils import count_free_parameters
-from easyscience import global_object
+from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
@@ -257,27 +258,26 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         alias_registry.add(alias)
         return alias
 
-    def _get_parameter_display_data(param: Parameter, model_unique_name: str) -> Tuple[str, str]:
-        """Extract display name and group from parameter path.
+    def _get_parameter_display_data(param: Parameter, path: list) -> Tuple[str, str]:
+        """Extract display name and group from the object path.
 
         For layer parameters (thickness, roughness), uses the assembly name
         from the path instead of the layer name, so that renaming an assembly
         in the Model Editor is reflected in the Analysis parameters table.
         """
-        path = global_object.map.find_path(model_unique_name, param.unique_name)
-        if len(path) >= 2:
-            param_name = global_object.map.get_item_by_key(path[-1]).name
+        if path is not None and len(path) >= 2:
+            param_name = path[-1].name
             # For layer parameters the path is:
             # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
             if _is_layer_parameter(param) and len(path) >= 4:
-                parent_name = global_object.map.get_item_by_key(path[-4]).name
+                parent_name = path[-4].name
             else:
-                parent_name = global_object.map.get_item_by_key(path[-2]).name
+                parent_name = path[-2].name
             return f'{parent_name} {param_name}', parent_name
         return param.name, ''  # Fallback to parameter name without group
 
-    def _get_dependency_expression(param: Parameter, model_unique_name: str) -> str:
+    def _get_dependency_expression(param: Parameter, paths: dict) -> str:
         """Get simplified dependency expression."""
         if param.independent:
             return ''
@@ -286,7 +286,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
             dependent_param = param.dependency_map['a']
             if isinstance(dependent_param, Parameter):
-                dep_name, _ = _get_parameter_display_data(dependent_param, model_unique_name)
+                dep_name, _ = _get_parameter_display_data(dependent_param, paths.get(dependent_param.unique_name))
             else:
                 dep_name = str(dependent_param)
             return param.dependency_expression.replace('a', dep_name)
@@ -302,12 +302,15 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     # Process parameters for each model
     for model_idx, model in enumerate(models):
-        model_unique_name = model.unique_name
         model_prefix = get_original_name(model)
+        # Object paths replace the global_object.map graph, which the new
+        # easyscience core no longer populates with parent->child edges.
+        paths = _build_param_object_paths(model)
 
         for parameter in parameters:
-            # Skip parameters not in this model's path
-            if not global_object.map.find_path(model_unique_name, parameter.unique_name):
+            # Skip parameters not in this model's tree
+            path = paths.get(parameter.unique_name)
+            if path is None:
                 continue
 
             # For non-layer parameters, skip if already processed (they're shared across models)
@@ -317,7 +320,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     continue
                 processed_unique_names.add(parameter.unique_name)
 
-            display_name, group_name = _get_parameter_display_data(parameter, model_unique_name)
+            display_name, group_name = _get_parameter_display_data(parameter, path)
 
             # Add model prefix only to layer parameters (thickness, roughness)
             if is_layer_param:
@@ -341,13 +344,55 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'units': parameter.unit,
                     'fit': parameter.free,
                     'independent': parameter.independent,
-                    'dependency': _get_dependency_expression(parameter, model_unique_name),
+                    'dependency': _get_dependency_expression(parameter, paths),
                     'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
                     'object': parameter,  # Direct reference to the Parameter object
                 }
             )
 
     return parameter_list
+
+
+def _build_param_object_paths(model) -> dict:
+    """Map each parameter's ``unique_name`` to its object chain ``[model, ..., parameter]``.
+
+    Replaces ``global_object.map.find_path``: the new easyscience core
+    (``NewBase`` / ``ModelBase`` / ``EasyList``) registers vertices but no
+    parent->child edges, so the map graph can no longer be walked. The chain
+    mirrors the old map path, e.g.
+    ``Model -> Sample -> Assembly -> LayerCollection -> Layer -> [Material ->] Parameter``,
+    so the existing index logic (``path[-4]`` for the assembly, ``path[-2]``
+    for the immediate parent) keeps working.
+    """
+    paths: dict[str, list] = {}
+    visited: set[int] = {id(model)}
+
+    def _children(obj) -> list:
+        # Collections expose their members by iteration, not as attributes.
+        if isinstance(obj, MutableSequence):
+            return list(obj)
+        children = []
+        for attr_name in dir(obj):
+            if attr_name.startswith('_'):
+                continue
+            try:
+                value = getattr(obj, attr_name)
+            except Exception:
+                continue
+            if isinstance(value, (Parameter, ModelBase, MutableSequence)):
+                children.append(value)
+        return children
+
+    def _visit(obj, chain: list) -> None:
+        for child in _children(obj):
+            if isinstance(child, Parameter):
+                paths.setdefault(child.unique_name, chain + [child])
+            elif isinstance(child, (ModelBase, MutableSequence)) and id(child) not in visited:
+                visited.add(id(child))
+                _visit(child, chain + [child])
+
+    _visit(model, [model])
+    return paths
 
 
 def _is_experiment_parameter(parameter: dict[str, Any]) -> bool:

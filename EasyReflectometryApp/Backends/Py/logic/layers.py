@@ -58,7 +58,7 @@ class Layers:
         return [element['label'] for element in self.layers]
 
     def remove_at_index(self, value: str) -> None:
-        self._layers.remove(int(value))
+        self._layers.remove_at(int(value))
 
     def add_new(self) -> None:
         if 'Si' not in [material.name for material in self._project_lib._materials]:
