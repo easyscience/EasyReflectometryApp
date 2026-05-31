@@ -10,6 +10,7 @@ from .analysis import Analysis
 from .experiment import Experiment
 from .home import Home
 from .plotting_1d import Plotting1d
+from .polarization import Polarization
 from .project import Project
 from .sample import Sample
 from .status import Status
@@ -36,6 +37,9 @@ class PyBackend(QObject):
 
         # Plotting backend part
         self._plotting_1d = Plotting1d(self._project_lib, parent=self)
+
+        # Polarization backend part (reuses plotting for per-channel data)
+        self._polarization = Polarization(self._project_lib, self._plotting_1d, parent=self)
 
         self._logger = LoggerLevelHandler(self)
 
@@ -79,6 +83,10 @@ class PyBackend(QObject):
     @Property('QVariant', constant=True)
     def plotting(self) -> Plotting1d:
         return self._plotting_1d
+
+    @Property('QVariant', constant=True)
+    def polarization(self) -> Polarization:
+        return self._polarization
 
     @Property('QVariant', constant=True)
     def logger(self):
@@ -146,6 +154,14 @@ class PyBackend(QObject):
         self._connect_sample_page()
         self._connect_experiment_page()
         self._connect_analysis_page()
+        self._connect_polarization()
+
+    def _connect_polarization(self) -> None:
+        # Toggling polarization changes whether the app is in multi-experiment mode
+        # (polarized data collapses the loaded files into one logical experiment),
+        # so re-emit the multi-experiment signal and refresh the plots.
+        self._polarization.displayChanged.connect(self.multiExperimentSelectionChanged)
+        self._polarization.displayChanged.connect(self._refresh_plots)
 
     ######### Forming connections between the backend parts
     def _connect_project_page(self) -> None:

@@ -88,7 +88,10 @@ Rectangle {
         }
 
         function recreateSeriesForCurrentMode() {
-            if (isMultiExperimentMode) {
+            if (isPolarizationMode) {
+                // Polarization mode: recreate per-channel series
+                updateMultiExperimentSeries()
+            } else if (isMultiExperimentMode) {
                 // Multi-experiment mode: recreate all multi-experiment series
                 updateMultiExperimentSeries()
             } else if (useLogQAxis) {
@@ -124,6 +127,20 @@ Rectangle {
                 return false
             }
         }
+
+        // Polarization support. The Experiment tab renders measured data only, so
+        // polarization mode is meaningful only when the current experiment exposes at
+        // least one channel with measured data. Gate more narrowly than the Analysis tab.
+        property bool isPolarizationMode: {
+            if (!Globals.BackendWrapper.polarizationAvailable) return false
+            var channels = Globals.BackendWrapper.polarizationGetExperimentChannels(
+                Globals.BackendWrapper.analysisExperimentsCurrentIndex
+            ) || []
+            for (var i = 0; i < channels.length; i++) {
+                if (channels[i] && channels[i].hasMeasured) return true
+            }
+            return false
+        }
         property bool useStaggeredPlotting: {
             try {
                 return Globals.Variables.useStaggeredPlotting || false
@@ -148,6 +165,9 @@ Rectangle {
 
         // Watch for changes in staggered plotting mode
         onUseStaggeredPlottingChanged: {
+            // Polarization mode uses its own per-channel stagger system; suppress the
+            // multi-experiment stagger to avoid layering two offsets (see plan §3.2.8).
+            if (isPolarizationMode) return
             // console.log(`ExperimentView detected staggered mode change: ${useStaggeredPlotting}`)
             // console.log(`Multi-experiment mode: ${isMultiExperimentMode}, Series count: ${multiExperimentSeries.length}`)
             if (isMultiExperimentMode && multiExperimentSeries.length > 1) {
@@ -165,6 +185,7 @@ Rectangle {
 
         // Watch for changes in staggering factor
         onStaggeringFactorChanged: {
+            if (isPolarizationMode) return  // polarization uses its own stagger system (plan §3.2.8)
             // console.log(`ExperimentView detected staggering factor change: ${staggeringFactor.toFixed(2)}`)
             if (useStaggeredPlotting && isMultiExperimentMode && multiExperimentSeries.length > 1) {
                 // console.log(`Refreshing ${multiExperimentSeries.length} series with new factor`)
@@ -181,6 +202,7 @@ Rectangle {
         Connections {
             target: Globals.Variables
             function onStaggeringFactorChanged() {
+                if (chartView.isPolarizationMode) return  // plan §3.2.8
                 // console.log(`Direct watcher: Globals.Variables.staggeringFactor changed to ${Globals.Variables.staggeringFactor}`)
                 if (chartView.useStaggeredPlotting && chartView.isMultiExperimentMode && chartView.multiExperimentSeries.length > 1) {
                     // console.log(`Forcing refresh of ${chartView.multiExperimentSeries.length} series`)
@@ -193,22 +215,31 @@ Rectangle {
         }
 
         function adjustAxisForStaggering() {
-            if (!useStaggeredPlotting || !isMultiExperimentMode || multiExperimentSeries.length <= 1) {
+            // Two independent staggering systems can require axis refit: the multi-experiment
+            // stagger and the polarization per-channel stagger (plan §3.2.8). They are mutually
+            // exclusive (polarization mode suppresses multi-experiment stagger).
+            var polarizationStagger = isPolarizationMode && Globals.BackendWrapper.polarizationStaggerEnabled
+            var multiStagger = useStaggeredPlotting && isMultiExperimentMode && multiExperimentSeries.length > 1
+            if (!polarizationStagger && !multiStagger) {
                 return
             }
 
             var allMinY = 1e10
             var allMaxY = -1e10
 
-            // Find the bounds of all staggered series
+            // Find the bounds of all staggered series. Points are appended already-staggered,
+            // so the markers carry the offset directly.
             for (var exp = 0; exp < multiExperimentSeries.length; exp++) {
                 var series = multiExperimentSeries[exp].measuredSerie
+                if (!series) continue
                 for (var i = 0; i < series.count; i++) {
                     var point = series.at(i)
                     allMinY = Math.min(allMinY, point.y)
                     allMaxY = Math.max(allMaxY, point.y)
                 }
             }
+
+            if (allMaxY <= allMinY) return
 
             // Add 10% padding and apply to Y-axis
             var padding = (allMaxY - allMinY) * 0.1
@@ -242,6 +273,24 @@ Rectangle {
             function onChartAxesResetRequested() {
                 // Reset axes when model is loaded (e.g., from ORSO file)
                 experimentResetAxesTimer.start()
+            }
+        }
+
+        // Polarization display/data changes (channel visibility, stagger, channel data)
+        Connections {
+            target: Globals.BackendWrapper
+            function onPolarizationDisplayChanged() {
+                // Channel/stagger membership changed: recreate series and reset axes.
+                chartView.updateMultiExperimentSeries()
+                experimentResetAxesTimer.start()
+            }
+            function onPolarizationDataChanged() {
+                // Only data values changed: refresh existing series without recreation.
+                if (chartView.isPolarizationMode) {
+                    chartView.refreshDynamicSeriesData()
+                } else {
+                    Globals.BackendWrapper.plottingRefreshExperiment()
+                }
             }
         }
 
@@ -301,8 +350,8 @@ Rectangle {
                 logModeSeries = null
             }
 
-            if (isMultiExperimentMode) {
-                // Multi-experiment mode: recreate all multi-experiment series with the correct axis
+            if (isPolarizationMode || isMultiExperimentMode) {
+                // Polarization / multi-experiment: recreate series with the correct axis
                 updateMultiExperimentSeries()
             } else if (useLogQAxis) {
                 // Single experiment, log mode: create dynamic series on log axis
@@ -394,6 +443,52 @@ Rectangle {
             // Clear existing multi-experiment series
             clearMultiExperimentSeries()
 
+            // Polarization mode: one measured+error series triplet per visible channel,
+            // for the current experiment (single mode) or every experiment (multi mode).
+            if (isPolarizationMode) {
+                if (logModeSeries) {
+                    chartView.removeSeries(logModeSeries.measuredSerie)
+                    chartView.removeSeries(logModeSeries.errorUpperSerie)
+                    chartView.removeSeries(logModeSeries.errorLowerSerie)
+                    logModeSeries = null
+                }
+
+                measured.visible = false
+                if (measuredScatterSerie) measuredScatterSerie.visible = false
+                errorUpper.visible = false
+                errorLower.visible = false
+
+                var polarizationExperiments = []
+                if (isMultiExperimentMode) {
+                    polarizationExperiments = Globals.BackendWrapper.plottingIndividualExperimentDataList
+                } else {
+                    var currentIndex = Globals.BackendWrapper.analysisExperimentsCurrentIndex
+                    polarizationExperiments = [{
+                        index: currentIndex,
+                        name: `Exp ${currentIndex + 1}`,
+                        color: currentExperimentColor,
+                        hasData: true
+                    }]
+                }
+
+                for (var p = 0; p < polarizationExperiments.length; p++) {
+                    var polarizationExperiment = polarizationExperiments[p]
+                    if (!polarizationExperiment.hasData) continue
+
+                    var channels = visibleChannelsForExperiment(polarizationExperiment.index)
+                    for (var c = 0; c < channels.length; c++) {
+                        createExperimentSeries(polarizationExperiment.index,
+                                               polarizationExperiment.name,
+                                               polarizationExperiment.color,
+                                               channels[c],
+                                               c)
+                    }
+                }
+
+                adjustAxisForStaggering()
+                return
+            }
+
             if (!isMultiExperimentMode) {
                 // Show default series for single experiment
                 measured.visible = false
@@ -469,22 +564,85 @@ Rectangle {
             multiExperimentSeries = []
         }
 
-        function createExperimentSeries(expIndex, expName, color) {
+        // Returns the visible channels (filtered by selection + availability) for one
+        // experiment, or a single synthetic 'default' channel when not in polarization mode.
+        function visibleChannelsForExperiment(expIndex) {
+            if (!isPolarizationMode) {
+                return [{
+                    key: 'default',
+                    label: '',
+                    color: currentExperimentColor,
+                    enabled: true,
+                    hasMeasured: true
+                }]
+            }
+
+            var selectedKeys = Globals.BackendWrapper.polarizationVisibleChannelKeys || []
+            var channels = Globals.BackendWrapper.polarizationGetExperimentChannels(expIndex) || []
+            var visibleChannels = []
+            for (var i = 0; i < channels.length; i++) {
+                var channel = channels[i]
+                if (!channel || channel.enabled === false) continue
+                if (channel.hasMeasured === false) continue
+                if (selectedKeys.indexOf(channel.key) === -1) continue
+                visibleChannels.push(channel)
+            }
+            return visibleChannels
+        }
+
+        // Visible channels across all experiments, for the legend.
+        function visiblePolarizationChannels() {
+            if (!isPolarizationMode) return []
+
+            var selectedKeys = Globals.BackendWrapper.polarizationVisibleChannelKeys || []
+            var channels = Globals.BackendWrapper.polarizationChannels || []
+            var visibleChannels = []
+            for (var i = 0; i < channels.length; i++) {
+                var channel = channels[i]
+                if (!channel || channel.enabled === false) continue
+                if (channel.hasMeasured === false) continue
+                if (selectedKeys.indexOf(channel.key) === -1) continue
+                visibleChannels.push(channel)
+            }
+            return visibleChannels
+        }
+
+        // Apply the per-channel polarization stagger offset on the log-Y axis.
+        function staggeredY(value, channelIndex) {
+            if (value === undefined || value === null || isNaN(value)) return NaN
+            if (!isPolarizationMode) return value
+            if (!Globals.BackendWrapper.polarizationStaggerEnabled) return value
+            return value + channelIndex * Globals.BackendWrapper.polarizationStaggerFactor
+        }
+
+        // Refresh data into existing series without recreating them (data-only change).
+        function refreshDynamicSeriesData() {
+            for (var i = 0; i < multiExperimentSeries.length; i++) {
+                populateExperimentSeries(multiExperimentSeries[i])
+            }
+        }
+
+        function createExperimentSeries(expIndex, expName, color, channel, channelIndex) {
             // console.log(` Creating series for experiment ${expIndex}: ${expName} (${color})`)
 
             var xAxis = currentXAxis()
 
+            var usePolarizationChannel = isPolarizationMode && channel && channel.key !== 'default'
+            var seriesColor = usePolarizationChannel ? (channel.color || color) : color
+            var labelPrefix = expName || `Exp ${expIndex + 1}`
+            var channelSuffix = usePolarizationChannel ? ` - ${channel.label || channel.key}` : ''
+
             // Create measured data series (scatter points)
             var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
-                                                       `${expName} - Data`,
+                                                       `${labelPrefix}${channelSuffix} - Data`,
                                                        xAxis, chartView.axisY,
-                                                       color, Globals.Variables.experimentMarkerStyle)
+                                                       seriesColor, Globals.Variables.experimentMarkerStyle)
 
             // Create error bound series (lighter colors)
-            var errorColor = Qt.darker(color, 1.3)
+            var errorColor = Qt.darker(seriesColor, 1.3)
 
             var errorUpperSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                        `${expName} - Error Upper`,
+                                                        `${labelPrefix}${channelSuffix} - Error Upper`,
                                                         xAxis, chartView.axisY)
             errorUpperSerie.color = errorColor
             errorUpperSerie.width = 1
@@ -492,7 +650,7 @@ Rectangle {
             errorUpperSerie.useOpenGL = chartView.useOpenGL
 
             var errorLowerSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                        `${expName} - Error Lower`,
+                                                        `${labelPrefix}${channelSuffix} - Error Lower`,
                                                         xAxis, chartView.axisY)
             errorLowerSerie.color = errorColor
             errorLowerSerie.width = 1
@@ -506,7 +664,10 @@ Rectangle {
                 errorLowerSerie: errorLowerSerie,
                 expIndex: expIndex,
                 expName: expName,
-                color: color
+                color: seriesColor,
+                channelKey: channel ? channel.key : 'default',
+                channelLabel: channel ? channel.label : '',
+                channelIndex: channelIndex || 0
             }
             multiExperimentSeries.push(seriesSet)
 
@@ -515,13 +676,31 @@ Rectangle {
         }
 
         function populateExperimentSeries(seriesSet) {
-            // Get data points from backend
-            var dataPoints = Globals.BackendWrapper.plottingGetExperimentDataPoints(seriesSet.expIndex)
+            // Get data points from backend (channel-aware in polarization mode)
+            var dataPoints = isPolarizationMode
+                             ? Globals.BackendWrapper.plottingGetExperimentChannelDataPoints(seriesSet.expIndex, seriesSet.channelKey)
+                             : Globals.BackendWrapper.plottingGetExperimentDataPoints(seriesSet.expIndex)
 
             // Clear existing points
             seriesSet.measuredSerie.clear()
             seriesSet.errorUpperSerie.clear()
             seriesSet.errorLowerSerie.clear()
+
+            // Polarization mode: per-channel stagger applied uniformly to measured + both
+            // error bounds so the bounds stay aligned with their markers (plan §3.2.8 / #11).
+            // The multi-experiment stagger system is suppressed in polarization mode.
+            if (isPolarizationMode) {
+                for (var k = 0; k < dataPoints.length; k++) {
+                    var channelPoint = dataPoints[k]
+                    var measuredY = staggeredY(channelPoint.y, seriesSet.channelIndex)
+                    var upperY = staggeredY(channelPoint.errorUpper, seriesSet.channelIndex)
+                    var lowerY = staggeredY(channelPoint.errorLower, seriesSet.channelIndex)
+                    if (isFinite(measuredY)) seriesSet.measuredSerie.append(channelPoint.x, measuredY)
+                    if (isFinite(upperY)) seriesSet.errorUpperSerie.append(channelPoint.x, upperY)
+                    if (isFinite(lowerY)) seriesSet.errorLowerSerie.append(channelPoint.x, lowerY)
+                }
+                return
+            }
 
             // Calculate staggering offset if enabled
             var yOffset = 0
@@ -657,19 +836,65 @@ Rectangle {
 
                 // Single experiment legend
                 EaElements.Label {
-                    visible: !chartView.isMultiExperimentMode
+                    visible: !chartView.isMultiExperimentMode && !chartView.isPolarizationMode
                     text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + '  I (Measured)'
                     color: chartView.calcSerie.color
                 }
                 EaElements.Label {
-                    visible: !chartView.isMultiExperimentMode
+                    visible: !chartView.isMultiExperimentMode && !chartView.isPolarizationMode
                     text: Globals.Variables.lineStyleSymbol(chartView.measSerie.style) + ' Error'
                     color: chartView.measSerie.color
                 }
-                
+
+                // Polarization legend
+                Column {
+                    visible: chartView.isPolarizationMode
+                    spacing: EaStyle.Sizes.fontPixelSize * 0.2
+
+                    EaElements.Label {
+                        text: qsTr("Polarization channels:")
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                        font.bold: true
+                        color: EaStyle.Colors.themeForeground
+                    }
+
+                    Repeater {
+                        model: chartView.visiblePolarizationChannels()
+                        delegate: Row {
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.3
+
+                            Rectangle {
+                                width: EaStyle.Sizes.fontPixelSize * 0.8
+                                height: 3
+                                color: modelData.color || '#1f77b4'
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            EaElements.Label {
+                                text: `${modelData.label || modelData.key} (${modelData.description || ''})`
+                                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.8
+                                color: EaStyle.Colors.themeForeground
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width - 2 * EaStyle.Sizes.fontPixelSize
+                        height: 1
+                        color: EaStyle.Colors.chartGridLine
+                    }
+
+                    EaElements.Label {
+                        text: qsTr("● Measured  - - - Error bounds")
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
+                        color: EaStyle.Colors.themeForegroundMinor
+                    }
+                }
+
                 // Multi-experiment legend
                 Column {
-                    visible: chartView.isMultiExperimentMode
+                    visible: chartView.isMultiExperimentMode && !chartView.isPolarizationMode
                     spacing: EaStyle.Sizes.fontPixelSize * 0.2
 
                     EaElements.Label {
@@ -755,9 +980,16 @@ Rectangle {
             chartView.updateReferenceLines()
         }
 
+        // Rebuild series when polarization availability/channel set changes
+        // (e.g. switching to a polarized experiment or backend gaining support).
+        onIsPolarizationModeChanged: {
+            updateMultiExperimentSeries()
+            experimentResetAxesTimer.start()
+        }
+
         // Update series when chart becomes visible
         onVisibleChanged: {
-            if (visible && isMultiExperimentMode) {
+            if (visible && (isMultiExperimentMode || isPolarizationMode)) {
                 updateMultiExperimentSeries()
             }
             if (visible) {

@@ -4,6 +4,7 @@ import QtQuick
 
 QtObject {
     property bool available: true
+    property bool polarized: true
 
     property var channels: [
         {
@@ -71,6 +72,12 @@ QtObject {
 
     signal displayChanged()
     signal dataChanged()
+
+    function setPolarized(value) {
+        polarized = value
+        available = value
+        displayChanged()
+    }
 
     function setChannelVisible(channelKey, visible) {
         var keys = visibleChannelKeys.slice()
@@ -144,6 +151,38 @@ QtObject {
                 'x': q,
                 'measured': calculated + Math.cos(q * 95.0) * 0.08,
                 'calculated': calculated
+            })
+        }
+
+        return points
+    }
+
+    function getExperimentChannelDataPoints(experimentIndex, channelKey) {
+        // Measured-only per-channel data with error bounds, mirroring the shape returned by
+        // Plotting.getExperimentDataPoints ({ x, y, errorUpper, errorLower }) so the
+        // Experiment chart can draw markers + dashed error bounds per polarization channel.
+        var channelOffsets = {
+            'pp': 0.0,
+            'mm': -0.45,
+            'pm': -0.9,
+            'mp': -1.35
+        }
+        var offset = channelOffsets[channelKey] || 0.0
+        var experimentOffset = experimentIndex * 0.12
+        var points = []
+
+        for (var i = 0; i < 80; i++) {
+            var q = 0.01 + i * 0.0035
+            var decay = -1.5 - q * 9.0
+            var oscillation = Math.sin(q * 70.0 + experimentIndex * 0.4) * 0.18
+            var measured = decay + oscillation + offset - experimentOffset
+                           + Math.cos(q * 95.0) * 0.08
+            var sigma = 0.05 + q * 0.6
+            points.push({
+                'x': q,
+                'y': measured,
+                'errorUpper': measured + sigma,
+                'errorLower': measured - sigma
             })
         }
 

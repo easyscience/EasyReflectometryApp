@@ -15,6 +15,9 @@ EaComponents.SideBarColumn {
     Groups.ExperimentalData{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
+    Groups.Polarization{
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+    }
     Groups.InstrumentParameters{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }

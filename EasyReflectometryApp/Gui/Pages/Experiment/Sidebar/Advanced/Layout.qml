@@ -7,10 +7,16 @@ import QtQuick
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
 
+import Gui.Components as GuiComponents
+import Gui.Globals as Globals
 import "./Groups" as Groups
 
 
 EaComponents.SideBarColumn {
+
+    // Channel visibility + stagger controls for polarized measured datasets.
+    // Self-hides when the active backend has no polarization support.
+    GuiComponents.PolarizationChannelSelector {}
 
     Groups.PlotControl {}
 

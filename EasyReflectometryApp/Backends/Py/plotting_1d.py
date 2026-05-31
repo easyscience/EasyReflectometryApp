@@ -306,8 +306,16 @@ class Plotting1d(QObject):
 
     @property
     def is_multi_experiment_mode(self) -> bool:
-        """Check if multiple experiments are selected."""
+        """Check if multiple experiments are selected.
+
+        When polarization is enabled the separately-loaded files are treated as a
+        single logical polarized experiment (its channels), so multi-experiment
+        mode is suppressed and the channel-aware single-experiment path is used.
+        """
         try:
+            polarization = getattr(self._proxy, '_polarization', None)
+            if polarization is not None and polarization.available:
+                return False
             if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
                 return len(self._proxy._analysis._selected_experiment_indices) > 1
         except Exception:  # noqa: S110

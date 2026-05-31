@@ -574,6 +574,13 @@ QtObject {
             return false
         }
     }
+    readonly property bool polarizationPolarized: {
+        try {
+            return activeBackend.polarization.polarized || false
+        } catch (e) {
+            return false
+        }
+    }
     readonly property var polarizationChannels: {
         try {
             return activeBackend.polarization.channels || []
@@ -620,6 +627,13 @@ QtObject {
     signal polarizationDisplayChanged()
     signal polarizationDataChanged()
 
+    function polarizationSetPolarized(value) {
+        try {
+            activeBackend.polarization.setPolarized(value)
+        } catch (e) {
+            console.warn("polarizationSetPolarized failed:", e)
+        }
+    }
     function polarizationSetChannelVisible(channelKey, visible) {
         try {
             activeBackend.polarization.setChannelVisible(channelKey, visible)
@@ -675,6 +689,14 @@ QtObject {
             return activeBackend.polarization.getAnalysisChannelDataPoints(experimentIndex, channelKey)
         } catch (e) {
             console.warn("plottingGetAnalysisChannelDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetExperimentChannelDataPoints(experimentIndex, channelKey) {
+        try {
+            return activeBackend.polarization.getExperimentChannelDataPoints(experimentIndex, channelKey)
+        } catch (e) {
+            console.warn("plottingGetExperimentChannelDataPoints failed:", e)
             return []
         }
     }
