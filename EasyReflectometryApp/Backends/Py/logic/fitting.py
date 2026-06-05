@@ -439,6 +439,10 @@ class Fitting:
             self._results = [single_result] if single_result is not None else []
 
     @property
+    def last_fit_results(self):
+        return self._results if self._results else None
+
+    @property
     def fit_n_pars(self) -> int:
         """Return the global number of refined parameters for the fit."""
         if len(self._results) > 1:

@@ -89,8 +89,8 @@ def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monke
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi=1.2),
+        make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi2=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi2=1.2),
     ])
 
     assert logic.fit_finished is True
@@ -98,10 +98,27 @@ def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monke
     assert logic.fit_n_pars == 2
     assert logic.fit_chi2 == 2.0
 
-    logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi=4.5))
+    logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi2=4.5))
     assert logic.fit_success is False
     assert logic.fit_n_pars == 1
     assert logic.fit_chi2 == 4.5
+
+
+def test_last_fit_results_reflects_stored_results():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    assert logic.last_fit_results is None
+
+    multi_results = [
+        make_fit_result(success=True, chi2=2.0, n_pars=1, x=[1, 2], reduced_chi2=1.0),
+        make_fit_result(success=True, chi2=3.0, n_pars=1, x=[1, 2, 3], reduced_chi2=1.5),
+    ]
+    logic.on_fit_finished(multi_results)
+    assert logic.last_fit_results is multi_results
+
+    logic.on_fit_finished(make_fit_result(success=True, chi2=1.0, n_pars=1, x=[1], reduced_chi2=1.0))
+    assert len(logic.last_fit_results) == 1
 
 
 def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_results(monkeypatch):
@@ -111,8 +128,8 @@ def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_result
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=3, x=[1, 2, 3], reduced_chi=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=3, x=[1, 2, 3, 4], reduced_chi=1.2),
+        make_fit_result(success=True, chi2=4.0, n_pars=3, x=[1, 2, 3], reduced_chi2=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=3, x=[1, 2, 3, 4], reduced_chi2=1.2),
     ])
 
     assert logic.fit_n_pars == 3
@@ -149,7 +166,7 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_progress({'iteration': 3, 'chi2': 8.0, 'parameter_values': {'beta': 1.0}})
-    logic.on_fit_finished(make_fit_result(success=True, chi2=8.0, n_pars=1, x=[1, 2], reduced_chi=4.0))
+    logic.on_fit_finished(make_fit_result(success=True, chi2=8.0, n_pars=1, x=[1, 2], reduced_chi2=4.0))
 
     assert logic.fit_iteration == 0
     assert logic.fit_progress_message == ''
@@ -191,7 +208,7 @@ def test_fit_failure_and_cancellation_state_transitions():
 
 def test_start_stop_handles_success_and_fiterror():
     project = make_project(models=[object()])
-    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, chi2=1.7, reduced_chi=1.7))
+    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, chi2=1.7, reduced_chi2=1.7))
     logic = fitting_module.Fitting(project)
 
     logic.start_stop()

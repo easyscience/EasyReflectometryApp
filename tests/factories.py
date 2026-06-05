@@ -293,12 +293,12 @@ class FakeParameter:
 
 
 class FakeFitResult:
-    def __init__(self, success=True, chi2=1.0, n_pars=1, x=None, reduced_chi=0.5, minimizer_engine='stub'):
+    def __init__(self, success=True, chi2=1.0, n_pars=1, x=None, reduced_chi2=0.5, minimizer_engine='stub'):
         self.success = success
         self.chi2 = chi2
         self.n_pars = n_pars
         self.x = [] if x is None else x
-        self.reduced_chi2 = reduced_chi
+        self.reduced_chi2 = reduced_chi2
         self.minimizer_engine = minimizer_engine
 
 
