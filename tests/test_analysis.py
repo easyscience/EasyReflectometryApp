@@ -219,7 +219,7 @@ def test_start_threaded_sample_forwards_bayesian_kwargs(monkeypatch, qcore_appli
     analysis._start_threaded_sample()
 
     worker = StubWorker.instances[-1]
-    assert worker.method_name == 'sample'
+    assert worker.method_name == 'mcmc_sample'
     assert worker.args == ('data-group',)
     assert worker.kwargs == {
         'samples': 5000,
@@ -290,7 +290,7 @@ def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcor
     analysis.fittingStartStop()
 
     worker = StubWorker.instances[-1]
-    assert worker.method_name == 'sample'
+    assert worker.method_name == 'mcmc_sample'
     assert 'samples' in worker.kwargs
     assert 'burn' in worker.kwargs
     assert 'thin' in worker.kwargs
