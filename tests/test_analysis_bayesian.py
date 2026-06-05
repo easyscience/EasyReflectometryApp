@@ -815,7 +815,7 @@ class TestStartThreadedSample:
         analysis._start_threaded_fit()
 
         worker = StubWorker.instances[-1]
-        assert worker.method_name == 'sample'
+        assert worker.method_name == 'mcmc_sample'
         assert worker.start_calls == 1
 
     def test_worker_kwargs_contain_hyper_params(self, analysis):

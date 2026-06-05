@@ -307,7 +307,7 @@ class Fitting:
     # ------------------------------------------------------------------
 
     def collect_selected_experiments_datagroup(self) -> 'sc.DataGroup':
-        """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.sample()``.
+        """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.mcmc_sample()``.
 
         :return: DataGroup with reflectivity coords and data.
         :rtype: sc.DataGroup

@@ -97,15 +97,15 @@ class FitterWorker(QThread):
             # Get the method and call it
             method = getattr(self._fitter, self._method_name)
             kwargs = dict(self._kwargs)
-            if self._method_name in ('fit', 'sample') and 'progress_callback' not in kwargs:
+            if self._method_name in ('fit', 'mcmc_sample') and 'progress_callback' not in kwargs:
                 kwargs['progress_callback'] = self._progress_callback
-            if self._method_name == 'sample' and 'abort_test' not in kwargs:
+            if self._method_name == 'mcmc_sample' and 'abort_test' not in kwargs:
                 kwargs['abort_test'] = lambda: self._stop_requested
             elif self._method_name == 'fit' and 'abort_test' not in kwargs and self._uses_bumps_minimizer():
                 kwargs['abort_test'] = lambda: self._stop_requested
             result = method(*self._args, **kwargs)
 
-            # For BUMPS fit/sample, abort_test interrupts mid-run and method() returns early;
+            # For BUMPS fit/mcmc_sample, abort_test interrupts mid-run and method() returns early;
             # for lmfit/dfo this still only catches stops requested after the fit completed.
             if self._stop_requested:
                 self.failed.emit('Fitting cancelled by user')

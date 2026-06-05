@@ -522,7 +522,7 @@ class Analysis(QObject):
 
         self._fitter_thread = FitterWorker(
             fitter=multi_fitter,  # the high-level reflectometry MultiFitter
-            method_name='sample',
+            method_name='mcmc_sample',
             args=(data_group,),  # sc.DataGroup
             kwargs={
                 'samples': self._bayesian_logic.samples,
