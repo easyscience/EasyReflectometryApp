@@ -306,8 +306,14 @@ class Fitting:
     # Bayesian sampling helpers
     # ------------------------------------------------------------------
 
-    def collect_selected_experiments_datagroup(self) -> 'sc.DataGroup':
+    def collect_all_experiments_datagroup(self) -> 'sc.DataGroup':
         """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.mcmc_sample()``.
+
+        Scope decision (see issue #319): Bayesian sampling deliberately runs over
+        **all** experiments, mirroring the classical fit path (``prepare_threaded_fit``)
+        which also fits every experiment. The experiment selection currently affects
+        only plotting, not the fit/sampling scope. If per-selection sampling is ever
+        wanted, filter ``self._ordered_experiments()`` here and rename accordingly.
 
         :return: DataGroup with reflectivity coords and data.
         :rtype: sc.DataGroup
@@ -358,7 +364,7 @@ class Fitting:
             if selected is not None:
                 multi_fitter.easy_science_multi_fitter.switch_minimizer(selected)
 
-            data_group = self.collect_selected_experiments_datagroup()
+            data_group = self.collect_all_experiments_datagroup()
             return multi_fitter, data_group
         except Exception as e:
             self._fit_error_message = f'Error preparing sampling: {e}'

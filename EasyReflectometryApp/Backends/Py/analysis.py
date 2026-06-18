@@ -545,12 +545,26 @@ class Analysis(QObject):
     @Slot(list)
     def _on_sample_finished(self, results: list) -> None:
         """Handle successful completion of Bayesian sampling."""
-        try:
-            posterior = results[0]  # {'draws', 'param_names', 'state', 'logp'}
-            self._bayesian_logic._posterior = posterior
+        if not results:
+            logger.error('Bayesian sampling finished with empty results list')
             self._fitting_logic.on_sample_finished()
             self._fitter_thread = None
-            # Phase 2: compute posterior predictive, diagnostics, and rendered plots
+            self.fittingChanged.emit()
+            self.externalFittingChanged.emit()
+            return
+        try:
+            posterior = results[0]  # {'draws', 'param_names', 'state', 'logp'}
+            self._bayesian_logic.posterior = posterior
+            self._fitting_logic.on_sample_finished()
+            self._fitter_thread = None
+        except Exception:
+            logger.exception('Error storing Bayesian posterior result')
+            self._fitter_thread = None
+            self.fittingChanged.emit()
+            self.externalFittingChanged.emit()
+            return
+        # Phase 2: compute posterior predictive, diagnostics, and rendered plots
+        try:
             self._compute_and_publish_posterior_predictive()
             self._compute_diagnostics()
             self._render_corner_plot()

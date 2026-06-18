@@ -33,9 +33,11 @@ def test_minimizers_filters_out_blocked_entries(monkeypatch):
 
     # Bayesian sentinel is prepended at index 0
     assert logic.minimizers_available() == ['BUMPS-DREAM (Bayesian)', 'DREAM', 'SciPy']
-    # Index 0 is Bayesian sentinel: selected_minimizer_enum() falls back to Bumps_simplex
-    assert logic.selected_minimizer_enum().name == 'Bumps_simplex'
-    assert logic.is_bayesian_selected() is True
+    # Default is index 1 (first classical minimizer); index 0 is the Bayesian
+    # sentinel, which requires an explicit user choice (issue #320).
+    assert logic.minimizer_current_index() == 1
+    assert logic.selected_minimizer_enum().name == 'DREAM'
+    assert logic.is_bayesian_selected() is False
 
 
 def test_minimizers_set_index_updates_project_and_runtime_properties(monkeypatch):

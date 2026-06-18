@@ -1,3 +1,4 @@
+import logging
 import re
 from collections.abc import MutableSequence
 from typing import Any
@@ -11,6 +12,8 @@ from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
+
+logger = logging.getLogger(__name__)
 
 RESERVED_ALIAS_NAMES = {'np', 'numpy', 'math', 'pi', 'e'}
 
@@ -161,7 +164,11 @@ class Parameters:
         except ValueError:
             return False
         if float_value != parameter.value:
-            parameter.value = float_value
+            try:
+                parameter.value = float_value
+            except (ValueError, TypeError):
+                logger.exception('Failed to set parameter value to %s', float_value)
+                return False
             return True
         return False
 
@@ -174,7 +181,11 @@ class Parameters:
         except ValueError:
             return False
         if float_value != parameter.min:
-            parameter.min = float_value
+            try:
+                parameter.min = float_value
+            except (ValueError, TypeError):
+                logger.exception('Failed to set parameter min to %s', float_value)
+                return False
             return True
         return False
 
@@ -187,7 +198,11 @@ class Parameters:
         except ValueError:
             return False
         if float_value != parameter.max:
-            parameter.max = float_value
+            try:
+                parameter.max = float_value
+            except (ValueError, TypeError):
+                logger.exception('Failed to set parameter max to %s', float_value)
+                return False
             return True
         return False
 
