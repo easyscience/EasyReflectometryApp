@@ -1,3 +1,4 @@
+import logging
 import math
 import numbers
 import re
@@ -20,6 +21,8 @@ from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
 from .logic.parameters import Parameters as ParametersLogic
 from .logic.project import Project as ProjectLogic
+
+logger = logging.getLogger(__name__)
 
 _ASTEVAL_CONFIG = {
     'import': False,
@@ -364,6 +367,7 @@ class Sample(QObject):
     def removeAssembly(self, value: str) -> None:
         self._assemblies_logic.remove_at_index(value)
         self._refreshCurrentAssemblySelectionState()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -372,6 +376,7 @@ class Sample(QObject):
     def addNewAssembly(self) -> None:
         self._assemblies_logic.add_new()
         self._refreshCurrentAssemblySelectionState()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -380,6 +385,7 @@ class Sample(QObject):
     def duplicateSelectedAssembly(self) -> None:
         self._assemblies_logic.duplicate_selected()
         self._refreshCurrentAssemblySelectionState()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -388,6 +394,7 @@ class Sample(QObject):
     def moveSelectedAssemblyUp(self) -> None:
         self._assemblies_logic.move_selected_up()
         self._refreshCurrentAssemblySelectionState()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
 
@@ -395,6 +402,7 @@ class Sample(QObject):
     def moveSelectedAssemblyDown(self) -> None:
         self._assemblies_logic.move_selected_down()
         self._refreshCurrentAssemblySelectionState()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
 
@@ -904,6 +912,9 @@ class Sample(QObject):
             constraints.append(
                 {
                     'dependentName': dependent_display,
+                    # Carry the unique_name so removal keys off identity, not the
+                    # (possibly duplicated) display name (issue #328).
+                    'uniqueName': getattr(parameter_obj, 'unique_name', '') or '',
                     'expression': expression_display,
                     'rawExpression': raw_expression,
                     'relation': relation,
@@ -926,14 +937,17 @@ class Sample(QObject):
         if index >= len(constraints_list):
             return
 
-        param_name = constraints_list[index]['dependentName']
-        param_obj = self._find_parameter_object_by_name(param_name)
+        # Resolve by unique_name (parameter identity), not display name, so two
+        # parameters sharing a display name don't collide (issue #328).
+        unique_name = constraints_list[index].get('uniqueName')
+        if not unique_name:
+            return
+        param_obj = self._find_parameter_object_by_unique_name(unique_name)
 
         if param_obj is None:
             return
 
-        unique_name = getattr(param_obj, 'unique_name', None)
-        state = self._constraint_states.pop(unique_name, None) if unique_name is not None else None
+        state = self._constraint_states.pop(unique_name, None)
 
         if state and 'previous' in state:
             self._restore_parameter_state(param_obj, state['previous'])
@@ -943,36 +957,11 @@ class Sample(QObject):
         self.externalSampleChanged.emit()
         self.layersChange.emit()
 
-    def _find_parameter_object_by_name(self, param_name: str):
-        """Find parameter object by name.
-
-        Handles both regular names ('SiO2 sld') and model-prefixed names ('M2 SiO2 sld').
-        """
-        parameters = self._parameters_logic.parameters
-
-        # Direct match by display name
-        for param in parameters:
-            if param['name'] == param_name:
+    def _find_parameter_object_by_unique_name(self, unique_name: str):
+        """Find a parameter object by its unique_name (stable identity)."""
+        for param in self._parameters_logic.parameters:
+            if param.get('unique_name') == unique_name:
                 return param['object']
-
-        # Check constraint states for model-prefixed dependent_display
-        for unique_name, state in self._constraint_states.items():
-            if state.get('dependent_display') == param_name:
-                # Find the parameter by unique_name
-                for param in parameters:
-                    if param.get('unique_name') == unique_name:
-                        return param['object']
-
-        # Try stripping model prefix (e.g., 'M2 SiO2 sld' -> 'SiO2 sld')
-        import re
-
-        prefix_match = re.match(r'^M\d+\s+(.+)$', param_name)
-        if prefix_match:
-            stripped_name = prefix_match.group(1)
-            for param in parameters:
-                if param['name'] == stripped_name:
-                    return param['object']
-
         return None
 
     def _make_parameter_independent(self, param_obj) -> None:
@@ -1090,7 +1079,7 @@ class Sample(QObject):
         num_models = len(self._project_lib._models)
         for idx in model_indices:
             if idx < 0 or idx >= num_models:
-                print(f'Invalid model index: {idx}')
+                logger.warning('Invalid model index: %s', idx)
                 return
 
         # Get the reference model (first in the sorted list)
@@ -1150,7 +1139,7 @@ class Sample(QObject):
 
                         constraints_added += 1
                     except Exception as e:  # noqa: BLE001
-                        print(f'Failed to constrain parameter {param_path}: {e}')
+                        logger.warning('Failed to constrain parameter %s: %s', param_path, e)
                         continue
 
         if constraints_added > 0:

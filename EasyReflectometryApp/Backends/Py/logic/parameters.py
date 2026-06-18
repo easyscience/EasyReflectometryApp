@@ -243,10 +243,13 @@ class Parameters:
 
             dependent.make_dependent_on(dependency_expression='a', dependency_map={'a': float(value)})
         else:
-            print('Failed to add constraint: Unsupported type')
+            logger.warning('Failed to add constraint: Unsupported type')
             return
 
-        print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
+        logger.debug(
+            'Added constraint: %s, %s, %s, %s, %s',
+            dependent_idx, relational_operator, value, arithmetic_operator, independent_idx,
+        )
 
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:

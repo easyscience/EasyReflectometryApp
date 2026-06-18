@@ -203,10 +203,24 @@ class Analysis(QObject):
     def bayesianSamples(self) -> int:
         return self._bayesian_logic.samples
 
+    def _set_bayesian_attr(self, attr: str, value) -> None:
+        """Assign a Bayesian hyper-parameter, tolerating invalid input.
+
+        The ``Bayesian`` setters raise ``ValueError`` on invalid values. Letting
+        that propagate out of a Qt slot prints a stderr traceback and leaves the
+        UI without feedback. Instead we log the rejection and always re-emit
+        ``minimizerChanged`` so QML re-reads the property and the input reverts
+        to the last valid value.
+        """
+        try:
+            setattr(self._bayesian_logic, attr, value)
+        except ValueError as exc:
+            logger.warning('Rejected invalid Bayesian %s value %r: %s', attr, value, exc)
+        self.minimizerChanged.emit()
+
     @Slot(int)
     def setBayesianSamples(self, value: int) -> None:
-        self._bayesian_logic.samples = value
-        self.minimizerChanged.emit()
+        self._set_bayesian_attr('samples', value)
 
     @Property(int, notify=minimizerChanged)
     def bayesianBurnIn(self) -> int:
@@ -214,8 +228,7 @@ class Analysis(QObject):
 
     @Slot(int)
     def setBayesianBurnIn(self, value: int) -> None:
-        self._bayesian_logic.burn = value
-        self.minimizerChanged.emit()
+        self._set_bayesian_attr('burn', value)
 
     @Property(int, notify=minimizerChanged)
     def bayesianPopulation(self) -> int:
@@ -223,8 +236,7 @@ class Analysis(QObject):
 
     @Slot(int)
     def setBayesianPopulation(self, value: int) -> None:
-        self._bayesian_logic.population = value
-        self.minimizerChanged.emit()
+        self._set_bayesian_attr('population', value)
 
     @Property(int, notify=minimizerChanged)
     def bayesianThinning(self) -> int:
@@ -232,8 +244,7 @@ class Analysis(QObject):
 
     @Slot(int)
     def setBayesianThinning(self, value: int) -> None:
-        self._bayesian_logic.thin = value
-        self.minimizerChanged.emit()
+        self._set_bayesian_attr('thin', value)
 
     @Property(str, notify=minimizerChanged)
     def bayesianInitializer(self) -> str:
@@ -241,8 +252,7 @@ class Analysis(QObject):
 
     @Slot(str)
     def setBayesianInitializer(self, value: str) -> None:
-        self._bayesian_logic.initializer = value
-        self.minimizerChanged.emit()
+        self._set_bayesian_attr('initializer', value)
 
     @Property('QVariantList', notify=minimizerChanged)
     def bayesianInitializerOptions(self) -> list:
@@ -1031,7 +1041,7 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
         else:
-            print(f'Experiment index {index} is out of range.')
+            logger.warning('Experiment index %s is out of range.', index)
 
     ########################
     ## Multi-experiment selection support
@@ -1094,7 +1104,7 @@ class Analysis(QObject):
                     all_ye.extend(data.ye if hasattr(data, 'ye') and data.ye.size > 0 else np.zeros_like(data.y))
                     all_xe.extend(data.xe if hasattr(data, 'xe') and data.xe.size > 0 else np.zeros_like(data.x))
             except (IndexError, AttributeError) as e:
-                print(f'Error accessing experiment {exp_idx}: {e}')
+                logger.warning('Error accessing experiment %s: %s', exp_idx, e)
                 continue
 
         if not all_x:
@@ -1155,7 +1165,7 @@ class Analysis(QObject):
 
                     experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
             except (IndexError, AttributeError) as e:
-                print(f'Error accessing experiment {exp_idx}: {e}')
+                logger.warning('Error accessing experiment %s: %s', exp_idx, e)
                 continue
 
         return experiment_data_list

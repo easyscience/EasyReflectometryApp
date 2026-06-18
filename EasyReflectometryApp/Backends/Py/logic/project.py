@@ -89,10 +89,29 @@ class Project:
         return experimental_data
 
     def _update_enablement_of_fixed_layers_for_model(self, index: int) -> None:
+        """Re-derive superphase/subphase layer enablement from assembly position.
+
+        Enablement is position-based (superphase = first assembly, subphase =
+        last), so it must be recomputed whenever assemblies are added, removed,
+        or reordered. This method is idempotent: it first re-enables every layer,
+        then disables the fixed superphase/subphase parameters. A full reset is
+        safe because this is the only code path that disables layer enablement
+        (issue #329).
+        """
         sample = self._project_lib.models[index].sample
-        sample[0].layers[0].thickness.enabled = False
-        sample[0].layers[0].roughness.enabled = False
-        sample[-1].layers[-1].thickness.enabled = False
+        for assembly in sample:
+            for layer in assembly.layers:
+                layer.thickness.enabled = True
+                layer.roughness.enabled = True
+        if len(sample) == 0:
+            return
+        # Superphase (first assembly, first layer): thickness and roughness fixed.
+        if len(sample[0].layers) > 0:
+            sample[0].layers[0].thickness.enabled = False
+            sample[0].layers[0].roughness.enabled = False
+        # Subphase (last assembly, last layer): thickness fixed.
+        if len(sample[-1].layers) > 0:
+            sample[-1].layers[-1].thickness.enabled = False
 
     def info(self) -> dict:
         info = copy(self._project_lib._info)
