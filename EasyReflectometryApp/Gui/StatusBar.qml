@@ -22,7 +22,7 @@ EaElements.StatusBar {
     EaElements.StatusBarItem {
         keyIcon: 'layer-group'
         keyText: qsTr('Models')
-        valueText: Globals.BackendWrapper.statusPhaseCount ?? ''
+        valueText: Globals.BackendWrapper.statusModelsCount ?? ''
         ToolTip.text: qsTr('Number of models added')
     }
 

@@ -445,7 +445,6 @@ class Analysis(QObject):
             kwargs={'weights': weights, 'method': method},
             parent=self,
         )
-        self._fitter_thread.setTerminationEnabled(True)
         self._fitter_thread.finished.connect(self._on_fit_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
         self._fitter_thread.progressDetail.connect(self._on_fit_progress)
@@ -534,7 +533,6 @@ class Analysis(QObject):
             },
             parent=self,
         )
-        self._fitter_thread.setTerminationEnabled(True)
         self._fitter_thread.finished.connect(self._on_sample_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
         self._fitter_thread.progressDetail.connect(self._on_fit_progress)
@@ -721,7 +719,7 @@ class Analysis(QObject):
                         val = float(rhat[name].values)
                         display = mapping.get(name, name)
                         mapped_rhat[display] = val
-                    finite_rhat = {name: value for name, value in mapped_rhat.items() if value == value}
+                    finite_rhat = {name: value for name, value in mapped_rhat.items() if np.isfinite(value)}
                     if finite_rhat:
                         diagnostics['rhat'] = finite_rhat
                     else:

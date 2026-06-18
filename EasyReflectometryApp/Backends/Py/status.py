@@ -40,5 +40,5 @@ class Status(QObject):
         return self._parameters_logic.as_status_string
 
     @Property(str, notify=statusChanged)
-    def phaseCount(self):
-        return None
+    def modelsCount(self):
+        return self._status_logic.models_count
