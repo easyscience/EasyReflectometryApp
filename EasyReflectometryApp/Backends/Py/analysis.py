@@ -1351,5 +1351,5 @@ class Analysis(QObject):
             logger.info('Bayesian plot saved to %s', save_path)
             return True
         except OSError as exc:
-            logger.exception('Failed to save Bayesian plot to %s', save_path, exc)
+            logger.exception('Failed to save Bayesian plot to %s', save_path)
             return False
