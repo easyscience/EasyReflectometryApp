@@ -156,11 +156,12 @@ class Parameters:
         parameter = self._get_current_parameter()
         if parameter is None:
             return False
-        if float(new_value) != parameter.value:
-            try:
-                parameter.value = float(new_value)
-            except ValueError:
-                pass
+        try:
+            float_value = float(new_value)
+        except ValueError:
+            return False
+        if float_value != parameter.value:
+            parameter.value = float_value
             return True
         return False
 
@@ -168,11 +169,12 @@ class Parameters:
         parameter = self._get_current_parameter()
         if parameter is None:
             return False
-        if float(new_value) != parameter.min:
-            try:
-                parameter.min = float(new_value)
-            except ValueError:
-                pass
+        try:
+            float_value = float(new_value)
+        except ValueError:
+            return False
+        if float_value != parameter.min:
+            parameter.min = float_value
             return True
         return False
 
@@ -180,11 +182,12 @@ class Parameters:
         parameter = self._get_current_parameter()
         if parameter is None:
             return False
-        if float(new_value) != parameter.max:
-            try:
-                parameter.max = float(new_value)
-            except ValueError:
-                pass
+        try:
+            float_value = float(new_value)
+        except ValueError:
+            return False
+        if float_value != parameter.max:
+            parameter.max = float_value
             return True
         return False
 
