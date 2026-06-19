@@ -198,6 +198,8 @@ class PyBackend(QObject):
         self._sample._clearCacheAndEmitLayersChanged()
         self._sample.materialsTableChanged.emit()
         self._sample.modelsTableChanged.emit()
+        # Notify summary that paths have changed (project path changed)
+        self._summary.refreshPaths()
         self._sample.modelsIndexChanged.emit()
         self._sample.assembliesTableChanged.emit()
         self._sample.assembliesIndexChanged.emit()
