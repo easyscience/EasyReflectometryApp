@@ -95,6 +95,10 @@ class Bayesian:
     def posterior(self) -> dict | None:
         return self._posterior
 
+    @posterior.setter
+    def posterior(self, value: dict | None) -> None:
+        self._posterior = value
+
     @property
     def has_result(self) -> bool:
         return self._posterior is not None

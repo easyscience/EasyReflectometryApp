@@ -42,7 +42,7 @@ QtObject {
     // Status bar
     /////////////
     readonly property string statusProject: activeBackend.status.project
-    readonly property string statusPhaseCount: activeBackend.status.phaseCount
+    readonly property string statusModelsCount: activeBackend.status.modelsCount
     readonly property string statusExperimentsCount: activeBackend.status.experimentsCount
     readonly property string statusCalculator: activeBackend.status.calculator
     readonly property string statusMinimizer: activeBackend.status.minimizer

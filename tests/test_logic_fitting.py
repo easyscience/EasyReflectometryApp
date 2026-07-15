@@ -251,7 +251,7 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
     logic = fitting_module.Fitting(project)
 
     # Mock the datagroup collection to avoid scipp dependency
-    monkeypatch.setattr(logic, 'collect_selected_experiments_datagroup', lambda: 'fake-data-group')
+    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda: 'fake-data-group')
 
     multi_fitter, data_group = logic.prepare_threaded_sample(StubMinimizersLogic())
 
@@ -260,7 +260,7 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
     assert data_group == 'fake-data-group'
 
 
-def test_collect_selected_experiments_datagroup_builds_sc_structs(monkeypatch):
+def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):
     # Fake scipp to avoid import issues
     import numpy as np
 
@@ -304,7 +304,7 @@ def test_collect_selected_experiments_datagroup_builds_sc_structs(monkeypatch):
     monkeypatch.setattr('scipp.array', FakeSCArray)
     monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
 
-    dg = logic.collect_selected_experiments_datagroup()
+    dg = logic.collect_all_experiments_datagroup()
 
     # Verify FakeSCArray was called to create coords and data
     assert len(FakeSCArray._registry) >= 2  # coords + data entries

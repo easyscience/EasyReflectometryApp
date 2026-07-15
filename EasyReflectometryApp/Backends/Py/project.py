@@ -125,8 +125,11 @@ class Project(QObject):
 
     @Slot(str, bool)
     def sampleLoad(self, url: str, append: bool = True) -> None:
-        # Load ORSO file content
-        orso_data = orso.load_orso(IO.generalizePath(url))
+        try:
+            orso_data = orso.load_orso(IO.generalizePath(url))
+        except Exception as ex:
+            self.projectLoadError.emit(f'Failed to load ORSO file: {ex}')
+            return
         # Load the sample model
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter('always')

@@ -134,6 +134,9 @@ class Plotting1d(QObject):
         self.sampleChartRangesChanged.emit()
         self.experimentChartRangesChanged.emit()
         self.samplePageDataChanged.emit()
+        # Notify QML to re-read posterior predictive properties
+        # so transforms are re-applied with the new RQ4 setting.
+        self.posteriorPredictiveDataChanged.emit()
 
     @Property(str, notify=plotModeChanged)
     def yMainAxisTitle(self) -> str:
@@ -455,6 +458,9 @@ class Plotting1d(QObject):
         if data.y.size == 0:
             return 1.0
         y_values = self._apply_rq4(data.x, data.y)
+        y_values = y_values[y_values > 0]
+        if y_values.size == 0:
+            return 1.0
         return np.log10(y_values.max())
 
     @Property(float, notify=experimentChartRangesChanged)
@@ -475,6 +481,19 @@ class Plotting1d(QObject):
     def _invalidate_residual_range_cache(self):
         """Clear the cached residual range so it is recomputed on next access."""
         self._residual_range_cache = None
+
+    @staticmethod
+    def _compute_residual(calculated: float, measured: float, sigma: float) -> float:
+        """Compute residual value for a single data point.
+
+        Uses a three-tier fallback: (calc−meas)/σ, then /meas,
+        then plain difference when both are unavailable.
+        """
+        if sigma > 0.0:
+            return (calculated - measured) / sigma
+        if measured > 0.0:
+            return (calculated - measured) / measured
+        return calculated - measured
 
     def _get_residual_range(self) -> tuple:
         """Return (min_x, max_x, min_y, max_y) for the residual chart.
@@ -513,15 +532,8 @@ class Plotting1d(QObject):
                     aligned = self._get_aligned_analysis_values(exp_idx)
                     for item in aligned:
                         q = item['q']
-                        calc = item['calculated']
-                        meas = item['measured']
-                        sigma = item['sigma']
-                        if sigma > 0.0:
-                            residual = (calc - meas) / sigma
-                        elif meas > 0.0:
-                            residual = (calc - meas) / meas
-                        else:
-                            residual = calc - meas
+                        residual = self._compute_residual(
+                            item['calculated'], item['measured'], item['sigma'])
                         if min_x == float('inf'):
                             min_x = q
                         else:
@@ -764,10 +776,8 @@ class Plotting1d(QObject):
         try:
             points = []
             for point in self._get_aligned_analysis_values(experiment_index):
-                sigma = point['sigma']
-                residual = point['calculated'] - point['measured']
-                if sigma > 0:
-                    residual = residual / sigma
+                residual = self._compute_residual(
+                    point['calculated'], point['measured'], point['sigma'])
                 points.append({'x': point['q'], 'y': float(residual)})
             return points
         except Exception as e:
@@ -803,10 +813,13 @@ class Plotting1d(QObject):
             self.qtchartsReplaceCalculatedOnSampleChartAndRedraw()
 
     def qtchartsReplaceCalculatedOnSampleChartAndRedraw(self):
-        series = self._chartRefs['QtCharts']['samplePage']['sampleSerie']
-        series.clear()
+        if not self._clear_qtcharts_series('samplePage', 'sampleSerie'):
+            return
+        series = self._qtcharts_series_ref('samplePage', 'sampleSerie')
         nr_points = 0
         for point in self.sample_data.data_points():
+            if point[1] <= 0:
+                continue
             series.append(point[0], np.log10(point[1]))
             nr_points = nr_points + 1
         console.debug(IO.formatMsg('sub', 'Calc curve', f'{nr_points} points', 'on sample page', 'replaced'))
@@ -934,15 +947,32 @@ class Plotting1d(QObject):
 
     @Property('QVariantList', notify=posteriorPredictiveDataChanged)
     def posteriorPredictiveMedian(self) -> list:
-        return self._posterior_median
+        return self._transform_posterior_series(
+            self._posterior_q, self._posterior_median)
 
     @Property('QVariantList', notify=posteriorPredictiveDataChanged)
     def posteriorPredictiveLower(self) -> list:
-        return self._posterior_lower
+        return self._transform_posterior_series(
+            self._posterior_q, self._posterior_lower)
 
     @Property('QVariantList', notify=posteriorPredictiveDataChanged)
     def posteriorPredictiveUpper(self) -> list:
-        return self._posterior_upper
+        return self._transform_posterior_series(
+            self._posterior_q, self._posterior_upper)
+
+    def _transform_posterior_series(self, q_list: list, y_list: list) -> list:
+        """Apply RQ4 and log10 transforms to a posterior predictive series.
+
+        Transforms are applied at read time so that toggling plot mode
+        (RQ4 on/off) is reflected without re-publishing the data.
+        """
+        if not y_list:
+            return []
+        q = np.asarray(q_list, dtype=float)
+        y = np.asarray(y_list, dtype=float)
+        y = self._apply_rq4(q, y)
+        eps = 1e-30
+        return np.where(y > 0, np.log10(y), np.log10(eps)).tolist()
 
     def set_posterior_predictive(self, q, median, lower, upper) -> None:
         """Publish posterior predictive reflectivity curves to QML.
@@ -958,21 +988,12 @@ class Plotting1d(QObject):
         lower = np.asarray(lower, dtype=float)
         upper = np.asarray(upper, dtype=float)
 
-        # Apply R(q)×q⁴ transform if enabled
-        median = self._apply_rq4(q, median)
-        lower = self._apply_rq4(q, lower)
-        upper = self._apply_rq4(q, upper)
-
-        # Clip non-positive values before log10
-        eps = 1e-30
-        median_log = np.where(median > 0, np.log10(median), np.log10(eps))
-        lower_log = np.where(lower > 0, np.log10(lower), np.log10(eps))
-        upper_log = np.where(upper > 0, np.log10(upper), np.log10(eps))
-
+        # Store linear data — transforms applied at read time in property getters
+        # so that toggling RQ4 mode is reflected without re-publishing.
         self._posterior_q = q.tolist()
-        self._posterior_median = median_log.tolist()
-        self._posterior_lower = lower_log.tolist()
-        self._posterior_upper = upper_log.tolist()
+        self._posterior_median = median.tolist()
+        self._posterior_lower = lower.tolist()
+        self._posterior_upper = upper.tolist()
         self.posteriorPredictiveDataChanged.emit()
 
     def clear_posterior_predictive(self) -> None:

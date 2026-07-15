@@ -5,6 +5,7 @@ class StubStatusLogic:
     def __init__(self, _project_lib):
         self.project = 'Demo Project'
         self.experiments_count = '4'
+        self.models_count = '2'
         self.calculator = 'refnx'
         self.minimizer = 'LeastSquares'
 
@@ -27,11 +28,11 @@ def test_status_wrapper_delegates_to_logic(monkeypatch, qcore_application):
     assert status.variables == '2 free / 10 total'
 
 
-def test_status_wrapper_phase_count_is_none(monkeypatch, qcore_application):
+def test_status_wrapper_models_count_delegates_to_logic(monkeypatch, qcore_application):
     monkeypatch.setattr(status_module, 'StatusLogic', StubStatusLogic)
     monkeypatch.setattr(status_module, 'ParametersLogic', StubParametersLogic)
 
     status = status_module.Status(project_lib=object())
 
-    assert status.phaseCount is None
+    assert status.modelsCount == '2'
 

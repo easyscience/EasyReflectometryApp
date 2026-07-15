@@ -7,7 +7,9 @@ BAYESIAN_LABEL = 'BUMPS-DREAM (Bayesian)'
 class Minimizers:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
-        self._minimizer_current_index = 0
+        # Default to the first classical minimizer (index 1); index 0 is the
+        # Bayesian sentinel (None) which requires an explicit user choice.
+        self._minimizer_current_index = 1
         self._list_available_minimizers = list(AvailableMinimizers)
         try:
             self._list_available_minimizers.remove(AvailableMinimizers.LMFit)
@@ -44,6 +46,8 @@ class Minimizers:
         return entry if entry is not None else AvailableMinimizers.Bumps_simplex
 
     def set_minimizer_current_index(self, new_value: int) -> bool:
+        if not 0 <= new_value < len(self._list_available_minimizers):
+            return False
         if new_value != self._minimizer_current_index:
             self._minimizer_current_index = new_value
             entry = self._list_available_minimizers[new_value]

@@ -13,14 +13,14 @@ class Home(QObject):
         super().__init__(parent)
 
     @Property('QVariant', constant=True)
-    def version(self) -> dict[str:str]:
+    def version(self) -> dict[str, str]:
         return {
             'number': PYPROJECT['project']['version'],
-            'date': PYPROJECT['project']['release_data'],
+            'date': PYPROJECT['release']['release_date'],
         }
 
     @Property('QVariant', constant=True)
-    def urls(self) -> dict[str:str]:
+    def urls(self) -> dict[str, str]:
         return {
             'homepage': PYPROJECT['project']['urls']['homepage'],
             'issues': PYPROJECT['project']['urls']['issues'],

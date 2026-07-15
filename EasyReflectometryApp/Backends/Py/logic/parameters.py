@@ -1,3 +1,4 @@
+import logging
 import re
 from collections.abc import MutableSequence
 from typing import Any
@@ -11,6 +12,8 @@ from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
+
+logger = logging.getLogger(__name__)
 
 RESERVED_ALIAS_NAMES = {'np', 'numpy', 'math', 'pi', 'e'}
 
@@ -156,11 +159,16 @@ class Parameters:
         parameter = self._get_current_parameter()
         if parameter is None:
             return False
-        if float(new_value) != parameter.value:
+        try:
+            float_value = float(new_value)
+        except ValueError:
+            return False
+        if float_value != parameter.value:
             try:
-                parameter.value = float(new_value)
-            except ValueError:
-                pass
+                parameter.value = float_value
+            except (ValueError, TypeError):
+                logger.exception('Failed to set parameter value to %s', float_value)
+                return False
             return True
         return False
 
@@ -168,11 +176,16 @@ class Parameters:
         parameter = self._get_current_parameter()
         if parameter is None:
             return False
-        if float(new_value) != parameter.min:
+        try:
+            float_value = float(new_value)
+        except ValueError:
+            return False
+        if float_value != parameter.min:
             try:
-                parameter.min = float(new_value)
-            except ValueError:
-                pass
+                parameter.min = float_value
+            except (ValueError, TypeError):
+                logger.exception('Failed to set parameter min to %s', float_value)
+                return False
             return True
         return False
 
@@ -180,11 +193,16 @@ class Parameters:
         parameter = self._get_current_parameter()
         if parameter is None:
             return False
-        if float(new_value) != parameter.max:
+        try:
+            float_value = float(new_value)
+        except ValueError:
+            return False
+        if float_value != parameter.max:
             try:
-                parameter.max = float(new_value)
-            except ValueError:
-                pass
+                parameter.max = float_value
+            except (ValueError, TypeError):
+                logger.exception('Failed to set parameter max to %s', float_value)
+                return False
             return True
         return False
 
@@ -225,10 +243,13 @@ class Parameters:
 
             dependent.make_dependent_on(dependency_expression='a', dependency_map={'a': float(value)})
         else:
-            print('Failed to add constraint: Unsupported type')
+            logger.warning('Failed to add constraint: Unsupported type')
             return
 
-        print(f'{dependent_idx}, {relational_operator}, {value}, {arithmetic_operator}, {independent_idx}')
+        logger.debug(
+            'Added constraint: %s, %s, %s, %s, %s',
+            dependent_idx, relational_operator, value, arithmetic_operator, independent_idx,
+        )
 
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:

@@ -29,3 +29,7 @@ class Status:
     @property
     def experiments_count(self):
         return str(len(self._project_lib._experiments.keys()))
+
+    @property
+    def models_count(self):
+        return str(len(self._project_lib._models))
