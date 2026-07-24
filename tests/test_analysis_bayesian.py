@@ -708,6 +708,16 @@ class TestBayesianDiagnostics:
         analysis_with_posterior._bayesian_logic._posterior = {
             'draws': SAMPLE_POSTERIOR_2D['draws'],
             'param_names': ['thickness', 'roughness'],
+            'internal_bumps_object': SimpleNamespace(acceptance_rate=0.35),
+        }
+        analysis_with_posterior._compute_diagnostics()
+        assert analysis_with_posterior._bayesian_logic.diagnostics.get('acceptanceRate') == 0.35
+
+    def test_acceptance_rate_from_legacy_state_key(self, analysis_with_posterior):
+        # Legacy 'state' key is still honoured as a fallback.
+        analysis_with_posterior._bayesian_logic._posterior = {
+            'draws': SAMPLE_POSTERIOR_2D['draws'],
+            'param_names': ['thickness', 'roughness'],
             'state': SimpleNamespace(acceptance_rate=0.35),
         }
         analysis_with_posterior._compute_diagnostics()
@@ -750,7 +760,7 @@ class TestBayesianDiagnostics:
         mock_state.chains = lambda: (None, chains_3d, None)
         # Use 2D posterior but attach a state with .chains()
         posterior_2d_with_state = dict(SAMPLE_POSTERIOR_2D)
-        posterior_2d_with_state['state'] = mock_state
+        posterior_2d_with_state['internal_bumps_object'] = mock_state
         analysis_with_posterior._bayesian_logic._posterior = posterior_2d_with_state
         analysis_with_posterior._compute_diagnostics()
         diag = analysis_with_posterior._bayesian_logic.diagnostics
@@ -772,7 +782,7 @@ class TestBayesianDiagnostics:
         mock_state = SimpleNamespace()
         mock_state.chains = lambda: (None, chains_3d, None)
         posterior_2d_with_state = dict(SAMPLE_POSTERIOR_2D)
-        posterior_2d_with_state['state'] = mock_state
+        posterior_2d_with_state['internal_bumps_object'] = mock_state
         analysis_with_posterior._bayesian_logic._posterior = posterior_2d_with_state
         analysis_with_posterior._compute_diagnostics()
         diag = analysis_with_posterior._bayesian_logic.diagnostics

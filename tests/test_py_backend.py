@@ -96,6 +96,9 @@ class StubSummary(QObject):
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)
 
+    def refreshPaths(self):
+        pass
+
 
 class StubStatusLogic:
     def __init__(self):

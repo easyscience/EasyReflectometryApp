@@ -561,7 +561,7 @@ class Analysis(QObject):
             self.externalFittingChanged.emit()
             return
         try:
-            posterior = results[0]  # {'draws', 'param_names', 'state', 'logp'}
+            posterior = results[0]  # {'draws', 'param_names', 'internal_bumps_object', 'logp'}
             self._bayesian_logic.posterior = posterior
             self._fitting_logic.on_sample_finished()
             self._fitter_thread = None
@@ -679,8 +679,11 @@ class Analysis(QObject):
             'samples': self._bayesian_logic.samples,
         }
 
-        # Extract acceptance rate from BUMPS state if available
-        state = posterior.get('state')
+        # Extract acceptance rate from BUMPS state if available.
+        # The sampler result dict exposes the BUMPS MCMCDraw under
+        # 'internal_bumps_object' (easyscience core); fall back to the legacy
+        # 'state' key for robustness against future core renames.
+        state = posterior.get('internal_bumps_object') or posterior.get('state')
         if state is not None:
             try:
                 diagnostics['acceptanceRate'] = float(getattr(state, 'acceptance_rate', None) or 0.0)
@@ -688,7 +691,7 @@ class Analysis(QObject):
                 pass
 
         draws = posterior['draws']
-        state = posterior.get('state')
+        state = posterior.get('internal_bumps_object') or posterior.get('state')
 
         # Try to obtain 3D draws (chains × draws × params) needed by arviz R-hat.
         # The BUMPS MCMCDraw.chains() returns (n_generations, n_chains, n_params).
