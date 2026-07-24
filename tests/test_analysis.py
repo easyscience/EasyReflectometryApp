@@ -177,6 +177,29 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
 
 
+def test_on_fit_finished_records_results_on_project_fitter(monkeypatch, qcore_application):
+    """The canonical project fitter must learn the fit results.
+
+    Otherwise ``project.fitter.reduced_chi`` stays None and the HTML summary's
+    goodness-of-fit shows 'N/A' even though the Analysis section has a value.
+    """
+    from tests.factories import FakeFitResult
+
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic = Fitting(make_project())
+    analysis._clearCacheAndEmitParametersChanged = MagicMock()
+
+    fitter = MagicMock()
+    analysis._project_lib.fitter = fitter
+
+    results = [FakeFitResult(chi2=20.0, n_pars=4, x=list(range(14)))]
+    analysis._on_fit_finished(results)
+
+    fitter.record_fit_results.assert_called_once()
+    (recorded,) = fitter.record_fit_results.call_args.args
+    assert recorded == results
+
+
 # ---------------------------------------------------------------------------
 # Bayesian sampling dispatch tests
 # ---------------------------------------------------------------------------

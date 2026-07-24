@@ -476,6 +476,16 @@ class Analysis(QObject):
         """Handle successful completion of threaded fit."""
         self._fitting_logic.on_fit_finished(results)
         self._project_lib._last_fit_results = self._fitting_logic.last_fit_results
+        # The threaded fit runs on a throwaway fitter's easy_science_multi_fitter,
+        # so the project's canonical MultiFitter never learns the results. Record
+        # them explicitly so the HTML summary's goodness-of-fit (project.fitter
+        # .reduced_chi) reflects the fit instead of showing 'N/A'.
+        try:
+            fitter = self._project_lib.fitter
+            if fitter is not None:
+                fitter.record_fit_results(self._fitting_logic.last_fit_results)
+        except Exception:
+            logger.exception('Failed to record fit results on project fitter')
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()

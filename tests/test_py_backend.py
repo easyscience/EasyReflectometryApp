@@ -205,6 +205,18 @@ def test_backend_relay_project_changed_triggers_refresh_chain(monkeypatch, qcore
     assert counts == {'status': 1, 'summary': 1, 'axes': 1}
 
 
+def test_backend_fit_finished_refreshes_summary(monkeypatch, qcore_application):
+    # A finished fit must invalidate the Summary tab's HTML binding so the
+    # goodness-of-fit stops showing the stale pre-fit 'N/A'.
+    backend = _make_backend(monkeypatch)
+    counts = {'summary': 0}
+    backend._summary.summaryChanged.connect(lambda: counts.__setitem__('summary', counts['summary'] + 1))
+
+    backend._analysis.externalFittingChanged.emit()
+
+    assert counts['summary'] == 1
+
+
 def test_backend_refresh_plots_emits_ranges_and_multi_signal(monkeypatch, qcore_application):
     backend = _make_backend(monkeypatch)
     counts = {'sample': 0, 'sld': 0, 'exp': 0, 'multi': 0}
