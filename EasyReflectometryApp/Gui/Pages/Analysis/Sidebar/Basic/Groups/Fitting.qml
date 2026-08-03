@@ -20,7 +20,7 @@ EaElements.GroupBox {
             enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length
             wide: true
             fontIcon: Globals.BackendWrapper.analysisFittingRunning ? 'stop-circle' : 'play-circle'
-            text: Globals.BackendWrapper.analysisFittingRunning  ? qsTr('Cancel fitting') : qsTr('Start fitting')
+            text: Globals.BackendWrapper.analysisFittingRunning ? qsTr('Cancel fitting') : (Globals.BackendWrapper.analysisIsBayesianSelected ? qsTr('Start sampling') : qsTr('Start fitting'))
 
             onClicked: {
                 console.debug(`Clicking '${text}' button: ${this}`)
@@ -30,5 +30,22 @@ EaElements.GroupBox {
             Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.startFittingButton = this
         }
 
+        // Progress message shown during fitting or sampling
+        EaElements.Label {
+            visible: Globals.BackendWrapper.analysisFitProgressMessage !== ''
+            text: Globals.BackendWrapper.analysisFitProgressMessage
+            color: EaStyle.Colors.themeForegroundMinor
+            wrapMode: Text.WordWrap
+        }
+
+        // Indeterminate progress bar shown during fitting/sampling
+        ProgressBar {
+            visible: Globals.BackendWrapper.analysisFittingRunning
+            indeterminate: Globals.BackendWrapper.analysisIsBayesianSelected
+            from: 0
+            to: 100
+            value: Globals.BackendWrapper.analysisFitIteration > 0 ? 50 : 0
+            width: parent.width
+        }
     }
 }

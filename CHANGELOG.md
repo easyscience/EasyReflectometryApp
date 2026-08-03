@@ -1,3 +1,10 @@
+# Unreleased
+
+- Migrated to the new `easyscience` core API surface exposed by `reflectometry-lib`:
+  - Layer removal now calls `remove_at(index)`; the lib's index-based `remove` was replaced by standard `MutableSequence.remove(value)` semantics.
+  - Parameter discovery uses `get_all_parameters()`.
+- **Breaking:** project files saved by earlier versions (predating `file_format=2`) can no longer be opened. Opening one now shows a clear error dialog instead of failing uncaught; affected projects must be recreated.
+
 # Version 1.3.0 (1 May 2026)
 
 - Migrated the application to the new `EasyApplication` module and removed the old `EasyApp` footer dependency.

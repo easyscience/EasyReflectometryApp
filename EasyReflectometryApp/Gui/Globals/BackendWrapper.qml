@@ -42,7 +42,7 @@ QtObject {
     // Status bar
     /////////////
     readonly property string statusProject: activeBackend.status.project
-    readonly property string statusPhaseCount: activeBackend.status.phaseCount
+    readonly property string statusModelsCount: activeBackend.status.modelsCount
     readonly property string statusExperimentsCount: activeBackend.status.experimentsCount
     readonly property string statusCalculator: activeBackend.status.calculator
     readonly property string statusMinimizer: activeBackend.status.minimizer
@@ -86,6 +86,16 @@ QtObject {
     property var _sampleLoadWarningConnection: {
         if (activeBackend && activeBackend.project && activeBackend.project.sampleLoadWarning) {
             activeBackend.project.sampleLoadWarning.connect(sampleLoadWarning)
+        }
+        return null
+    }
+
+    // Project load error signal - forwarded from backend
+    signal projectLoadError(string message)
+
+    property var _projectLoadErrorConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectLoadError) {
+            activeBackend.project.projectLoadError.connect(projectLoadError)
         }
         return null
     }
@@ -299,6 +309,44 @@ QtObject {
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
     function analysisStopFit() { activeBackend.analysis.stopFit() }
 
+    // Bayesian sampling
+    readonly property bool analysisIsBayesianSelected: activeBackend.analysis.isBayesianSelected
+
+    readonly property int bayesianSamples: activeBackend.analysis.bayesianSamples
+    readonly property int bayesianBurnIn: activeBackend.analysis.bayesianBurnIn
+    readonly property int bayesianPopulation: activeBackend.analysis.bayesianPopulation
+    readonly property int bayesianThinning: activeBackend.analysis.bayesianThinning
+
+    function bayesianSetSamples(v)    { activeBackend.analysis.setBayesianSamples(v) }
+    function bayesianSetBurnIn(v)     { activeBackend.analysis.setBayesianBurnIn(v) }
+    function bayesianSetPopulation(v) { activeBackend.analysis.setBayesianPopulation(v) }
+    function bayesianSetThinning(v)   { activeBackend.analysis.setBayesianThinning(v) }
+
+    readonly property string bayesianInitializer: activeBackend.analysis.bayesianInitializer
+    readonly property var bayesianInitializerOptions: activeBackend.analysis.bayesianInitializerOptions
+    function setBayesianInitializer(v) { activeBackend.analysis.setBayesianInitializer(v) }
+
+    readonly property var bayesianPosterior: activeBackend.analysis.bayesianPosterior
+    readonly property bool bayesianResultAvailable: activeBackend.analysis.bayesianResultAvailable
+    readonly property var bayesianMarginals: activeBackend.analysis.bayesianMarginals
+
+    // Phase 2: corner/trace/distribution plots (HTML), diagnostics, heatmap
+    readonly property string bayesianCornerPlotUrl: activeBackend.analysis.bayesianCornerPlotUrl
+    readonly property string bayesianTracePlotUrl: activeBackend.analysis.bayesianTracePlotUrl
+    readonly property string bayesianDistributionPlotUrl: activeBackend.analysis.bayesianDistributionPlotUrl
+    readonly property var bayesianDiagnostics: activeBackend.analysis.bayesianDiagnostics
+    readonly property var bayesianParamNames: activeBackend.analysis.bayesianParamNames
+    readonly property var bayesianHeatmapData: activeBackend.analysis.bayesianHeatmapData
+    readonly property string bayesianHeatmapPlotUrl: activeBackend.analysis.bayesianHeatmapPlotUrl
+    function bayesianComputeHeatmap(x, y) { activeBackend.analysis.computeBayesianHeatmap(x, y) }
+    function bayesianSavePlot(sourceUrl)  { activeBackend.analysis.saveBayesianPlot(sourceUrl) }
+
+    // Phase 2: SLD posterior predictive
+    readonly property var posteriorPredictiveSldZ: activeBackend.plotting.posteriorPredictiveSldZ
+    readonly property var posteriorPredictiveSldMedian: activeBackend.plotting.posteriorPredictiveSldMedian
+    readonly property var posteriorPredictiveSldLower: activeBackend.plotting.posteriorPredictiveSldLower
+    readonly property var posteriorPredictiveSldUpper: activeBackend.plotting.posteriorPredictiveSldUpper
+
     // Fit failure signal - forwarded from backend
     signal analysisFitFailed(string message)
 
@@ -396,6 +444,12 @@ QtObject {
     // Reference line visibility
     readonly property bool plottingScaleShown: activeBackend.plotting.scaleShown
     readonly property bool plottingBkgShown: activeBackend.plotting.bkgShown
+
+    // Posterior predictive (Bayesian) overlay data
+    readonly property var posteriorPredictiveQ: activeBackend.plotting.posteriorPredictiveQ
+    readonly property var posteriorPredictiveMedian: activeBackend.plotting.posteriorPredictiveMedian
+    readonly property var posteriorPredictiveLower: activeBackend.plotting.posteriorPredictiveLower
+    readonly property var posteriorPredictiveUpper: activeBackend.plotting.posteriorPredictiveUpper
 
     // Plot mode toggle functions
     function plottingTogglePlotRQ4() { activeBackend.plotting.togglePlotRQ4() }
@@ -500,6 +554,10 @@ QtObject {
     signal plotModeChanged()
     // Signal to request QML to reset chart axes (e.g., after model load)
     signal chartAxesResetRequested()
+    // Signal for posterior predictive (Bayesian) overlay data updates
+    signal posteriorPredictiveDataChanged()
+    // Signal for posterior predictive SLD (Bayesian) overlay data updates
+    signal posteriorPredictiveSldDataChanged()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
@@ -514,6 +572,12 @@ QtObject {
         }
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.chartAxesResetRequested) {
             activeBackend.plotting.chartAxesResetRequested.connect(chartAxesResetRequested)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.posteriorPredictiveDataChanged) {
+            activeBackend.plotting.posteriorPredictiveDataChanged.connect(posteriorPredictiveDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.posteriorPredictiveSldDataChanged) {
+            activeBackend.plotting.posteriorPredictiveSldDataChanged.connect(posteriorPredictiveSldDataChanged)
         }
     }
 
@@ -562,4 +626,10 @@ QtObject {
             return []
         }
     }
+
+    // Bayesian sampling progress
+    readonly property int analysisSampleProgressStep: activeBackend.analysis.sampleProgressStep
+    readonly property string analysisSampleProgressMessage: activeBackend.analysis.sampleProgressMessage
+    readonly property bool analysisSampleProgressHasUpdate: activeBackend.analysis.sampleProgressHasUpdate
+    readonly property int analysisSampleProgressTotalSteps: activeBackend.analysis.sampleProgressTotalSteps
 }

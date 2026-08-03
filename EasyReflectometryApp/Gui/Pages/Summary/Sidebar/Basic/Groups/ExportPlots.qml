@@ -74,7 +74,7 @@ Column {
         topPadding: topInset + padding
         rightPadding: plotChooseButton.width
         horizontalAlignment: TextInput.AlignLeft
-        Component.onCompleted: text = Globals.BackendWrapper.summaryPlotFilePath +
+        text: Globals.BackendWrapper.summaryPlotFilePath +
             '.' + plotFormatField.currentValue.toLowerCase()
         EaElements.Label {
             id: plotLocationLabel

@@ -68,6 +68,10 @@ class StubAnalysis(QObject):
         self._selected = [0]
         self.received_indices = None
         self.clear_calls = 0
+        self._plotting_accepted = None
+
+    def set_plotting(self, plotting):
+        self._plotting_accepted = plotting
 
     @property
     def experimentsSelectedCount(self):
@@ -91,6 +95,9 @@ class StubSummary(QObject):
 
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)
+
+    def refreshPaths(self):
+        pass
 
 
 class StubStatusLogic:
@@ -196,6 +203,18 @@ def test_backend_relay_project_changed_triggers_refresh_chain(monkeypatch, qcore
     assert backend._plotting_1d.reset_calls == 1
     assert backend._plotting_1d.refresh_calls == {'sample': 1, 'experiment': 1, 'analysis': 1}
     assert counts == {'status': 1, 'summary': 1, 'axes': 1}
+
+
+def test_backend_fit_finished_refreshes_summary(monkeypatch, qcore_application):
+    # A finished fit must invalidate the Summary tab's HTML binding so the
+    # goodness-of-fit stops showing the stale pre-fit 'N/A'.
+    backend = _make_backend(monkeypatch)
+    counts = {'summary': 0}
+    backend._summary.summaryChanged.connect(lambda: counts.__setitem__('summary', counts['summary'] + 1))
+
+    backend._analysis.externalFittingChanged.emit()
+
+    assert counts['summary'] == 1
 
 
 def test_backend_refresh_plots_emits_ranges_and_multi_signal(monkeypatch, qcore_application):

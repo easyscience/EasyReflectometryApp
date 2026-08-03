@@ -73,6 +73,16 @@ class Summary(QObject):
     def exportFormats(self):
         return ['HTML', 'PDF']
 
+    @Slot()
+    def refreshPaths(self) -> None:
+        """Re-emit path-related signals so QML bindings re-evaluate.
+
+        Call this whenever the project path changes so that filePath,
+        fileUrl, plotFilePath and plotFileUrl stay in sync.
+        """
+        self.fileNameChanged.emit()
+        self.plotFileNameChanged.emit()
+
     @Slot(str)
     def saveAsHtml(self, path: str = '') -> None:
         try:

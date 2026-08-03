@@ -10,6 +10,8 @@ from easyscience.fitting import FitResults
 from easyscience.fitting.minimizers.utils import FitError
 
 if TYPE_CHECKING:
+    import scipp as sc
+
     from .minimizers import Minimizers
 
 
@@ -34,6 +36,10 @@ class Fitting:
         self._fit_preview_parameter_values: dict = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
+        self._sample_step = 0
+        self._sample_total_steps = 0
+        self._sample_running_message = ''
+        self._sample_has_update = False
 
     @property
     def status(self) -> str:
@@ -104,6 +110,30 @@ class Fitting:
     def fit_has_interim_update(self) -> bool:
         return self._fit_has_interim_update
 
+    # ------------------------------------------------------------------
+    # Bayesian sampling progress
+    # ------------------------------------------------------------------
+
+    @property
+    def sample_step(self) -> int:
+        return self._sample_step
+
+    @property
+    def sample_progress_message(self) -> str:
+        return self._sample_running_message
+
+    @property
+    def sample_has_update(self) -> bool:
+        return self._sample_has_update
+
+    @property
+    def sample_total_steps(self) -> int:
+        return self._sample_total_steps
+
+    # ------------------------------------------------------------------
+    # Progress handling
+    # ------------------------------------------------------------------
+
     def on_fit_progress(self, payload: dict) -> None:
         """Update transient state from an in-flight fit progress payload."""
         self._fit_iteration = int(payload.get('iteration', 0) or 0)
@@ -130,6 +160,7 @@ class Fitting:
         self._fit_preview_parameter_values = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
+        self.clear_sample_progress()
 
     def on_fit_failed(self, error_message: str) -> None:
         """Handle fitting failure callback.
@@ -270,6 +301,125 @@ class Fitting:
             self._show_results_dialog = True
             logger.exception('Error preparing threaded fit')
             return None, None, None, None, None
+
+    # ------------------------------------------------------------------
+    # Bayesian sampling helpers
+    # ------------------------------------------------------------------
+
+    def collect_all_experiments_datagroup(self) -> 'sc.DataGroup':
+        """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.mcmc_sample()``.
+
+        Scope decision (see issue #319): Bayesian sampling deliberately runs over
+        **all** experiments, mirroring the classical fit path (``prepare_threaded_fit``)
+        which also fits every experiment. The experiment selection currently affects
+        only plotting, not the fit/sampling scope. If per-selection sampling is ever
+        wanted, filter ``self._ordered_experiments()`` here and rename accordingly.
+
+        :return: DataGroup with reflectivity coords and data.
+        :rtype: sc.DataGroup
+        """
+        import scipp as sc
+
+        experiments = self._ordered_experiments()
+        coords = {}
+        data = {}
+        for i, experiment in enumerate(experiments):
+            import numpy as np
+
+            x_vals = np.asarray(experiment.x, dtype=float)
+            xe_vals = np.asarray(experiment.xe, dtype=float)
+            y_vals = np.asarray(experiment.y, dtype=float)
+            ye_vals = np.asarray(experiment.ye, dtype=float)  # variances (σ²)
+
+            coords[f'Qz_{i}'] = sc.array(
+                dims=[f'Qz_{i}'], values=x_vals, variances=xe_vals, unit=sc.Unit('1/angstrom'),
+            )
+            data[f'R_{i}'] = sc.array(
+                dims=[f'Qz_{i}'], values=y_vals, variances=ye_vals,
+            )
+        return sc.DataGroup(data=data, coords=coords, attrs={})
+
+    def prepare_threaded_sample(self, minimizers_logic: 'Minimizers') -> tuple:
+        """Prepare high-level MultiFitter + DataGroup for Bayesian sampling.
+
+        :param minimizers_logic: The minimizers logic instance.
+        :return: Tuple of (multi_fitter, data_group) or (None, None) on error.
+        """
+        try:
+            from easyreflectometry.fitting import MultiFitter
+
+            experiments = self._ordered_experiments()
+            if not experiments:
+                self._fit_error_message = 'No experiments to sample'
+                self._running = False
+                self._finished = True
+                self._show_results_dialog = True
+                return None, None
+
+            models = [experiment.model for experiment in experiments]
+            multi_fitter = MultiFitter(*models)
+
+            # Ensure underlying engine is BUMPS for the sample() call
+            selected = minimizers_logic.selected_minimizer_enum()
+            if selected is not None:
+                multi_fitter.easy_science_multi_fitter.switch_minimizer(selected)
+
+            data_group = self.collect_all_experiments_datagroup()
+            return multi_fitter, data_group
+        except Exception as e:
+            self._fit_error_message = f'Error preparing sampling: {e}'
+            self._running = False
+            self._finished = True
+            self._show_results_dialog = True
+            logger.exception('Error preparing threaded sample')
+            return None, None
+
+    def prepare_for_threaded_sample(self) -> None:
+        """Set running flags and sampling progress message before launching the worker."""
+        self._running = True
+        self._finished = False
+        self._show_results_dialog = False
+        self._fit_error_message = None
+        self._result = None
+        self._results = []
+        self.clear_fit_progress()
+        self.clear_sample_progress()
+        self._sample_running_message = 'Sampling… (this may take several minutes)'
+
+    def on_sample_finished(self) -> None:
+        """Handle successful Bayesian sampling completion without FitResults.
+
+        Clears classical fit result state (which is not applicable to sampling)
+        while preserving the shared running / dialog lifecycle.
+        """
+        self._running = False
+        self._finished = True
+        self._show_results_dialog = True
+        self._fit_error_message = None
+        self._result = None
+        self._results = []
+        self.clear_fit_progress()
+
+    def on_sample_progress(self, payload: dict) -> None:
+        """Update transient state from an in-flight DREAM sampling progress payload."""
+        self._sample_step = int(payload.get('iteration', 0) or 0)
+        self._sample_total_steps = int(payload.get('total_steps', 0) or 0)
+        self._sample_has_update = True
+        self._fit_has_interim_update = True
+        total = self._sample_total_steps
+        if self._sample_step > 0:
+            if total > 0:
+                self._sample_running_message = f'DREAM step {self._sample_step} of {total}'
+            else:
+                self._sample_running_message = f'DREAM step {self._sample_step}'
+        else:
+            self._sample_running_message = 'Sampling…'
+
+    def clear_sample_progress(self) -> None:
+        self._sample_step = 0
+        self._sample_total_steps = 0
+        self._sample_running_message = ''
+        self._sample_has_update = False
 
     def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
         """Handle successful completion of fitting.

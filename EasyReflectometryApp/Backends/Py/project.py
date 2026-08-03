@@ -23,6 +23,7 @@ class Project(QObject):
     externalProjectLoaded = Signal()
     externalProjectReset = Signal()
     sampleLoadWarning = Signal(str)
+    projectLoadError = Signal(str)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -85,7 +86,22 @@ class Project(QObject):
 
     @Slot(str)
     def load(self, path: str) -> None:
-        self._logic.load(IO.generalizePath(path))
+        try:
+            self._logic.load(IO.generalizePath(path))
+        except ValueError as ex:
+            # easyreflectometry rejects project files whose file_format predates
+            # the current schema. Show a user-facing message for that case and
+            # surface any other unreadable-JSON error verbatim, rather than
+            # letting it propagate uncaught.
+            if 'file_format' in str(ex):
+                message = (
+                    'This project file uses obsolete and unsupported format.\n'
+                    'Please re-create the project from its underlying data and save it again.'
+                )
+            else:
+                message = str(ex)
+            self.projectLoadError.emit(message)
+            return
         self.createdChanged.emit()
         self.nameChanged.emit()
         self.descriptionChanged.emit()
@@ -109,8 +125,11 @@ class Project(QObject):
 
     @Slot(str, bool)
     def sampleLoad(self, url: str, append: bool = True) -> None:
-        # Load ORSO file content
-        orso_data = orso.load_orso(IO.generalizePath(url))
+        try:
+            orso_data = orso.load_orso(IO.generalizePath(url))
+        except Exception as ex:
+            self.projectLoadError.emit(f'Failed to load ORSO file: {ex}')
+            return
         # Load the sample model
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter('always')

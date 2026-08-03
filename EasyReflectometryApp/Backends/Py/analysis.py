@@ -1,3 +1,7 @@
+import logging
+import os
+import time
+
 from typing import List
 from typing import Optional
 
@@ -8,6 +12,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
+from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiments import Experiments as ExperimentLogic
 from .logic.fitting import Fitting as FittingLogic
@@ -15,6 +20,8 @@ from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
 from .logic.parameters import Parameters as ParametersLogic
 from .workers import FitterWorker
+
+logger = logging.getLogger(__name__)
 
 
 class Analysis(QObject):
@@ -41,6 +48,8 @@ class Analysis(QObject):
         self._calculators_logic = CalculatorsLogic(project_lib)
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
+        self._bayesian_logic = BayesianLogic()
+        self._plotting = None  # Set by PyBackend after construction
         self._chached_parameters = None
         self._chached_enabled_parameters = None
         # Thread management for background fitting
@@ -59,6 +68,13 @@ class Analysis(QObject):
             self._selected_experiment_indices = [0]
         else:
             self._selected_experiment_indices = []
+
+    def set_plotting(self, plotting) -> None:
+        """Store a reference to the Plotting1d instance for posterior predictive publishing.
+
+        Called by PyBackend after construction.
+        """
+        self._plotting = plotting
 
     def _ordered_experiments(self) -> list:
         """Return experiments as an ordered list of experiment objects.
@@ -155,6 +171,244 @@ class Analysis(QObject):
             'chi2': self._fitting_logic.fit_chi2,
         }
 
+    # ------------------------------------------------------------------
+    # Bayesian sampling properties
+    # ------------------------------------------------------------------
+
+    @Property(bool, notify=minimizerChanged)
+    def isBayesianSelected(self) -> bool:
+        return self._minimizers_logic.is_bayesian_selected()
+
+    # ------------------------------------------------------------------
+    # Bayesian sampling progress properties
+    # ------------------------------------------------------------------
+
+    @Property(int, notify=fittingChanged)
+    def sampleProgressStep(self) -> int:
+        return self._fitting_logic.sample_step
+
+    @Property(str, notify=fittingChanged)
+    def sampleProgressMessage(self) -> str:
+        return self._fitting_logic.sample_progress_message
+
+    @Property(bool, notify=fittingChanged)
+    def sampleProgressHasUpdate(self) -> bool:
+        return self._fitting_logic.sample_has_update
+
+    # ------------------------------------------------------------------
+    # Bayesian sampling parameter properties
+    # ------------------------------------------------------------------
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianSamples(self) -> int:
+        return self._bayesian_logic.samples
+
+    def _set_bayesian_attr(self, attr: str, value) -> None:
+        """Assign a Bayesian hyper-parameter, tolerating invalid input.
+
+        The ``Bayesian`` setters raise ``ValueError`` on invalid values. Letting
+        that propagate out of a Qt slot prints a stderr traceback and leaves the
+        UI without feedback. Instead we log the rejection and always re-emit
+        ``minimizerChanged`` so QML re-reads the property and the input reverts
+        to the last valid value.
+        """
+        try:
+            setattr(self._bayesian_logic, attr, value)
+        except ValueError as exc:
+            logger.warning('Rejected invalid Bayesian %s value %r: %s', attr, value, exc)
+        self.minimizerChanged.emit()
+
+    @Slot(int)
+    def setBayesianSamples(self, value: int) -> None:
+        self._set_bayesian_attr('samples', value)
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianBurnIn(self) -> int:
+        return self._bayesian_logic.burn
+
+    @Slot(int)
+    def setBayesianBurnIn(self, value: int) -> None:
+        self._set_bayesian_attr('burn', value)
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianPopulation(self) -> int:
+        return self._bayesian_logic.population
+
+    @Slot(int)
+    def setBayesianPopulation(self, value: int) -> None:
+        self._set_bayesian_attr('population', value)
+
+    @Property(int, notify=minimizerChanged)
+    def bayesianThinning(self) -> int:
+        return self._bayesian_logic.thin
+
+    @Slot(int)
+    def setBayesianThinning(self, value: int) -> None:
+        self._set_bayesian_attr('thin', value)
+
+    @Property(str, notify=minimizerChanged)
+    def bayesianInitializer(self) -> str:
+        return self._bayesian_logic.initializer
+
+    @Slot(str)
+    def setBayesianInitializer(self, value: str) -> None:
+        self._set_bayesian_attr('initializer', value)
+
+    @Property('QVariantList', notify=minimizerChanged)
+    def bayesianInitializerOptions(self) -> list:
+        return ['eps', 'cov', 'lhs', 'random']
+
+    @Property(bool, notify=fittingChanged)
+    def bayesianResultAvailable(self) -> bool:
+        return self._bayesian_logic.has_result
+
+    @Property('QVariant', notify=fittingChanged)
+    def bayesianPosterior(self) -> dict | None:
+        p = self._bayesian_logic.posterior
+        if p is None:
+            return None
+        return {
+            'paramNames': self._bayesian_display_name_list(),
+            'nDraws': int(p['draws'].shape[0]),
+        }
+
+    @Property('QVariant', notify=fittingChanged)
+    def bayesianMarginals(self) -> list:
+        if not self._bayesian_logic.has_result:
+            return []
+        import numpy as np
+
+        p = self._bayesian_logic.posterior
+        display_names = self._bayesian_display_name_list()
+        out = []
+        for k, name in enumerate(display_names):
+            col = p['draws'][:, k]
+            counts, edges = np.histogram(col, bins=40, density=True)
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            out.append(
+                dict(
+                    name=name,
+                    mean=float(col.mean()),
+                    std=float(col.std()),
+                    ci_low=float(np.quantile(col, 0.025)),
+                    ci_high=float(np.quantile(col, 0.975)),
+                    binCenters=centers.tolist(),
+                    counts=counts.tolist(),
+                )
+            )
+        return out
+
+    # Phase 2: corner/trace plot PNGs, diagnostics, heatmap
+
+    def _bayesian_display_names(self) -> dict[str, str]:
+        """Build mapping from unique_name to human-readable display name.
+
+        Uses the unfiltered parameter list (``all_parameters()``) so that every
+        sampled parameter can be resolved, independent of the current table
+        filter state.
+        """
+        mapping: dict[str, str] = {}
+        try:
+            for p in self._parameters_logic.all_parameters():
+                unique = p.get('unique_name', '')
+                display = p.get('name', unique)
+                if unique:
+                    mapping[unique] = display
+        except Exception:
+            logger.exception('Failed to build Bayesian parameter display-name mapping')
+        return mapping
+
+    def _bayesian_display_name_list(self) -> list[str]:
+        """Return the posterior parameter names translated to display names."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            return []
+        mapping = self._bayesian_display_names()
+        result: list[str] = []
+        for name in posterior['param_names']:
+            result.append(mapping.get(name) or name)
+        return result
+
+    @Property(str, notify=fittingChanged)
+    def bayesianCornerPlotUrl(self) -> str:
+        """Return a file URL for the corner plot PNG, or empty string."""
+        if not self._bayesian_logic.has_result:
+            return ''
+        if not self._bayesian_logic.corner_plot_url:
+            self._render_corner_plot()
+        return self._bayesian_logic.corner_plot_url
+
+    @Property(str, notify=fittingChanged)
+    def bayesianTracePlotUrl(self) -> str:
+        """Return a file URL for the trace plot PNG, or empty string."""
+        if not self._bayesian_logic.has_result:
+            return ''
+        if not self._bayesian_logic.trace_plot_url:
+            self._render_trace_plot()
+        return self._bayesian_logic.trace_plot_url
+
+    @Property(str, notify=fittingChanged)
+    def bayesianDistributionPlotUrl(self) -> str:
+        """Return a file URL for the interactive distribution HTML, or empty string."""
+        if not self._bayesian_logic.has_result:
+            return ''
+        if not self._bayesian_logic.distribution_plot_url:
+            self._render_distribution_plot()
+        return self._bayesian_logic.distribution_plot_url
+
+    @Property('QVariant', notify=fittingChanged)
+    def bayesianDiagnostics(self) -> dict:
+        """Return convergence diagnostics dict."""
+        if self._bayesian_logic.has_result and not self._bayesian_logic.diagnostics:
+            self._compute_diagnostics()
+        return self._bayesian_logic.diagnostics
+
+    @Property('QVariantList', notify=fittingChanged)
+    def bayesianParamNames(self) -> list:
+        """Return parameter names for heatmap axis dropdowns (display names)."""
+        return self._bayesian_display_name_list()
+
+    heatmapChanged = Signal()
+
+    @Property('QVariant', notify=heatmapChanged)
+    def bayesianHeatmapData(self) -> dict | None:
+        """Return 2D histogram data for the heatmap view."""
+        return self._bayesian_logic.heatmap_data
+
+    @Property(str, notify=heatmapChanged)
+    def bayesianHeatmapPlotUrl(self) -> str:
+        """Return a file URL for the rendered 2D heatmap PNG, or empty string."""
+        return self._bayesian_logic.heatmap_plot_url
+
+    @Slot(int, int)
+    def computeBayesianHeatmap(self, paramX: int, paramY: int) -> None:
+        """Compute 2D histogram for the selected parameter pair."""
+        import numpy as np
+
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            return
+        draws = np.asarray(posterior['draws'])
+        if draws.ndim == 3:
+            draws = draws.reshape(-1, draws.shape[-1])
+        x = draws[:, paramX]
+        y = draws[:, paramY]
+        display_names = self._bayesian_display_name_list()
+        H, xedges, yedges = np.histogram2d(x, y, bins=50, density=True)
+        self._bayesian_logic.heatmap_data = {
+            'xLabel': display_names[paramX] if paramX < len(display_names) else posterior['param_names'][paramX],
+            'yLabel': display_names[paramY] if paramY < len(display_names) else posterior['param_names'][paramY],
+            'xCenters': (0.5 * (xedges[:-1] + xedges[1:])).tolist(),
+            'yCenters': (0.5 * (yedges[:-1] + yedges[1:])).tolist(),
+            'zValues': H.T.tolist(),
+        }
+        self._render_heatmap_plot(paramX, paramY)
+        self.heatmapChanged.emit()
+
+    # ------------------------------------------------------------------
+    # Fitting start / stop (classical + Bayesian dispatch)
+    # ------------------------------------------------------------------
+
     @Slot(None)
     def fittingStartStop(self) -> None:
         # If already running, stop the fit
@@ -170,7 +424,12 @@ class Analysis(QObject):
         self._start_threaded_fit()
 
     def _start_threaded_fit(self) -> None:
-        """Start fitting in a background thread."""
+        """Start fitting in a background thread, dispatching to sampling when Bayesian is selected."""
+        if self._minimizers_logic.is_bayesian_selected():
+            self._start_threaded_sample()
+            return
+
+        # Classical fitting path
         # Reset flags and prepare for fit using proper encapsulation
         self._fitting_logic.reset_stop_flag()
         self._fitting_logic.prepare_for_threaded_fit()
@@ -196,7 +455,6 @@ class Analysis(QObject):
             kwargs={'weights': weights, 'method': method},
             parent=self,
         )
-        self._fitter_thread.setTerminationEnabled(True)
         self._fitter_thread.finished.connect(self._on_fit_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
         self._fitter_thread.progressDetail.connect(self._on_fit_progress)
@@ -207,7 +465,10 @@ class Analysis(QObject):
     @Slot(dict)
     def _on_fit_progress(self, payload: dict) -> None:
         """Handle in-flight progress payloads emitted from the worker thread."""
-        self._fitting_logic.on_fit_progress(payload)
+        if payload.get('sampling'):
+            self._fitting_logic.on_sample_progress(payload)
+        else:
+            self._fitting_logic.on_fit_progress(payload)
         self.fittingChanged.emit()
 
     @Slot(list)
@@ -215,6 +476,16 @@ class Analysis(QObject):
         """Handle successful completion of threaded fit."""
         self._fitting_logic.on_fit_finished(results)
         self._project_lib._last_fit_results = self._fitting_logic.last_fit_results
+        # The threaded fit runs on a throwaway fitter's easy_science_multi_fitter,
+        # so the project's canonical MultiFitter never learns the results. Record
+        # them explicitly so the HTML summary's goodness-of-fit (project.fitter
+        # .reduced_chi) reflects the fit instead of showing 'N/A'.
+        try:
+            fitter = self._project_lib.fitter
+            if fitter is not None:
+                fitter.record_fit_results(self._fitting_logic.last_fit_results)
+        except Exception:
+            logger.exception('Failed to record fit results on project fitter')
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
@@ -242,6 +513,416 @@ class Analysis(QObject):
             self._fitter_thread.stop()
         self.fittingChanged.emit()
         self.externalFittingChanged.emit()
+
+    # ------------------------------------------------------------------
+    # Bayesian sampling dispatch and result handling
+    # ------------------------------------------------------------------
+
+    def _start_threaded_sample(self) -> None:
+        """Start Bayesian MCMC sampling in a background thread."""
+        self._fitting_logic.prepare_for_threaded_sample()
+        self.fittingChanged.emit()
+
+        multi_fitter, data_group = self._fitting_logic.prepare_threaded_sample(self._minimizers_logic)
+
+        if multi_fitter is None:
+            self.fittingChanged.emit()
+            if self._fitting_logic.fit_error_message:
+                self.fitFailed.emit(self._fitting_logic.fit_error_message)
+            return
+
+        logger.info(
+            'Bayesian DREAM: samples=%d burn=%d thin=%d population=%d initializer=%s',
+            self._bayesian_logic.samples,
+            self._bayesian_logic.burn,
+            self._bayesian_logic.thin,
+            self._bayesian_logic.population,
+            self._bayesian_logic.initializer,
+        )
+
+        self._fitter_thread = FitterWorker(
+            fitter=multi_fitter,  # the high-level reflectometry MultiFitter
+            method_name='mcmc_sample',
+            args=(data_group,),  # sc.DataGroup
+            kwargs={
+                'samples': self._bayesian_logic.samples,
+                'burn': self._bayesian_logic.burn,
+                'thin': self._bayesian_logic.thin,
+                'population': self._bayesian_logic.population,
+                'initializer': self._bayesian_logic.initializer,
+            },
+            parent=self,
+        )
+        self._fitter_thread.finished.connect(self._on_sample_finished)
+        self._fitter_thread.failed.connect(self._on_fit_failed)
+        self._fitter_thread.progressDetail.connect(self._on_fit_progress)
+        self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
+        self._fitter_thread.start()
+
+    @Slot(list)
+    def _on_sample_finished(self, results: list) -> None:
+        """Handle successful completion of Bayesian sampling."""
+        if not results:
+            logger.error('Bayesian sampling finished with empty results list')
+            self._fitting_logic.on_sample_finished()
+            self._fitter_thread = None
+            self.fittingChanged.emit()
+            self.externalFittingChanged.emit()
+            return
+        try:
+            posterior = results[0]  # {'draws', 'param_names', 'internal_bumps_object', 'logp'}
+            self._bayesian_logic.posterior = posterior
+            self._fitting_logic.on_sample_finished()
+            self._fitter_thread = None
+        except Exception:
+            logger.exception('Error storing Bayesian posterior result')
+            self._fitter_thread = None
+            self.fittingChanged.emit()
+            self.externalFittingChanged.emit()
+            return
+        # Phase 2: compute posterior predictive, diagnostics, and rendered plots
+        try:
+            self._compute_and_publish_posterior_predictive()
+            self._compute_diagnostics()
+            self._render_corner_plot()
+            self._render_trace_plot()
+        except Exception:
+            logger.exception('Error during posterior computation / rendering')
+        finally:
+            self.fittingChanged.emit()
+            self.externalFittingChanged.emit()
+
+    def _compute_and_publish_posterior_predictive(self) -> None:
+        """Compute posterior predictive reflectivity and SLD, publish to plotting."""
+        if self._plotting is None:
+            return
+        from easyreflectometry.analysis.bayesian import (
+            posterior_predictive_reflectivity,
+            posterior_predictive_sld_profile,
+        )
+        import numpy as np
+
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            logger.warning('_compute_and_publish_posterior_predictive: no posterior available')
+            return
+
+        experiments = self._ordered_experiments()
+        if not experiments:
+            logger.warning('_compute_and_publish_posterior_predictive: no experiments available')
+            return
+
+        # Compute posterior predictive reflectivity for all experiments
+        q_all = []
+        median_all = []
+        lo_all = []
+        hi_all = []
+
+        total_q_points = sum(len(np.asarray(experiment.x)) for experiment in experiments)
+        logger.info(
+            '_compute_and_publish_posterior_predictive: draws shape=%s, n_params=%d, '
+            'n_experiments=%d, total_q_points=%d',
+            posterior['draws'].shape,
+            len(posterior['param_names']),
+            len(experiments),
+            total_q_points,
+        )
+
+        try:
+
+            for i, experiment in enumerate(experiments):
+                q_i = np.asarray(experiment.x)
+                model_i = experiment.model
+
+                median_i, lo_i, hi_i = posterior_predictive_reflectivity(
+                    posterior['draws'],
+                    posterior['param_names'],
+                    model=model_i,
+                    q_values=q_i,
+                    n_samples=200,
+                )
+                logger.info(
+                    'Posterior predictive for experiment %d: q=%d, median shape=%s',
+                    i, len(q_i), median_i.shape,
+                )
+
+                q_all.append(q_i)
+                median_all.append(median_i)
+                lo_all.append(lo_i)
+                hi_all.append(hi_i)
+
+            q_concat = np.concatenate(q_all)
+            median_concat = np.concatenate(median_all)
+            lo_concat = np.concatenate(lo_all)
+            hi_concat = np.concatenate(hi_all)
+            self._plotting.set_posterior_predictive(q_concat, median_concat, lo_concat, hi_concat)
+        except Exception:
+            logger.exception('Failed to compute or publish posterior predictive reflectivity')
+            return
+
+        # SLD profile: use the first experiment's model (SLD is shared across experiments)
+        try:
+            z, sld_median, sld_lo, sld_hi = posterior_predictive_sld_profile(
+                posterior['draws'],
+                posterior['param_names'],
+                model=experiments[0].model,
+                n_samples=200,
+            )
+            self._plotting.set_posterior_predictive_sld(z, sld_median, sld_lo, sld_hi)
+        except Exception:
+            logger.exception('Failed to compute or publish posterior predictive SLD profile')
+
+    def _compute_diagnostics(self) -> None:
+        """Compute convergence diagnostics from the posterior and state."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.diagnostics = {}
+            return
+
+        diagnostics = {
+            'nDraws': int(posterior['draws'].shape[0]),
+            'nParams': int(posterior['draws'].shape[1]),
+            'burnIn': self._bayesian_logic.burn,
+            'thin': self._bayesian_logic.thin,
+            'population': self._bayesian_logic.population,
+            'samples': self._bayesian_logic.samples,
+        }
+
+        # Extract acceptance rate from BUMPS state if available.
+        # The sampler result dict exposes the BUMPS MCMCDraw under
+        # 'internal_bumps_object' (easyscience core); fall back to the legacy
+        # 'state' key for robustness against future core renames.
+        state = posterior.get('internal_bumps_object') or posterior.get('state')
+        if state is not None:
+            try:
+                diagnostics['acceptanceRate'] = float(getattr(state, 'acceptance_rate', None) or 0.0)
+            except (AttributeError, TypeError, ValueError):
+                pass
+
+        draws = posterior['draws']
+        state = posterior.get('internal_bumps_object') or posterior.get('state')
+
+        # Try to obtain 3D draws (chains × draws × params) needed by arviz R-hat.
+        # The BUMPS MCMCDraw.chains() returns (n_generations, n_chains, n_params).
+        draws_3d = None
+        if getattr(draws, 'ndim', 0) == 3 and draws.shape[0] >= 2:
+            draws_3d = draws
+        elif state is not None and hasattr(state, 'chains'):
+            try:
+                import numpy as np
+
+                _draw_counts, chains_3d, _logp_3d = state.chains()
+                # chains_3d: (n_generations, n_chains, n_params)
+                if chains_3d.shape[1] >= 2:  # at least 2 chains
+                    # Transpose to arviz convention: (n_chains, n_draws, n_params)
+                    draws_3d = np.moveaxis(chains_3d, 0, 1)
+                else:
+                    diagnostics['rhatStatus'] = 'Unavailable: only one chain was sampled (increase Population).'
+            except Exception:
+                draws_3d = None
+
+        if draws_3d is not None:
+            try:
+                import arviz as _arviz
+
+                # Build arviz InferenceData from 3D draws (n_chains, n_draws, n_params)
+                import numpy as np
+
+                posterior_dict = {}
+                for i, name in enumerate(posterior['param_names']):
+                    posterior_dict[name] = draws_3d[:, :, i]
+                idata = _arviz.from_dict({'posterior': posterior_dict})
+                rhat = _arviz.rhat(idata)
+                if rhat is not None:
+                    # arviz.rhat returns an xarray Dataset; extract scalar values
+                    mapping = self._bayesian_display_names()
+                    mapped_rhat = {}
+                    for name in posterior['param_names']:
+                        val = float(rhat[name].values)
+                        display = mapping.get(name, name)
+                        mapped_rhat[display] = val
+                    finite_rhat = {name: value for name, value in mapped_rhat.items() if np.isfinite(value)}
+                    if finite_rhat:
+                        diagnostics['rhat'] = finite_rhat
+                    else:
+                        diagnostics['rhatStatus'] = 'Unavailable: all R-hat values are NaN/Inf.'
+                else:
+                    diagnostics['rhatStatus'] = 'Unavailable: arviz.rhat returned None.'
+            except ImportError:
+                diagnostics['rhatStatus'] = 'Unavailable: arviz is not installed.'
+            except Exception as exc:
+                diagnostics['rhatStatus'] = f'Unavailable: R-hat computation failed ({exc}).'
+        else:
+            if 'rhatStatus' not in diagnostics:
+                diagnostics['rhatStatus'] = 'Unavailable: the sampler returned flattened draws without chain identities.'
+
+        self._bayesian_logic.diagnostics = diagnostics
+
+    @Property(int, notify=fittingChanged)
+    def sampleProgressTotalSteps(self) -> int:
+        return self._fitting_logic.sample_total_steps
+
+    def _plot_file_path(self, stem: str, ext: str = 'png'):
+        """Return a stable temporary file path for a rendered Bayesian plot."""
+        from pathlib import Path
+        import tempfile
+
+        out_dir = Path(tempfile.gettempdir()) / 'EasyReflectometryApp' / 'bayesian'
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return out_dir / f'{stem}.{ext}'
+
+    def _plot_file_url(self, stem: str) -> str:
+        """Return a stable temporary file URL for a rendered Bayesian plot."""
+        return self._plot_file_path(stem).as_uri()
+
+    def _render_corner_plot(self) -> None:
+        """Render corner plot to interactive HTML and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.corner_plot_url = ''
+            return
+        try:
+            from easyreflectometry.analysis.bayesian import plot_corner
+
+            display_names = self._bayesian_display_name_list()
+            import numpy as np
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 3:
+                draws = draws.reshape(-1, draws.shape[-1])
+
+            fig = plot_corner(draws, display_names)
+            if fig is None:
+                self._bayesian_logic.corner_plot_url = ''
+                logger.info('Plotly unavailable — corner plot not rendered')
+                return
+
+            html = fig.to_html(
+                include_plotlyjs=True,
+                full_html=True,
+                config={'responsive': True},
+            )
+            path = self._plot_file_path('corner', 'html')
+            path.write_text(html, encoding='utf-8')
+            self._bayesian_logic.corner_plot_url = path.as_uri() + f'?t={time.time_ns()}'
+        except ImportError:
+            self._bayesian_logic.corner_plot_url = ''
+            logger.info('Plotly not installed — corner plot unavailable')
+        except Exception:
+            self._bayesian_logic.corner_plot_url = ''
+            logger.exception('Failed to render corner plot')
+
+    def _render_distribution_plot(self) -> None:
+        """Render marginal distribution plot to interactive HTML and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.distribution_plot_url = ''
+            return
+        try:
+            from easyreflectometry.analysis.bayesian import plot_distribution
+
+            display_names = self._bayesian_display_name_list()
+            import numpy as np
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 3:
+                draws = draws.reshape(-1, draws.shape[-1])
+
+            fig = plot_distribution(draws, display_names, return_figure=True)
+            if fig is None:
+                self._bayesian_logic.distribution_plot_url = ''
+                logger.info('Plotly unavailable — distribution plot not rendered')
+                return
+
+            html = fig.to_html(
+                include_plotlyjs=True,
+                full_html=True,
+                config={'responsive': True},
+            )
+            path = self._plot_file_path('distribution', 'html')
+            path.write_text(html, encoding='utf-8')
+            self._bayesian_logic.distribution_plot_url = path.as_uri() + f'?t={time.time_ns()}'
+        except ImportError:
+            self._bayesian_logic.distribution_plot_url = ''
+            logger.info('Plotly not installed — distribution plot unavailable')
+        except Exception:
+            self._bayesian_logic.distribution_plot_url = ''
+            logger.exception('Failed to render distribution plot')
+
+    def _render_trace_plot(self) -> None:
+        """Render MCMC trace plot to interactive HTML and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.trace_plot_url = ''
+            return
+        try:
+            from easyreflectometry.analysis.bayesian import plot_trace
+
+            import numpy as np
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 2:
+                draws = draws[np.newaxis, ...]  # (1, n_draws, n_params)
+
+            display_names = self._bayesian_display_name_list()
+
+            fig = plot_trace(draws, display_names, return_figure=True)
+            if fig is None or not hasattr(fig, 'to_html'):
+                self._bayesian_logic.trace_plot_url = ''
+                logger.info('Plotly unavailable — trace plot not rendered')
+                return
+
+            html = fig.to_html(  # type: ignore[union-attr]
+                include_plotlyjs=True,
+                full_html=True,
+                config={'responsive': True},
+            )
+            path = self._plot_file_path('trace', 'html')
+            path.write_text(html, encoding='utf-8')
+            self._bayesian_logic.trace_plot_url = path.as_uri() + f'?t={time.time_ns()}'
+        except ImportError:
+            self._bayesian_logic.trace_plot_url = ''
+            logger.info('Plotly not installed — trace plot unavailable')
+        except Exception:
+            self._bayesian_logic.trace_plot_url = ''
+            logger.exception('Failed to render trace plot')
+
+    def _render_heatmap_plot(self, paramX: int, paramY: int) -> None:
+        """Render selected 2D posterior density heatmap to PNG and expose it as a file URL."""
+        posterior = self._bayesian_logic.posterior
+        if posterior is None:
+            self._bayesian_logic.heatmap_plot_url = ''
+            return
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            draws = np.asarray(posterior['draws'])
+            if draws.ndim == 3:
+                draws = draws.reshape(-1, draws.shape[-1])
+
+            x = draws[:, paramX]
+            y = draws[:, paramY]
+            display_names = self._bayesian_display_name_list()
+            x_label = display_names[paramX] if paramX < len(display_names) else posterior['param_names'][paramX]
+            y_label = display_names[paramY] if paramY < len(display_names) else posterior['param_names'][paramY]
+
+            fig, axis = plt.subplots(figsize=(8, 6))
+            heatmap = axis.hist2d(x, y, bins=60, density=True, cmap='viridis')
+            fig.colorbar(heatmap[3], ax=axis, label='Posterior density')
+            axis.set_xlabel(x_label)
+            axis.set_ylabel(y_label)
+            axis.set_title(f'Joint posterior: {x_label} vs {y_label}')
+            axis.grid(False)
+            fig.tight_layout()
+
+            path = self._plot_file_path(f'heatmap_{paramX}_{paramY}')
+            fig.savefig(path, format='png', dpi=100, bbox_inches='tight')
+            plt.close(fig)
+            self._bayesian_logic.heatmap_plot_url = path.as_uri() + f'?t={time.time_ns()}'
+        except Exception:
+            self._bayesian_logic.heatmap_plot_url = ''
+            logger.exception('Failed to render Bayesian heatmap')
 
     def prefitCheck(self) -> bool:
         """
@@ -373,7 +1054,7 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
         else:
-            print(f'Experiment index {index} is out of range.')
+            logger.warning('Experiment index %s is out of range.', index)
 
     ########################
     ## Multi-experiment selection support
@@ -436,7 +1117,7 @@ class Analysis(QObject):
                     all_ye.extend(data.ye if hasattr(data, 'ye') and data.ye.size > 0 else np.zeros_like(data.y))
                     all_xe.extend(data.xe if hasattr(data, 'xe') and data.xe.size > 0 else np.zeros_like(data.x))
             except (IndexError, AttributeError) as e:
-                print(f'Error accessing experiment {exp_idx}: {e}')
+                logger.warning('Error accessing experiment %s: %s', exp_idx, e)
                 continue
 
         if not all_x:
@@ -470,18 +1151,18 @@ class Analysis(QObject):
 
         experiment_data_list = []
 
-        # Define a color palette for experiments
+        # Define a muted/pastel color palette for experiments
         color_palette = [
-            '#1f77b4',  # Blue
-            '#ff7f0e',  # Orange
-            '#2ca02c',  # Green
-            '#d62728',  # Red
-            '#9467bd',  # Purple
-            '#8c564b',  # Brown
-            '#e377c2',  # Pink
-            '#7f7f7f',  # Gray
-            '#bcbd22',  # Olive
-            '#17becf',  # Cyan
+            '#7BA6C4',  # Soft Blue
+            '#E8B889',  # Soft Orange
+            '#8DBF8D',  # Soft Green
+            '#D48787',  # Soft Red
+            '#B296B8',  # Soft Purple
+            '#A68F7F',  # Soft Brown
+            '#D4A8BC',  # Soft Pink
+            '#A5A5A5',  # Soft Gray
+            '#B8B87D',  # Soft Olive
+            '#7BB8B8',  # Soft Cyan
         ]
 
         for idx, exp_idx in enumerate(self._selected_experiment_indices):
@@ -497,7 +1178,7 @@ class Analysis(QObject):
 
                     experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
             except (IndexError, AttributeError) as e:
-                print(f'Error accessing experiment {exp_idx}: {e}')
+                logger.warning('Error accessing experiment %s: %s', exp_idx, e)
                 continue
 
         return experiment_data_list
@@ -652,3 +1333,58 @@ class Analysis(QObject):
             self._parameters_logic.set_current_index(parameters_length - 1)
             self.parametersIndexChanged.emit()
         self.parametersChanged.emit()
+
+    # ------------------------------------------------------------------
+    # Bayesian plot saving
+    # ------------------------------------------------------------------
+
+    @Slot(str, result=bool)
+    def saveBayesianPlot(self, source_url: str) -> bool:
+        """Open a native save dialog to save a rendered Bayesian plot PNG.
+
+        :param source_url: ``file://`` URL of the rendered plot (e.g. from
+            ``bayesianCornerPlotUrl``, ``bayesianTracePlotUrl``,
+            ``bayesianHeatmapPlotUrl``).
+        :returns: ``True`` if the file was saved successfully.
+        """
+        import shutil
+        from pathlib import Path
+
+        if not source_url or not source_url.startswith('file://'):
+            logger.warning('Invalid Bayesian plot URL for saving: %s', source_url)
+            return False
+
+        # Strip query string (e.g. ?t=<timestamp> used for cache-busting)
+        clean_url = source_url.split('?')[0]
+        source_path = Path(clean_url.replace('file:///', '', 1) if clean_url.startswith('file:///')
+                           else clean_url.replace('file://', '', 1))
+        # Handle Windows paths: file:///C:/... → C:/...
+        if os.name == 'nt' and str(source_path).startswith('/'):
+            source_path = Path(str(source_path)[1:])
+
+        if not source_path.exists():
+            logger.warning('Bayesian plot file not found: %s', source_path)
+            return False
+
+        suggested = source_path.name or 'bayesian_plot.png'
+        if source_path.suffix.lower() == '.html':
+            file_filter = 'HTML Files (*.html)'
+        else:
+            file_filter = 'PNG Images (*.png)'
+        dialog = QtWidgets.QFileDialog()
+        save_path, _ = dialog.getSaveFileName(
+            None,
+            'Save Bayesian plot',
+            str(Path.home() / suggested),
+            file_filter,
+        )
+        if not save_path:
+            return False
+
+        try:
+            shutil.copy2(str(source_path), save_path)
+            logger.info('Bayesian plot saved to %s', save_path)
+            return True
+        except OSError as exc:
+            logger.exception('Failed to save Bayesian plot to %s', save_path)
+            return False

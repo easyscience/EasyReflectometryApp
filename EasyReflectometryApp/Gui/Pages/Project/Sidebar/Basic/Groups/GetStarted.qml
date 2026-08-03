@@ -63,4 +63,28 @@ Grid {
     }
     // button 3
 
+    // Error dialog for project load issues (e.g. outdated project file_format)
+    EaElements.Dialog {
+        id: projectLoadErrorDialog
+        title: qsTr('Project Load Error')
+        standardButtons: Dialog.Ok
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        property string errorMessage: ''
+
+        EaElements.Label {
+            text: projectLoadErrorDialog.errorMessage
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.sideBarContentWidth
+        }
+    }
+
+    Connections {
+        target: Globals.BackendWrapper
+        function onProjectLoadError(message) {
+            projectLoadErrorDialog.errorMessage = message
+            projectLoadErrorDialog.open()
+        }
+    }
+
 }

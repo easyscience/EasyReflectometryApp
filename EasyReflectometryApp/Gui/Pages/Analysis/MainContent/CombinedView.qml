@@ -62,6 +62,9 @@ Rectangle {
                 anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
                 useOpenGL: EaGlobals.Vars.useOpenGL
+                
+                // Disable built-in Qt Charts legend - we use our custom legend instead
+                legend.visible: false
 
                 // Multi-experiment support
                 property var multiExperimentSeries: []
@@ -153,6 +156,62 @@ Rectangle {
                     enabled: target !== null
                     function onReferenceLineVisibilityChanged() {
                         analysisChartView.updateReferenceLines()
+                    }
+                }
+
+                // Posterior predictive overlay (Bayesian)
+                LineSeries {
+                    id: ppMedianSerie
+                    name: qsTr("Posterior median")
+                    axisX: analysisChartView.currentXAxis()
+                    axisY: analysisChartView.axisY
+                    color: "#E67E22"
+                    width: 5
+                    visible: Globals.BackendWrapper.bayesianResultAvailable
+                }
+
+                AreaSeries {
+                    id: ppBandSerie
+                    name: qsTr("95% credible interval")
+                    axisX: analysisChartView.currentXAxis()
+                    axisY: analysisChartView.axisY
+                    color: Qt.rgba(0.902, 0.494, 0.133, 0.25)  // orange with alpha
+                    borderWidth: 0
+                    upperSeries: LineSeries {
+                        id: ppUpperSerie
+                        axisX: analysisChartView.currentXAxis()
+                        axisY: analysisChartView.axisY
+                        visible: Globals.BackendWrapper.bayesianResultAvailable
+                    }
+                    lowerSeries: LineSeries {
+                        id: ppLowerSerie
+                        axisX: analysisChartView.currentXAxis()
+                        axisY: analysisChartView.axisY
+                        visible: Globals.BackendWrapper.bayesianResultAvailable
+                    }
+                    visible: Globals.BackendWrapper.bayesianResultAvailable
+                }
+
+                Connections {
+                    target: Globals.BackendWrapper
+                    function onPosteriorPredictiveDataChanged() {
+                        analysisChartView.refreshPosteriorPredictiveOverlay()
+                    }
+                }
+
+                function refreshPosteriorPredictiveOverlay() {
+                    ppMedianSerie.clear()
+                    ppUpperSerie.clear()
+                    ppLowerSerie.clear()
+                    const q  = Globals.BackendWrapper.posteriorPredictiveQ
+                    const m  = Globals.BackendWrapper.posteriorPredictiveMedian
+                    const lo = Globals.BackendWrapper.posteriorPredictiveLower
+                    const hi = Globals.BackendWrapper.posteriorPredictiveUpper
+                    if (!q || !m || !lo || !hi) return
+                    for (let i = 0; i < q.length; ++i) {
+                        ppMedianSerie.append(q[i], m[i])
+                        ppLowerSerie.append(q[i], lo[i])
+                        ppUpperSerie.append(q[i], hi[i])
                     }
                 }
 
@@ -530,6 +589,36 @@ Rectangle {
                             color: analysisChartView.calcSerie.color
                         }
 
+                        // Bayesian posterior predictive legend
+                        Row {
+                            visible: !analysisChartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.3
+                            Rectangle {
+                                width: EaStyle.Sizes.fontPixelSize * 1.2
+                                height: 2
+                                color: "#E67E22"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            EaElements.Label {
+                                text: qsTr("Posterior median")
+                                color: EaStyle.Colors.themeForegroundMinor
+                            }
+                        }
+                        Row {
+                            visible: !analysisChartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.3
+                            Rectangle {
+                                width: EaStyle.Sizes.fontPixelSize * 1.2
+                                height: EaStyle.Sizes.fontPixelSize * 0.6
+                                color: Qt.rgba(0.902, 0.494, 0.133, 0.25)
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            EaElements.Label {
+                                text: qsTr("95% credible interval")
+                                color: EaStyle.Colors.themeForegroundMinor
+                            }
+                        }
+
                         // Multi-experiment legend
                         Column {
                             visible: analysisChartView.isMultiExperimentMode
@@ -617,6 +706,9 @@ Rectangle {
                     
                     // Initialize reference lines
                     updateReferenceLines()
+
+                    // Initialize posterior predictive overlay if results already exist
+                    Qt.callLater(refreshPosteriorPredictiveOverlay)
                 }
 
                 function recreateSeriesForCurrentMode() {
