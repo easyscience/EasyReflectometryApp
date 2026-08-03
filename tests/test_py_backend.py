@@ -69,9 +69,13 @@ class StubAnalysis(QObject):
         self.received_indices = None
         self.clear_calls = 0
         self._plotting_accepted = None
+        self.bayesian_clear_calls = 0
 
     def set_plotting(self, plotting):
         self._plotting_accepted = plotting
+
+    def clearBayesianResults(self):
+        self.bayesian_clear_calls += 1
 
     @property
     def experimentsSelectedCount(self):
@@ -203,6 +207,18 @@ def test_backend_relay_project_changed_triggers_refresh_chain(monkeypatch, qcore
     assert backend._plotting_1d.reset_calls == 1
     assert backend._plotting_1d.refresh_calls == {'sample': 1, 'experiment': 1, 'analysis': 1}
     assert counts == {'status': 1, 'summary': 1, 'axes': 1}
+
+
+def test_backend_project_lifecycle_clears_bayesian_results(monkeypatch, qcore_application):
+    # Posteriors belong to one project state: create/load/reset must discard
+    # them so stale Bayesian results are never shown against new data.
+    backend = _make_backend(monkeypatch)
+
+    backend._project.externalCreatedChanged.emit()
+    backend._project.externalProjectLoaded.emit()
+    backend._project.externalProjectReset.emit()
+
+    assert backend._analysis.bayesian_clear_calls == 3
 
 
 def test_backend_fit_finished_refreshes_summary(monkeypatch, qcore_application):

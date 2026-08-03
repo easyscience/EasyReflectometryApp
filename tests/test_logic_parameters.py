@@ -83,6 +83,37 @@ def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_share
     assert result[3]['alias'] == 'm2_layera_thickness'
 
 
+def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
+    """Real assemblies expose ``front_layer``/``back_layer`` properties that
+    alias into ``layers`` and sort *before* it in ``dir()`` order. The canonical
+    Model -> sample -> assembly -> layers -> layer chain must win the recorded
+    path; otherwise ``path[-4]`` (expected: the assembly) resolves to the wrong
+    ancestor and superphase/subphase parameters get mislabelled."""
+    _patch_tree_types(monkeypatch)
+
+    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+    roughness = make_parameter(name='roughness', unique_name='roughness', value=3.0, free=True, enabled=True)
+
+    model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
+    layer = FakeNode('Layer', 'layer', thickness=thickness, roughness=roughness)
+    assembly = FakeNode(
+        'Superphase', 'asm',
+        back_layer=layer,   # alias, sorts before 'layers'
+        front_layer=layer,  # alias, sorts before 'layers'
+        layers=[layer],     # canonical container
+    )
+    model.sample = [assembly]
+    models = make_model_collection(model)
+
+    result = parameters_module._from_parameters_to_list_of_dicts([thickness, roughness], models)
+
+    assert [entry['display_name'] for entry in result] == [
+        'M1 Superphase thickness',
+        'M1 Superphase roughness',
+    ]
+    assert all(entry['group'] == 'Superphase' for entry in result)
+
+
 def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch):
     monkeypatch.setattr(parameters_module, 'count_free_parameters', lambda project: 2)
     monkeypatch.setattr(parameters_module, 'count_fixed_parameters', lambda project: 1)

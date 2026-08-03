@@ -154,6 +154,11 @@ class PyBackend(QObject):
         self._project.externalCreatedChanged.connect(self._relay_project_page_created)
         self._project.externalProjectLoaded.connect(self._relay_project_page_project_changed)
         self._project.externalProjectReset.connect(self._relay_project_page_project_changed)
+        # Bayesian posteriors belong to one project state: discard them on
+        # create/load/reset so stale results are never shown against new data.
+        self._project.externalCreatedChanged.connect(self._analysis.clearBayesianResults)
+        self._project.externalProjectLoaded.connect(self._analysis.clearBayesianResults)
+        self._project.externalProjectReset.connect(self._analysis.clearBayesianResults)
 
     def _connect_sample_page(self) -> None:
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)

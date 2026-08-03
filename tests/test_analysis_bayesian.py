@@ -126,6 +126,18 @@ class StubPlotting:
         self.sld_lo = lo
         self.sld_hi = hi
 
+    def clear_posterior_predictive(self):
+        self.posterior_q = None
+        self.posterior_median = None
+        self.posterior_lo = None
+        self.posterior_hi = None
+
+    def clear_posterior_predictive_sld(self):
+        self.sld_z = None
+        self.sld_median = None
+        self.sld_lo = None
+        self.sld_hi = None
+
 
 class StubWorker(QObject):
     finished = Signal(list)
@@ -811,6 +823,67 @@ class TestPosteriorPredictive:
         analysis_with_posterior._bayesian_logic.clear()
         analysis_with_posterior._compute_and_publish_posterior_predictive()
         assert analysis_with_posterior._plotting.posterior_q is None
+
+
+# ===================================================================
+# Bayesian state clearing
+# ===================================================================
+
+class TestBayesianStateClearing:
+    def _set_full_result(self, analysis):
+        analysis._bayesian_logic._posterior = dict(SAMPLE_POSTERIOR_2D)
+        analysis._bayesian_logic.corner_plot_url = 'file:///corner.html'
+        analysis._bayesian_logic.diagnostics = {'nDraws': 4}
+        analysis._plotting.set_posterior_predictive([1.0], [2.0], [1.5], [2.5])
+        analysis._plotting.set_posterior_predictive_sld([0.0], [1.0], [0.5], [1.5])
+
+    def test_clear_bayesian_results_discards_posterior_and_overlays(self, analysis):
+        self._set_full_result(analysis)
+        emissions = {'fitting': 0, 'heatmap': 0}
+        analysis.fittingChanged.connect(lambda: emissions.__setitem__('fitting', emissions['fitting'] + 1))
+        analysis.heatmapChanged.connect(lambda: emissions.__setitem__('heatmap', emissions['heatmap'] + 1))
+
+        analysis.clearBayesianResults()
+
+        assert analysis._bayesian_logic.has_result is False
+        assert analysis._bayesian_logic.corner_plot_url == ''
+        assert analysis._bayesian_logic.diagnostics == {}
+        assert analysis._plotting.posterior_q is None
+        assert analysis._plotting.sld_z is None
+        assert emissions['fitting'] >= 1
+        assert emissions['heatmap'] >= 1
+
+    def test_clear_without_result_does_not_emit(self, analysis):
+        emissions = []
+        analysis.fittingChanged.connect(lambda: emissions.append('fitting'))
+
+        analysis.clearBayesianResults()
+
+        assert emissions == []
+
+    def test_classical_fit_start_clears_previous_posterior(self, analysis):
+        self._set_full_result(analysis)
+        # Classical path: give the stub what _start_threaded_fit needs and make
+        # preparation fail so no worker is actually started.
+        analysis._fitting_logic.prepare_threaded_fit = lambda ml: (None, None, None, None, None)
+
+        analysis._start_threaded_fit()
+
+        assert analysis._bayesian_logic.has_result is False
+        assert analysis._plotting.posterior_q is None
+
+    def test_sampling_start_clears_previous_posterior(self, analysis):
+        StubWorker.instances = []
+        self._set_full_result(analysis)
+        analysis._minimizers_logic.set_bayesian(True)
+
+        analysis._start_threaded_fit()
+
+        # The old posterior must be gone even though the new run has not
+        # finished (a failed run must not resurrect stale results).
+        assert analysis._bayesian_logic.has_result is False
+        assert analysis._bayesian_logic.corner_plot_url == ''
+        assert analysis._plotting.posterior_q is None
 
 
 # ===================================================================

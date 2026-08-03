@@ -430,6 +430,9 @@ class Analysis(QObject):
             return
 
         # Classical fitting path
+        # Discard any previous Bayesian posterior so the results dialog and the
+        # posterior-predictive chart overlays reflect this fit, not a stale run.
+        self._clear_bayesian_results()
         # Reset flags and prepare for fit using proper encapsulation
         self._fitting_logic.reset_stop_flag()
         self._fitting_logic.prepare_for_threaded_fit()
@@ -462,9 +465,25 @@ class Analysis(QObject):
         self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
 
+    def _is_stale_worker_signal(self) -> bool:
+        """Return True when a worker signal comes from a superseded worker.
+
+        A cancelled fit's thread may outlive the cancellation (lmfit/DFO cannot
+        abort mid-run); its late signals must not clobber the state of a newer
+        run. Signals from the current worker — and direct calls, where
+        ``sender()`` is None — are processed normally.
+        """
+        sender = self.sender()
+        if sender is not None and sender is not self._fitter_thread:
+            logger.info('Ignoring signal from a superseded fit worker')
+            return True
+        return False
+
     @Slot(dict)
     def _on_fit_progress(self, payload: dict) -> None:
         """Handle in-flight progress payloads emitted from the worker thread."""
+        if self._is_stale_worker_signal():
+            return
         if payload.get('sampling'):
             self._fitting_logic.on_sample_progress(payload)
         else:
@@ -474,6 +493,8 @@ class Analysis(QObject):
     @Slot(list)
     def _on_fit_finished(self, results: list) -> None:
         """Handle successful completion of threaded fit."""
+        if self._is_stale_worker_signal():
+            return
         self._fitting_logic.on_fit_finished(results)
         self._project_lib._last_fit_results = self._fitting_logic.last_fit_results
         # The threaded fit runs on a throwaway fitter's easy_science_multi_fitter,
@@ -494,6 +515,8 @@ class Analysis(QObject):
     @Slot(str)
     def _on_fit_failed(self, error_message: str) -> None:
         """Handle failed threaded fit."""
+        if self._is_stale_worker_signal():
+            return
         is_user_cancel = self._fitting_logic.fit_cancelled and 'cancel' in error_message.lower()
         if is_user_cancel:
             error_message = 'Fitting cancelled by user'
@@ -518,8 +541,36 @@ class Analysis(QObject):
     # Bayesian sampling dispatch and result handling
     # ------------------------------------------------------------------
 
+    def _clear_bayesian_results(self) -> None:
+        """Discard the stored posterior, rendered assets and chart overlays.
+
+        Without this, a previous run's posterior keeps the "Bayesian Sampling
+        Results" dialog branch, the credible-interval chart overlays and the
+        posterior tab alive after the model, minimizer or project has changed.
+        """
+        had_result = self._bayesian_logic.has_result
+        self._bayesian_logic.clear()
+        if self._plotting is not None:
+            self._plotting.clear_posterior_predictive()
+            self._plotting.clear_posterior_predictive_sld()
+        if had_result:
+            self.fittingChanged.emit()
+            self.heatmapChanged.emit()
+
+    @Slot()
+    def clearBayesianResults(self) -> None:
+        """Public entry point for discarding Bayesian results.
+
+        Connected by PyBackend to project create/load/reset signals so results
+        from one project can never be displayed against another.
+        """
+        self._clear_bayesian_results()
+
     def _start_threaded_sample(self) -> None:
         """Start Bayesian MCMC sampling in a background thread."""
+        # A fresh run invalidates the previous posterior immediately; if the
+        # run fails, the UI must not keep presenting the old result as current.
+        self._clear_bayesian_results()
         self._fitting_logic.prepare_for_threaded_sample()
         self.fittingChanged.emit()
 
@@ -563,6 +614,8 @@ class Analysis(QObject):
     @Slot(list)
     def _on_sample_finished(self, results: list) -> None:
         """Handle successful completion of Bayesian sampling."""
+        if self._is_stale_worker_signal():
+            return
         if not results:
             logger.error('Bayesian sampling finished with empty results list')
             self._fitting_logic.on_sample_finished()
