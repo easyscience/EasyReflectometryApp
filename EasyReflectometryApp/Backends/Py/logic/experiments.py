@@ -1,4 +1,8 @@
+import logging
+
 from easyreflectometry import Project as ProjectLib
+
+logger = logging.getLogger(__name__)
 
 
 class Experiments:
@@ -86,9 +90,9 @@ class Experiments:
                 model = models[new_value]
                 exp.model = model
             except IndexError:
-                print(f'Model index {new_value} is out of range for the current experiment.')
+                logger.warning('Model index %s is out of range for the current experiment.', new_value)
         else:
-            print('No experiment or models available to set on the experiment.')
+            logger.warning('No experiment or models available to set on the experiment.')
         pass
 
     def remove_experiment(self, index: int) -> None:
@@ -97,13 +101,13 @@ class Experiments:
         """
         total = len(self.available())
         if not (0 <= index < total):
-            print(f'Experiment index {index} is out of range.')
+            logger.warning('Experiment index %s is out of range.', index)
             return
 
         experiments = self._project_lib._experiments
         exp_key = self._experiment_key_at_index(index)
         if exp_key is None:
-            print(f'Experiment index {index} is out of range.')
+            logger.warning('Experiment index %s is out of range.', index)
             return
 
         if hasattr(experiments, 'items'):

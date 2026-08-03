@@ -61,7 +61,7 @@ Column {
         topPadding: topInset + padding
         rightPadding: chooseButton.width
         horizontalAlignment: TextInput.AlignLeft
-        Component.onCompleted: text = Globals.BackendWrapper.summaryFilePath
+        text: Globals.BackendWrapper.summaryFilePath
         EaElements.Label {
             id: locationLabel
             text: qsTr('Location')

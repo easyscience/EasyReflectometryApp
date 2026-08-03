@@ -12,6 +12,10 @@ class StubParametersLogic:
     def __init__(self, _project_lib):
         pass
 
+    @property
+    def parameters(self):
+        return []
+
 
 class StubCalculatorsLogic:
     def __init__(self, _project_lib):
@@ -36,6 +40,9 @@ class StubMinimizersLogic:
 
     def selected_minimizer_enum(self):
         return None
+
+    def is_bayesian_selected(self):
+        return False
 
 
 class StubWorker(QObject):
@@ -122,7 +129,10 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     assert fitting_changed['count'] >= 2
 
 
-def test_on_stop_fit_requests_worker_stop_without_immediate_cleanup(monkeypatch, qcore_application):
+def test_on_stop_fit_requests_worker_stop_and_keeps_ui_locked_until_thread_exits(monkeypatch, qcore_application):
+    """Cancel only requests a cooperative stop; ``running`` stays True until the
+    worker thread actually exits, so a second fit cannot start while a
+    non-abortable minimizer is still mutating the shared parameters."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
     analysis._fitting_logic.prepare_threaded_fit = MagicMock(
@@ -136,8 +146,40 @@ def test_on_stop_fit_requests_worker_stop_without_immediate_cleanup(monkeypatch,
 
     assert worker.stop_calls == 1
     assert analysis._fitter_thread is worker
+    # UI stays locked: the thread has not exited yet.
+    assert analysis.fittingRunning is True
+    assert analysis._fitting_logic.fit_cancelled is True
+
+    # Worker thread exits and reports the cancellation.
+    worker.failed.emit('Fitting cancelled by user')
+
+    assert analysis._fitter_thread is None
     assert analysis.fittingRunning is False
     assert analysis.fitErrorMessage == 'Fitting cancelled by user'
+
+
+def test_stale_worker_signals_are_ignored_after_new_fit_starts(monkeypatch, qcore_application):
+    """Late signals from a superseded worker must not clobber the current run."""
+    StubWorker.instances = []
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
+        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
+    )
+
+    analysis._start_threaded_fit()
+    stale_worker = StubWorker.instances[-1]
+
+    # Simulate a newer worker having taken over.
+    analysis._start_threaded_fit()
+    current_worker = StubWorker.instances[-1]
+    assert analysis._fitter_thread is current_worker
+
+    # The old worker finally exits — its failure signal must be ignored.
+    stale_worker.failed.emit('Fitting cancelled by user')
+
+    assert analysis._fitter_thread is current_worker
+    assert analysis.fittingRunning is True
+    assert analysis.fitErrorMessage in ('', None)
 
 
 def test_fitting_start_stop_emits_stop_signal_when_fit_is_running(monkeypatch, qcore_application):
@@ -168,3 +210,181 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     assert analysis.fitErrorMessage == 'Fitting cancelled by user'
     assert received == []
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
+
+
+def test_on_fit_finished_records_results_on_project_fitter(monkeypatch, qcore_application):
+    """The canonical project fitter must learn the fit results.
+
+    Otherwise ``project.fitter.reduced_chi`` stays None and the HTML summary's
+    goodness-of-fit shows 'N/A' even though the Analysis section has a value.
+    """
+    from tests.factories import FakeFitResult
+
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic = Fitting(make_project())
+    analysis._clearCacheAndEmitParametersChanged = MagicMock()
+
+    fitter = MagicMock()
+    analysis._project_lib.fitter = fitter
+
+    results = [FakeFitResult(chi2=20.0, n_pars=4, x=list(range(14)))]
+    analysis._on_fit_finished(results)
+
+    fitter.record_fit_results.assert_called_once()
+    (recorded,) = fitter.record_fit_results.call_args.args
+    assert recorded == results
+
+
+# ---------------------------------------------------------------------------
+# Bayesian sampling dispatch tests
+# ---------------------------------------------------------------------------
+
+
+class StubBayesianMinimizersLogic(StubMinimizersLogic):
+    """Minimizers stub that reports Bayesian mode is active."""
+
+    def is_bayesian_selected(self):
+        return True
+
+
+def _make_analysis_bayesian(monkeypatch):
+    """Create an Analysis instance configured for Bayesian sampling."""
+    project = make_project()
+    monkeypatch.setattr(analysis_module, 'ParametersLogic', StubParametersLogic)
+    monkeypatch.setattr(analysis_module, 'CalculatorsLogic', StubCalculatorsLogic)
+    monkeypatch.setattr(analysis_module, 'ExperimentLogic', StubExperimentLogic)
+    monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubBayesianMinimizersLogic)
+    monkeypatch.setattr(analysis_module, 'FitterWorker', StubWorker)
+    analysis = analysis_module.Analysis(project)
+    analysis._clearCacheAndEmitParametersChanged = MagicMock()
+    return analysis
+
+
+def test_start_threaded_sample_forwards_bayesian_kwargs(monkeypatch, qcore_application):
+    """_start_threaded_sample passes samples, burn, thin, population, initializer to worker."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+    # Set non-default Bayesian hyper-params
+    analysis._bayesian_logic.samples = 5000
+    analysis._bayesian_logic.burn = 1000
+    analysis._bayesian_logic.thin = 5
+    analysis._bayesian_logic.population = 8
+    analysis._bayesian_logic.initializer = 'lhs'
+
+    analysis._start_threaded_sample()
+
+    worker = StubWorker.instances[-1]
+    assert worker.method_name == 'mcmc_sample'
+    assert worker.args == ('data-group',)
+    assert worker.kwargs == {
+        'samples': 5000,
+        'burn': 1000,
+        'thin': 5,
+        'population': 8,
+        'initializer': 'lhs',
+    }
+    assert worker.start_calls == 1
+    assert analysis.fittingRunning is True
+
+
+def test_start_threaded_sample_uses_defaults_when_not_set(monkeypatch, qcore_application):
+    """_start_threaded_sample uses Bayesian DEFAULTS when no custom values are set."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+
+    analysis._start_threaded_sample()
+
+    worker = StubWorker.instances[-1]
+    assert worker.kwargs == {
+        'samples': 10000,
+        'burn': 2000,
+        'thin': 1,
+        'population': 10,
+        'initializer': 'eps',
+    }
+
+
+def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_application):
+    """Progress payloads with sampling=True update Bayesian-specific progress properties."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+
+    analysis._start_threaded_sample()
+    worker = StubWorker.instances[-1]
+    worker.progressDetail.emit({
+        'iteration': 25,
+        'total_steps': 100,
+        'chi2': 4.2,
+        'reduced_chi2': 1.8,
+        'sampling': True,
+    })
+
+    assert analysis.sampleProgressStep == 25
+    assert analysis.sampleProgressMessage != ''
+    assert analysis.sampleProgressHasUpdate is True
+
+
+def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcore_application):
+    """fittingStartStop calls _start_threaded_sample when Bayesian minimizer is selected."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(
+        return_value=('multi-fitter', 'data-group')
+    )
+
+    # Mock prefitCheck to avoid complex real checks
+    analysis.prefitCheck = MagicMock(return_value=True)
+
+    # fittingStartStop should detect Bayesian mode and dispatch to sample
+    analysis.fittingStartStop()
+
+    worker = StubWorker.instances[-1]
+    assert worker.method_name == 'mcmc_sample'
+    assert 'samples' in worker.kwargs
+    assert 'burn' in worker.kwargs
+    assert 'thin' in worker.kwargs
+    assert 'population' in worker.kwargs
+    assert 'initializer' in worker.kwargs
+
+
+def test_start_threaded_sample_error_emits_fit_failed(monkeypatch, qcore_application):
+    """When prepare_threaded_sample returns None, fitFailed signal is emitted."""
+    StubWorker.instances = []
+    analysis = _make_analysis_bayesian(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(return_value=(None, None))
+    # Make prepare_threaded_sample return None and set error message (as real code does)
+    def _prepare_and_fail(*args, **kwargs):
+        analysis._fitting_logic._fit_error_message = 'No experiments to sample'
+        return None, None
+
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(side_effect=_prepare_and_fail)
+
+    received = []
+    analysis.fitFailed.connect(received.append)
+
+    analysis._start_threaded_sample()
+
+    assert len(received) == 1
+    assert 'No experiments to sample' in received[0]
+
+
+def test_bayesian_initializer_property_round_trip(monkeypatch, qcore_application):
+    """bayesianInitializer property and setter work through the QML-facing layer."""
+    analysis = _make_analysis_bayesian(monkeypatch)
+    assert analysis.bayesianInitializer == 'eps'
+    assert analysis.bayesianInitializerOptions == ['eps', 'cov', 'lhs', 'random']
+
+    analysis.setBayesianInitializer('lhs')
+    assert analysis.bayesianInitializer == 'lhs'
+
+    analysis.setBayesianInitializer('cov')
+    assert analysis.bayesianInitializer == 'cov'

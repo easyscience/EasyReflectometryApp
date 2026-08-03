@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
@@ -14,7 +15,11 @@ EaElements.GroupBox {
     title: qsTr("Minimization method")
     icon: 'level-down-alt'
 
-    EaElements.GroupRow{
+    Column {
+        width: parent.width
+        spacing: 0
+
+        EaElements.GroupRow{
             EaElements.ComboBox {
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2
                 topInset: minimizerLabel.height
@@ -42,13 +47,15 @@ EaElements.GroupBox {
                 onCurrentIndexChanged: Globals.BackendWrapper.analysisSetMinimizerCurrentIndex(currentIndex)
             }
 
+        // Classical tolerance / max evaluations fields — hidden in Bayesian mode
         EaElements.TextField {
+            visible: !Globals.BackendWrapper.analysisIsBayesianSelected
             width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
             topInset: toleranceLabel.height
             topPadding: topInset + padding
             horizontalAlignment: TextInput.AlignLeft
             onAccepted: {
-                onAccepted: Globals.BackendWrapper.analysisSetMinimizerTolerance(text)
+                Globals.BackendWrapper.analysisSetMinimizerTolerance(text)
                 focus = false
             }
             text: Globals.BackendWrapper.analysisMinimizerTolerance === undefined ? 'Defaults' : Number(Globals.BackendWrapper.analysisMinimizerTolerance).toFixed(3)
@@ -60,6 +67,7 @@ EaElements.GroupBox {
         }
 
         EaElements.TextField {
+            visible: !Globals.BackendWrapper.analysisIsBayesianSelected
             width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
             topInset: maxIterLabel.height
             topPadding: topInset + padding
@@ -75,5 +83,94 @@ EaElements.GroupBox {
                 color: EaStyle.Colors.themeForegroundMinor
             }
         }
+    }
+
+    // Bayesian DREAM controls — only visible when Bayesian is selected
+    EaElements.GroupRow {
+        visible: Globals.BackendWrapper.analysisIsBayesianSelected
+        height: visible ? implicitHeight : 0
+
+        EaElements.TextField {
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
+            topInset: samplesLabel.height
+            topPadding: topInset + padding
+            horizontalAlignment: TextInput.AlignLeft
+            onEditingFinished: Globals.BackendWrapper.bayesianSetSamples(Number(text))
+            text: Globals.BackendWrapper.bayesianSamples
+            EaElements.Label {
+                id: samplesLabel
+                text: qsTr("Samples")
+                color: EaStyle.Colors.themeForegroundMinor
+            }
+        }
+
+        EaElements.TextField {
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
+            topInset: burninLabel.height
+            topPadding: topInset + padding
+            horizontalAlignment: TextInput.AlignLeft
+            onEditingFinished: Globals.BackendWrapper.bayesianSetBurnIn(Number(text))
+            text: Globals.BackendWrapper.bayesianBurnIn
+            EaElements.Label {
+                id: burninLabel
+                text: qsTr("Burn-in steps")
+                color: EaStyle.Colors.themeForegroundMinor
+            }
+        }
+
+        EaElements.TextField {
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
+            topInset: populationLabel.height
+            topPadding: topInset + padding
+            horizontalAlignment: TextInput.AlignLeft
+            onEditingFinished: Globals.BackendWrapper.bayesianSetPopulation(Number(text))
+            text: Globals.BackendWrapper.bayesianPopulation
+            EaElements.Label {
+                id: populationLabel
+                text: qsTr("Population")
+                color: EaStyle.Colors.themeForegroundMinor
+            }
+        }
+
+        EaElements.TextField {
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5.5
+            topInset: thinningLabel.height
+            topPadding: topInset + padding
+            horizontalAlignment: TextInput.AlignLeft
+            onEditingFinished: Globals.BackendWrapper.bayesianSetThinning(Number(text))
+            text: Globals.BackendWrapper.bayesianThinning
+            EaElements.Label {
+                id: thinningLabel
+                text: qsTr("Thinning")
+                color: EaStyle.Colors.themeForegroundMinor
+            }
+        }
+
+        EaElements.ComboBox {
+            width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 5
+            topInset: initLabel.height
+            topPadding: topInset + padding
+            model: Globals.BackendWrapper.bayesianInitializerOptions
+            currentIndex: {
+                const options = Globals.BackendWrapper.bayesianInitializerOptions
+                const current = Globals.BackendWrapper.bayesianInitializer
+                for (let i = 0; i < options.length; i++) {
+                    if (options[i] === current) return i
+                }
+                return 0
+            }
+            onCurrentIndexChanged: {
+                const options = Globals.BackendWrapper.bayesianInitializerOptions
+                if (currentIndex >= 0 && currentIndex < options.length) {
+                    Globals.BackendWrapper.setBayesianInitializer(options[currentIndex])
+                }
+            }
+            EaElements.Label {
+                id: initLabel
+                text: qsTr("Initializer")
+                color: EaStyle.Colors.themeForegroundMinor
+            }
+        }
+    }
     }
 }

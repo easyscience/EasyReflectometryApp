@@ -10,6 +10,8 @@ from easyscience.fitting import FitResults
 from easyscience.fitting.minimizers.utils import FitError
 
 if TYPE_CHECKING:
+    import scipp as sc
+
     from .minimizers import Minimizers
 
 
@@ -34,6 +36,10 @@ class Fitting:
         self._fit_preview_parameter_values: dict = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
+        self._sample_step = 0
+        self._sample_total_steps = 0
+        self._sample_running_message = ''
+        self._sample_has_update = False
 
     @property
     def status(self) -> str:
@@ -104,6 +110,30 @@ class Fitting:
     def fit_has_interim_update(self) -> bool:
         return self._fit_has_interim_update
 
+    # ------------------------------------------------------------------
+    # Bayesian sampling progress
+    # ------------------------------------------------------------------
+
+    @property
+    def sample_step(self) -> int:
+        return self._sample_step
+
+    @property
+    def sample_progress_message(self) -> str:
+        return self._sample_running_message
+
+    @property
+    def sample_has_update(self) -> bool:
+        return self._sample_has_update
+
+    @property
+    def sample_total_steps(self) -> int:
+        return self._sample_total_steps
+
+    # ------------------------------------------------------------------
+    # Progress handling
+    # ------------------------------------------------------------------
+
     def on_fit_progress(self, payload: dict) -> None:
         """Update transient state from an in-flight fit progress payload."""
         self._fit_iteration = int(payload.get('iteration', 0) or 0)
@@ -130,6 +160,7 @@ class Fitting:
         self._fit_preview_parameter_values = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
+        self.clear_sample_progress()
 
     def on_fit_failed(self, error_message: str) -> None:
         """Handle fitting failure callback.
@@ -145,16 +176,16 @@ class Fitting:
         self.clear_fit_progress()
 
     def stop_fit(self) -> None:
-        """Request fitting to stop and clean up state."""
+        """Request the running fit/sampling to stop.
+
+        Only the stop/cancel flags are set here. The lifecycle state (running,
+        finished, results, dialog) is finalised by ``on_fit_failed`` when the
+        worker thread actually exits. Keeping ``running`` True until then keeps
+        the UI locked, so a second fit cannot be started while a non-abortable
+        minimizer (lmfit, DFO) is still mutating the shared parameters.
+        """
         self._stop_requested = True
-        self._result = None
-        self._results = []
-        self._running = False
-        self._finished = True
         self._fit_cancelled = True
-        self._fit_error_message = 'Fitting cancelled by user'
-        self._show_results_dialog = True
-        self.clear_fit_progress()
 
     def reset_stop_flag(self) -> None:
         """Reset the stop request flag before starting a new fit."""
@@ -271,6 +302,134 @@ class Fitting:
             logger.exception('Error preparing threaded fit')
             return None, None, None, None, None
 
+    # ------------------------------------------------------------------
+    # Bayesian sampling helpers
+    # ------------------------------------------------------------------
+
+    def collect_all_experiments_datagroup(self) -> 'sc.DataGroup':
+        """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.mcmc_sample()``.
+
+        Scope decision (see issue #319): Bayesian sampling deliberately runs over
+        **all** experiments, mirroring the classical fit path (``prepare_threaded_fit``)
+        which also fits every experiment. The experiment selection currently affects
+        only plotting, not the fit/sampling scope. If per-selection sampling is ever
+        wanted, filter ``self._ordered_experiments()`` here and rename accordingly.
+
+        :return: DataGroup with reflectivity coords and data.
+        :rtype: sc.DataGroup
+        """
+        import numpy as np
+        import scipp as sc
+
+        experiments = self._ordered_experiments()
+        coords = {}
+        data = {}
+        for i, experiment in enumerate(experiments):
+            x_vals = np.asarray(experiment.x, dtype=float)
+            y_vals = np.asarray(experiment.y, dtype=float)
+
+            # ye holds variances (σ²), same convention as prepare_threaded_fit.
+            # Data files without an uncertainty column yield an empty/absent ye;
+            # scipp requires variances to match the values' shape, so fall back
+            # to zeros and let mcmc_sample's zero-variance handling report it.
+            ye_raw = getattr(experiment, 'ye', None)
+            ye_vals = np.asarray(ye_raw, dtype=float) if ye_raw is not None else np.zeros_like(y_vals)
+            if ye_vals.shape != y_vals.shape:
+                ye_vals = np.zeros_like(y_vals)
+
+            # No variances on the Qz coordinate: mcmc_sample only reads its
+            # values, and xe may be empty for 2/3-column data files.
+            coords[f'Qz_{i}'] = sc.array(
+                dims=[f'Qz_{i}'], values=x_vals, unit=sc.Unit('1/angstrom'),
+            )
+            data[f'R_{i}'] = sc.array(
+                dims=[f'Qz_{i}'], values=y_vals, variances=ye_vals,
+            )
+        return sc.DataGroup(data=data, coords=coords, attrs={})
+
+    def prepare_threaded_sample(self, minimizers_logic: 'Minimizers') -> tuple:
+        """Prepare high-level MultiFitter + DataGroup for Bayesian sampling.
+
+        :param minimizers_logic: The minimizers logic instance.
+        :return: Tuple of (multi_fitter, data_group) or (None, None) on error.
+        """
+        try:
+            from easyreflectometry.fitting import MultiFitter
+
+            experiments = self._ordered_experiments()
+            if not experiments:
+                self._fit_error_message = 'No experiments to sample'
+                self._running = False
+                self._finished = True
+                self._show_results_dialog = True
+                return None, None
+
+            models = [experiment.model for experiment in experiments]
+            multi_fitter = MultiFitter(*models)
+
+            # Ensure underlying engine is BUMPS for the sample() call
+            selected = minimizers_logic.selected_minimizer_enum()
+            if selected is not None:
+                multi_fitter.easy_science_multi_fitter.switch_minimizer(selected)
+
+            data_group = self.collect_all_experiments_datagroup()
+            return multi_fitter, data_group
+        except Exception as e:
+            self._fit_error_message = f'Error preparing sampling: {e}'
+            self._running = False
+            self._finished = True
+            self._show_results_dialog = True
+            logger.exception('Error preparing threaded sample')
+            return None, None
+
+    def prepare_for_threaded_sample(self) -> None:
+        """Set running flags and sampling progress message before launching the worker."""
+        self.reset_stop_flag()
+        self._running = True
+        self._finished = False
+        self._show_results_dialog = False
+        self._fit_error_message = None
+        self._result = None
+        self._results = []
+        self.clear_fit_progress()
+        self.clear_sample_progress()
+        self._sample_running_message = 'Sampling… (this may take several minutes)'
+
+    def on_sample_finished(self) -> None:
+        """Handle successful Bayesian sampling completion without FitResults.
+
+        Clears classical fit result state (which is not applicable to sampling)
+        while preserving the shared running / dialog lifecycle.
+        """
+        self._running = False
+        self._finished = True
+        self._show_results_dialog = True
+        self._fit_error_message = None
+        self._result = None
+        self._results = []
+        self.clear_fit_progress()
+
+    def on_sample_progress(self, payload: dict) -> None:
+        """Update transient state from an in-flight DREAM sampling progress payload."""
+        self._sample_step = int(payload.get('iteration', 0) or 0)
+        self._sample_total_steps = int(payload.get('total_steps', 0) or 0)
+        self._sample_has_update = True
+        self._fit_has_interim_update = True
+        total = self._sample_total_steps
+        if self._sample_step > 0:
+            if total > 0:
+                self._sample_running_message = f'DREAM step {self._sample_step} of {total}'
+            else:
+                self._sample_running_message = f'DREAM step {self._sample_step}'
+        else:
+            self._sample_running_message = 'Sampling…'
+
+    def clear_sample_progress(self) -> None:
+        self._sample_step = 0
+        self._sample_total_steps = 0
+        self._sample_running_message = ''
+        self._sample_has_update = False
+
     def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
         """Handle successful completion of fitting.
 
@@ -295,6 +454,10 @@ class Fitting:
             self._results = [single_result] if single_result is not None else []
 
     @property
+    def last_fit_results(self):
+        return self._results if self._results else None
+
+    @property
     def fit_n_pars(self) -> int:
         """Return the global number of refined parameters for the fit."""
         if len(self._results) > 1:
@@ -309,7 +472,7 @@ class Fitting:
         if self._results:
             try:
                 if len(self._results) == 1:
-                    return float(self._results[0].reduced_chi)
+                    return float(self._results[0].reduced_chi2)
                 total_chi2 = float(sum(result.chi2 for result in self._results))
                 total_points = sum(len(result.x) for result in self._results)
                 n_params = self._results[0].n_pars
@@ -322,7 +485,7 @@ class Fitting:
         if self._result is None:
             return 0.0
         try:
-            return float(self._result.reduced_chi)
+            return float(self._result.reduced_chi2)
         except (ValueError, TypeError):
             return 0.0
 

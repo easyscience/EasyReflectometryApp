@@ -41,6 +41,9 @@ Rectangle {
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
         useOpenGL: EaGlobals.Vars.useOpenGL
+        
+        // Disable built-in Qt Charts legend - we use our custom legend instead
+        legend.visible: false
 
         // Background reference line series
         LineSeries {

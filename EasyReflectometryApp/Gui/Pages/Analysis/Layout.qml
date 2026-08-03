@@ -19,12 +19,20 @@ EaComponents.ContentPage {
 
     mainView: EaComponents.MainContent {
         tabs: [
-            EaElements.TabButton { text: qsTr('Reflectivity') }
+            EaElements.TabButton { text: qsTr('Reflectivity') },
+            EaElements.TabButton {
+                text: qsTr('Bayesian Posterior')
+                enabled: Globals.BackendWrapper.bayesianResultAvailable
+            }
        ]
 
         items: [
             Loader {
                 source: `MainContent/CombinedView.qml`
+                onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
+            },
+            Loader {
+                source: `MainContent/BayesianPosteriorView.qml`
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             }
         ]
@@ -46,7 +54,7 @@ EaComponents.ContentPage {
                 enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length
                 wide: true
                 fontIcon: Globals.BackendWrapper.analysisFittingRunning ? 'stop-circle' : 'play-circle'
-                text: Globals.BackendWrapper.analysisFittingRunning ? qsTr('Cancel fitting') : qsTr('Start fitting')
+                text: Globals.BackendWrapper.analysisFittingRunning ? qsTr('Cancel fitting') : (Globals.BackendWrapper.analysisIsBayesianSelected ? qsTr('Start sampling') : qsTr('Start fitting'))
 
                 onClicked: {
                     console.debug(`Clicking '${text}' button: ${this}`)

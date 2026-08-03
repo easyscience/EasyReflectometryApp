@@ -89,8 +89,8 @@ def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monke
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi=1.2),
+        make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi2=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi2=1.2),
     ])
 
     assert logic.fit_finished is True
@@ -98,10 +98,27 @@ def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monke
     assert logic.fit_n_pars == 2
     assert logic.fit_chi2 == 2.0
 
-    logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi=4.5))
+    logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi2=4.5))
     assert logic.fit_success is False
     assert logic.fit_n_pars == 1
     assert logic.fit_chi2 == 4.5
+
+
+def test_last_fit_results_reflects_stored_results():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    assert logic.last_fit_results is None
+
+    multi_results = [
+        make_fit_result(success=True, chi2=2.0, n_pars=1, x=[1, 2], reduced_chi2=1.0),
+        make_fit_result(success=True, chi2=3.0, n_pars=1, x=[1, 2, 3], reduced_chi2=1.5),
+    ]
+    logic.on_fit_finished(multi_results)
+    assert logic.last_fit_results is multi_results
+
+    logic.on_fit_finished(make_fit_result(success=True, chi2=1.0, n_pars=1, x=[1], reduced_chi2=1.0))
+    assert len(logic.last_fit_results) == 1
 
 
 def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_results(monkeypatch):
@@ -111,8 +128,8 @@ def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_result
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=3, x=[1, 2, 3], reduced_chi=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=3, x=[1, 2, 3, 4], reduced_chi=1.2),
+        make_fit_result(success=True, chi2=4.0, n_pars=3, x=[1, 2, 3], reduced_chi2=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=3, x=[1, 2, 3, 4], reduced_chi2=1.2),
     ])
 
     assert logic.fit_n_pars == 3
@@ -149,7 +166,7 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_progress({'iteration': 3, 'chi2': 8.0, 'parameter_values': {'beta': 1.0}})
-    logic.on_fit_finished(make_fit_result(success=True, chi2=8.0, n_pars=1, x=[1, 2], reduced_chi=4.0))
+    logic.on_fit_finished(make_fit_result(success=True, chi2=8.0, n_pars=1, x=[1, 2], reduced_chi2=4.0))
 
     assert logic.fit_iteration == 0
     assert logic.fit_progress_message == ''
@@ -167,6 +184,11 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
     logic.on_fit_progress({'iteration': 5, 'chi2': 6.0})
     logic.stop_fit()
 
+    # stop_fit only requests cancellation; progress stays visible while the
+    # worker thread is still winding down and is cleared when it exits.
+    assert logic.fit_iteration == 5
+    logic.on_fit_failed('Fitting cancelled by user')
+
     assert logic.fit_iteration == 0
     assert logic.fit_progress_message == ''
     assert logic.fit_has_interim_update is False
@@ -181,8 +203,18 @@ def test_fit_failure_and_cancellation_state_transitions():
     assert logic.fit_finished is True
     assert logic.show_results_dialog is True
 
+    logic.prepare_for_threaded_fit()
     logic.stop_fit()
+    # stop_fit only requests cancellation; the lifecycle state is finalised by
+    # on_fit_failed when the worker thread actually exits. Keeping ``running``
+    # True until then keeps the UI locked against starting a second fit.
     assert logic.fit_cancelled is True
+    assert logic.running is True
+    assert logic.fit_finished is False
+
+    logic.on_fit_failed('Fitting cancelled by user')
+    assert logic.running is False
+    assert logic.fit_finished is True
     assert logic.fit_error_message == 'Fitting cancelled by user'
 
     logic.reset_stop_flag()
@@ -191,7 +223,7 @@ def test_fit_failure_and_cancellation_state_transitions():
 
 def test_start_stop_handles_success_and_fiterror():
     project = make_project(models=[object()])
-    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, chi2=1.7, reduced_chi=1.7))
+    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, chi2=1.7, reduced_chi2=1.7))
     logic = fitting_module.Fitting(project)
 
     logic.start_stop()
@@ -205,3 +237,243 @@ def test_start_stop_handles_success_and_fiterror():
     project.fitter = SimpleNamespace(fit_single_data_set_1d=_raise_fit_error)
     logic.start_stop()
     assert 'fit failed' in logic.fit_error_message
+
+
+# ===================================================================
+# Bayesian sampling preparation
+# ===================================================================
+
+def test_prepare_threaded_sample_handles_empty_experiments():
+    project = make_project(experiments={})
+    logic = fitting_module.Fitting(project)
+
+    result = logic.prepare_threaded_sample(StubMinimizersLogic())
+
+    assert result == (None, None)
+    assert logic.fit_error_message == 'No experiments to sample'
+    assert logic.fit_finished is True
+    assert logic.show_results_dialog is True
+
+
+def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
+    install_fake_multifitter(monkeypatch)
+    model_a = make_model(name='A')
+    experiments = {
+        0: make_experiment('Exp A', model=model_a,
+                           x=np.array([1.0, 2.0]), y=np.array([4.0, 5.0]), ye=np.array([0.1, 0.2])),
+    }
+    project = make_project(experiments=experiments)
+    logic = fitting_module.Fitting(project)
+
+    # Mock the datagroup collection to avoid scipp dependency
+    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda: 'fake-data-group')
+
+    multi_fitter, data_group = logic.prepare_threaded_sample(StubMinimizersLogic())
+
+    assert multi_fitter is not None
+    assert multi_fitter.models == (model_a,)
+    assert data_group == 'fake-data-group'
+
+
+def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):
+    # Fake scipp to avoid import issues
+    import numpy as np
+
+    # We need to make scipp available; we'll mock the import within the method
+    model = make_model(name='M1')
+    experiments = {
+        0: make_experiment('Exp 1', model=model,
+                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([0.01, 0.04])),
+    }
+    project = make_project(experiments=experiments)
+    logic = fitting_module.Fitting(project)
+
+    # Create a minimal sc.DataGroup stand-in
+    class FakeSCUnit:
+        def __init__(self, unit_str):
+            self._str = unit_str
+        def __eq__(self, other):
+            return isinstance(other, FakeSCUnit) and other._str == self._str
+
+    class FakeSCArray:
+        _registry = []
+        def __init__(self, *, dims, values, variances=None, unit=None):
+            self.dims = dims
+            self.values = values
+            self.variances = variances
+            self.unit = unit
+            FakeSCArray._registry.append(self)
+
+    class FakeSCDataGroup(dict):
+        def __init__(self, data=None, coords=None, attrs=None):
+            super().__init__()
+            self.data = data or {}
+            self.coords = coords or {}
+            self.attrs = attrs or {}
+        def __repr__(self):
+            return f'DataGroup({dict(self.data)})'
+
+    FakeSCArray._registry = []
+
+    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
+    monkeypatch.setattr('scipp.array', FakeSCArray)
+    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
+
+    dg = logic.collect_all_experiments_datagroup()
+
+    assert dg.coords.keys() == {'Qz_0'}
+    assert dg.data.keys() == {'R_0'}
+
+    coord = dg.coords['Qz_0']
+    assert coord.dims == ['Qz_0']
+    assert list(coord.values) == [1.0, 2.0]
+    # mcmc_sample only reads the coordinate's values; no variances are attached
+    # (xe may be empty for 2/3-column data files, which scipp would reject).
+    assert coord.variances is None
+    assert coord.unit == FakeSCUnit('1/angstrom')
+
+    measurement = dg.data['R_0']
+    assert measurement.dims == ['Qz_0']
+    assert list(measurement.values) == [0.1, 0.2]
+    assert list(measurement.variances) == [0.01, 0.04]
+
+
+def test_collect_all_experiments_datagroup_missing_ye_falls_back_to_zero_variance(monkeypatch):
+    """Data files without an uncertainty column yield empty/absent ye; the
+    DataGroup must still build (with zero variances) instead of crashing in
+    scipp, so mcmc_sample can report the missing uncertainties itself."""
+    import numpy as np
+
+    model = make_model(name='M1')
+    experiments = {
+        0: make_experiment('Exp 1', model=model,
+                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([])),
+    }
+    project = make_project(experiments=experiments)
+    logic = fitting_module.Fitting(project)
+
+    class FakeSCUnit:
+        def __init__(self, unit_str):
+            self._str = unit_str
+
+    class FakeSCArray:
+        def __init__(self, *, dims, values, variances=None, unit=None):
+            if variances is not None and np.shape(variances) != np.shape(values):
+                raise ValueError("The shapes of 'values' and 'variances' differ")
+            self.dims = dims
+            self.values = values
+            self.variances = variances
+            self.unit = unit
+
+    class FakeSCDataGroup(dict):
+        def __init__(self, data=None, coords=None, attrs=None):
+            super().__init__()
+            self.data = data or {}
+            self.coords = coords or {}
+            self.attrs = attrs or {}
+
+    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
+    monkeypatch.setattr('scipp.array', FakeSCArray)
+    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
+
+    dg = logic.collect_all_experiments_datagroup()
+
+    assert list(dg.data['R_0'].variances) == [0.0, 0.0]
+
+
+def test_prepare_for_threaded_sample_sets_flags_and_message():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+    # A previously cancelled fit must not leak its cancel flag into sampling.
+    logic.stop_fit()
+
+    logic.prepare_for_threaded_sample()
+
+    assert logic.running is True
+    assert logic.fit_finished is False
+    assert logic.show_results_dialog is False
+    assert logic.fit_cancelled is False
+    assert logic.sample_progress_message == 'Sampling… (this may take several minutes)'
+
+
+# ===================================================================
+# Bayesian sampling progress
+# ===================================================================
+
+def test_on_sample_progress_updates_step_and_total():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({'iteration': 42, 'total_steps': 1000})
+
+    assert logic.sample_step == 42
+    assert logic.sample_total_steps == 1000
+    assert logic.sample_has_update is True
+
+
+def test_on_sample_progress_handles_zero_defaults():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({})
+
+    assert logic.sample_step == 0
+    assert logic.sample_total_steps == 0
+
+
+def test_on_sample_progress_handles_none_values():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({'iteration': None, 'total_steps': None})
+
+    assert logic.sample_step == 0
+    assert logic.sample_total_steps == 0
+
+
+# ===================================================================
+# Bayesian sampling completion lifecycle
+# ===================================================================
+
+def test_on_sample_finished_clears_fit_state_and_shows_dialog():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    # Simulate that a fit was running
+    logic.prepare_for_threaded_sample()
+    assert logic.running is True
+
+    logic.on_sample_finished()
+
+    assert logic.running is False
+    assert logic.fit_finished is True
+    assert logic.show_results_dialog is True
+    assert logic.fit_error_message == ''
+    assert logic.fit_success is False  # default
+    assert logic.sample_step == 0      # cleared via clear_fit_progress
+    assert logic.sample_has_update is False
+
+
+def test_on_sample_finished_preserves_none_result():
+    """on_sample_finished does not set a FitResult — Bayesian results are stored elsewhere."""
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_finished()
+
+    assert logic._result is None
+    assert logic._results == []
+
+
+def test_clear_sample_progress_works():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+
+    logic.on_sample_progress({'iteration': 50, 'total_steps': 500})
+    assert logic.sample_step == 50
+
+    logic.clear_sample_progress()
+
+    assert logic.sample_step == 0
+    assert logic.sample_total_steps == 0
+    assert logic.sample_progress_message == ''

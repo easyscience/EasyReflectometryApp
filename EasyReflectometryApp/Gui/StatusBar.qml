@@ -22,7 +22,7 @@ EaElements.StatusBar {
     EaElements.StatusBarItem {
         keyIcon: 'layer-group'
         keyText: qsTr('Models')
-        valueText: Globals.BackendWrapper.statusPhaseCount ?? ''
+        valueText: Globals.BackendWrapper.statusModelsCount ?? ''
         ToolTip.text: qsTr('Number of models added')
     }
 
@@ -60,11 +60,23 @@ EaElements.StatusBar {
         keyText: qsTr('Fit')
         valueText: {
             if (Globals.BackendWrapper.analysisFitHasInterimUpdate) {
+                if (Globals.BackendWrapper.analysisIsBayesianSelected
+                    && Globals.BackendWrapper.analysisSampleProgressHasUpdate) {
+                    const step = Globals.BackendWrapper.analysisSampleProgressStep
+                    const total = Globals.BackendWrapper.analysisSampleProgressTotalSteps
+                    if (total > 0) {
+                        return qsTr('DREAM step %1 of %2').arg(step).arg(total)
+                    }
+                    return qsTr('DREAM step %1').arg(step)
+                }
                 const iter = Globals.BackendWrapper.analysisFitIteration
                 const rchi2 = Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
                 return qsTr('iter %1 · χ² %2').arg(iter).arg(rchi2)
             }
-            return qsTr('Fitting running') + '.'.repeat(dotCount % 5)
+            if (Globals.BackendWrapper.analysisIsBayesianSelected) {
+                return qsTr('Sampling') + '.'.repeat(dotCount % 5)
+            }
+            return qsTr('Fitting') + '.'.repeat(dotCount % 5)
         }
         ToolTip.text: qsTr('Current fitting progress')
 

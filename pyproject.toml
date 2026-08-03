@@ -4,8 +4,7 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'EasyReflectometryApp'
-version = '1.3.1'
-release_data = '1 May 2026'
+version = '1.4.0'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
     {name = "Andrew R. McCluskey"}, 
@@ -32,10 +31,15 @@ classifiers = [
 requires-python = '>=3.12'
 dependencies = [
   'easyapplication',
+  #'easyreflectometry @ git+https://github.com/easyscience/reflectometry-lib.git@develop',
   'easyreflectometry',
   'asteval',
   'PySide6',
   'toml',
+  'numpy',
+  'matplotlib',
+  'arviz>=0.18',
+  'plotly>=5.0',
 ]
 
 [project.optional-dependencies]
@@ -64,6 +68,7 @@ docs = [
 [release]
 app_name = 'EasyReflectometryApp'
 family_name = 'EasyReflectometryApp'
+release_date = '1 May 2026'
 tag_template = 'v{VERSION}'
 title_template = 'Version {VERSION} ({DATE})'
 description_file = 'RELEASE.md'

@@ -97,14 +97,16 @@ class FitterWorker(QThread):
             # Get the method and call it
             method = getattr(self._fitter, self._method_name)
             kwargs = dict(self._kwargs)
-            if self._method_name == 'fit' and 'progress_callback' not in kwargs:
+            if self._method_name in ('fit', 'mcmc_sample') and 'progress_callback' not in kwargs:
                 kwargs['progress_callback'] = self._progress_callback
+            if self._method_name == 'mcmc_sample' and 'abort_test' not in kwargs:
+                kwargs['abort_test'] = lambda: self._stop_requested
+            elif self._method_name == 'fit' and 'abort_test' not in kwargs and self._uses_bumps_minimizer():
+                kwargs['abort_test'] = lambda: self._stop_requested
             result = method(*self._args, **kwargs)
 
-            # NOTE: This check only catches stop requests that occurred AFTER the fit
-            # completed but before we emit the result. It does NOT interrupt the fitting
-            # algorithm mid-execution since lmfit/scipy don't support cancellation callbacks.
-            # The effective cancellation window is only before the fit starts (checked above).
+            # For BUMPS fit/mcmc_sample, abort_test interrupts mid-run and method() returns early;
+            # for lmfit/dfo this still only catches stops requested after the fit completed.
             if self._stop_requested:
                 self.failed.emit('Fitting cancelled by user')
                 return
@@ -127,28 +129,24 @@ class FitterWorker(QThread):
         self.progressDetail.emit(dict(payload))
         return not self._stop_requested
 
+    def _uses_bumps_minimizer(self) -> bool:
+        """Return True if the underlying minimizer is BUMPS (and therefore accepts abort_test)."""
+        minimizer = getattr(self._fitter, 'minimizer', None)
+        return getattr(minimizer, 'package', None) == 'bumps'
+
     def stop(self) -> None:
         """
         Request the fitting operation to stop.
 
-        This sets a flag that is checked during execution and also
-        terminates the thread if it's still running. Call wait() after
-        this to ensure proper thread cleanup.
+        This only sets a flag; the thread is **not** terminated. The flag is
+        checked between iterations via the BUMPS ``abort_test`` / progress
+        callback, so cancellation is cooperative.
 
-        .. warning::
-            DANGEROUS: This method uses QThread.terminate() which is strongly
-            discouraged by Qt documentation. It can:
-            - Leave mutex locks held indefinitely causing deadlocks
-            - Corrupt data structures mid-operation
-            - Prevent proper cleanup of resources (especially numpy arrays, scipy internals)
-            - Cause memory leaks and undefined behavior
-
-            The fitting libraries (lmfit, scipy) do not support graceful cancellation.
-            The stop flag is only effective BEFORE the fit starts - once the fitting
-            algorithm is running, it cannot be interrupted cleanly.
-
-            See THREAD_TERMINATION_WARNING.md for details on known issues and
-            potential future improvements (e.g., using subprocess instead of QThread).
+        .. note::
+            The stop flag is effective only for minimizers that poll it (BUMPS).
+            Other fitting backends (lmfit, scipy) do not support graceful
+            cancellation, so once such a fit is running it cannot be interrupted
+            and will finish before the stop takes effect.
         """
         self._stop_requested = True
 

@@ -41,6 +41,7 @@ class PyBackend(QObject):
 
         # Wire cross-cutting references before connecting signals
         self._status._status_logic.set_minimizers_logic(self._analysis._minimizers_logic)
+        self._analysis.set_plotting(self._plotting_1d)
 
         # Must be last to ensure all backend parts are created
         self._connect_backend_parts()
@@ -153,6 +154,11 @@ class PyBackend(QObject):
         self._project.externalCreatedChanged.connect(self._relay_project_page_created)
         self._project.externalProjectLoaded.connect(self._relay_project_page_project_changed)
         self._project.externalProjectReset.connect(self._relay_project_page_project_changed)
+        # Bayesian posteriors belong to one project state: discard them on
+        # create/load/reset so stale results are never shown against new data.
+        self._project.externalCreatedChanged.connect(self._analysis.clearBayesianResults)
+        self._project.externalProjectLoaded.connect(self._analysis.clearBayesianResults)
+        self._project.externalProjectReset.connect(self._analysis.clearBayesianResults)
 
     def _connect_sample_page(self) -> None:
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)
@@ -174,6 +180,9 @@ class PyBackend(QObject):
         self._analysis.externalParametersChanged.connect(self._relay_analysis_page)
         self._analysis.externalParametersChanged.connect(self._refresh_plots)
         self._analysis.externalFittingChanged.connect(self._refresh_plots)
+        # A finished fit updates the goodness-of-fit; refresh the Summary tab's
+        # HTML binding so it stops showing the stale pre-fit value.
+        self._analysis.externalFittingChanged.connect(self._summary.summaryChanged)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
         # Update status bar when parameters change (e.g. fit checkbox toggle, post-fit)
@@ -197,6 +206,8 @@ class PyBackend(QObject):
         self._sample._clearCacheAndEmitLayersChanged()
         self._sample.materialsTableChanged.emit()
         self._sample.modelsTableChanged.emit()
+        # Notify summary that paths have changed (project path changed)
+        self._summary.refreshPaths()
         self._sample.modelsIndexChanged.emit()
         self._sample.assembliesTableChanged.emit()
         self._sample.assembliesIndexChanged.emit()

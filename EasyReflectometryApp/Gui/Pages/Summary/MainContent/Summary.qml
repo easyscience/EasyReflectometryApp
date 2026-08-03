@@ -47,10 +47,40 @@ Rectangle {
 
             textFormat: TextEdit.RichText
             text: Globals.BackendWrapper.summaryAsHtml
+
+            onLinkActivated: (link) => {
+                if (link.startsWith("nametooltip:")) {
+                    return
+                }
+                Qt.openUrlExternally(link)
+            }
         }
         // Main text area
 
     }
     // Flickable
+
+    // Tooltip for truncated experiment datablock names.
+    // Python wraps long names in <a href="nametooltip:ENCODED_FULL_NAME">.
+    // TextEdit.hoveredLink fires when the mouse enters/leaves such a link;
+    // we decode the full name and show it in a native ToolTip near the cursor.
+    HoverHandler {
+        id: hoverHandler
+    }
+
+    ToolTip {
+        id: nameToolTip
+
+        readonly property string scheme: "nametooltip:"
+
+        visible: textArea.hoveredLink.startsWith(scheme)
+        text: visible ? decodeURIComponent(textArea.hoveredLink.substring(scheme.length)) : ""
+
+        x: hoverHandler.point.position.x + 12
+        y: hoverHandler.point.position.y + 12
+
+        delay: 300
+        timeout: 8000
+    }
 
 }

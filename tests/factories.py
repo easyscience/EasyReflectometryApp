@@ -91,7 +91,7 @@ class FakeLayerCollection(list):
         )
         self.insert(index + 1, duplicate)
 
-    def remove(self, index):
+    def remove_at(self, index):
         self.pop(index)
 
     def move_up(self, index):
@@ -243,12 +243,13 @@ class FakeCalculatorController:
 
 
 class FakeExperiment:
-    def __init__(self, name, model=None, x=None, y=None, ye=None):
+    def __init__(self, name, model=None, x=None, y=None, ye=None, xe=None):
         self.name = name
         self.model = model
         self.x = [] if x is None else x
         self.y = [] if y is None else y
         self.ye = [] if ye is None else ye
+        self.xe = [] if xe is None else xe
 
 
 class FakeMinimizerValue:
@@ -292,12 +293,12 @@ class FakeParameter:
 
 
 class FakeFitResult:
-    def __init__(self, success=True, chi2=1.0, n_pars=1, x=None, reduced_chi=0.5, minimizer_engine='stub'):
+    def __init__(self, success=True, chi2=1.0, n_pars=1, x=None, reduced_chi2=0.5, minimizer_engine='stub'):
         self.success = success
         self.chi2 = chi2
         self.n_pars = n_pars
         self.x = [] if x is None else x
-        self.reduced_chi = reduced_chi
+        self.reduced_chi2 = reduced_chi2
         self.minimizer_engine = minimizer_engine
 
 

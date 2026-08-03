@@ -26,10 +26,7 @@ class IO:
 
     @staticmethod
     def localFileToUrl(fpath: str) -> str:
-        if not sys.platform.startswith('win'):
-            return QUrl.fromLocalFile(fpath).toString()
-        url = QUrl.fromLocalFile(fpath.split(':')[-1]).toString()
-        return url
+        return QUrl.fromLocalFile(fpath).toString()
 
     @staticmethod
     def formatMsg(type, *args):
