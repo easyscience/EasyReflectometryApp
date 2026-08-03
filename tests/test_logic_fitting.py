@@ -184,6 +184,11 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
     logic.on_fit_progress({'iteration': 5, 'chi2': 6.0})
     logic.stop_fit()
 
+    # stop_fit only requests cancellation; progress stays visible while the
+    # worker thread is still winding down and is cleared when it exits.
+    assert logic.fit_iteration == 5
+    logic.on_fit_failed('Fitting cancelled by user')
+
     assert logic.fit_iteration == 0
     assert logic.fit_progress_message == ''
     assert logic.fit_has_interim_update is False
@@ -198,8 +203,18 @@ def test_fit_failure_and_cancellation_state_transitions():
     assert logic.fit_finished is True
     assert logic.show_results_dialog is True
 
+    logic.prepare_for_threaded_fit()
     logic.stop_fit()
+    # stop_fit only requests cancellation; the lifecycle state is finalised by
+    # on_fit_failed when the worker thread actually exits. Keeping ``running``
+    # True until then keeps the UI locked against starting a second fit.
     assert logic.fit_cancelled is True
+    assert logic.running is True
+    assert logic.fit_finished is False
+
+    logic.on_fit_failed('Fitting cancelled by user')
+    assert logic.running is False
+    assert logic.fit_finished is True
     assert logic.fit_error_message == 'Fitting cancelled by user'
 
     logic.reset_stop_flag()
@@ -306,21 +321,78 @@ def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):
 
     dg = logic.collect_all_experiments_datagroup()
 
-    # Verify FakeSCArray was called to create coords and data
-    assert len(FakeSCArray._registry) >= 2  # coords + data entries
-    # Coords entries have 'Qz' in their dims
-    coord_calls = [a for a in FakeSCArray._registry if 'Qz' in str(a.dims)]
-    assert len(coord_calls) >= 1
-    # Data entries have variances (ye_vals)
-    data_calls = [a for a in FakeSCArray._registry if a.variances is not None]
+    assert dg.coords.keys() == {'Qz_0'}
+    assert dg.data.keys() == {'R_0'}
+
+    coord = dg.coords['Qz_0']
+    assert coord.dims == ['Qz_0']
+    assert list(coord.values) == [1.0, 2.0]
+    # mcmc_sample only reads the coordinate's values; no variances are attached
+    # (xe may be empty for 2/3-column data files, which scipp would reject).
+    assert coord.variances is None
+    assert coord.unit == FakeSCUnit('1/angstrom')
+
+    measurement = dg.data['R_0']
+    assert measurement.dims == ['Qz_0']
+    assert list(measurement.values) == [0.1, 0.2]
+    assert list(measurement.variances) == [0.01, 0.04]
+
+
+def test_collect_all_experiments_datagroup_missing_ye_falls_back_to_zero_variance(monkeypatch):
+    """Data files without an uncertainty column yield empty/absent ye; the
+    DataGroup must still build (with zero variances) instead of crashing in
+    scipp, so mcmc_sample can report the missing uncertainties itself."""
+    import numpy as np
+
+    model = make_model(name='M1')
+    experiments = {
+        0: make_experiment('Exp 1', model=model,
+                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([])),
+    }
+    project = make_project(experiments=experiments)
+    logic = fitting_module.Fitting(project)
+
+    class FakeSCUnit:
+        def __init__(self, unit_str):
+            self._str = unit_str
+
+    class FakeSCArray:
+        def __init__(self, *, dims, values, variances=None, unit=None):
+            if variances is not None and np.shape(variances) != np.shape(values):
+                raise ValueError("The shapes of 'values' and 'variances' differ")
+            self.dims = dims
+            self.values = values
+            self.variances = variances
+            self.unit = unit
+
+    class FakeSCDataGroup(dict):
+        def __init__(self, data=None, coords=None, attrs=None):
+            super().__init__()
+            self.data = data or {}
+            self.coords = coords or {}
+            self.attrs = attrs or {}
+
+    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
+    monkeypatch.setattr('scipp.array', FakeSCArray)
+    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
+
+    dg = logic.collect_all_experiments_datagroup()
+
+    assert list(dg.data['R_0'].variances) == [0.0, 0.0]
+
+
+def test_prepare_for_threaded_sample_sets_flags_and_message():
     project = make_project()
     logic = fitting_module.Fitting(project)
+    # A previously cancelled fit must not leak its cancel flag into sampling.
+    logic.stop_fit()
 
     logic.prepare_for_threaded_sample()
 
     assert logic.running is True
     assert logic.fit_finished is False
     assert logic.show_results_dialog is False
+    assert logic.fit_cancelled is False
     assert logic.sample_progress_message == 'Sampling… (this may take several minutes)'
 
 

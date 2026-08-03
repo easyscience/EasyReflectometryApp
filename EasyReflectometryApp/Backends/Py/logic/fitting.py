@@ -176,16 +176,16 @@ class Fitting:
         self.clear_fit_progress()
 
     def stop_fit(self) -> None:
-        """Request fitting to stop and clean up state."""
+        """Request the running fit/sampling to stop.
+
+        Only the stop/cancel flags are set here. The lifecycle state (running,
+        finished, results, dialog) is finalised by ``on_fit_failed`` when the
+        worker thread actually exits. Keeping ``running`` True until then keeps
+        the UI locked, so a second fit cannot be started while a non-abortable
+        minimizer (lmfit, DFO) is still mutating the shared parameters.
+        """
         self._stop_requested = True
-        self._result = None
-        self._results = []
-        self._running = False
-        self._finished = True
         self._fit_cancelled = True
-        self._fit_error_message = 'Fitting cancelled by user'
-        self._show_results_dialog = True
-        self.clear_fit_progress()
 
     def reset_stop_flag(self) -> None:
         """Reset the stop request flag before starting a new fit."""
@@ -318,21 +318,29 @@ class Fitting:
         :return: DataGroup with reflectivity coords and data.
         :rtype: sc.DataGroup
         """
+        import numpy as np
         import scipp as sc
 
         experiments = self._ordered_experiments()
         coords = {}
         data = {}
         for i, experiment in enumerate(experiments):
-            import numpy as np
-
             x_vals = np.asarray(experiment.x, dtype=float)
-            xe_vals = np.asarray(experiment.xe, dtype=float)
             y_vals = np.asarray(experiment.y, dtype=float)
-            ye_vals = np.asarray(experiment.ye, dtype=float)  # variances (σ²)
 
+            # ye holds variances (σ²), same convention as prepare_threaded_fit.
+            # Data files without an uncertainty column yield an empty/absent ye;
+            # scipp requires variances to match the values' shape, so fall back
+            # to zeros and let mcmc_sample's zero-variance handling report it.
+            ye_raw = getattr(experiment, 'ye', None)
+            ye_vals = np.asarray(ye_raw, dtype=float) if ye_raw is not None else np.zeros_like(y_vals)
+            if ye_vals.shape != y_vals.shape:
+                ye_vals = np.zeros_like(y_vals)
+
+            # No variances on the Qz coordinate: mcmc_sample only reads its
+            # values, and xe may be empty for 2/3-column data files.
             coords[f'Qz_{i}'] = sc.array(
-                dims=[f'Qz_{i}'], values=x_vals, variances=xe_vals, unit=sc.Unit('1/angstrom'),
+                dims=[f'Qz_{i}'], values=x_vals, unit=sc.Unit('1/angstrom'),
             )
             data[f'R_{i}'] = sc.array(
                 dims=[f'Qz_{i}'], values=y_vals, variances=ye_vals,
@@ -376,6 +384,7 @@ class Fitting:
 
     def prepare_for_threaded_sample(self) -> None:
         """Set running flags and sampling progress message before launching the worker."""
+        self.reset_stop_flag()
         self._running = True
         self._finished = False
         self._show_results_dialog = False

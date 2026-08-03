@@ -392,7 +392,8 @@ def _build_param_object_paths(model) -> dict:
         # Collections expose their members by iteration, not as attributes.
         if isinstance(obj, MutableSequence):
             return list(obj)
-        children = []
+        collections = []
+        others = []
         for attr_name in dir(obj):
             if attr_name.startswith('_'):
                 continue
@@ -400,9 +401,17 @@ def _build_param_object_paths(model) -> dict:
                 value = getattr(obj, attr_name)
             except Exception:
                 continue
-            if isinstance(value, (Parameter, ModelBase, MutableSequence)):
-                children.append(value)
-        return children
+            if isinstance(value, MutableSequence):
+                collections.append(value)
+            elif isinstance(value, (Parameter, ModelBase)):
+                others.append(value)
+        # Canonical containers first. Assemblies expose alias properties
+        # (``front_layer``/``back_layer`` point into ``layers``) that sort
+        # before 'layers' alphabetically; if an alias won the first-found
+        # path, the chain would skip the LayerCollection level and the
+        # positional lookups (``path[-4]`` = assembly) would resolve to the
+        # wrong ancestor, mislabelling superphase/subphase parameters.
+        return collections + others
 
     def _visit(obj, chain: list) -> None:
         for child in _children(obj):

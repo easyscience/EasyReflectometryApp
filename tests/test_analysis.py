@@ -129,7 +129,10 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     assert fitting_changed['count'] >= 2
 
 
-def test_on_stop_fit_requests_worker_stop_without_immediate_cleanup(monkeypatch, qcore_application):
+def test_on_stop_fit_requests_worker_stop_and_keeps_ui_locked_until_thread_exits(monkeypatch, qcore_application):
+    """Cancel only requests a cooperative stop; ``running`` stays True until the
+    worker thread actually exits, so a second fit cannot start while a
+    non-abortable minimizer is still mutating the shared parameters."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
     analysis._fitting_logic.prepare_threaded_fit = MagicMock(
@@ -143,8 +146,40 @@ def test_on_stop_fit_requests_worker_stop_without_immediate_cleanup(monkeypatch,
 
     assert worker.stop_calls == 1
     assert analysis._fitter_thread is worker
+    # UI stays locked: the thread has not exited yet.
+    assert analysis.fittingRunning is True
+    assert analysis._fitting_logic.fit_cancelled is True
+
+    # Worker thread exits and reports the cancellation.
+    worker.failed.emit('Fitting cancelled by user')
+
+    assert analysis._fitter_thread is None
     assert analysis.fittingRunning is False
     assert analysis.fitErrorMessage == 'Fitting cancelled by user'
+
+
+def test_stale_worker_signals_are_ignored_after_new_fit_starts(monkeypatch, qcore_application):
+    """Late signals from a superseded worker must not clobber the current run."""
+    StubWorker.instances = []
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
+        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
+    )
+
+    analysis._start_threaded_fit()
+    stale_worker = StubWorker.instances[-1]
+
+    # Simulate a newer worker having taken over.
+    analysis._start_threaded_fit()
+    current_worker = StubWorker.instances[-1]
+    assert analysis._fitter_thread is current_worker
+
+    # The old worker finally exits — its failure signal must be ignored.
+    stale_worker.failed.emit('Fitting cancelled by user')
+
+    assert analysis._fitter_thread is current_worker
+    assert analysis.fittingRunning is True
+    assert analysis.fitErrorMessage in ('', None)
 
 
 def test_fitting_start_stop_emits_stop_signal_when_fit_is_running(monkeypatch, qcore_application):
