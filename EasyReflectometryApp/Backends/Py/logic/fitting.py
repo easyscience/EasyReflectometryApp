@@ -226,6 +226,17 @@ class Fitting:
 
         return list(experiments)
 
+    _POLARIZED_FIT_MESSAGE = (
+        'Fitting polarized experiments is not yet supported in the application. '
+        'Use MultiFitter.fit_polarized from a notebook or script meanwhile.'
+    )
+
+    def _has_polarized_experiments(self) -> bool:
+        """Whether any loaded experiment carries per-channel (polarized) data."""
+        return any(
+            getattr(experiment, 'available_channels', None) is not None for experiment in self._ordered_experiments()
+        )
+
     def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> tuple:
         """Prepare data for threaded fitting.
 
@@ -238,6 +249,13 @@ class Fitting:
             experiments = self._ordered_experiments()
             if not experiments:
                 self._fit_error_message = 'No experiments to fit'
+                self._running = False
+                self._finished = True
+                self._show_results_dialog = True
+                return None, None, None, None, None
+
+            if self._has_polarized_experiments():
+                self._fit_error_message = self._POLARIZED_FIT_MESSAGE
                 self._running = False
                 self._finished = True
                 self._show_results_dialog = True
@@ -320,6 +338,9 @@ class Fitting:
         """
         import numpy as np
         import scipp as sc
+
+        if self._has_polarized_experiments():
+            raise ValueError(self._POLARIZED_FIT_MESSAGE)
 
         experiments = self._ordered_experiments()
         coords = {}
@@ -502,6 +523,8 @@ class Fitting:
             try:
                 # This needs extension to support multiple data sets
                 exp_data = self._project_lib.experimental_data_for_model_at_index(0)
+                if getattr(exp_data, 'available_channels', None) is not None:
+                    raise FitError(self._POLARIZED_FIT_MESSAGE)
                 self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
             except FitError as e:
                 # Handle fit failure - create a failed result

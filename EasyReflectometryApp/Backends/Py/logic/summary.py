@@ -112,33 +112,40 @@ class Summary:
         experiments = self._ordered_experiments()
         if experiments:
             for offset, (experiment_index, experiment) in enumerate(experiments):
-                x = np.asarray(experiment.x)
-                y = np.asarray(experiment.y)
-                if x.size == 0 or y.size == 0:
-                    continue
-
-                ye = np.asarray(experiment.ye) if getattr(experiment, 'ye', None) is not None else None
-                model = experiment.model
-                model.interface = self._project_lib._calculator
-                y_calc = np.asarray(model.interface().reflectity_profile(x, model.unique_name))
-                scale_factor = 10**offset
-
-                color = getattr(model, 'color', None) or '#1f77b4'
-                if ye is not None and ye.size == y.size:
-                    ax_reflectivity.errorbar(
-                        x,
-                        y * scale_factor,
-                        ye * scale_factor,
-                        marker='',
-                        ls='',
-                        color=color,
-                        alpha=0.45,
-                    )
+                experiment_name = experiment.name or f'Experiment {experiment_index + 1}'
+                channels = getattr(experiment, 'available_channels', None)
+                if channels is None:
+                    datasets = [(experiment_name, experiment)]
                 else:
-                    ax_reflectivity.plot(x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45)
+                    # Polarized experiment: one series per measured spin channel.
+                    datasets = [(f'{experiment_name} ({channel.value})', experiment[channel]) for channel in channels]
+                for label_name, dataset in datasets:
+                    x = np.asarray(dataset.x)
+                    y = np.asarray(dataset.y)
+                    if x.size == 0 or y.size == 0:
+                        continue
 
-                label_name = experiment.name or f'Experiment {experiment_index + 1}'
-                ax_reflectivity.plot(x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name)
+                    ye = np.asarray(dataset.ye) if getattr(dataset, 'ye', None) is not None else None
+                    model = experiment.model
+                    model.interface = self._project_lib._calculator
+                    y_calc = np.asarray(model.interface().reflectity_profile(x, model.unique_name))
+                    scale_factor = 10**offset
+
+                    color = getattr(model, 'color', None) or '#1f77b4'
+                    if ye is not None and ye.size == y.size:
+                        ax_reflectivity.errorbar(
+                            x,
+                            y * scale_factor,
+                            ye * scale_factor,
+                            marker='',
+                            ls='',
+                            color=color,
+                            alpha=0.45,
+                        )
+                    else:
+                        ax_reflectivity.plot(x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45)
+
+                    ax_reflectivity.plot(x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name)
         else:
             for model_index, model in enumerate(self._project_lib.models):
                 sample_data = self._project_lib.sample_data_for_model_at_index(model_index)

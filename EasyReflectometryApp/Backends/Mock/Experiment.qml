@@ -22,4 +22,13 @@ QtObject {
     function load(path) {
         console.debug(`Loading experiment from ${path}`)
     }
+
+    function suggestPolarizedChannels(paths) {
+        console.debug(`Suggesting polarized channels for ${paths}`)
+        return []
+    }
+
+    function loadPolarized(assignments) {
+        console.debug(`Loading polarized experiment from ${assignments.length} file(s)`)
+    }
 }

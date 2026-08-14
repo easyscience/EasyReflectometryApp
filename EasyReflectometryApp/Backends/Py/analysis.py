@@ -15,6 +15,7 @@ from PySide6.QtCore import Slot
 from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiments import Experiments as ExperimentLogic
+from .logic.experiments import flatten_polarized
 from .logic.fitting import Fitting as FittingLogic
 from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
@@ -1038,6 +1039,11 @@ class Analysis(QObject):
     def experimentsAvailable(self) -> List[str]:
         return self._experiments_logic.available()
 
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsPolarized(self) -> List[bool]:
+        """Per-experiment flag: True for polarized (per-channel) experiments."""
+        return self._experiments_logic.polarized_flags()
+
     @Property(int, notify=experimentsChanged)
     def experimentCurrentIndex(self) -> int:
         return self._experiments_logic.current_index()
@@ -1163,7 +1169,9 @@ class Analysis(QObject):
 
         for exp_idx in self._selected_experiment_indices:
             try:
-                data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                data = flatten_polarized(
+                    self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                )
                 if data.x.size > 0:  # Only include non-empty datasets
                     all_x.extend(data.x)
                     all_y.extend(data.y)
@@ -1220,7 +1228,9 @@ class Analysis(QObject):
 
         for idx, exp_idx in enumerate(self._selected_experiment_indices):
             try:
-                data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                data = flatten_polarized(
+                    self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                )
                 if data.x.size > 0:  # Only include non-empty datasets
                     exp_name = (
                         self._experiments_logic.available()[exp_idx]

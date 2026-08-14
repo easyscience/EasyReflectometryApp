@@ -28,6 +28,13 @@ QtObject {
 
     property int modelCount: 1
 
+    // Polarized experiment (spin channel) support
+    property bool currentExperimentIsPolarized: false
+    property var experimentChannelList: []
+    function setChannelVisible(channel, visible) {
+        console.debug(`setChannelVisible ${channel} ${visible}`)
+    }
+
     // Plot mode properties
     property bool plotRQ4: false
     property string yMainAxisTitle: 'R(q)'

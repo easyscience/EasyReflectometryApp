@@ -226,12 +226,22 @@ QtObject {
     readonly property var experimentResolution: activeBackend.experiment.resolution
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
     function experimentLoad(value) { activeBackend.experiment.load(value) }
+    // Polarized experiment import (one file per spin channel)
+    function experimentSuggestPolarizedChannels(value) { return activeBackend.experiment.suggestPolarizedChannels(value) }
+    function experimentLoadPolarized(value) { activeBackend.experiment.loadPolarized(value) }
 
 
     ///////////////
     // Analysis page
     ///////////////
     readonly property var analysisExperimentsAvailable: activeBackend.analysis.experimentsAvailable
+    readonly property var analysisExperimentsPolarized: {
+        try {
+            return activeBackend.analysis.experimentsPolarized || []
+        } catch (e) {
+            return []
+        }
+    }
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
     function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
@@ -624,6 +634,47 @@ QtObject {
         } catch (e) {
             console.warn("plottingGetResidualDataPoints failed:", e)
             return []
+        }
+    }
+
+    // Polarized experiment (spin channel) plotting support
+    readonly property bool plottingCurrentExperimentIsPolarized: {
+        try {
+            return activeBackend.plotting.currentExperimentIsPolarized || false
+        } catch (e) {
+            console.warn("plottingCurrentExperimentIsPolarized failed:", e)
+            return false
+        }
+    }
+    readonly property var plottingExperimentChannelList: {
+        try {
+            return activeBackend.plotting.experimentChannelList || []
+        } catch (e) {
+            console.warn("plottingExperimentChannelList failed:", e)
+            return []
+        }
+    }
+    function plottingGetExperimentChannels(index) {
+        try {
+            return activeBackend.plottingGetExperimentChannels(index)
+        } catch (e) {
+            console.warn("plottingGetExperimentChannels failed:", e)
+            return []
+        }
+    }
+    function plottingGetExperimentChannelDataPoints(index, channel) {
+        try {
+            return activeBackend.plottingGetExperimentChannelDataPoints(index, channel)
+        } catch (e) {
+            console.warn("plottingGetExperimentChannelDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingSetChannelVisible(channel, visible) {
+        try {
+            activeBackend.plottingSetChannelVisible(channel, visible)
+        } catch (e) {
+            console.warn("plottingSetChannelVisible failed:", e)
         }
     }
 

@@ -8,6 +8,10 @@ from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
 from .helpers import IO
+from .logic.experiments import CHANNEL_COLORS
+from .logic.experiments import CHANNEL_LABELS
+from .logic.experiments import experiment_channel_values
+from .logic.experiments import flatten_polarized
 
 PLOT_BACKEND = 'QtCharts'
 
@@ -31,6 +35,13 @@ class Plotting1d(QObject):
     posteriorPredictiveDataChanged = Signal()
     posteriorPredictiveSldDataChanged = Signal()
 
+    # Polarized-experiment channel selection
+    channelSelectionChanged = Signal()
+
+    # Class-level default so instances constructed without __init__ (test stubs)
+    # still have a channel selection; setChannelVisible replaces it per instance.
+    _visible_channels: frozenset = frozenset({'pp', 'pm', 'mp', 'mm'})
+
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
         self._project_lib = project_lib
@@ -47,6 +58,9 @@ class Plotting1d(QObject):
         self._scale_shown = False
         self._bkg_shown = False
         self._residual_range_cache = None
+
+        # Spin channels shown for polarized experiments (channel-value strings).
+        self._visible_channels = frozenset({'pp', 'pm', 'mp', 'mm'})
 
         # Posterior predictive state
         self._posterior_q: list = []
@@ -213,7 +227,9 @@ class Plotting1d(QObject):
                     return []
             else:
                 exp_idx = self._project_lib.current_experiment_index
-                exp_data = self._project_lib.experimental_data_for_model_at_index(exp_idx)
+                exp_data = flatten_polarized(
+                    self._project_lib.experimental_data_for_model_at_index(exp_idx), self._visible_channels
+                )
                 if exp_data.x is None or len(exp_data.x) == 0:
                     return []
                 x_min, x_max = float(exp_data.x[0]), float(exp_data.x[-1])
@@ -310,9 +326,13 @@ class Plotting1d(QObject):
                 if len(selected_indices) > 1:
                     # Return concatenated data for multiple experiments (legacy support)
                     return self._proxy._analysis.get_concatenated_experiment_data()
-            # Default single experiment behavior
+            # Default single experiment behavior. Polarized experiments are
+            # flattened to the first visible channel here; the experiment page
+            # uses the channel-aware slots for full per-channel display.
             current_index = self._project_lib.current_experiment_index
-            data = self._project_lib.experimental_data_for_model_at_index(current_index)
+            data = flatten_polarized(
+                self._project_lib.experimental_data_for_model_at_index(current_index), self._visible_channels
+            )
         except IndexError:
             data = DataSet1D(
                 name='Experiment Data empty',
@@ -655,34 +675,104 @@ class Plotting1d(QObject):
         """Return the number of models."""
         return len(self._project_lib.models)
 
+    def _measured_points_from_dataset(self, data) -> list:
+        """Log-space measured points with error bands from one flat dataset."""
+        points = []
+        for point in data.data_points():
+            q = point[0]
+            r = point[1]
+            if r <= 0:
+                continue
+            error_var = point[2]
+            error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
+            r_val = self._apply_rq4(q, r)
+            error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
+            error_lower = self._apply_rq4(q, error_lower_linear)
+            points.append(
+                {
+                    'x': float(q),
+                    'y': float(np.log10(r_val)),
+                    'errorUpper': float(np.log10(error_upper)),
+                    'errorLower': float(np.log10(error_lower)),
+                }
+            )
+        return points
+
     @Slot(int, result='QVariantList')
     def getExperimentDataPoints(self, experiment_index: int) -> list:
-        """Get data points for a specific experiment for plotting."""
+        """Get data points for a specific experiment for plotting.
+
+        For a polarized experiment this returns the first visible channel;
+        per-channel series use `getExperimentChannelDataPoints` instead.
+        """
         try:
-            data = self._project_lib.experimental_data_for_model_at_index(experiment_index)
-            points = []
-            for point in data.data_points():
-                q = point[0]
-                r = point[1]
-                if r <= 0:
-                    continue
-                error_var = point[2]
-                error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
-                r_val = self._apply_rq4(q, r)
-                error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
-                error_lower = self._apply_rq4(q, error_lower_linear)
-                points.append(
-                    {
-                        'x': float(q),
-                        'y': float(np.log10(r_val)),
-                        'errorUpper': float(np.log10(error_upper)),
-                        'errorLower': float(np.log10(error_lower)),
-                    }
-                )
-            return points
+            data = flatten_polarized(
+                self._project_lib.experimental_data_for_model_at_index(experiment_index), self._visible_channels
+            )
+            return self._measured_points_from_dataset(data)
         except Exception as e:
             console.debug(f'Error getting experiment data points for index {experiment_index}: {e}')
             return []
+
+    @Slot(int, str, result='QVariantList')
+    def getExperimentChannelDataPoints(self, experiment_index: int, channel: str) -> list:
+        """Get data points of one spin channel of a polarized experiment."""
+        try:
+            data = self._project_lib.experimental_data_for_model_at_index(experiment_index, channel=channel)
+            return self._measured_points_from_dataset(data)
+        except Exception as e:
+            console.debug(f'Error getting {channel} channel data points for index {experiment_index}: {e}')
+            return []
+
+    @Slot(int, result='QVariantList')
+    def getExperimentChannels(self, experiment_index: int) -> list:
+        """Measured channels of an experiment as ``{channel, label, color, visible}`` rows.
+
+        Empty for unpolarized experiments.
+        """
+        try:
+            experiment = self._project_lib.experimental_data_for_model_at_index(experiment_index)
+        except IndexError:
+            return []
+        return [
+            {
+                'channel': channel,
+                'label': CHANNEL_LABELS[channel],
+                'color': CHANNEL_COLORS[channel],
+                'visible': channel in self._visible_channels,
+            }
+            for channel in experiment_channel_values(experiment)
+        ]
+
+    @Property(bool, notify=experimentDataChanged)
+    def currentExperimentIsPolarized(self) -> bool:
+        """Whether the current experiment carries per-channel (polarized) data."""
+        try:
+            experiment = self._project_lib.experimental_data_for_model_at_index(
+                self._project_lib.current_experiment_index
+            )
+        except IndexError:
+            return False
+        return bool(experiment_channel_values(experiment))
+
+    @Property('QVariantList', notify=channelSelectionChanged)
+    def experimentChannelList(self) -> list:
+        """Channel rows of the current experiment for the channel selector UI."""
+        return self.getExperimentChannels(self._project_lib.current_experiment_index)
+
+    @Slot(str, bool)
+    def setChannelVisible(self, channel: str, visible: bool) -> None:
+        """Show or hide one spin channel on the experiment/analysis charts."""
+        visible_channels = set(self._visible_channels)
+        if visible:
+            visible_channels.add(channel)
+        elif len(visible_channels) > 1:
+            # Keep at least one channel visible so flat consumers stay meaningful.
+            visible_channels.discard(channel)
+        if visible_channels != set(self._visible_channels):
+            self._visible_channels = frozenset(visible_channels)
+            self.channelSelectionChanged.emit()
+            self.experimentDataChanged.emit()
 
     def _get_experiment_model_index(self, experiment_index: int, exp_data=None) -> int:
         """Resolve the model index used by a given experiment."""
@@ -696,7 +786,9 @@ class Plotting1d(QObject):
 
     def _get_aligned_analysis_values(self, experiment_index: int) -> list[dict]:
         """Return measured, calculated and sigma values aligned on experiment q points."""
-        exp_data = self._project_lib.experimental_data_for_model_at_index(experiment_index)
+        exp_data = flatten_polarized(
+            self._project_lib.experimental_data_for_model_at_index(experiment_index), self._visible_channels
+        )
         q_values = np.asarray(getattr(exp_data, 'x', np.empty(0)), dtype=float)
         measured_values = np.asarray(getattr(exp_data, 'y', np.empty(0)), dtype=float)
         sigma_values = np.asarray(getattr(exp_data, 'ye', np.zeros_like(measured_values)), dtype=float)

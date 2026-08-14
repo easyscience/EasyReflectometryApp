@@ -33,6 +33,8 @@ class StubProjectLogic:
         self.dataset_counts = {}
         self.loaded_all = []
         self.loaded_new = []
+        self.loaded_polarized = []
+        self.load_polarized_result = True
 
     def count_datasets_in_file(self, path):
         return self.dataset_counts.get(path, 1)
@@ -43,6 +45,13 @@ class StubProjectLogic:
 
     def load_new_experiment(self, path):
         self.loaded_new.append(path)
+
+    def suggest_polarized_channel_assignment(self, paths):
+        return {path: ('pp' if '_uu' in path else 'mm' if '_dd' in path else '') for path in paths}
+
+    def load_polarized_experiment(self, channel_to_path):
+        self.loaded_polarized.append(dict(channel_to_path))
+        return self.load_polarized_result
 
 
 def _build_experiment(monkeypatch):
@@ -102,3 +111,65 @@ def test_load_routes_single_vs_multi_dataset_paths(monkeypatch, qcore_applicatio
     assert experiment._project_logic.loaded_all == ['A']
     assert experiment._project_logic.loaded_new == ['B']
     assert changed == {'experiment': 2, 'external': 2}
+
+
+def test_suggest_polarized_channels_returns_editable_rows(monkeypatch, qcore_application):
+    experiment = _build_experiment(monkeypatch)
+    monkeypatch.setattr(experiment_module.IO, 'generalizePath', lambda path: path)
+
+    rows = experiment.suggestPolarizedChannels('data/run_uu.dat,data/run_dd.dat,data/run_x.dat')
+
+    assert rows == [
+        {'path': 'data/run_uu.dat', 'name': 'run_uu.dat', 'channel': 'pp'},
+        {'path': 'data/run_dd.dat', 'name': 'run_dd.dat', 'channel': 'mm'},
+        {'path': 'data/run_x.dat', 'name': 'run_x.dat', 'channel': ''},
+    ]
+
+
+def test_load_polarized_builds_channel_mapping_and_emits(monkeypatch, qcore_application):
+    experiment = _build_experiment(monkeypatch)
+    changed = {'experiment': 0, 'external': 0, 'q_range': 0}
+    experiment.experimentChanged.connect(lambda: changed.__setitem__('experiment', changed['experiment'] + 1))
+    experiment.externalExperimentChanged.connect(lambda: changed.__setitem__('external', changed['external'] + 1))
+    experiment.qRangeUpdated.connect(lambda: changed.__setitem__('q_range', changed['q_range'] + 1))
+
+    experiment.loadPolarized(
+        [
+            {'path': 'run_uu.dat', 'channel': 'pp'},
+            {'path': 'run_dd.dat', 'channel': 'mm'},
+            {'path': 'run_x.dat', 'channel': ''},  # unassigned rows are skipped
+        ]
+    )
+
+    assert experiment._project_logic.loaded_polarized == [{'pp': 'run_uu.dat', 'mm': 'run_dd.dat'}]
+    assert changed == {'experiment': 1, 'external': 1, 'q_range': 1}
+
+
+def test_polarized_slots_accept_qjsvalues_from_qml(monkeypatch, qcore_application):
+    # QML hands over JS arrays/objects as QJSValue, not Python lists/dicts.
+    from PySide6.QtQml import QJSEngine
+
+    experiment = _build_experiment(monkeypatch)
+    monkeypatch.setattr(experiment_module.IO, 'generalizePath', lambda path: path)
+    engine = QJSEngine()
+
+    paths = engine.evaluate("(['data/run_uu.dat', 'data/run_dd.dat'])")
+    rows = experiment.suggestPolarizedChannels(paths)
+    assert [row['channel'] for row in rows] == ['pp', 'mm']
+
+    assignments = engine.evaluate(
+        "([{path: 'run_uu.dat', channel: 'pp'}, {path: 'run_dd.dat', channel: 'mm'}])"
+    )
+    experiment.loadPolarized(assignments)
+    assert experiment._project_logic.loaded_polarized == [{'pp': 'run_uu.dat', 'mm': 'run_dd.dat'}]
+
+
+def test_load_polarized_without_assignments_is_a_no_op(monkeypatch, qcore_application):
+    experiment = _build_experiment(monkeypatch)
+    changed = {'count': 0}
+    experiment.experimentChanged.connect(lambda: changed.__setitem__('count', changed['count'] + 1))
+
+    experiment.loadPolarized([{'path': 'run_x.dat', 'channel': ''}])
+
+    assert experiment._project_logic.loaded_polarized == []
+    assert changed == {'count': 0}

@@ -1,12 +1,22 @@
+import os
+
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
+from PySide6.QtQml import QJSValue
 
 from .helpers import IO
 from .logic.models import Models as ModelsLogic
 from .logic.project import Project as ProjectLogic
+
+
+def _from_qml(value):
+    """Unwrap a QJSValue handed over by QML into plain Python data."""
+    if isinstance(value, QJSValue):
+        return value.toVariant()
+    return value
 
 
 class Experiment(QObject):
@@ -77,5 +87,43 @@ class Experiment(QObject):
                 q_range_changed = True
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
+        if q_range_changed:
+            self.qRangeUpdated.emit()
+
+    @Slot('QVariant', result='QVariantList')
+    def suggestPolarizedChannels(self, paths) -> list:
+        """Suggested spin-channel assignment for the selected files.
+
+        Returns one ``{'path': ..., 'name': ..., 'channel': ...}`` row per file
+        (``channel`` is '' when undetected) for the assignment dialog to edit.
+        """
+        paths = _from_qml(paths)
+        if isinstance(paths, str):
+            paths = paths.split(',')
+        generalized = [IO.generalizePath(path) for path in paths]
+        suggestion = self._project_logic.suggest_polarized_channel_assignment(generalized)
+        return [
+            {'path': path, 'name': os.path.basename(path), 'channel': channel}
+            for path, channel in suggestion.items()
+        ]
+
+    @Slot('QVariant')
+    def loadPolarized(self, assignments) -> None:
+        """Load one polarized experiment from dialog rows ``[{'path','channel'},...]``.
+
+        Rows with an empty channel are skipped; duplicate channels are invalid
+        and ignored here (the dialog prevents them).
+        """
+        assignments = _from_qml(assignments)
+        channel_to_path = {}
+        for row in assignments:
+            channel = row['channel']
+            if channel:
+                channel_to_path[channel] = row['path']
+        if not channel_to_path:
+            return
+        q_range_changed = self._project_logic.load_polarized_experiment(channel_to_path)
+        self.experimentChanged.emit()
+        self.externalExperimentChanged.emit()
         if q_range_changed:
             self.qRangeUpdated.emit()

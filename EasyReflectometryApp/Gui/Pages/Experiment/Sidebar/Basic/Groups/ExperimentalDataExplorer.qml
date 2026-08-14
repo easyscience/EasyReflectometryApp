@@ -207,8 +207,10 @@ EaElements.GroupBox {
                 EaComponents.TableViewLabel {
                     id: noLabel
                     width: EaStyle.Sizes.fontPixelSize * 2.5
-                    text: index + 1
-                    
+                    // '⇅' badge marks polarized (per-spin-channel) experiments
+                    text: (index + 1) + (Globals.BackendWrapper.analysisExperimentsPolarized[index] ? ' ⇅' : '')
+                    ToolTip.text: Globals.BackendWrapper.analysisExperimentsPolarized[index] ? qsTr("Polarized experiment") : ""
+
                     // Selection background overlay - placed as child to avoid layout interference
                     Rectangle {
                         visible: isSelected

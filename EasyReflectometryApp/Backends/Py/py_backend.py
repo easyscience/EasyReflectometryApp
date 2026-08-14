@@ -141,6 +141,22 @@ class PyBackend(QObject):
         """Get residual data points for a specific experiment for residual plotting."""
         return self._plotting_1d.getResidualDataPoints(experiment_index)
 
+    # Polarized experiment support
+    @Slot(int, str, result='QVariantList')
+    def plottingGetExperimentChannelDataPoints(self, experiment_index: int, channel: str) -> list:
+        """Get data points of one spin channel of a polarized experiment."""
+        return self._plotting_1d.getExperimentChannelDataPoints(experiment_index, channel)
+
+    @Slot(int, result='QVariantList')
+    def plottingGetExperimentChannels(self, experiment_index: int) -> list:
+        """Measured spin channels of an experiment ({channel, label, color, visible} rows)."""
+        return self._plotting_1d.getExperimentChannels(experiment_index)
+
+    @Slot(str, bool)
+    def plottingSetChannelVisible(self, channel: str, visible: bool) -> None:
+        """Show or hide one spin channel on the charts."""
+        self._plotting_1d.setChannelVisible(channel, visible)
+
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:
         self._connect_project_page()

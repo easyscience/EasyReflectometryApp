@@ -394,11 +394,27 @@ class FakeProject:
         self.calls.append(('replace_models_from_orso', sample))
         self.models[:] = [sample]
 
-    def experimental_data_for_model_at_index(self, index):
-        self.calls.append(('experimental_data_for_model_at_index', index))
+    def experimental_data_for_model_at_index(self, index, channel=None):
+        self.calls.append(('experimental_data_for_model_at_index', index, channel))
         if index >= len(self.models):
             raise IndexError(index)
         return object()
+
+    def suggest_polarized_channel_assignment(self, paths):
+        self.calls.append(('suggest_polarized_channel_assignment', tuple(paths)))
+        # Simple deterministic stub: uu/dd tokens resolve, everything else does not.
+        suggestion = {}
+        for path in paths:
+            if '_uu' in path:
+                suggestion[path] = SimpleNamespace(value='pp')
+            elif '_dd' in path:
+                suggestion[path] = SimpleNamespace(value='mm')
+            else:
+                suggestion[path] = None
+        return suggestion
+
+    def load_polarized_experiment(self, channel_to_path):
+        self.calls.append(('load_polarized_experiment', dict(channel_to_path)))
 
     def set_path_project_parent(self, path):
         self.calls.append(('set_path_project_parent', path))

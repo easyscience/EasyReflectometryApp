@@ -4,6 +4,37 @@ from easyreflectometry import Project as ProjectLib
 
 logger = logging.getLogger(__name__)
 
+# Fixed per-channel colors for polarized experiments (pp, pm, mp, mm), matching
+# the channel order used across the app and the report.
+CHANNEL_COLORS = {'pp': '#0173B2', 'pm': '#029E73', 'mp': '#CC78BC', 'mm': '#DE8F05'}
+CHANNEL_LABELS = {'pp': '↑↑', 'pm': '↑↓', 'mp': '↓↑', 'mm': '↓↓'}
+
+
+def flatten_polarized(experiment, visible_channels=None):
+    """A flat ``DataSet1D`` for consumers that expect one x/y/ye series.
+
+    Unpolarized experiments are returned unchanged. For a `PolarizedDataSet`
+    the first measured channel is returned — restricted to `visible_channels`
+    (channel-value strings) when given and matching. Fully per-channel display
+    goes through the dedicated channel-aware code paths instead.
+    """
+    channels = getattr(experiment, 'available_channels', None)
+    if channels is None:
+        return experiment
+    if visible_channels:
+        for channel in channels:
+            if channel.value in visible_channels:
+                return experiment[channel]
+    return experiment[channels[0]]
+
+
+def experiment_channel_values(experiment) -> list[str]:
+    """Measured channel-value strings of an experiment ([] when unpolarized)."""
+    channels = getattr(experiment, 'available_channels', None)
+    if channels is None:
+        return []
+    return [channel.value for channel in channels]
+
 
 class Experiments:
     def __init__(self, project_lib: ProjectLib):
@@ -48,6 +79,12 @@ class Experiments:
         except IndexError:
             pass
         return experiments_name
+
+    def polarized_flags(self) -> list[bool]:
+        """Per-experiment flag: True when the experiment carries per-channel (polarized) data."""
+        return [
+            getattr(exp, 'available_channels', None) is not None for _, exp in self._ordered_experiment_items()
+        ]
 
     def current_index(self) -> int:
         return self._project_lib._current_experiment_index
