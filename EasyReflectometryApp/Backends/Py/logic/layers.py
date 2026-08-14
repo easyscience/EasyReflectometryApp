@@ -1,10 +1,22 @@
+import logging
+from typing import Optional
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
+from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.sample import Material
 from easyreflectometry.sample import Sample
+from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
+
+logger = logging.getLogger(__name__)
+
+# Shown in the magnetism fields of a layer that is not magnetic (yet): the
+# values attaching magnetism would start from. Taken from the library so the
+# preview cannot drift away from what `LayerMagnetism()` actually creates.
+_DEFAULT_RHO_M = MAGNETISM_DEFAULTS['rho_m']['value']
+_DEFAULT_THETA_M = MAGNETISM_DEFAULTS['theta_m']['value']
 
 
 class Layers:
@@ -196,6 +208,108 @@ class Layers:
             self._layers[index].molecular_formula = new_value
             return True
         return False
+
+    # # #
+    # Magnetism
+    # # #
+
+    @property
+    def magnetism_supported(self) -> bool:
+        """Whether the active calculator can model magnetic layers (refl1d only)."""
+        return bool(self._project_lib.calculator_supports_magnetism)
+
+    @property
+    def magnetism(self) -> list[dict[str, str]]:
+        """One row per layer of the current assembly, describing its magnetism.
+
+        ``magnetic`` is 'True'/'False'; ``rho_m``/``theta_m`` carry the defaults
+        of a fresh :class:`LayerMagnetism` for non-magnetic layers so the fields
+        show what attaching magnetism would start from.
+        """
+        rows = []
+        for layer in self._layers:
+            magnetism = getattr(layer, 'magnetism', None)
+            rows.append(
+                {
+                    'label': layer.name,
+                    'magnetic': str(magnetism is not None),
+                    'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
+                    'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
+                }
+            )
+        return rows
+
+    def set_magnetic_at_index(self, index: int, new_value: bool) -> bool:
+        """Attach or remove :class:`LayerMagnetism` on one layer.
+
+        Attaching turns calculator magnetism on; removing the last magnetic
+        layer turns it off again (both handled by the library).
+        """
+        if not self._has_valid_layer_index(index):
+            return False
+        layer = self._layers[index]
+        is_magnetic = getattr(layer, 'magnetism', None) is not None
+        if bool(new_value) == is_magnetic:
+            return False
+        if new_value and not self.magnetism_supported:
+            raise NotImplementedError(
+                f'The {self._project_lib.calculator} calculator cannot model magnetic layers. '
+                'Switch to refl1d on the Analysis page first.'
+            )
+        layer.magnetism = LayerMagnetism() if new_value else None
+        if new_value:
+            self._ensure_calculator_magnetism()
+            # Bring the fresh parameters under the project's limit/enablement
+            # policy, exactly as a newly created layer would be.
+            self._project_lib._sync_parameter_states()
+        return True
+
+    def _ensure_calculator_magnetism(self) -> None:
+        """Make sure attaching magnetism actually reached the calculator.
+
+        `Layer.magnetism` can only switch magnetism on through its own
+        interface, which is None for a layer that was never bound (a sample
+        assigned wholesale rather than edited in place). The calculator would
+        then still be unpolarized and every spin channel would fail to
+        calculate, so re-propagate the model's interface over the sample tree.
+        """
+        model = self._project_lib._models[self._project_lib.current_model_index]
+        interface = getattr(model, 'interface', None)
+        if interface is None or interface().include_magnetism:
+            return
+        logger.debug('Re-propagating the calculator interface to bind new magnetism')
+        model.interface = interface
+
+    def set_rho_m_at_index(self, index: int, new_value: float) -> bool:
+        return self._set_magnetism_value_at_index(index, 'rho_m', new_value)
+
+    def set_theta_m_at_index(self, index: int, new_value: float) -> bool:
+        return self._set_magnetism_value_at_index(index, 'theta_m', new_value)
+
+    def _set_magnetism_value_at_index(self, index: int, attribute: str, new_value: float) -> bool:
+        """Set one magnetic parameter, ignoring edits to a non-magnetic layer."""
+        magnetism = self.magnetism_at_index(index)
+        if magnetism is None:
+            return False
+        try:
+            value = float(new_value)
+        except (TypeError, ValueError):
+            return False
+        parameter = getattr(magnetism, attribute)
+        if parameter.value == value:
+            return False
+        try:
+            parameter.value = value
+        except (ValueError, TypeError):
+            logger.exception('Failed to set %s to %s', attribute, value)
+            return False
+        return True
+
+    def magnetism_at_index(self, index: int) -> Optional[LayerMagnetism]:
+        """The layer's magnetism, or None when the layer is not magnetic/valid."""
+        if not self._has_valid_layer_index(index):
+            return None
+        return getattr(self._layers[index], 'magnetism', None)
 
 
 def _from_layers_collection_to_list_of_dicts(

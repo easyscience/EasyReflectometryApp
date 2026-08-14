@@ -67,6 +67,10 @@ class Sample(QObject):
     layersChange = Signal()
     layersIndexChanged = Signal()
 
+    # Per-layer magnetism (rho_m / theta_m) and calculator capability.
+    magnetismChanged = Signal()
+    magnetismFailed = Signal(str)
+
     qRangeChanged = Signal()
     constraintsChanged = Signal()
 
@@ -90,6 +94,8 @@ class Sample(QObject):
 
     def connect_logic(self) -> None:
         self.assembliesIndexChanged.connect(self.layersConnectChanges)
+        # The magnetism table lists the current assembly's layers.
+        self.assembliesIndexChanged.connect(self.magnetismChanged)
 
     # # #
     # Materials
@@ -581,6 +587,54 @@ class Sample(QObject):
     def _clearCacheAndEmitLayersChanged(self):
         self._chached_layers = None
         self.layersChange.emit()
+        # The magnetism table lists the same layers, so it goes stale whenever
+        # a layer is added, removed, reordered or renamed.
+        self.magnetismChanged.emit()
+
+    # # #
+    # Layer magnetism
+    # # #
+    @Property(bool, notify=magnetismChanged)
+    def magnetismSupported(self) -> bool:
+        """Whether the active calculator can model magnetic layers (refl1d only)."""
+        return self._layers_logic.magnetism_supported
+
+    @Property('QVariantList', notify=magnetismChanged)
+    def layersMagnetism(self) -> list[dict[str, str]]:
+        """Per-layer magnetism of the current assembly, one row per layer."""
+        return self._layers_logic.magnetism
+
+    @Slot(int, bool)
+    def setLayerMagneticAtIndex(self, index: int, new_value: bool) -> None:
+        """Attach or remove magnetism on one layer.
+
+        A calculator that cannot model magnetism reports the reason instead of
+        raising out of a QML-invoked slot (which would abort the process).
+        """
+        try:
+            changed = self._layers_logic.set_magnetic_at_index(index, new_value)
+        except NotImplementedError as exception:
+            logger.warning('Cannot change layer magnetism: %s', exception)
+            self.magnetismFailed.emit(str(exception))
+            return
+        if changed:
+            self._emitMagnetismChanged()
+
+    @Slot(int, float)
+    def setLayerRhoMAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_rho_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    @Slot(int, float)
+    def setLayerThetaMAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_theta_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    def _emitMagnetismChanged(self) -> None:
+        """Magnetism edits change the model, its parameters and every curve."""
+        self._clearCacheAndEmitLayersChanged()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
 
     # # #
     # Constraints

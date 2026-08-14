@@ -192,6 +192,27 @@ QtObject {
     function sampleSetCurrentLayerSolvation(value) { activeBackend.sample.setCurrentLayerSolvation(value) }
     function sampleSetLayerSolvationAtIndex(index, value) { activeBackend.sample.setLayerSolvationAtIndex(index, value) }
 
+    // Layer magnetism (polarized analysis). Only the refl1d calculator can
+    // model magnetic layers, so the editor is gated on sampleMagnetismSupported.
+    readonly property bool sampleMagnetismSupported: {
+        try {
+            return activeBackend.sample.magnetismSupported || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var sampleLayersMagnetism: {
+        try {
+            return activeBackend.sample.layersMagnetism || []
+        } catch (e) {
+            console.warn("sampleLayersMagnetism failed:", e)
+            return []
+        }
+    }
+    function sampleSetLayerMagneticAtIndex(index, value) { activeBackend.sample.setLayerMagneticAtIndex(index, value) }
+    function sampleSetLayerRhoMAtIndex(index, value) { activeBackend.sample.setLayerRhoMAtIndex(index, value) }
+    function sampleSetLayerThetaMAtIndex(index, value) { activeBackend.sample.setLayerThetaMAtIndex(index, value) }
+
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
@@ -650,20 +671,30 @@ QtObject {
             return []
         }
     }
-    function plottingGetAnalysisDataPoints(index) {
+    // `channel` is optional: pass a spin channel ('pp'/'pm'/'mp'/'mm') to get
+    // that cross-section of a polarized experiment, '' for the ordinary curve.
+    function plottingGetAnalysisDataPoints(index, channel) {
         try {
-            return activeBackend.plottingGetAnalysisDataPoints(index)
+            return activeBackend.plottingGetAnalysisDataPoints(index, channel || "")
         } catch (e) {
             console.warn("plottingGetAnalysisDataPoints failed:", e)
             return []
         }
     }
-    function plottingGetResidualDataPoints(index) {
+    function plottingGetResidualDataPoints(index, channel) {
         try {
-            return activeBackend.plottingGetResidualDataPoints(index)
+            return activeBackend.plottingGetResidualDataPoints(index, channel || "")
         } catch (e) {
             console.warn("plottingGetResidualDataPoints failed:", e)
             return []
+        }
+    }
+    // True when the analysis/residual charts must draw one series per channel.
+    readonly property bool plottingAnalysisUsesChannelSeries: {
+        try {
+            return activeBackend.plottingAnalysisUsesChannelSeries || false
+        } catch (e) {
+            return false
         }
     }
 

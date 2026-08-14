@@ -154,8 +154,8 @@ class StubPlotting(QObject):
     def getExperimentDataPoints(self, experiment_index):
         return [{'x': float(experiment_index), 'y': 0.0}]
 
-    def getAnalysisDataPoints(self, experiment_index):
-        return [{'x': float(experiment_index), 'measured': 0.0, 'calculated': 0.0}]
+    def getAnalysisDataPoints(self, experiment_index, channel=''):
+        return [{'x': float(experiment_index), 'measured': 0.0, 'calculated': 0.0, 'channel': channel}]
 
     def reset_data(self):
         self.reset_calls += 1
@@ -259,7 +259,9 @@ def test_backend_refresh_plots_emits_ranges_and_multi_signal(monkeypatch, qcore_
         {'name': 'E0', 'index': 0, 'color': '#111111', 'channel': '', 'hasData': True}
     ]
     assert backend.plottingGetExperimentDataPoints(3) == [{'x': 3.0, 'y': 0.0}]
-    assert backend.plottingGetAnalysisDataPoints(5) == [{'x': 5.0, 'measured': 0.0, 'calculated': 0.0}]
+    assert backend.plottingGetAnalysisDataPoints(5) == [
+        {'x': 5.0, 'measured': 0.0, 'calculated': 0.0, 'channel': ''}
+    ]
 
 
 def test_backend_imported_experiment_is_selected_and_channels_renotified(monkeypatch, qcore_application):
@@ -298,11 +300,11 @@ class _DelegationStub:
     def __init__(self, plotting_1d):
         self._plotting_1d = plotting_1d
 
-    def plottingGetAnalysisDataPoints(self, experiment_index: int) -> list:
-        return self._plotting_1d.getAnalysisDataPoints(experiment_index)
+    def plottingGetAnalysisDataPoints(self, experiment_index: int, channel: str = '') -> list:
+        return self._plotting_1d.getAnalysisDataPoints(experiment_index, channel)
 
-    def plottingGetResidualDataPoints(self, experiment_index: int) -> list:
-        return self._plotting_1d.getResidualDataPoints(experiment_index)
+    def plottingGetResidualDataPoints(self, experiment_index: int, channel: str = '') -> list:
+        return self._plotting_1d.getResidualDataPoints(experiment_index, channel)
 
 
 class TestPlottingGetResidualDataPointsDelegation:
@@ -317,7 +319,7 @@ class TestPlottingGetResidualDataPointsDelegation:
 
         result = backend.plottingGetResidualDataPoints(0)
 
-        plotting.getResidualDataPoints.assert_called_once_with(0)
+        plotting.getResidualDataPoints.assert_called_once_with(0, '')
         assert result == expected
 
     def test_passes_experiment_index(self):
@@ -326,7 +328,7 @@ class TestPlottingGetResidualDataPointsDelegation:
 
         backend.plottingGetResidualDataPoints(3)
 
-        plotting.getResidualDataPoints.assert_called_once_with(3)
+        plotting.getResidualDataPoints.assert_called_once_with(3, '')
 
     def test_returns_empty_list_when_plotting_returns_empty(self):
         backend, plotting = self._backend()
@@ -360,7 +362,7 @@ class TestPlottingGetAnalysisDataPointsDelegation:
 
         result = backend.plottingGetAnalysisDataPoints(0)
 
-        plotting.getAnalysisDataPoints.assert_called_once_with(0)
+        plotting.getAnalysisDataPoints.assert_called_once_with(0, '')
         assert result == expected
 
     def test_passes_experiment_index(self):
@@ -369,5 +371,5 @@ class TestPlottingGetAnalysisDataPointsDelegation:
 
         backend.plottingGetAnalysisDataPoints(5)
 
-        plotting.getAnalysisDataPoints.assert_called_once_with(5)
+        plotting.getAnalysisDataPoints.assert_called_once_with(5, '')
 

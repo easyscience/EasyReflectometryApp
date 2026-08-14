@@ -137,14 +137,24 @@ class PyBackend(QObject):
         return self._plotting_1d.getExperimentDataPoints(experiment_index)
 
     @Slot(int, result='QVariantList')
-    def plottingGetAnalysisDataPoints(self, experiment_index: int) -> list:
-        """Get measured and calculated data points for a specific experiment for analysis plotting."""
-        return self._plotting_1d.getAnalysisDataPoints(experiment_index)
+    @Slot(int, str, result='QVariantList')
+    def plottingGetAnalysisDataPoints(self, experiment_index: int, channel: str = '') -> list:
+        """Get measured and calculated data points for a specific experiment for analysis plotting.
+
+        `channel` picks one spin channel of a polarized experiment.
+        """
+        return self._plotting_1d.getAnalysisDataPoints(experiment_index, channel)
 
     @Slot(int, result='QVariantList')
-    def plottingGetResidualDataPoints(self, experiment_index: int) -> list:
+    @Slot(int, str, result='QVariantList')
+    def plottingGetResidualDataPoints(self, experiment_index: int, channel: str = '') -> list:
         """Get residual data points for a specific experiment for residual plotting."""
-        return self._plotting_1d.getResidualDataPoints(experiment_index)
+        return self._plotting_1d.getResidualDataPoints(experiment_index, channel)
+
+    @Property(bool, notify=multiExperimentSelectionChanged)
+    def plottingAnalysisUsesChannelSeries(self) -> bool:
+        """Whether the analysis/residual charts must draw one series per spin channel."""
+        return self._plotting_1d.analysisUsesChannelSeries
 
     # Polarized experiment support
     @Slot(int, str, result='QVariantList')
@@ -267,6 +277,9 @@ class PyBackend(QObject):
         self._experiment.experimentChanged.emit()
         self._summary.summaryChanged.emit()
         self._plotting_1d.samplePageResetAxes.emit()
+        # Switching the calculator changes whether magnetism can be modelled at
+        # all, which gates the Sample page's magnetism editor.
+        self._sample.magnetismChanged.emit()
 
     def _refresh_plots(self):
         self._plotting_1d.sampleChartRangesChanged.emit()

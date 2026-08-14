@@ -21,13 +21,32 @@
     non-magnetic model) is shown as measured data without a calculated overlay.
   - **Limitations:** one resolution function is used per polarized experiment
     (taken from the first assigned channel — stated in the import dialog);
-    fitting and Bayesian sampling of polarized experiments are not supported yet
-    and report a clear message; the analysis and residual charts show the first
-    visible channel only; polarized experiments are not yet saved in project
-    files.
+    Bayesian sampling of polarized experiments is not supported yet and reports
+    a clear message; polarized experiments are not yet saved in project files.
   - Requires an `easyreflectometry` version with the per-channel experiment API;
     the app reports a clear error instead of drawing empty charts if it is
     missing.
+- Added magnetism editing and polarized fitting:
+  - New "Magnetism" group on the Sample page: one row per layer of the current
+    assembly with a magnetic on/off checkbox and the magnetic SLD (ρM) and
+    in-plane moment angle (θM). Only refl1d can model magnetic layers, so the
+    group explains itself and stays disabled on other calculation engines
+    instead of accepting edits that would go nowhere.
+  - ρM and θM appear in the Analysis parameter table like any other layer
+    parameter — named after their assembly and model (`Model Fe rho_m`), with
+    default limits, fit checkboxes and constraints. The name filter accepts
+    "magnetic" as a keyword for them.
+  - Fitting a polarized experiment now fits all its measured spin channels
+    simultaneously against the one shared model: thickness, roughness, nuclear
+    SLD, scale and background are common to every channel while ρM and θM are
+    constrained by all of them at once. Polarized and ordinary experiments can
+    be fitted together. Previously this reported "not supported yet".
+  - The analysis and residual charts draw one measured/calculated pair per
+    visible spin channel, each with the channel's own cross-section, instead of
+    showing the first visible channel only. A channel the model cannot
+    calculate (spin-flip on a non-magnetic sample) shows its measured points
+    without a calculated curve and contributes no residuals, rather than a copy
+    of the measured data that would look like a perfect fit.
 
 # Version 1.4.0 (3 Aug 2026)
 

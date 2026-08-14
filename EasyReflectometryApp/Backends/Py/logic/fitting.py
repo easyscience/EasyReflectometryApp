@@ -226,9 +226,9 @@ class Fitting:
 
         return list(experiments)
 
-    _POLARIZED_FIT_MESSAGE = (
-        'Fitting polarized experiments is not yet supported in the application. '
-        'Use MultiFitter.fit_polarized from a notebook or script meanwhile.'
+    _POLARIZED_SAMPLE_MESSAGE = (
+        'Bayesian sampling of polarized experiments is not supported yet — the sampler '
+        'has no notion of spin channels. Classical fitting of polarized data does work.'
     )
 
     def _has_polarized_experiments(self) -> bool:
@@ -254,16 +254,11 @@ class Fitting:
                 self._show_results_dialog = True
                 return None, None, None, None, None
 
-            if self._has_polarized_experiments():
-                self._fit_error_message = self._POLARIZED_FIT_MESSAGE
-                self._running = False
-                self._finished = True
-                self._show_results_dialog = True
-                return None, None, None, None, None
-
-            # Create MultiFitter with all models
-            models = [experiment.model for experiment in experiments]
-            multi_fitter = MultiFitter(*models)
+            # One fit function per dataset: a polarized experiment expands to
+            # one per measured spin channel, all sharing its single model, so
+            # structural parameters stay common and the magnetic ones are
+            # constrained by every channel at once.
+            multi_fitter = MultiFitter.for_experiments(experiments)
 
             # Apply the user-selected minimizer to the new fitter
             selected_minimizer = minimizers_logic.selected_minimizer_enum()
@@ -286,16 +281,18 @@ class Fitting:
             x_data = []
             y_data = []
             weights = []
-            for idx, experiment in enumerate(experiments):
-                x_vals = np.asarray(experiment.x)
-                y_vals = np.asarray(experiment.y)
-                ye_vals = np.asarray(experiment.ye)
+            # `fit_datasets` is the flat, per-channel dataset list matching the
+            # fit functions; for unpolarized data it is just the experiments.
+            for idx, dataset in enumerate(multi_fitter.fit_datasets):
+                x_vals = np.asarray(dataset.x)
+                y_vals = np.asarray(dataset.y)
+                ye_vals = np.asarray(dataset.ye)
 
                 # Mask out points with zero variance (same as MultiFitter.fit in EasyReflectometryLib)
                 valid = ye_vals > 0
                 num_masked = int(np.sum(~valid))
                 if num_masked > 0:
-                    exp_name = experiment.name if hasattr(experiment, 'name') else f'index {idx}'
+                    exp_name = dataset.name if hasattr(dataset, 'name') else f'index {idx}'
                     logger.warning(
                         'Masked %d data point(s) in experiment %s due to zero variance.',
                         num_masked,
@@ -340,7 +337,7 @@ class Fitting:
         import scipp as sc
 
         if self._has_polarized_experiments():
-            raise ValueError(self._POLARIZED_FIT_MESSAGE)
+            raise ValueError(self._POLARIZED_SAMPLE_MESSAGE)
 
         experiments = self._ordered_experiments()
         coords = {}
@@ -524,8 +521,12 @@ class Fitting:
                 # This needs extension to support multiple data sets
                 exp_data = self._project_lib.experimental_data_for_model_at_index(0)
                 if getattr(exp_data, 'available_channels', None) is not None:
-                    raise FitError(self._POLARIZED_FIT_MESSAGE)
-                self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
+                    # All measured spin channels against the one shared model.
+                    channel_results = self._project_lib.fitter.fit_polarized(exp_data)
+                    self._results = list(channel_results.values())
+                    self._result = self._results[0] if self._results else None
+                else:
+                    self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
             except FitError as e:
                 # Handle fit failure - create a failed result
                 self._result = None

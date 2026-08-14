@@ -659,11 +659,25 @@ class Plotting1d(QObject):
     def individualExperimentChannelDataList(self) -> list:
         """Multi-experiment list with polarized experiments split per visible channel.
 
-        Used by the experiment chart, which draws one series per channel; the
-        analysis and residual charts stay on the flat list until they are
-        channel aware (Phase 4).
+        Used by the experiment and analysis charts, which draw one series per
+        channel; each row's `channel` selects the matching per-channel points.
         """
         return self._qml_experiment_data_list(self.individual_experiment_channel_data_list)
+
+    @Property(bool, notify=experimentChannelsChanged)
+    def analysisUsesChannelSeries(self) -> bool:
+        """Whether the analysis chart must draw one series per spin channel.
+
+        True as soon as any selected experiment is polarized: its measured data
+        and calculated curve exist per channel, so the single measured/
+        calculated pair of the ordinary path cannot represent it.
+        """
+        try:
+            selected = getattr(self._proxy._analysis, '_selected_experiment_indices', None) or []
+            return any(self._project_lib.experiment_is_polarized_at_index(index) for index in selected)
+        except Exception as exception:  # noqa: BLE001 - a chart flag must never raise into QML
+            console.debug(f'Error resolving analysis channel mode: {exception}')
+            return False
 
     @staticmethod
     def _qml_experiment_data_list(data_list: list) -> list:
@@ -938,11 +952,19 @@ class Plotting1d(QObject):
             return experiment_index
         return 0
 
-    def _get_aligned_analysis_values(self, experiment_index: int) -> list[dict]:
-        """Return measured, calculated and sigma values aligned on experiment q points."""
-        exp_data = flatten_polarized(
-            self._project_lib.experimental_data_for_model_at_index(experiment_index), self._visible_channels
-        )
+    def _get_aligned_analysis_values(self, experiment_index: int, channel: str = '') -> list[dict]:
+        """Return measured, calculated and sigma values aligned on experiment q points.
+
+        With `channel`, both the measured points and the calculated curve come
+        from that spin channel — the calculated curve must be the channel's own
+        cross-section, not the channel-agnostic one. Without it a polarized
+        experiment falls back to its first visible channel.
+        """
+        experiment = self._project_lib.experimental_data_for_model_at_index(experiment_index)
+        if channel:
+            exp_data = experiment[channel]
+        else:
+            exp_data = flatten_polarized(experiment, self._visible_channels)
         q_values = np.asarray(getattr(exp_data, 'x', np.empty(0)), dtype=float)
         measured_values = np.asarray(getattr(exp_data, 'y', np.empty(0)), dtype=float)
         sigma_values = np.asarray(getattr(exp_data, 'ye', np.zeros_like(measured_values)), dtype=float)
@@ -956,13 +978,24 @@ class Plotting1d(QObject):
         sigma_filtered = sigma_values[q_mask] if sigma_values.size else np.zeros_like(measured_filtered)
 
         model_index = self._get_experiment_model_index(experiment_index, exp_data)
-        try:
-            calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered)
-        except TypeError:
-            calc_data = self._project_lib.model_data_for_model_at_index(model_index)
+        if channel:
+            # A channel curve must be that channel's own cross-section: if it
+            # cannot be computed (e.g. spin-flip on a non-magnetic model), show
+            # the measured points alone rather than another channel's curve.
+            try:
+                calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered, channel=channel)
+            except Exception as exception:  # noqa: BLE001 - any backend refusal means "no curve"
+                console.debug(f'No calculated curve for channel {channel}: {exception}')
+                calc_data = None
+        else:
+            try:
+                calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered)
+            except TypeError:
+                calc_data = self._project_lib.model_data_for_model_at_index(model_index)
 
         calc_values = np.asarray(getattr(calc_data, 'y', np.empty(0)), dtype=float)
         calc_q_values = np.asarray(getattr(calc_data, 'x', np.empty(0)), dtype=float)
+        has_calculated = calc_values.size > 0
 
         if calc_values.size == q_filtered.size:
             calculated_filtered = calc_values
@@ -992,16 +1025,24 @@ class Plotting1d(QObject):
                     'measured': float(measured_value),
                     'calculated': float(calculated_value),
                     'sigma': float(sigma_value),
+                    # False when there is no cross-section to show (see above);
+                    # 'calculated' then mirrors 'measured' and must not be drawn.
+                    'has_calculated': has_calculated,
                 }
             )
         return points
 
     @Slot(int, result='QVariantList')
-    def getAnalysisDataPoints(self, experiment_index: int) -> list:
-        """Get measured and calculated data points for a specific experiment for analysis plotting."""
+    @Slot(int, str, result='QVariantList')
+    def getAnalysisDataPoints(self, experiment_index: int, channel: str = '') -> list:
+        """Get measured and calculated data points for a specific experiment for analysis plotting.
+
+        `channel` selects one spin channel of a polarized experiment; both the
+        measured points and the calculated curve are then that channel's.
+        """
         try:
             points = []
-            for point in self._get_aligned_analysis_values(experiment_index):
+            for point in self._get_aligned_analysis_values(experiment_index, channel):
                 measured = point['measured']
                 calculated = point['calculated']
                 points.append(
@@ -1009,6 +1050,7 @@ class Plotting1d(QObject):
                         'x': point['q'],
                         'measured': float(np.log10(measured)) if measured > 0 else -10.0,
                         'calculated': float(np.log10(calculated)) if calculated > 0 else -10.0,
+                        'hasCalculated': bool(point['has_calculated']),
                     }
                 )
             return points
@@ -1017,11 +1059,16 @@ class Plotting1d(QObject):
             return []
 
     @Slot(int, result='QVariantList')
-    def getResidualDataPoints(self, experiment_index: int) -> list:
-        """Get residual data points for a specific experiment."""
+    @Slot(int, str, result='QVariantList')
+    def getResidualDataPoints(self, experiment_index: int, channel: str = '') -> list:
+        """Get residual data points for a specific experiment (optionally one spin channel)."""
         try:
             points = []
-            for point in self._get_aligned_analysis_values(experiment_index):
+            for point in self._get_aligned_analysis_values(experiment_index, channel):
+                if not point['has_calculated']:
+                    # No cross-section: a residual of zero would look like a
+                    # perfect fit, so report nothing at all.
+                    continue
                 residual = self._compute_residual(
                     point['calculated'], point['measured'], point['sigma'])
                 points.append({'x': point['q'], 'y': float(residual)})

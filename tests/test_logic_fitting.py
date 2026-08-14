@@ -36,6 +36,31 @@ class FakeMultiFitter:
     def __init__(self, *models):
         self.models = models
         self.easy_science_multi_fitter = FakeEasyScienceMultiFitter()
+        self.fit_datasets = []
+        self.fit_channels = []
+
+    @classmethod
+    def for_experiments(cls, experiments, objective='hybrid'):
+        """Mirror the library factory: one dataset per measured spin channel."""
+        models = []
+        datasets = []
+        channels = []
+        for experiment in experiments:
+            model = experiment.model
+            if not any(model is known for known in models):
+                models.append(model)
+            experiment_channels = getattr(experiment, 'available_channels', None)
+            if experiment_channels is None:
+                datasets.append(experiment)
+                channels.append(None)
+                continue
+            for channel in experiment_channels:
+                datasets.append(experiment[channel])
+                channels.append(channel)
+        fitter = cls(*models)
+        fitter.fit_datasets = datasets
+        fitter.fit_channels = channels
+        return fitter
 
 
 def install_fake_multifitter(monkeypatch):
