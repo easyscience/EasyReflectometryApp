@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from PySide6.QtCore import QObject
+
 from EasyReflectometryApp.Backends.Py.logic.experiments import experiment_channel_values
 from EasyReflectometryApp.Backends.Py.logic.experiments import flatten_polarized
 from EasyReflectometryApp.Backends.Py.logic.project import Project as ProjectLogic
@@ -256,6 +258,7 @@ class TestEndToEndPolarizedImport:
     def test_import_and_display_through_real_project(self, qcore_application, tmp_path):
         """Full chain: Experiment QObject → logic → real Project lib → Plotting1d channels."""
         from easyreflectometry import Project as RealProject
+
         from EasyReflectometryApp.Backends.Py.experiment import Experiment
 
         q = np.linspace(0.01, 0.2, 15)
@@ -288,6 +291,7 @@ class TestEndToEndPolarizedImport:
     def test_imported_experiment_becomes_the_current_one(self, qcore_application, tmp_path):
         """With an experiment already loaded, the import must not stay invisible."""
         from easyreflectometry import Project as RealProject
+
         from EasyReflectometryApp.Backends.Py.experiment import Experiment
 
         q = np.linspace(0.01, 0.2, 15)
@@ -316,6 +320,63 @@ class TestEndToEndPolarizedImport:
         # The polarized group is experiment 1, and the app is told to select it.
         assert project.experiment_is_polarized_at_index(1) is True
         assert loaded == [1]
+
+    def test_summary_html_compiles_after_a_polarized_import(self, qcore_application, tmp_path):
+        """Importing emits summaryChanged, and QML reads asHtml straight after.
+
+        The summary used to assume every experiment is a DataSet1D, so reading
+        it after a polarized import raised inside a QML-read property — which
+        Qt turns into a process abort with no traceback.
+        """
+        from easyreflectometry import Project as RealProject
+
+        from EasyReflectometryApp.Backends.Py.experiment import Experiment
+        from EasyReflectometryApp.Backends.Py.summary import Summary
+
+        q = np.linspace(0.01, 0.2, 15)
+        reflectivity = np.exp(-q * 30)
+        paths = []
+        for name in ('run_uu.dat', 'run_dd.dat'):
+            path = tmp_path / name
+            np.savetxt(path, np.column_stack([q, reflectivity, 0.01 * reflectivity]))
+            paths.append(str(path))
+
+        project = RealProject()
+        project.calculator = 'refl1d'
+        project.default_model()
+        experiment = Experiment(project_lib=project)
+        experiment.loadPolarized(
+            [
+                {'path': paths[0], 'channel': 'pp'},
+                {'path': paths[1], 'channel': 'mm'},
+            ]
+        )
+
+        html = Summary(project_lib=project).asHtml
+
+        assert 'could not be generated' not in html
+        assert '(pp)' in html and '(mm)' in html
+
+
+class TestSummaryFailureIsNotFatal:
+    def test_asHtml_reports_errors_instead_of_raising(self, qcore_application):
+        """A raising getter escapes into Qt and aborts the process — never raise."""
+        from EasyReflectometryApp.Backends.Py.summary import Summary
+
+        summary = Summary.__new__(Summary)
+        QObject.__init__(summary)
+
+        class _Boom:
+            @property
+            def as_html(self):
+                raise RuntimeError('summary exploded')
+
+        summary._logic = _Boom()
+
+        html = summary.asHtml
+
+        assert 'could not be generated' in html
+        assert 'summary exploded' in html
 
 
 class TestSwitchingBetweenExperiments:
