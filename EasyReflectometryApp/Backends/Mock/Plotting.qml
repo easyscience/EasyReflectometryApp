@@ -31,8 +31,16 @@ QtObject {
     // Polarized experiment (spin channel) support
     property bool currentExperimentIsPolarized: false
     property var experimentChannelList: []
+    signal channelSelectionChanged()
+    signal experimentChannelsChanged()
     function setChannelVisible(channel, visible) {
         console.debug(`setChannelVisible ${channel} ${visible}`)
+    }
+    function getExperimentChannels(index) {
+        return []
+    }
+    function getExperimentChannelDataPoints(index, channel) {
+        return []
     }
 
     // Plot mode properties

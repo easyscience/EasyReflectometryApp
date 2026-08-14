@@ -1,5 +1,6 @@
 import os
 
+from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -19,10 +20,18 @@ def _from_qml(value):
     return value
 
 
+# Spin channels accepted by the polarized import, in canonical order.
+_CHANNELS = ('pp', 'pm', 'mp', 'mm')
+
+
 class Experiment(QObject):
     experimentChanged = Signal()
     externalExperimentChanged = Signal()
     qRangeUpdated = Signal()
+    # Emitted with a user-facing message when an import is rejected.
+    loadFailed = Signal(str)
+    # Emitted with the list position of a newly imported experiment.
+    experimentLoaded = Signal(int)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -111,19 +120,69 @@ class Experiment(QObject):
     def loadPolarized(self, assignments) -> None:
         """Load one polarized experiment from dialog rows ``[{'path','channel'},...]``.
 
-        Rows with an empty channel are skipped; duplicate channels are invalid
-        and ignored here (the dialog prevents them).
+        Rows with an empty channel are excluded ('not used' in the dialog). The
+        assignment must be unambiguous: every remaining row needs an existing
+        file and a known channel ('pp', 'pm', 'mp', 'mm'), and no channel may
+        appear twice. Invalid input is rejected with a message rather than
+        silently dropped — the dialog is not a trust boundary, and this slot is
+        also called directly by tests and automation.
+
+        Raises
+        ------
+        ValueError
+            The assignment is malformed, incomplete or ambiguous.
         """
         assignments = _from_qml(assignments)
-        channel_to_path = {}
-        for row in assignments:
-            channel = row['channel']
-            if channel:
-                channel_to_path[channel] = row['path']
-        if not channel_to_path:
-            return
-        q_range_changed = self._project_logic.load_polarized_experiment(channel_to_path)
+        channel_to_path = self._validated_channel_assignment(assignments)
+        new_index, q_range_changed = self._project_logic.load_polarized_experiment(channel_to_path)
         self.experimentChanged.emit()
         self.externalExperimentChanged.emit()
         if q_range_changed:
             self.qRangeUpdated.emit()
+        if new_index >= 0:
+            # Show what was just imported: without this the new experiment is
+            # only added to the list while the chart stays on the previous one.
+            self.experimentLoaded.emit(new_index)
+
+    def _validated_channel_assignment(self, assignments) -> dict:
+        """Turn dialog rows into a validated ``{channel: path}`` mapping."""
+        if not isinstance(assignments, (list, tuple)):
+            self._reject_assignment(f'Expected a list of channel assignments, got {type(assignments).__name__}.')
+
+        channel_to_path: dict = {}
+        for row in assignments:
+            row = _from_qml(row)
+            if not isinstance(row, dict) or 'channel' not in row or 'path' not in row:
+                self._reject_assignment(f"Malformed channel assignment row: {row!r} (expected 'path' and 'channel').")
+            channel = (row['channel'] or '').strip()
+            if not channel:
+                # 'not used': the file is deliberately left out.
+                continue
+            if channel not in _CHANNELS:
+                self._reject_assignment(
+                    f"Unknown spin channel '{channel}'; expected one of {', '.join(_CHANNELS)}."
+                )
+            if channel in channel_to_path:
+                self._reject_assignment(
+                    f"Channel '{channel}' is assigned to more than one file; each channel needs exactly one file."
+                )
+            # Rows from `suggestPolarizedChannels` are already platform paths;
+            # only a file:// URL (direct automation call) needs converting —
+            # `generalizePath` is not idempotent on Windows (it would eat the
+            # drive letter of an already-converted path).
+            path = row['path'] or ''
+            if path.startswith('file:'):
+                path = IO.generalizePath(path)
+            if not path or not os.path.isfile(path):
+                self._reject_assignment(f"No such file for channel '{channel}': {row['path']!r}.")
+            channel_to_path[channel] = path
+
+        if not channel_to_path:
+            self._reject_assignment('Assign at least one file to a spin channel.')
+        return channel_to_path
+
+    def _reject_assignment(self, message: str) -> None:
+        """Report an invalid channel assignment and abort the load."""
+        console.error(f'Polarized import rejected: {message}')
+        self.loadFailed.emit(message)
+        raise ValueError(message)

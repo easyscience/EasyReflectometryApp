@@ -126,6 +126,11 @@ class PyBackend(QObject):
         """Return list of individual experiment data for multi-experiment plotting."""
         return self._plotting_1d.individualExperimentDataList
 
+    @Property('QVariantList', notify=multiExperimentSelectionChanged)
+    def plottingIndividualExperimentChannelDataList(self) -> list:
+        """Multi-experiment data with polarized experiments split per visible spin channel."""
+        return self._plotting_1d.individualExperimentChannelDataList
+
     @Slot(int, result='QVariantList')
     def plottingGetExperimentDataPoints(self, experiment_index: int) -> list:
         """Get data points for a specific experiment for plotting."""
@@ -187,6 +192,12 @@ class PyBackend(QObject):
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._experiment.externalExperimentChanged.connect(self._refresh_plots)
+        # Loading/removing an experiment can change whether the current one is
+        # polarized and which channels it has.
+        self._experiment.externalExperimentChanged.connect(self._plotting_1d.notifyExperimentChannelsChanged)
+        # A freshly imported experiment becomes the current (and only selected)
+        # one, so the charts show what was just loaded.
+        self._experiment.experimentLoaded.connect(self._analysis.selectExperimentAtIndex)
         if hasattr(self._experiment, 'qRangeUpdated') and hasattr(self._sample, 'qRangeChanged'):
             self._experiment.qRangeUpdated.connect(self._sample.qRangeChanged)
 
@@ -201,6 +212,9 @@ class PyBackend(QObject):
         self._analysis.externalFittingChanged.connect(self._summary.summaryChanged)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
+        # Selecting another experiment changes the polarization state and the
+        # channel list QML binds to.
+        self._analysis.experimentsChanged.connect(self._plotting_1d.notifyExperimentChannelsChanged)
         # Update status bar when parameters change (e.g. fit checkbox toggle, post-fit)
         self._analysis.parametersChanged.connect(self._status.statusChanged)
         # Connect multi-experiment selection changes

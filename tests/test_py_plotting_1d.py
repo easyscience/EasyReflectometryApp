@@ -80,7 +80,7 @@ class FakeAnalysisProxy:
     def get_concatenated_experiment_data(self):
         return FakeData(x=[0.1, 0.2, 0.3], y=[1e-6, 2e-6, 3e-6], ye=[1e-8, 1e-8, 1e-8])
 
-    def get_individual_experiment_data_list(self):
+    def get_individual_experiment_data_list(self, expand_channels=False):
         return [
             {'name': 'E0', 'color': '#111111', 'index': 0, 'data': FakeData(x=[0.1], y=[1e-6], ye=[1e-8])},
             {'name': 'E1', 'color': '#222222', 'index': 1, 'data': FakeData(x=[0.2], y=[2e-6], ye=[1e-8])},

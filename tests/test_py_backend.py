@@ -48,6 +48,7 @@ class StubExperiment(QObject):
     externalExperimentChanged = Signal()
     experimentChanged = Signal()
     qRangeUpdated = Signal()
+    experimentLoaded = Signal(int)
 
     def __init__(self, _project_lib):
         super().__init__()
@@ -89,6 +90,9 @@ class StubAnalysis(QObject):
         self.received_indices = indices
         self._selected = list(indices)
 
+    def selectExperimentAtIndex(self, index):
+        self.setSelectedExperimentIndices([index])
+
     def _clearCacheAndEmitParametersChanged(self):
         self.clear_calls += 1
 
@@ -125,13 +129,19 @@ class StubPlotting(QObject):
     sldChartRangesChanged = Signal()
     experimentChartRangesChanged = Signal()
     samplePageResetAxes = Signal()
+    experimentChannelsChanged = Signal()
 
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)
         self.reset_calls = 0
+        self.channel_notifications = 0
         self.refresh_calls = {'sample': 0, 'experiment': 0, 'analysis': 0}
         self._multi = True
-        self._individual = [{'name': 'E0', 'index': 0, 'color': '#111111', 'hasData': True}]
+        self._individual = [{'name': 'E0', 'index': 0, 'color': '#111111', 'channel': '', 'hasData': True}]
+
+    def notifyExperimentChannelsChanged(self):
+        self.channel_notifications += 1
+        self.experimentChannelsChanged.emit()
 
     @property
     def isMultiExperimentMode(self):
@@ -245,9 +255,35 @@ def test_backend_refresh_plots_emits_ranges_and_multi_signal(monkeypatch, qcore_
 
     assert counts == {'sample': 1, 'sld': 1, 'exp': 1, 'multi': 1}
     assert backend.plottingIsMultiExperimentMode is True
-    assert backend.plottingIndividualExperimentDataList == [{'name': 'E0', 'index': 0, 'color': '#111111', 'hasData': True}]
+    assert backend.plottingIndividualExperimentDataList == [
+        {'name': 'E0', 'index': 0, 'color': '#111111', 'channel': '', 'hasData': True}
+    ]
     assert backend.plottingGetExperimentDataPoints(3) == [{'x': 3.0, 'y': 0.0}]
     assert backend.plottingGetAnalysisDataPoints(5) == [{'x': 5.0, 'measured': 0.0, 'calculated': 0.0}]
+
+
+def test_backend_imported_experiment_is_selected_and_channels_renotified(monkeypatch, qcore_application):
+    # A freshly imported experiment must become the current selection, and the
+    # channel state must be re-published so the selector/chart follow it.
+    backend = _make_backend(monkeypatch)
+
+    backend._experiment.experimentLoaded.emit(2)
+
+    assert backend._analysis.received_indices == [2]
+
+    backend._experiment.externalExperimentChanged.emit()
+    assert backend._plotting_1d.channel_notifications >= 1
+
+
+def test_backend_experiment_selection_renotifies_channels(monkeypatch, qcore_application):
+    # Selecting another experiment goes through analysis.experimentsChanged;
+    # without this connection a polarized -> polarized switch keeps the old
+    # channel list and the old chart.
+    backend = _make_backend(monkeypatch)
+
+    backend._analysis.experimentsChanged.emit()
+
+    assert backend._plotting_1d.channel_notifications == 1
 
 
 # ===========================================================================

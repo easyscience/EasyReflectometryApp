@@ -29,7 +29,13 @@ EaElements.GroupBox {
                 text: `${modelData.label} ${modelData.channel}`
                 checked: modelData.visible
                 ToolTip.text: qsTr("Show the %1 channel on the charts").arg(modelData.channel)
-                onToggled: Globals.BackendWrapper.plottingSetChannelVisible(modelData.channel, checked)
+                onToggled: {
+                    Globals.BackendWrapper.plottingSetChannelVisible(modelData.channel, checked)
+                    // Clicking replaced the binding with a plain value. The
+                    // backend refuses to hide the last visible measured
+                    // channel, so follow its state instead of the click.
+                    checked = Qt.binding(function() { return modelData.visible })
+                }
             }
         }
     }

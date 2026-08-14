@@ -265,3 +265,100 @@ def test_summary_make_plot_skips_empty_series_and_does_not_add_legend_without_re
     assert reflectivity_axis.plot_calls == []
     assert reflectivity_axis.errorbar_calls == []
     assert reflectivity_axis.legend_called is False
+
+
+class FakePolarizedCalculatorRuntime(FakeCalculatorRuntime):
+    """Calculator with genuinely different spin cross-sections."""
+
+    CHANNEL_LEVEL = {'pp': 0.9, 'pm': 0.3, 'mp': 0.2, 'mm': 0.6}
+
+    def reflectivity_profile_channel(self, x, unique_name, channel):
+        level = self.CHANNEL_LEVEL.get(getattr(channel, 'value', channel))
+        if level is None:
+            raise ValueError(f'Unknown channel {channel}')
+        return np.asarray(x) * 0 + level
+
+
+class FakePolarizedCalculatorFactory:
+    def __init__(self, runtime_class=FakePolarizedCalculatorRuntime):
+        self._runtime_class = runtime_class
+
+    def __call__(self):
+        return self._runtime_class()
+
+
+class FakeChannelKey(str):
+    @property
+    def value(self):
+        return str(self)
+
+
+class FakePolarizedExperiment:
+    def __init__(self, name, model, channels):
+        self.name = name
+        self.model = model
+        self._channels = {FakeChannelKey(key): value for key, value in channels.items()}
+
+    @property
+    def available_channels(self):
+        return list(self._channels.keys())
+
+    def __getitem__(self, channel):
+        return self._channels[FakeChannelKey(channel)]
+
+
+def _polarized_summary_project(tmp_path, calculator_factory):
+    models = make_model_collection(make_model(name='Model <1>', unique_name='m1', color='#123456'))
+    project = make_project(models=models)
+    project.path = tmp_path / 'polarized-report'
+    project._calculator = calculator_factory
+    channels = {
+        name: make_experiment(
+            name, model=models[0], x=np.array([0.1, 0.2]), y=np.array([1.0, 2.0]), ye=np.array([0.1, 0.2])
+        )
+        for name in ('pp', 'mm')
+    }
+    project.experiments = {0: FakePolarizedExperiment('Polarized <1>', models[0], channels)}
+    project._experiments = project.experiments
+    project.sample_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([0.1]), y=np.array([1.0]))
+    project.sld_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([1.0, 2.0]), y=np.array([3.0, 4.0]))
+    return project
+
+
+def _plot_polarized(tmp_path, monkeypatch, calculator_factory):
+    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
+    project = _polarized_summary_project(tmp_path, calculator_factory)
+    logic = summary_module.Summary(project)
+    monkeypatch.setattr(logic, '_plt', lambda: FakePyplot())
+    monkeypatch.setattr(logic, '_gridspec', lambda: FakeGridSpecModule)
+    return logic.make_plot(10.0, 8.0)
+
+
+def test_summary_plots_a_distinct_calculation_per_channel(tmp_path, monkeypatch):
+    """Each channel label must carry its own cross-section, not one repeated curve."""
+    figure = _plot_polarized(tmp_path, monkeypatch, FakePolarizedCalculatorFactory())
+    reflectivity_axis = figure.axes[0]
+
+    labelled = [call for call in reflectivity_axis.plot_calls if call[1].get('label')]
+    assert [call[1]['label'] for call in labelled] == ['Polarized <1> (pp)', 'Polarized <1> (mm)']
+
+    # Different y values (pp = 0.9, mm = 0.6) and different channel colors.
+    y_values = [float(np.asarray(call[0][1])[0]) for call in labelled]
+    assert y_values[0] != y_values[1]
+    assert labelled[0][1]['color'] != labelled[1][1]['color']
+
+
+def test_summary_omits_the_overlay_when_a_channel_cannot_be_calculated(tmp_path, monkeypatch):
+    """A non-magnetic model has no spin cross-sections: show data, no wrong curve."""
+
+    class NoChannelSupport(FakeCalculatorRuntime):
+        def reflectivity_profile_channel(self, x, unique_name, channel):
+            raise ValueError('requires magnetism')
+
+    figure = _plot_polarized(tmp_path, monkeypatch, FakePolarizedCalculatorFactory(NoChannelSupport))
+    reflectivity_axis = figure.axes[0]
+
+    labelled = [call for call in reflectivity_axis.plot_calls if call[1].get('label')]
+    # Both channels still appear in the legend, as measured-only series.
+    assert [call[1]['label'] for call in labelled] == ['Polarized <1> (pp)', 'Polarized <1> (mm)']
+    assert all(call[1].get('ls') == '' for call in labelled)

@@ -1,3 +1,34 @@
+# Unreleased
+
+- Added polarized (spin-channel) experiment import and display:
+  - New "Load polarized experiment (file per channel)" import flow: multi-select
+    one file per spin channel, then review and edit the automatic channel
+    assignment (from the ORSO `polarization` header or the file name) in the
+    assignment dialog. Any number of channels may be assigned — a single-channel
+    experiment is allowed — and files can be excluded with "not used". Invalid
+    assignments (duplicate or unknown channels, missing files, nothing assigned)
+    are rejected with a message instead of quietly loading nothing.
+  - The experiment chart draws one measured series (plus error bounds) per
+    visible spin channel in a fixed channel palette (↑↑ pp, ↑↓ pm, ↓↑ mp,
+    ↓↓ mm), with a channel selector in the experiment sidebar and a per-channel
+    legend. At least one measured channel always stays visible. With several
+    experiments selected, each polarized experiment contributes one series per
+    visible channel, keeping the experiment color as hue base.
+  - Experiment lists mark polarized experiments with a `⇅N` badge showing the
+    number of measured spin channels.
+  - Report figures plot each channel's own spin cross-section in its channel
+    color; a channel that cannot be calculated (e.g. spin-flip on a
+    non-magnetic model) is shown as measured data without a calculated overlay.
+  - **Limitations:** one resolution function is used per polarized experiment
+    (taken from the first assigned channel — stated in the import dialog);
+    fitting and Bayesian sampling of polarized experiments are not supported yet
+    and report a clear message; the analysis and residual charts show the first
+    visible channel only; polarized experiments are not yet saved in project
+    files.
+  - Requires an `easyreflectometry` version with the per-channel experiment API;
+    the app reports a clear error instead of drawing empty charts if it is
+    missing.
+
 # Version 1.4.0 (3 Aug 2026)
 
 - Added Bayesian analysis: run MCMC sampling alongside classical fitting, with posterior median and credibility intervals on the main chart, trace/corner-style plots per parameter, a dedicated status display with cancellation support, and plot export.

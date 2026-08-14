@@ -150,6 +150,24 @@ Rectangle {
             function onChannelSelectionChanged() {
                 if (chartView.isPolarizedMode) {
                     chartView.updateChannelSeries()
+                } else if (chartView.isMultiExperimentMode) {
+                    // Multi-experiment mode draws one series per visible channel
+                    // of each polarized experiment; rebuild them too.
+                    chartView.updateMultiExperimentSeries()
+                }
+            }
+
+            // The current experiment (or its channel list) changed. The
+            // per-channel series are QML-owned, so a backend refresh does not
+            // touch them: switching between two polarized experiments would
+            // otherwise keep the previous one's points on screen.
+            function onExperimentChannelsChanged() {
+                if (chartView.isPolarizedMode) {
+                    chartView.updateChannelSeries()
+                } else if (chartView.isMultiExperimentMode) {
+                    chartView.updateMultiExperimentSeries()
+                } else {
+                    chartView.clearChannelSeries()
                 }
             }
         }
@@ -547,8 +565,9 @@ Rectangle {
                 return
             }
 
-            // Get experiment data list
-            var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
+            // Get experiment data list; polarized experiments are expanded
+            // into one entry per visible spin channel.
+            var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentChannelDataList
             // If no data available yet, keep default series visible as fallback
             if (experimentDataList.length === 0) {
                 console.log("No experiment data available - keeping default series visible")
@@ -578,11 +597,12 @@ Rectangle {
             errorUpper.visible = false
             errorLower.visible = false
 
-            // Create series for each experiment
+            // Create series for each experiment; a polarized experiment
+            // contributes one entry per visible spin channel.
             for (var i = 0; i < experimentDataList.length; i++) {
                 var expData = experimentDataList[i]
                 if (expData.hasData) {
-                    createExperimentSeries(expData.index, expData.name, expData.color)
+                    createExperimentSeries(expData.index, expData.name, expData.color, expData.channel ?? "")
                 }
             }
         }
@@ -604,7 +624,7 @@ Rectangle {
             multiExperimentSeries = []
         }
 
-        function createExperimentSeries(expIndex, expName, color) {
+        function createExperimentSeries(expIndex, expName, color, channel) {
             // console.log(` Creating series for experiment ${expIndex}: ${expName} (${color})`)
 
             var xAxis = currentXAxis()
@@ -641,7 +661,8 @@ Rectangle {
                 errorLowerSerie: errorLowerSerie,
                 expIndex: expIndex,
                 expName: expName,
-                color: color
+                color: color,
+                channel: channel ?? ""
             }
             multiExperimentSeries.push(seriesSet)
 
@@ -650,8 +671,11 @@ Rectangle {
         }
 
         function populateExperimentSeries(seriesSet) {
-            // Get data points from backend
-            var dataPoints = Globals.BackendWrapper.plottingGetExperimentDataPoints(seriesSet.expIndex)
+            // Get data points from backend: the requested spin channel for a
+            // polarized experiment, the plain experiment data otherwise.
+            var dataPoints = seriesSet.channel
+                ? Globals.BackendWrapper.plottingGetExperimentChannelDataPoints(seriesSet.expIndex, seriesSet.channel)
+                : Globals.BackendWrapper.plottingGetExperimentDataPoints(seriesSet.expIndex)
 
             // Clear existing points
             seriesSet.measuredSerie.clear()
@@ -661,7 +685,11 @@ Rectangle {
             // Calculate staggering offset if enabled
             var yOffset = 0
             if (useStaggeredPlotting && isMultiExperimentMode && multiExperimentSeries.length > 1) {
-                var experimentIndex = seriesSet.expIndex
+                // Offset by the series' own position, not by the experiment
+                // index: the spin channels of one polarized experiment share an
+                // index and would otherwise be stacked on top of each other.
+                var seriesPosition = multiExperimentSeries.indexOf(seriesSet)
+                var experimentIndex = seriesPosition >= 0 ? seriesPosition : seriesSet.expIndex
                 var totalExperiments = multiExperimentSeries.length
 
                 // Find the individual experiment's data range
@@ -850,7 +878,7 @@ Rectangle {
                     }
 
                     Repeater {
-                        model: chartView.isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentDataList : []
+                        model: chartView.isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentChannelDataList : []
                         delegate: Row {
                             spacing: EaStyle.Sizes.fontPixelSize * 0.3
 

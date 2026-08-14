@@ -228,7 +228,18 @@ QtObject {
     function experimentLoad(value) { activeBackend.experiment.load(value) }
     // Polarized experiment import (one file per spin channel)
     function experimentSuggestPolarizedChannels(value) { return activeBackend.experiment.suggestPolarizedChannels(value) }
-    function experimentLoadPolarized(value) { activeBackend.experiment.loadPolarized(value) }
+    // Returns '' on success, or the reason the import was rejected. The backend
+    // validates the rows itself and raises, which would otherwise surface only
+    // as an uncaught slot exception.
+    function experimentLoadPolarized(value) {
+        try {
+            activeBackend.experiment.loadPolarized(value)
+        } catch (e) {
+            console.warn("experimentLoadPolarized failed:", e)
+            return (e && e.message) ? e.message : qsTr("The polarized experiment could not be loaded.")
+        }
+        return ''
+    }
 
 
     ///////////////
@@ -238,6 +249,15 @@ QtObject {
     readonly property var analysisExperimentsPolarized: {
         try {
             return activeBackend.analysis.experimentsPolarized || []
+        } catch (e) {
+            return []
+        }
+    }
+    // Measured spin channels per experiment (0 when unpolarized), shown next to
+    // the polarization badge in the experiment lists.
+    readonly property var analysisExperimentsChannelCount: {
+        try {
+            return activeBackend.analysis.experimentsChannelCount || []
         } catch (e) {
             return []
         }
@@ -609,6 +629,16 @@ QtObject {
             return activeBackend.plottingIndividualExperimentDataList || []
         } catch (e) {
             console.warn("plottingIndividualExperimentDataList failed:", e)
+            return []
+        }
+    }
+    // Same list, but a polarized experiment appears once per visible spin
+    // channel — for charts that draw per-channel series.
+    readonly property var plottingIndividualExperimentChannelDataList: {
+        try {
+            return activeBackend.plottingIndividualExperimentChannelDataList || []
+        } catch (e) {
+            console.warn("plottingIndividualExperimentChannelDataList failed:", e)
             return []
         }
     }

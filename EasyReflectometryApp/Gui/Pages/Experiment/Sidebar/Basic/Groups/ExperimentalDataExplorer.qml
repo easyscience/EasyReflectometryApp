@@ -206,10 +206,14 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     id: noLabel
-                    width: EaStyle.Sizes.fontPixelSize * 2.5
-                    // '⇅' badge marks polarized (per-spin-channel) experiments
-                    text: (index + 1) + (Globals.BackendWrapper.analysisExperimentsPolarized[index] ? ' ⇅' : '')
-                    ToolTip.text: Globals.BackendWrapper.analysisExperimentsPolarized[index] ? qsTr("Polarized experiment") : ""
+                    width: EaStyle.Sizes.fontPixelSize * 3.5
+                    // '⇅N' badge marks polarized experiments and their measured channel count
+                    text: (index + 1) + (Globals.BackendWrapper.analysisExperimentsPolarized[index]
+                                         ? ' ⇅' + (Globals.BackendWrapper.analysisExperimentsChannelCount[index] ?? '')
+                                         : '')
+                    ToolTip.text: Globals.BackendWrapper.analysisExperimentsPolarized[index]
+                                  ? qsTr("Polarized experiment: %1 spin channel(s)").arg(Globals.BackendWrapper.analysisExperimentsChannelCount[index] ?? 0)
+                                  : ""
 
                     // Selection background overlay - placed as child to avoid layout interference
                     Rectangle {

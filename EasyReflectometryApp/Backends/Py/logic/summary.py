@@ -6,6 +6,10 @@ import numpy as np
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.summary import Summary as SummaryLib
 
+from .experiments import CHANNEL_COLORS
+
+logger = logging.getLogger(__name__)
+
 
 class Summary:
     def __init__(self, project_lib: ProjectLib):
@@ -94,6 +98,23 @@ class Summary:
 
         return gridspec
 
+    @staticmethod
+    def _calculated_curve(model, x, channel=None):
+        """Calculated reflectivity for one model, per spin channel when given.
+
+        Returns None when the channel cannot be calculated (a spin-flip channel
+        of a non-magnetic model, or a calculator without magnetism support): no
+        overlay is better than the wrong one.
+        """
+        calculator = model.interface()
+        if channel is None:
+            return np.asarray(calculator.reflectity_profile(x, model.unique_name))
+        try:
+            return np.asarray(calculator.reflectivity_profile_channel(x, model.unique_name, channel))
+        except (ValueError, NotImplementedError, AttributeError) as exception:
+            logger.warning('No calculated curve for channel %s: %s', channel.value, exception)
+            return None
+
     def make_plot(self, width_cm: float, height_cm: float):
         plt = self._plt()
         gridspec = self._gridspec()
@@ -115,11 +136,13 @@ class Summary:
                 experiment_name = experiment.name or f'Experiment {experiment_index + 1}'
                 channels = getattr(experiment, 'available_channels', None)
                 if channels is None:
-                    datasets = [(experiment_name, experiment)]
+                    datasets = [(experiment_name, experiment, None)]
                 else:
                     # Polarized experiment: one series per measured spin channel.
-                    datasets = [(f'{experiment_name} ({channel.value})', experiment[channel]) for channel in channels]
-                for label_name, dataset in datasets:
+                    datasets = [
+                        (f'{experiment_name} ({channel.value})', experiment[channel], channel) for channel in channels
+                    ]
+                for label_name, dataset, channel in datasets:
                     x = np.asarray(dataset.x)
                     y = np.asarray(dataset.y)
                     if x.size == 0 or y.size == 0:
@@ -128,10 +151,20 @@ class Summary:
                     ye = np.asarray(dataset.ye) if getattr(dataset, 'ye', None) is not None else None
                     model = experiment.model
                     model.interface = self._project_lib._calculator
-                    y_calc = np.asarray(model.interface().reflectity_profile(x, model.unique_name))
+                    # Each channel needs its own spin cross-section; the
+                    # channel-agnostic call would repeat one curve under four
+                    # channel labels. None means "cannot be calculated" (e.g. a
+                    # spin-flip channel of a non-magnetic model) — then the
+                    # measured data is shown without a calculated overlay.
+                    y_calc = self._calculated_curve(model, x, channel)
                     scale_factor = 10**offset
 
-                    color = getattr(model, 'color', None) or '#1f77b4'
+                    color = CHANNEL_COLORS[channel.value] if channel is not None else (
+                        getattr(model, 'color', None) or '#1f77b4'
+                    )
+                    # Without a calculated curve the measured series carries the
+                    # legend entry, so the channel is still identifiable.
+                    measured_label = label_name if y_calc is None else None
                     if ye is not None and ye.size == y.size:
                         ax_reflectivity.errorbar(
                             x,
@@ -142,10 +175,19 @@ class Summary:
                             color=color,
                             alpha=0.45,
                         )
+                        if measured_label is not None:
+                            ax_reflectivity.plot(
+                                x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45, label=measured_label
+                            )
                     else:
-                        ax_reflectivity.plot(x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45)
+                        ax_reflectivity.plot(
+                            x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45, label=measured_label
+                        )
 
-                    ax_reflectivity.plot(x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name)
+                    if y_calc is not None:
+                        ax_reflectivity.plot(
+                            x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name
+                        )
         else:
             for model_index, model in enumerate(self._project_lib.models):
                 sample_data = self._project_lib.sample_data_for_model_at_index(model_index)

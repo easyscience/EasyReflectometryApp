@@ -14,7 +14,10 @@ from PySide6.QtCore import Slot
 
 from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
+from .logic.experiments import CHANNEL_LABELS
 from .logic.experiments import Experiments as ExperimentLogic
+from .logic.experiments import channel_shade
+from .logic.experiments import experiment_channel_values
 from .logic.experiments import flatten_polarized
 from .logic.fitting import Fitting as FittingLogic
 from .logic.helpers import get_original_name
@@ -1044,6 +1047,11 @@ class Analysis(QObject):
         """Per-experiment flag: True for polarized (per-channel) experiments."""
         return self._experiments_logic.polarized_flags()
 
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsChannelCount(self) -> List[int]:
+        """Per-experiment number of measured spin channels (0 when unpolarized)."""
+        return self._experiments_logic.channel_counts()
+
     @Property(int, notify=experimentsChanged)
     def experimentCurrentIndex(self) -> int:
         return self._experiments_logic.current_index()
@@ -1129,6 +1137,15 @@ class Analysis(QObject):
         """Return the list of selected experiment indices."""
         return self._selected_experiment_indices
 
+    @Slot(int)
+    def selectExperimentAtIndex(self, index: int) -> None:
+        """Make one experiment the current and only selected one.
+
+        Used after an import so the charts show the experiment that was just
+        loaded instead of staying on the previously selected one.
+        """
+        self.setSelectedExperimentIndices([index])
+
     @Slot('QVariantList')
     def setSelectedExperimentIndices(self, indices: List[int]) -> None:
         """Set multiple selected experiment indices."""
@@ -1166,11 +1183,13 @@ class Analysis(QObject):
             return DataSet1D(name='No experiments selected', x=np.empty(0), y=np.empty(0), ye=np.empty(0), xe=np.empty(0))
 
         all_x, all_y, all_ye, all_xe = [], [], [], []
+        visible_channels = self._visible_channels()
 
         for exp_idx in self._selected_experiment_indices:
             try:
                 data = flatten_polarized(
-                    self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                    self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx),
+                    visible_channels,
                 )
                 if data.x.size > 0:  # Only include non-empty datasets
                     all_x.extend(data.x)
@@ -1201,10 +1220,17 @@ class Analysis(QObject):
             name=combined_name, x=np.array(x_sorted), y=np.array(y_sorted), ye=np.array(ye_sorted), xe=np.array(xe_sorted)
         )
 
-    def get_individual_experiment_data_list(self):
+    def get_individual_experiment_data_list(self, expand_channels: bool = False):
         """
         Get individual experiment data for each selected experiment.
         Returns a list of dictionaries with data, name, and color for each experiment.
+
+        With `expand_channels`, a polarized experiment contributes one entry per
+        visible measured channel (each carrying its `channel` and a channel
+        shade of the experiment color) instead of being flattened to a single
+        one — used by the experiment chart, which draws per-channel series.
+        Consumers that are not channel aware yet (analysis, residuals) keep the
+        flat one-entry-per-experiment list.
         """
 
         if not self._selected_experiment_indices:
@@ -1226,25 +1252,56 @@ class Analysis(QObject):
             '#7BB8B8',  # Soft Cyan
         ]
 
+        visible_channels = self._visible_channels()
+
         for idx, exp_idx in enumerate(self._selected_experiment_indices):
             try:
-                data = flatten_polarized(
-                    self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                experiment = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                exp_name = (
+                    self._experiments_logic.available()[exp_idx]
+                    if exp_idx < len(self._experiments_logic.available())
+                    else f'Experiment {exp_idx + 1}'
                 )
-                if data.x.size > 0:  # Only include non-empty datasets
-                    exp_name = (
-                        self._experiments_logic.available()[exp_idx]
-                        if exp_idx < len(self._experiments_logic.available())
-                        else f'Experiment {exp_idx + 1}'
-                    )
-                    color = color_palette[exp_idx % len(color_palette)]
+                color = color_palette[exp_idx % len(color_palette)]
 
-                    experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
-            except (IndexError, AttributeError) as e:
+                # A polarized experiment contributes one entry per visible
+                # measured channel, so nothing the user selected is dropped.
+                channels = (
+                    [channel for channel in experiment_channel_values(experiment) if channel in visible_channels]
+                    if expand_channels
+                    else []
+                )
+                if not channels:
+                    data = flatten_polarized(experiment, visible_channels)
+                    if data.x.size > 0:  # Only include non-empty datasets
+                        experiment_data_list.append(
+                            {'data': data, 'name': exp_name, 'color': color, 'index': exp_idx, 'channel': ''}
+                        )
+                    continue
+
+                for channel in channels:
+                    data = experiment[channel]
+                    if data.x.size == 0:
+                        continue
+                    experiment_data_list.append(
+                        {
+                            'data': data,
+                            'name': f'{exp_name} ({CHANNEL_LABELS[channel]} {channel})',
+                            'color': channel_shade(color, channel),
+                            'index': exp_idx,
+                            'channel': channel,
+                        }
+                    )
+            except (IndexError, AttributeError, KeyError) as e:
                 logger.warning('Error accessing experiment %s: %s', exp_idx, e)
                 continue
 
         return experiment_data_list
+
+    def _visible_channels(self) -> set:
+        """Channels the user kept visible (all of them when plotting is unavailable)."""
+        visible = getattr(self._plotting, '_visible_channels', None)
+        return set(visible) if visible else set(CHANNEL_LABELS)
 
     @Property('QVariantList', notify=experimentsChanged)
     def selectedExperimentDataList(self) -> List[dict]:

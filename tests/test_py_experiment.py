@@ -1,3 +1,5 @@
+import pytest
+
 from EasyReflectometryApp.Backends.Py import experiment as experiment_module
 
 
@@ -34,7 +36,8 @@ class StubProjectLogic:
         self.loaded_all = []
         self.loaded_new = []
         self.loaded_polarized = []
-        self.load_polarized_result = True
+        # (list position of the new experiment, whether q_max changed)
+        self.load_polarized_result = (0, True)
 
     def count_datasets_in_file(self, path):
         return self.dataset_counts.get(path, 1)
@@ -126,8 +129,18 @@ def test_suggest_polarized_channels_returns_editable_rows(monkeypatch, qcore_app
     ]
 
 
-def test_load_polarized_builds_channel_mapping_and_emits(monkeypatch, qcore_application):
+def _channel_files(tmp_path) -> tuple:
+    """Two real files: the loader only accepts paths that exist."""
+    pp_path = tmp_path / 'run_uu.dat'
+    mm_path = tmp_path / 'run_dd.dat'
+    for path in (pp_path, mm_path):
+        path.write_text('0.1 1.0 0.01\n')
+    return str(pp_path), str(mm_path)
+
+
+def test_load_polarized_builds_channel_mapping_and_emits(monkeypatch, qcore_application, tmp_path):
     experiment = _build_experiment(monkeypatch)
+    pp_path, mm_path = _channel_files(tmp_path)
     changed = {'experiment': 0, 'external': 0, 'q_range': 0}
     experiment.experimentChanged.connect(lambda: changed.__setitem__('experiment', changed['experiment'] + 1))
     experiment.externalExperimentChanged.connect(lambda: changed.__setitem__('external', changed['external'] + 1))
@@ -135,41 +148,63 @@ def test_load_polarized_builds_channel_mapping_and_emits(monkeypatch, qcore_appl
 
     experiment.loadPolarized(
         [
-            {'path': 'run_uu.dat', 'channel': 'pp'},
-            {'path': 'run_dd.dat', 'channel': 'mm'},
-            {'path': 'run_x.dat', 'channel': ''},  # unassigned rows are skipped
+            {'path': pp_path, 'channel': 'pp'},
+            {'path': mm_path, 'channel': 'mm'},
+            {'path': str(tmp_path / 'run_x.dat'), 'channel': ''},  # 'not used' rows are excluded
         ]
     )
 
-    assert experiment._project_logic.loaded_polarized == [{'pp': 'run_uu.dat', 'mm': 'run_dd.dat'}]
+    assert experiment._project_logic.loaded_polarized == [{'pp': pp_path, 'mm': mm_path}]
     assert changed == {'experiment': 1, 'external': 1, 'q_range': 1}
 
 
-def test_polarized_slots_accept_qjsvalues_from_qml(monkeypatch, qcore_application):
+def test_polarized_slots_accept_qjsvalues_from_qml(monkeypatch, qcore_application, tmp_path):
     # QML hands over JS arrays/objects as QJSValue, not Python lists/dicts.
     from PySide6.QtQml import QJSEngine
 
     experiment = _build_experiment(monkeypatch)
+    pp_path, mm_path = _channel_files(tmp_path)
     monkeypatch.setattr(experiment_module.IO, 'generalizePath', lambda path: path)
     engine = QJSEngine()
 
-    paths = engine.evaluate("(['data/run_uu.dat', 'data/run_dd.dat'])")
+    paths = engine.evaluate(f"(['{pp_path}', '{mm_path}'])".replace('\\', '/'))
     rows = experiment.suggestPolarizedChannels(paths)
     assert [row['channel'] for row in rows] == ['pp', 'mm']
 
     assignments = engine.evaluate(
-        "([{path: 'run_uu.dat', channel: 'pp'}, {path: 'run_dd.dat', channel: 'mm'}])"
+        f"([{{path: '{pp_path}', channel: 'pp'}}, {{path: '{mm_path}', channel: 'mm'}}])".replace('\\', '/')
     )
     experiment.loadPolarized(assignments)
-    assert experiment._project_logic.loaded_polarized == [{'pp': 'run_uu.dat', 'mm': 'run_dd.dat'}]
+    assert experiment._project_logic.loaded_polarized == [{'pp': pp_path.replace('\\', '/'), 'mm': mm_path.replace('\\', '/')}]
 
 
-def test_load_polarized_without_assignments_is_a_no_op(monkeypatch, qcore_application):
+@pytest.mark.parametrize(
+    'rows, message',
+    [
+        ([{'path': 'run_x.dat', 'channel': ''}], 'at least one file'),
+        ([], 'at least one file'),
+        ('run_uu.dat', 'Expected a list'),
+        ([{'channel': 'pp'}], 'Malformed'),
+        ([{'path': 'PP_FILE', 'channel': 'up'}], 'Unknown spin channel'),
+        ([{'path': 'PP_FILE', 'channel': 'pp'}, {'path': 'MM_FILE', 'channel': 'pp'}], 'more than one file'),
+        ([{'path': 'missing.dat', 'channel': 'pp'}], 'No such file'),
+    ],
+)
+def test_load_polarized_rejects_invalid_assignments(monkeypatch, qcore_application, tmp_path, rows, message):
+    """QML is not a trust boundary: the slot validates its own input."""
     experiment = _build_experiment(monkeypatch)
-    changed = {'count': 0}
-    experiment.experimentChanged.connect(lambda: changed.__setitem__('count', changed['count'] + 1))
+    pp_path, mm_path = _channel_files(tmp_path)
+    substitutes = {'PP_FILE': pp_path, 'MM_FILE': mm_path}
+    if isinstance(rows, list):
+        rows = [
+            {**row, 'path': substitutes[row['path']]} if row.get('path') in substitutes else row for row in rows
+        ]
 
-    experiment.loadPolarized([{'path': 'run_x.dat', 'channel': ''}])
+    failures = []
+    experiment.loadFailed.connect(failures.append)
+
+    with pytest.raises(ValueError, match=message):
+        experiment.loadPolarized(rows)
 
     assert experiment._project_logic.loaded_polarized == []
-    assert changed == {'count': 0}
+    assert len(failures) == 1 and message.lower() in failures[0].lower()

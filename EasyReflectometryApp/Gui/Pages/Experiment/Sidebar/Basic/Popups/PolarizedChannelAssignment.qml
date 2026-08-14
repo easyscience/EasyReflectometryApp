@@ -50,20 +50,56 @@ EaElements.Dialog {
         return false
     }
 
+    readonly property bool isValid: hasAssignment && !hasDuplicates
+
+    // Keep the OK button disabled while the assignment is invalid, so the
+    // dialog can never be accepted into a no-op that just closes it.
+    function updateOkEnabled() {
+        const okButton = standardButton(Dialog.Ok)
+        if (okButton) {
+            okButton.enabled = isValid
+        }
+    }
+
+    onIsValidChanged: updateOkEnabled()
+    // The footer buttons only exist once the dialog is shown.
+    onOpened: updateOkEnabled()
+
+    // Message from a backend rejection (validation the dialog cannot do itself,
+    // e.g. a file that disappeared, or a loader error).
+    property string loadError: ''
+
     function openWith(rows) {
         assignmentRows = rows
+        loadError = ''
         editRevision += 1
+        updateOkEnabled()
         open()
     }
 
     onAccepted: {
-        if (hasAssignment && !hasDuplicates) {
-            Globals.BackendWrapper.experimentLoadPolarized(assignmentRows)
+        // Belt and braces: OK is disabled while invalid, and the backend
+        // validates the rows again before loading anything.
+        if (!isValid) {
+            assignmentRows = []
+            return
         }
+        const error = Globals.BackendWrapper.experimentLoadPolarized(assignmentRows)
+        if (error) {
+            // Keep the rows and reopen with the reason, so the user can fix the
+            // assignment instead of losing it to a dialog that just closed.
+            loadError = error
+            open()
+            return
+        }
+        loadError = ''
         assignmentRows = []
     }
 
-    onRejected: assignmentRows = []
+    onRejected: {
+        assignmentRows = []
+        loadError = ''
+    }
 
     Component.onCompleted: {
         Globals.References.pages.experiment.sidebar.basic.popups.polarizedChannelAssignmentDialog = dialog
@@ -73,7 +109,13 @@ EaElements.Dialog {
         spacing: EaStyle.Sizes.fontPixelSize * 0.5
 
         EaElements.Label {
-            text: qsTr("One file per spin channel. Channels were pre-assigned from the\nORSO header or the file name — adjust them if needed.")
+            text: qsTr("One file per spin channel. Channels were pre-assigned from the\nORSO header or the file name — adjust them if needed.\nAny number of channels may be assigned (a single one is allowed);\nfiles set to 'not used' are ignored.")
+        }
+
+        EaElements.Label {
+            // Phase 2/3 limitation: Model.resolution_function is per experiment.
+            color: EaStyle.Colors.themeForegroundMinor
+            text: qsTr("Note: one resolution function is used for the whole experiment,\ntaken from the first assigned channel. Differing per-channel\nresolution metadata in the other files is ignored.")
         }
 
         Repeater {
@@ -112,6 +154,14 @@ EaElements.Dialog {
             visible: !dialog.hasAssignment
             color: EaStyle.Colors.red
             text: qsTr("Assign at least one file to a spin channel.")
+        }
+
+        EaElements.Label {
+            visible: dialog.loadError !== ''
+            color: EaStyle.Colors.red
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.fontPixelSize * 28
+            text: dialog.loadError
         }
     }
 }

@@ -1,3 +1,5 @@
+import inspect
+
 import numpy as np
 from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
@@ -35,12 +37,20 @@ class Plotting1d(QObject):
     posteriorPredictiveDataChanged = Signal()
     posteriorPredictiveSldDataChanged = Signal()
 
-    # Polarized-experiment channel selection
+    # Polarized-experiment channel selection.
+    # channelSelectionChanged: the visible-channel set changed.
+    # experimentChannelsChanged: the current experiment (and therefore its
+    #   polarization state and channel list) changed. QML properties depending
+    #   on the current experiment must be notified by this one; it is emitted
+    #   from PyBackend whenever experiment selection/addition/removal happens.
     channelSelectionChanged = Signal()
+    experimentChannelsChanged = Signal()
 
     # Class-level default so instances constructed without __init__ (test stubs)
     # still have a channel selection; setChannelVisible replaces it per instance.
     _visible_channels: frozenset = frozenset({'pp', 'pm', 'mp', 'mm'})
+    # Cached result of the library channel-API check (None = not checked yet).
+    _channel_api_error = None
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -356,9 +366,17 @@ class Plotting1d(QObject):
     @property
     def individual_experiment_data_list(self) -> list:
         """Get individual experiment data for multi-experiment plotting."""
+        return self._individual_experiment_data_list(expand_channels=False)
+
+    @property
+    def individual_experiment_channel_data_list(self) -> list:
+        """Like `individual_experiment_data_list`, one entry per visible spin channel."""
+        return self._individual_experiment_data_list(expand_channels=True)
+
+    def _individual_experiment_data_list(self, expand_channels: bool) -> list:
         try:
             if hasattr(self._proxy, '_analysis'):
-                return self._proxy._analysis.get_individual_experiment_data_list()
+                return self._proxy._analysis.get_individual_experiment_data_list(expand_channels=expand_channels)
         except Exception as e:
             console.debug(f'Error getting individual experiment data: {e}')
         return []
@@ -462,40 +480,63 @@ class Plotting1d(QObject):
         return (min_x, max_x, min_y, max_y)
 
     # Experiment ranges
+    def _experiment_range_datasets(self) -> list:
+        """Datasets the experiment chart actually draws for the current selection.
+
+        A polarized experiment shows one series per visible measured channel,
+        and channel files need not share a q grid — so the axes must span all of
+        them, not just the flattened first one. Multi-experiment selection keeps
+        using the concatenated data.
+        """
+        try:
+            if self.is_multi_experiment_mode:
+                return [self.experiment_data]
+            current_index = self._project_lib.current_experiment_index
+            experiment = self._project_lib.experimental_data_for_model_at_index(current_index)
+            channels = [
+                channel for channel in experiment_channel_values(experiment) if channel in self._visible_channels
+            ]
+            if channels:
+                return [experiment[channel] for channel in channels]
+        except (IndexError, KeyError, AttributeError) as e:
+            console.debug(f'Falling back to the flat experiment data for chart ranges: {e}')
+        return [self.experiment_data]
+
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMaxX(self):
-        data = self.experiment_data
-        return data.x.max() if data.x.size > 0 else 1.0
+        values = [data.x.max() for data in self._experiment_range_datasets() if data.x.size > 0]
+        return max(values) if values else 1.0
 
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMinX(self):
-        data = self.experiment_data
-        return data.x.min() if data.x.size > 0 else 0.0
+        values = [data.x.min() for data in self._experiment_range_datasets() if data.x.size > 0]
+        return min(values) if values else 0.0
 
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMaxY(self):
-        data = self.experiment_data
-        if data.y.size == 0:
-            return 1.0
-        y_values = self._apply_rq4(data.x, data.y)
-        y_values = y_values[y_values > 0]
-        if y_values.size == 0:
-            return 1.0
-        return np.log10(y_values.max())
+        values = []
+        for data in self._experiment_range_datasets():
+            if data.y.size == 0:
+                continue
+            y_values = self._apply_rq4(data.x, data.y)
+            y_values = y_values[y_values > 0]
+            if y_values.size > 0:
+                values.append(np.log10(y_values.max()))
+        return max(values) if values else 1.0
 
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMinY(self):
-        data = self.experiment_data
-        valid_y = data.y[data.y > 0] if data.y.size > 0 else np.array([1e-10])
-        if valid_y.size == 0:
-            return -10.0
-        valid_x = data.x[data.y > 0] if data.y.size > 0 else np.array([1.0])
-        valid_y = self._apply_rq4(valid_x, valid_y)
-        # Filter again after transformation to avoid log of zero/negative
-        valid_y = valid_y[valid_y > 0]
-        if valid_y.size == 0:
-            return -10.0
-        return np.log10(valid_y.min())
+        values = []
+        for data in self._experiment_range_datasets():
+            if data.y.size == 0:
+                continue
+            positive = data.y > 0
+            valid_y = self._apply_rq4(data.x[positive], data.y[positive])
+            # Filter again after transformation to avoid log of zero/negative
+            valid_y = valid_y[valid_y > 0]
+            if valid_y.size > 0:
+                values.append(np.log10(valid_y.min()))
+        return min(values) if values else -10.0
 
     # Residual ranges
     def _invalidate_residual_range_cache(self):
@@ -612,7 +653,20 @@ class Plotting1d(QObject):
     @Property('QVariantList', notify=experimentDataChanged)
     def individualExperimentDataList(self) -> list:
         """Return list of individual experiment data for multi-experiment plotting."""
-        data_list = self.individual_experiment_data_list
+        return self._qml_experiment_data_list(self.individual_experiment_data_list)
+
+    @Property('QVariantList', notify=experimentChannelsChanged)
+    def individualExperimentChannelDataList(self) -> list:
+        """Multi-experiment list with polarized experiments split per visible channel.
+
+        Used by the experiment chart, which draws one series per channel; the
+        analysis and residual charts stay on the flat list until they are
+        channel aware (Phase 4).
+        """
+        return self._qml_experiment_data_list(self.individual_experiment_channel_data_list)
+
+    @staticmethod
+    def _qml_experiment_data_list(data_list: list) -> list:
         # Convert to QML-friendly format
         qml_data_list = []
         for exp_data in data_list:
@@ -621,6 +675,9 @@ class Plotting1d(QObject):
                     'name': exp_data['name'],
                     'color': exp_data['color'],
                     'index': exp_data['index'],
+                    # Spin channel of a polarized experiment ('' when unpolarized);
+                    # QML fetches the matching per-channel points with it.
+                    'channel': exp_data.get('channel', ''),
                     'hasData': exp_data['data'].x.size > 0,
                 }
             )
@@ -709,20 +766,66 @@ class Plotting1d(QObject):
             data = flatten_polarized(
                 self._project_lib.experimental_data_for_model_at_index(experiment_index), self._visible_channels
             )
-            return self._measured_points_from_dataset(data)
-        except Exception as e:
-            console.debug(f'Error getting experiment data points for index {experiment_index}: {e}')
+        except (IndexError, KeyError) as e:
+            # Expected: no experiment loaded at this index.
+            console.debug(f'No experiment data for index {experiment_index}: {e}')
             return []
+        except Exception as e:
+            # Anything else is a defect or an incompatible library, not "no data".
+            console.error(f'Failed to read experiment {experiment_index}: {e!r}')
+            return []
+        return self._measured_points_from_dataset(data)
 
     @Slot(int, str, result='QVariantList')
     def getExperimentChannelDataPoints(self, experiment_index: int, channel: str) -> list:
         """Get data points of one spin channel of a polarized experiment."""
         try:
+            self._require_channel_api()
             data = self._project_lib.experimental_data_for_model_at_index(experiment_index, channel=channel)
-            return self._measured_points_from_dataset(data)
-        except Exception as e:
-            console.debug(f'Error getting {channel} channel data points for index {experiment_index}: {e}')
+        except (IndexError, KeyError) as e:
+            # Expected: no experiment at this index, or the channel was not measured.
+            console.debug(f'No {channel} channel data for index {experiment_index}: {e}')
             return []
+        except Exception as e:
+            # A TypeError here means the library predates the channel argument;
+            # silently returning [] would draw an empty chart instead.
+            console.error(f'Failed to read {channel} channel of experiment {experiment_index}: {e!r}')
+            return []
+        return self._measured_points_from_dataset(data)
+
+    def _require_channel_api(self) -> None:
+        """Fail loudly when the installed library has no per-channel experiment API.
+
+        The app and `easyreflectometry` must ship the same polarized API; an
+        older library would otherwise turn every polarized chart into an empty
+        one with no visible cause. Both halves are checked: the polarization
+        predicate and the accessor's `channel` argument.
+        """
+        if self._channel_api_error is None:
+            self._channel_api_error = self._check_channel_api()
+        if self._channel_api_error:
+            raise RuntimeError(self._channel_api_error)
+
+    def _check_channel_api(self) -> str:
+        """Return an error message when the library lacks the channel API, '' otherwise."""
+        missing = 'The installed easyreflectometry library does not provide the per-channel experiment API'
+        advice = (
+            'Polarized data cannot be displayed; please install a library version that '
+            'supports polarized experiments.'
+        )
+        if not hasattr(self._project_lib, 'experiment_is_polarized_at_index'):
+            return f'{missing} (experiment_is_polarized_at_index is missing). {advice}'
+        accessor = getattr(self._project_lib, 'experimental_data_for_model_at_index', None)
+        try:
+            parameters = inspect.signature(accessor).parameters
+        except (TypeError, ValueError):  # builtins/C callables: assume it is fine
+            return ''
+        accepts_channel = 'channel' in parameters or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+        )
+        if not accepts_channel:
+            return f'{missing} (experimental_data_for_model_at_index has no channel argument). {advice}'
+        return ''
 
     @Slot(int, result='QVariantList')
     def getExperimentChannels(self, experiment_index: int) -> list:
@@ -730,10 +833,6 @@ class Plotting1d(QObject):
 
         Empty for unpolarized experiments.
         """
-        try:
-            experiment = self._project_lib.experimental_data_for_model_at_index(experiment_index)
-        except IndexError:
-            return []
         return [
             {
                 'channel': channel,
@@ -741,37 +840,92 @@ class Plotting1d(QObject):
                 'color': CHANNEL_COLORS[channel],
                 'visible': channel in self._visible_channels,
             }
-            for channel in experiment_channel_values(experiment)
+            for channel in self._measured_channels(experiment_index)
         ]
 
-    @Property(bool, notify=experimentDataChanged)
+    def _measured_channels(self, experiment_index: int = None) -> list:
+        """Measured channel values of an experiment ([] when unpolarized or missing)."""
+        if experiment_index is None:
+            experiment_index = self._project_lib.current_experiment_index
+        try:
+            experiment = self._project_lib.experimental_data_for_model_at_index(experiment_index)
+        except (IndexError, KeyError):
+            return []
+        return experiment_channel_values(experiment)
+
+    @Property(bool, notify=experimentChannelsChanged)
     def currentExperimentIsPolarized(self) -> bool:
         """Whether the current experiment carries per-channel (polarized) data."""
-        try:
-            experiment = self._project_lib.experimental_data_for_model_at_index(
-                self._project_lib.current_experiment_index
-            )
-        except IndexError:
-            return False
-        return bool(experiment_channel_values(experiment))
+        return bool(self._measured_channels())
 
-    @Property('QVariantList', notify=channelSelectionChanged)
+    @Property('QVariantList', notify=experimentChannelsChanged)
     def experimentChannelList(self) -> list:
         """Channel rows of the current experiment for the channel selector UI."""
         return self.getExperimentChannels(self._project_lib.current_experiment_index)
 
+    @Slot()
+    def notifyExperimentChannelsChanged(self) -> None:
+        """Tell QML the current experiment (and so its channel state) changed.
+
+        Connected to every path that can change the current experiment —
+        selection, load, removal, project open — so `currentExperimentIsPolarized`
+        and `experimentChannelList` never keep a previous experiment's value.
+        The visible-channel set is renormalized first, so a selection made on a
+        previous experiment cannot leave the new one with nothing to draw.
+        """
+        if self._renormalize_visible_channels():
+            self.channelSelectionChanged.emit()
+        self.experimentChannelsChanged.emit()
+
+    def _renormalize_visible_channels(self) -> bool:
+        """Keep at least one measured channel of the current experiment visible.
+
+        The selection is global (one selector for the whole app), so hiding
+        channels on one experiment can leave another experiment with none of its
+        measured channels selected — an empty chart the user cannot fix, because
+        the last-visible guard only runs while *hiding*. When that happens, all
+        measured channels of the new current experiment are switched back on.
+
+        Returns True when the visible set changed.
+        """
+        measured = self._measured_channels()
+        if not measured or any(channel in self._visible_channels for channel in measured):
+            return False
+        self._visible_channels = self._visible_channels | frozenset(measured)
+        console.debug(f'No visible channel for the current experiment; showing {", ".join(measured)} again.')
+        return True
+
     @Slot(str, bool)
     def setChannelVisible(self, channel: str, visible: bool) -> None:
-        """Show or hide one spin channel on the experiment/analysis charts."""
+        """Show or hide one spin channel on the experiment/analysis charts.
+
+        At least one *measured* channel of the current experiment always stays
+        visible: a two-channel pp/mm experiment must not be blanked by hiding
+        pp and mm just because unmeasured pm/mp are still in the global set.
+        """
         visible_channels = set(self._visible_channels)
         if visible:
             visible_channels.add(channel)
-        elif len(visible_channels) > 1:
-            # Keep at least one channel visible so flat consumers stay meaningful.
+        else:
+            measured = self._measured_channels()
+            if measured:
+                still_visible = [name for name in measured if name in visible_channels and name != channel]
+                if not still_visible:
+                    console.debug(f'Refusing to hide {channel}: it is the last visible measured channel.')
+                    # The checkbox has already toggled itself; re-publish the
+                    # channel rows so it rebinds to the unchanged state.
+                    self.experimentChannelsChanged.emit()
+                    return
+            elif len(visible_channels) <= 1:
+                # Unpolarized/no experiment: keep the old global invariant.
+                self.experimentChannelsChanged.emit()
+                return
             visible_channels.discard(channel)
+
         if visible_channels != set(self._visible_channels):
             self._visible_channels = frozenset(visible_channels)
             self.channelSelectionChanged.emit()
+            self.experimentChannelsChanged.emit()
             self.experimentDataChanged.emit()
 
     def _get_experiment_model_index(self, experiment_index: int, exp_data=None) -> int:
