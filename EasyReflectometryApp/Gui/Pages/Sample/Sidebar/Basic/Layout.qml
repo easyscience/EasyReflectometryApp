@@ -24,8 +24,16 @@ EaComponents.SideBarColumn {
         collapsed: true
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
+    Groups.CalculationEngine {
+        collapsed: true
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+    }
     Groups.Magnetism {
         collapsed: true
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+    }
+    Groups.MagneticProfile {
+        collapsed: false
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
 }

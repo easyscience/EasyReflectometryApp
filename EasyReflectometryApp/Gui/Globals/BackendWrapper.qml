@@ -140,6 +140,43 @@ QtObject {
     function sampleMoveSelectedModelUp() { activeBackend.sample.moveSelectedModelUp() }
     function sampleMoveSelectedModelDown() { activeBackend.sample.moveSelectedModelDown() }
 
+    // Calculation engine (project-wide; also exposed on the Analysis page)
+    readonly property var sampleCalculationEngines: {
+        try {
+            return activeBackend.sample.calculationEngines || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property int sampleCalculationEngineIndex: {
+        try {
+            return activeBackend.sample.calculationEngineIndex || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var sampleCalculationEnginesSupportingMagnetism: {
+        try {
+            return activeBackend.sample.calculationEnginesSupportingMagnetism || []
+        } catch (e) {
+            return []
+        }
+    }
+    function sampleSetCalculationEngineIndex(value) {
+        try {
+            activeBackend.sample.setCalculationEngineIndex(value)
+        } catch (e) {
+            console.warn("sampleSetCalculationEngineIndex failed:", e)
+        }
+    }
+    function sampleEnableMagnetismWithEngineAtIndex(index, engine) {
+        try {
+            activeBackend.sample.enableMagnetismWithEngineAtIndex(index, engine)
+        } catch (e) {
+            console.warn("sampleEnableMagnetismWithEngineAtIndex failed:", e)
+        }
+    }
+
     // Sample
     readonly property var sampleAssemblies: activeBackend.sample.assemblies
     readonly property string sampleCurrentAssemblyName: activeBackend.sample.currentAssemblyName
@@ -609,6 +646,10 @@ QtObject {
     signal posteriorPredictiveDataChanged()
     // Signal for posterior predictive SLD (Bayesian) overlay data updates
     signal posteriorPredictiveSldDataChanged()
+    // Magnetic profile curves / magnetic state of the models changed
+    signal magneticProfileChanged()
+    // Spin-asymmetry availability or content changed
+    signal spinAsymmetryChanged()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
@@ -629,6 +670,12 @@ QtObject {
         }
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.posteriorPredictiveSldDataChanged) {
             activeBackend.plotting.posteriorPredictiveSldDataChanged.connect(posteriorPredictiveSldDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.magneticProfileChanged) {
+            activeBackend.plotting.magneticProfileChanged.connect(magneticProfileChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.spinAsymmetryChanged) {
+            activeBackend.plotting.spinAsymmetryChanged.connect(spinAsymmetryChanged)
         }
     }
 
@@ -736,6 +783,155 @@ QtObject {
             activeBackend.plottingSetChannelVisible(channel, visible)
         } catch (e) {
             console.warn("plottingSetChannelVisible failed:", e)
+        }
+    }
+
+    // Magnetic depth profiles on the shared SLD chart (Sample and Analysis)
+    readonly property bool plottingAnyModelHasMagnetism: {
+        try {
+            return activeBackend.plotting.anyModelHasMagnetism || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var plottingVisibleSldCurves: {
+        try {
+            return activeBackend.plotting.visibleSldCurves || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property var plottingSldThetaMinY: {
+        try {
+            return activeBackend.plotting.sldThetaMinY
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSldThetaMaxY: {
+        try {
+            return activeBackend.plotting.sldThetaMaxY
+        } catch (e) {
+            return 360
+        }
+    }
+    function plottingModelHasMagnetism(index) {
+        try {
+            return activeBackend.plottingModelHasMagnetism(index)
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingGetMagneticSldDataPointsForModel(index, curve) {
+        try {
+            return activeBackend.plottingGetMagneticSldDataPointsForModel(index, curve)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldDataPointsForModel failed:", e)
+            return []
+        }
+    }
+    function plottingGetMagneticSldSegmentsForModel(index, curve) {
+        try {
+            return activeBackend.plottingGetMagneticSldSegmentsForModel(index, curve)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldSegmentsForModel failed:", e)
+            return []
+        }
+    }
+    function plottingGetMagneticSldSegment(index, curve, segment) {
+        try {
+            return activeBackend.plottingGetMagneticSldSegment(index, curve, segment)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldSegment failed:", e)
+            return []
+        }
+    }
+    function plottingSldCurveVisible(curve) {
+        try {
+            return activeBackend.plottingSldCurveVisible(curve)
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingSetSldCurveVisible(curve, visible) {
+        try {
+            activeBackend.plottingSetSldCurveVisible(curve, visible)
+        } catch (e) {
+            console.warn("plottingSetSldCurveVisible failed:", e)
+        }
+    }
+
+    // Spin asymmetry
+    readonly property bool plottingSpinAsymmetryAvailable: {
+        try {
+            return activeBackend.plotting.spinAsymmetryAvailable || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property bool plottingSpinAsymmetryCalculatedAvailable: {
+        try {
+            return activeBackend.plotting.spinAsymmetryCalculatedAvailable || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property int plottingSpinAsymmetryMaskedPoints: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaskedPoints || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property int plottingSpinAsymmetryOutOfOverlapPoints: {
+        try {
+            return activeBackend.plotting.spinAsymmetryOutOfOverlapPoints || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSpinAsymmetryMinX: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMinX
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSpinAsymmetryMaxX: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaxX
+        } catch (e) {
+            return 1
+        }
+    }
+    readonly property var plottingSpinAsymmetryMinY: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMinY
+        } catch (e) {
+            return -1
+        }
+    }
+    readonly property var plottingSpinAsymmetryMaxY: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaxY
+        } catch (e) {
+            return 1
+        }
+    }
+    function plottingGetSpinAsymmetryPoints(index) {
+        try {
+            return activeBackend.plottingGetSpinAsymmetryPoints(index)
+        } catch (e) {
+            console.warn("plottingGetSpinAsymmetryPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetSpinAsymmetryCalculatedPoints(index) {
+        try {
+            return activeBackend.plottingGetSpinAsymmetryCalculatedPoints(index)
+        } catch (e) {
+            console.warn("plottingGetSpinAsymmetryCalculatedPoints failed:", e)
+            return []
         }
     }
 

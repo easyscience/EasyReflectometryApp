@@ -172,6 +172,48 @@ class PyBackend(QObject):
         """Show or hide one spin channel on the charts."""
         self._plotting_1d.setChannelVisible(channel, visible)
 
+    ######### Magnetic depth profiles (SLD chart, both pages)
+    @Slot(int, result=bool)
+    def plottingModelHasMagnetism(self, model_index: int) -> bool:
+        """Whether one model carries magnetism."""
+        return self._plotting_1d.modelHasMagnetism(model_index)
+
+    @Slot(int, str, result='QVariantList')
+    def plottingGetMagneticSldDataPointsForModel(self, model_index: int, curve: str) -> list:
+        """Points of one magnetic profile curve ('spin_up', 'spin_down', 'rho_m', 'theta_m')."""
+        return self._plotting_1d.getMagneticSldDataPointsForModel(model_index, curve)
+
+    @Slot(int, str, result='QVariantList')
+    def plottingGetMagneticSldSegmentsForModel(self, model_index: int, curve: str) -> list:
+        """The contiguous pieces of one magnetic profile curve."""
+        return self._plotting_1d.getMagneticSldSegmentsForModel(model_index, curve)
+
+    @Slot(int, str, int, result='QVariantList')
+    def plottingGetMagneticSldSegment(self, model_index: int, curve: str, segment: int) -> list:
+        """Points of one piece of a magnetic profile curve."""
+        return self._plotting_1d.getMagneticSldSegment(model_index, curve, segment)
+
+    @Slot(str, result=bool)
+    def plottingSldCurveVisible(self, curve: str) -> bool:
+        """Whether one magnetic profile curve is shown."""
+        return self._plotting_1d.sldCurveVisible(curve)
+
+    @Slot(str, bool)
+    def plottingSetSldCurveVisible(self, curve: str, visible: bool) -> None:
+        """Show or hide one magnetic profile curve on both SLD tabs."""
+        self._plotting_1d.setSldCurveVisible(curve, visible)
+
+    ######### Spin asymmetry
+    @Slot(int, result='QVariantList')
+    def plottingGetSpinAsymmetryPoints(self, experiment_index: int) -> list:
+        """Measured spin-asymmetry points with error bounds."""
+        return self._plotting_1d.getSpinAsymmetryPoints(experiment_index)
+
+    @Slot(int, result='QVariantList')
+    def plottingGetSpinAsymmetryCalculatedPoints(self, experiment_index: int) -> list:
+        """Calculated spin-asymmetry points ([] without a magnetic model)."""
+        return self._plotting_1d.getSpinAsymmetryCalculatedPoints(experiment_index)
+
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:
         self._connect_project_page()
@@ -193,6 +235,10 @@ class PyBackend(QObject):
 
     def _connect_sample_page(self) -> None:
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)
+        # Enabling magnetism can switch the project's calculation engine; the
+        # Analysis page's selector and every calculated curve must follow.
+        self._sample.calculationEngineChanged.connect(self._analysis.calculatorChanged)
+        self._sample.calculationEngineChanged.connect(self._analysis.externalCalculatorChanged)
         self._sample.externalRefreshPlot.connect(self._refresh_plots)
         self._sample.modelsTableChanged.connect(self._analysis._clearCacheAndEmitParametersChanged)
         self._sample.modelsTableChanged.connect(self._analysis.experimentsChanged)
@@ -223,8 +269,9 @@ class PyBackend(QObject):
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
         # Selecting another experiment changes the polarization state and the
-        # channel list QML binds to.
+        # channel list QML binds to, and with it whether spin asymmetry exists.
         self._analysis.experimentsChanged.connect(self._plotting_1d.notifyExperimentChannelsChanged)
+        self._analysis.experimentsChanged.connect(self._plotting_1d.notifySpinAsymmetryChanged)
         # Update status bar when parameters change (e.g. fit checkbox toggle, post-fit)
         self._analysis.parametersChanged.connect(self._status.statusChanged)
         # Connect multi-experiment selection changes
@@ -264,6 +311,10 @@ class PyBackend(QObject):
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
         self._plotting_1d.samplePageResetAxes.emit()
+        # Making a layer magnetic adds curves to the SLD chart and can add the
+        # model spin-asymmetry curve.
+        self._plotting_1d.notifyMagneticProfileChanged()
+        self._plotting_1d.notifySpinAsymmetryChanged()
 
     def _relay_experiment_page_experiment_changed(self):
         self._analysis.experimentsChanged.emit()
@@ -282,6 +333,11 @@ class PyBackend(QObject):
         self._sample.magnetismChanged.emit()
 
     def _refresh_plots(self):
+        # The magnetic profile and the spin asymmetry follow both the sample
+        # (a layer became magnetic, a parameter moved) and the data, so they are
+        # refreshed wherever the ordinary plots are.
+        self._plotting_1d.notifyMagneticProfileChanged()
+        self._plotting_1d.notifySpinAsymmetryChanged()
         self._plotting_1d.sampleChartRangesChanged.emit()
         self._plotting_1d.sldChartRangesChanged.emit()
         self._plotting_1d.experimentChartRangesChanged.emit()

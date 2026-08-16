@@ -28,6 +28,7 @@ class StubProject(QObject):
 
 class StubSample(QObject):
     externalSampleChanged = Signal()
+    calculationEngineChanged = Signal()
     externalRefreshPlot = Signal()
     modelsTableChanged = Signal()
     materialsTableChanged = Signal()
@@ -55,6 +56,7 @@ class StubExperiment(QObject):
 
 
 class StubAnalysis(QObject):
+    calculatorChanged = Signal()
     externalMinimizerChanged = Signal()
     externalCalculatorChanged = Signal()
     externalParametersChanged = Signal()
@@ -130,11 +132,15 @@ class StubPlotting(QObject):
     experimentChartRangesChanged = Signal()
     samplePageResetAxes = Signal()
     experimentChannelsChanged = Signal()
+    magneticProfileChanged = Signal()
+    spinAsymmetryChanged = Signal()
 
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)
         self.reset_calls = 0
         self.channel_notifications = 0
+        self.magnetic_notifications = 0
+        self.spin_asymmetry_notifications = 0
         self.refresh_calls = {'sample': 0, 'experiment': 0, 'analysis': 0}
         self._multi = True
         self._individual = [{'name': 'E0', 'index': 0, 'color': '#111111', 'channel': '', 'hasData': True}]
@@ -142,6 +148,14 @@ class StubPlotting(QObject):
     def notifyExperimentChannelsChanged(self):
         self.channel_notifications += 1
         self.experimentChannelsChanged.emit()
+
+    def notifyMagneticProfileChanged(self):
+        self.magnetic_notifications += 1
+        self.magneticProfileChanged.emit()
+
+    def notifySpinAsymmetryChanged(self):
+        self.spin_asymmetry_notifications += 1
+        self.spinAsymmetryChanged.emit()
 
     @property
     def isMultiExperimentMode(self):

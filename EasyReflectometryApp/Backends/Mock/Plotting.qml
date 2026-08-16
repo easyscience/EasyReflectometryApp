@@ -43,6 +43,48 @@ QtObject {
         return []
     }
 
+    // Magnetic depth profiles (no magnetic model in the mock)
+    property bool anyModelHasMagnetism: false
+    property var visibleSldCurves: ['spin_up', 'spin_down']
+    property double sldThetaMinY: 0
+    property double sldThetaMaxY: 360
+    signal magneticProfileChanged()
+    function modelHasMagnetism(index) {
+        return false
+    }
+    function getMagneticSldDataPointsForModel(index, curve) {
+        return []
+    }
+    function getMagneticSldSegmentsForModel(index, curve) {
+        return []
+    }
+    function getMagneticSldSegment(index, curve, segment) {
+        return []
+    }
+    function sldCurveVisible(curve) {
+        return visibleSldCurves.indexOf(curve) !== -1
+    }
+    function setSldCurveVisible(curve, visible) {
+        console.debug(`setSldCurveVisible ${curve} ${visible}`)
+    }
+
+    // Spin asymmetry (no polarized experiment in the mock)
+    property bool spinAsymmetryAvailable: false
+    property bool spinAsymmetryCalculatedAvailable: false
+    property int spinAsymmetryMaskedPoints: 0
+    property int spinAsymmetryOutOfOverlapPoints: 0
+    property double spinAsymmetryMinX: 0
+    property double spinAsymmetryMaxX: 1
+    property double spinAsymmetryMinY: -1
+    property double spinAsymmetryMaxY: 1
+    signal spinAsymmetryChanged()
+    function getSpinAsymmetryPoints(index) {
+        return []
+    }
+    function getSpinAsymmetryCalculatedPoints(index) {
+        return []
+    }
+
     // Plot mode properties
     property bool plotRQ4: false
     property string yMainAxisTitle: 'R(q)'

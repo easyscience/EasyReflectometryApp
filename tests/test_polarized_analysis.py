@@ -388,19 +388,52 @@ class TestSampleBackendSlots:
         assert float(backend.layersMagnetism[0]['rho_m']) == 3.0
         assert len(changed) == 3
 
-    def test_unsupported_calculator_reports_instead_of_raising(self, qcore_application):
-        """Raising out of a QML-invoked slot aborts the process — never do it."""
+    def test_unsupported_calculator_offers_the_engine_that_can(self, qcore_application):
+        """The Analysis page may not even be reachable yet: ask, do not point at it."""
         from EasyReflectometryApp.Backends.Py.sample import Sample
 
         backend = Sample(project_lib=_project(calculator='refnx'))
         failures = []
+        requests = []
         backend.magnetismFailed.connect(failures.append)
+        backend.magnetismNeedsEngine.connect(lambda index, engine: requests.append((index, engine)))
 
         backend.setLayerMagneticAtIndex(0, True)
 
+        # Nothing has changed yet — the UI confirms first.
         assert backend.magnetismSupported is False
-        assert len(failures) == 1 and 'refnx' in failures[0]
+        assert requests == [(0, 'refl1d')]
+        assert failures == []
         assert backend.layersMagnetism[0]['magnetic'] == 'False'
+
+    def test_confirmed_switch_changes_the_engine_and_attaches_magnetism(self, qcore_application):
+        from EasyReflectometryApp.Backends.Py.sample import Sample
+
+        backend = Sample(project_lib=_project(calculator='refnx'))
+        engine_changes = []
+        backend.calculationEngineChanged.connect(lambda: engine_changes.append(True))
+
+        backend.enableMagnetismWithEngineAtIndex(0, 'refl1d')
+
+        assert backend.magnetismSupported is True
+        assert backend.calculationEngines[backend.calculationEngineIndex] == 'refl1d'
+        assert backend.layersMagnetism[0]['magnetic'] == 'True'
+        assert engine_changes == [True]
+
+    def test_engine_that_cannot_carry_the_magnetism_is_refused(self, qcore_application):
+        """Binding a magnetic layer to refnx raises deep in the library."""
+        from EasyReflectometryApp.Backends.Py.sample import Sample
+
+        backend = Sample(project_lib=_project(calculator='refl1d'))
+        backend.setLayerMagneticAtIndex(0, True)
+        failures = []
+        backend.magnetismFailed.connect(failures.append)
+
+        backend.setCalculationEngineIndex(backend.calculationEngines.index('refnx'))
+
+        assert len(failures) == 1 and 'refnx' in failures[0]
+        assert backend.calculationEngines[backend.calculationEngineIndex] == 'refl1d'
+        assert backend.layersMagnetism[0]['magnetic'] == 'True'
 
 
 class _StubMinimizers:

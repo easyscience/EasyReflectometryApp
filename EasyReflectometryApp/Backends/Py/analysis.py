@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 class Analysis(QObject):
     minimizerChanged = Signal()
     calculatorChanged = Signal()
+    # Emitted with the reason when a calculator cannot be selected.
+    calculatorChangeRejected = Signal(str)
     experimentsChanged = Signal()
     parametersChanged = Signal()
     parametersIndexChanged = Signal()
@@ -1032,7 +1034,16 @@ class Analysis(QObject):
 
     @Slot(int)
     def setCalculatorCurrentIndex(self, new_value: int) -> None:
-        if self._calculators_logic.set_current_index(new_value):
+        try:
+            changed = self._calculators_logic.set_current_index(new_value)
+        except NotImplementedError as exception:
+            # A calculator that cannot model the sample's magnetism would raise
+            # deep inside the library; report it and keep the current engine.
+            logger.warning('Cannot change the calculator: %s', exception)
+            self.calculatorChangeRejected.emit(str(exception))
+            self.calculatorChanged.emit()
+            return
+        if changed:
             self.calculatorChanged.emit()
             self.externalCalculatorChanged.emit()
 

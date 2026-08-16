@@ -1,52 +1,88 @@
 # Unreleased
 
-- Added polarized (spin-channel) experiment import and display:
-  - New "Load polarized experiment (file per channel)" import flow: multi-select
-    one file per spin channel, then review and edit the automatic channel
-    assignment (from the ORSO `polarization` header or the file name) in the
-    assignment dialog. Any number of channels may be assigned — a single-channel
-    experiment is allowed — and files can be excluded with "not used". Invalid
-    assignments (duplicate or unknown channels, missing files, nothing assigned)
-    are rejected with a message instead of quietly loading nothing.
+- Enabling magnetism no longer jumps to another page. Ticking a layer's
+  "Magn." box while the current engine cannot model magnetism now asks whether
+  to switch the project to refl1d and does both in one step. The note next to
+  the table says this up front. It used to point at the Analysis page, which
+  stays disabled until Experiment has been visited. The calculation engine has
+  its own group on the Sample page, so the switch can be seen and undone where
+  magnetism is edited. The polarized import dialog also notes that modelling
+  the channels needs that engine.
+- Selecting an engine that cannot model magnetism, while the sample already has
+  magnetic layers, is refused with a message on both pages. This used to raise
+  out of a QML-invoked slot and could take the application down without a
+  traceback.
+- Fixed the calculation-engine selector showing the wrong engine after loading
+  a project that used a different one. The selection is read from the project,
+  not from a cached index.
+- Magnetic depth profiles on the SLD chart (Sample and Analysis share the
+  chart):
+  - Once a layer is magnetic, the chart adds the spin-up and spin-down
+    potentials ρ ± ρM·cos(θM − A) for each magnetic model, dashed in the
+    model's colour. ρM and the moment angle θM each have a checkbox; θM uses
+    its own right-hand axis. The y-range covers every visible curve and grows
+    when a curve is switched on, so ρ + ρM is not clipped. θM is only defined
+    where there is a moment, and that curve is drawn in pieces, not joined
+    across the gaps.
+  - The switches are in a new "Magnetic profile" group under Magnetism on the
+    Sample page, and in Analysis under "Plot control". Both use the same
+    selection.
+  - If no model is magnetic, the chart, legend and sidebar are unchanged.
+- Spin-asymmetry view, SA(q) = (R↑↑ − R↓↓)/(R↑↑ + R↓↓):
+  - A "Spin asymmetry" tab on the Experiment page (measured data) and a third
+    tab on the Analysis page's lower panel (measured data plus the model).
+    Neither is shown unless the experiment measured both non-spin-flip
+    channels. Without one, Experiment has no tab strip.
+  - Error bars come from the channel uncertainties. Points where R↑↑ + R↓↓ is
+    not significantly above zero (the background-dominated tail) are dropped,
+    with a note of how many, so they do not wreck the axis. Same for points
+    where the two channels do not share the same q. The axis shows the full
+    [−1, 1] window and expands if background-subtracted data go outside it.
+- Polarized (spin-channel) experiment import and display:
+  - New "Load polarized experiment (file per channel)" flow: multi-select one
+    file per spin channel, then review and edit the automatic assignment (from
+    the ORSO `polarization` header or the file name). Any number of channels
+    can be assigned, including a single channel. Files can be marked "not
+    used". Duplicate or unknown channels, missing files, or nothing assigned
+    are rejected with a message.
   - The experiment chart draws one measured series (plus error bounds) per
-    visible spin channel in a fixed channel palette (↑↑ pp, ↑↓ pm, ↓↑ mp,
-    ↓↓ mm), with a channel selector in the experiment sidebar and a per-channel
-    legend. At least one measured channel always stays visible. With several
-    experiments selected, each polarized experiment contributes one series per
-    visible channel, keeping the experiment color as hue base.
-  - Experiment lists mark polarized experiments with a `⇅N` badge showing the
+    visible spin channel in a fixed palette (↑↑ pp, ↑↓ pm, ↓↑ mp, ↓↓ mm), with
+    a channel selector in the sidebar and a per-channel legend. At least one
+    measured channel stays visible. With several experiments selected, each
+    polarized experiment contributes one series per visible channel, using the
+    experiment colour as the hue base.
+  - Experiment lists mark polarized experiments with a `⇅N` badge for the
     number of measured spin channels.
-  - Report figures plot each channel's own spin cross-section in its channel
-    color; a channel that cannot be calculated (e.g. spin-flip on a
-    non-magnetic model) is shown as measured data without a calculated overlay.
-  - **Limitations:** one resolution function is used per polarized experiment
-    (taken from the first assigned channel — stated in the import dialog);
-    Bayesian sampling of polarized experiments is not supported yet and reports
-    a clear message; polarized experiments are not yet saved in project files.
-  - Requires an `easyreflectometry` version with the per-channel experiment API;
-    the app reports a clear error instead of drawing empty charts if it is
-    missing.
-- Added magnetism editing and polarized fitting:
+  - Report figures plot each channel's spin cross-section in its channel
+    colour. A channel that cannot be calculated (for example spin-flip on a
+    non-magnetic model) is shown as measured data only.
+  - **Limitations:** one resolution function per polarized experiment (taken
+    from the first assigned channel; the import dialog says so); Bayesian
+    sampling of polarized experiments is not supported yet; polarized
+    experiments are not yet saved in project files.
+  - Needs an `easyreflectometry` version with the per-channel experiment API.
+    If it is missing, the app reports an error instead of drawing empty
+    charts.
+- Magnetism editing and polarized fitting:
   - New "Magnetism" group on the Sample page: one row per layer of the current
-    assembly with a magnetic on/off checkbox and the magnetic SLD (ρM) and
-    in-plane moment angle (θM). Only refl1d can model magnetic layers, so the
-    group explains itself and stays disabled on other calculation engines
-    instead of accepting edits that would go nowhere.
-  - ρM and θM appear in the Analysis parameter table like any other layer
-    parameter — named after their assembly and model (`Model Fe rho_m`), with
+    assembly, with a magnetic on/off checkbox, magnetic SLD (ρM) and in-plane
+    moment angle (θM). Only refl1d can model magnetic layers. The group says
+    so and offers to switch the project's calculation engine when a layer is
+    made magnetic (see above).
+  - ρM and θM appear in the Analysis parameter table like other layer
+    parameters, named after their assembly and model (`Model Fe rho_m`), with
     default limits, fit checkboxes and constraints. The name filter accepts
-    "magnetic" as a keyword for them.
-  - Fitting a polarized experiment now fits all its measured spin channels
-    simultaneously against the one shared model: thickness, roughness, nuclear
-    SLD, scale and background are common to every channel while ρM and θM are
-    constrained by all of them at once. Polarized and ordinary experiments can
-    be fitted together. Previously this reported "not supported yet".
+    "magnetic" as a keyword.
+  - Fitting a polarized experiment fits all its measured spin channels at once
+    against the shared model. Thickness, roughness, nuclear SLD, scale and
+    background are common to every channel; ρM and θM are constrained by all
+    of them. Polarized and ordinary experiments can be fitted together. This
+    used to report "not supported yet".
   - The analysis and residual charts draw one measured/calculated pair per
-    visible spin channel, each with the channel's own cross-section, instead of
-    showing the first visible channel only. A channel the model cannot
-    calculate (spin-flip on a non-magnetic sample) shows its measured points
-    without a calculated curve and contributes no residuals, rather than a copy
-    of the measured data that would look like a perfect fit.
+    visible spin channel, each with that channel's cross-section. Previously
+    only the first visible channel was shown. A channel the model cannot
+    calculate (spin-flip on a non-magnetic sample) shows measured points only
+    and contributes no residuals.
 
 # Version 1.4.0 (3 Aug 2026)
 

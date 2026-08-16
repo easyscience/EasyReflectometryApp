@@ -341,6 +341,11 @@ class FakeProject:
         self.current_layer_index = 0
         self._calculator = FakeCalculatorController(calculator_interfaces or ['refnx', 'refl1d'])
         self._calculator_name = calculator_name
+        # Engine capability, as the real Project reports it.
+        self.calculators_supporting_magnetism = [
+            name for name in (calculator_interfaces or ['refnx', 'refl1d']) if name == 'refl1d'
+        ]
+        self.models_have_magnetism = False
         self.minimizer = FakeMinimizerValue(minimizer_name)
         self._fitter = None
         self.fitter = None

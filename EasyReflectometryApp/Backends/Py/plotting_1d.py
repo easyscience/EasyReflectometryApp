@@ -46,9 +46,21 @@ class Plotting1d(QObject):
     channelSelectionChanged = Signal()
     experimentChannelsChanged = Signal()
 
+    # Magnetic depth profiles (Phase 5a).
+    # magneticProfileChanged: which magnetic curves are drawn, or whether any
+    #   model is magnetic at all, changed — the SLD chart rebuilds its series.
+    magneticProfileChanged = Signal()
+    # Spin asymmetry (Phase 5b/5c): availability or content of the SA charts.
+    spinAsymmetryChanged = Signal()
+
     # Class-level default so instances constructed without __init__ (test stubs)
     # still have a channel selection; setChannelVisible replaces it per instance.
     _visible_channels: frozenset = frozenset({'pp', 'pm', 'mp', 'mm'})
+    # Magnetic SLD curves drawn on top of the nuclear profile. The spin-up and
+    # spin-down potentials are on by default: where a layer is non-magnetic they
+    # collapse onto the nuclear curve, so a weakly magnetic sample still looks
+    # like the familiar chart. rho_m/theta_m are parameter views and are opt-in.
+    _visible_sld_curves: frozenset = frozenset({'spin_up', 'spin_down'})
     # Cached result of the library channel-API check (None = not checked yet).
     _channel_api_error = None
 
@@ -71,6 +83,13 @@ class Plotting1d(QObject):
 
         # Spin channels shown for polarized experiments (channel-value strings).
         self._visible_channels = frozenset({'pp', 'pm', 'mp', 'mm'})
+        # Magnetic profile curves shown on the SLD chart (both pages share it).
+        self._visible_sld_curves = frozenset({'spin_up', 'spin_down'})
+        # Spin asymmetry per experiment index; cleared with the other plot data.
+        self._spin_asymmetry_cache: dict = {}
+        # Magnetic depth profiles per model index; a refl1d evaluation each, and
+        # every chart refresh reads them several times.
+        self._magnetic_profile_cache: dict = {}
 
         # Posterior predictive state
         self._posterior_q: list = []
@@ -107,6 +126,8 @@ class Plotting1d(QObject):
         self._model_data = {}
         self._sld_data = {}
         self._residual_range_cache = None
+        self._spin_asymmetry_cache = {}
+        self._magnetic_profile_cache = {}
         console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
 
     def _apply_rq4(self, x, y):
@@ -450,6 +471,30 @@ class Plotting1d(QObject):
     def sldMinY(self):
         return self._get_all_models_sld_range()[2]
 
+    def _get_all_models_theta_range(self) -> tuple:
+        """(min, max) of theta_m over the magnetic models, for its own axis."""
+        values = []
+        for idx in range(len(self._project_lib.models)):
+            profile = self._magnetic_sld_profiles(idx).get('theta_m')
+            if profile is not None and profile.y.size > 0:
+                values.extend([float(profile.y.min()), float(profile.y.max())])
+        if not values:
+            return (0.0, 360.0)
+        low, high = min(values), max(values)
+        if high - low < 1e-6:
+            # A single-valued angle (every layer at the same theta_m, the usual
+            # case) would collapse the axis.
+            return (max(0.0, low - 10.0), min(360.0, high + 10.0))
+        return (low, high)
+
+    @Property(float, notify=magneticProfileChanged)
+    def sldThetaMinY(self) -> float:
+        return self._get_all_models_theta_range()[0]
+
+    @Property(float, notify=magneticProfileChanged)
+    def sldThetaMaxY(self) -> float:
+        return self._get_all_models_theta_range()[1]
+
     def _get_all_models_sld_range(self):
         """Get combined X/Y ranges for all models' SLD data."""
         min_x, max_x = float('inf'), float('-inf')
@@ -457,13 +502,23 @@ class Plotting1d(QObject):
 
         for idx in range(len(self._project_lib.models)):
             try:
-                data = self._project_lib.sld_data_for_model_at_index(idx)
-                if data.x.size > 0:
-                    min_x = min(min_x, data.x.min())
-                    max_x = max(max_x, data.x.max())
-                if data.y.size > 0:
-                    min_y = min(min_y, data.y.min())
-                    max_y = max(max_y, data.y.max())
+                datasets = [self._project_lib.sld_data_for_model_at_index(idx)]
+                # The magnetic curves are drawn on the same axes and rho + rhoM
+                # exceeds rho, so they must be part of the range or they end up
+                # silently clipped. theta_m lives on its own right-hand axis.
+                profiles = self._magnetic_sld_profiles(idx)
+                datasets += [
+                    profiles[curve]
+                    for curve in self._visible_sld_curves
+                    if curve in profiles and curve != 'theta_m'
+                ]
+                for data in datasets:
+                    if data.x.size > 0:
+                        min_x = min(min_x, data.x.min())
+                        max_x = max(max_x, data.x.max())
+                    if data.y.size > 0:
+                        min_y = min(min_y, data.y.min())
+                        max_y = max(max_y, data.y.max())
             except (IndexError, ValueError):
                 continue
 
@@ -732,6 +787,286 @@ class Plotting1d(QObject):
         except Exception as e:
             console.debug(f'Error getting SLD data points for model {model_index}: {e}')
             return []
+
+    # Magnetic depth profiles (Phase 5a)
+    MAGNETIC_SLD_CURVES = ('spin_up', 'spin_down', 'rho_m', 'theta_m')
+
+    def _magnetic_sld_profiles(self, model_index: int) -> dict:
+        """Magnetic profiles of one model, or {} when it has none.
+
+        A non-magnetic model, a calculator without magnetism, or a model index
+        that no longer exists are all "nothing to draw" — the chart simply keeps
+        the nuclear curve it draws today.
+
+        Cached per model: one chart refresh reads the curves and four range
+        properties, and each miss is a full refl1d profile evaluation. The cache
+        is dropped with the other plot data and on every magnetic notification,
+        so a parameter change is picked up immediately.
+        """
+        cache = getattr(self, '_magnetic_profile_cache', None)
+        if cache is None:
+            cache = self._magnetic_profile_cache = {}
+        if model_index in cache:
+            return cache[model_index]
+
+        try:
+            if not self._project_lib.model_has_magnetism_at_index(model_index):
+                profiles = {}
+            else:
+                profiles = self._project_lib.magnetic_sld_data_for_model_at_index(model_index)
+        except (IndexError, KeyError, ValueError, NotImplementedError, AttributeError) as e:
+            console.debug(f'No magnetic SLD profile for model {model_index}: {e}')
+            profiles = {}
+        cache[model_index] = profiles
+        return profiles
+
+    @Slot(int, result=bool)
+    def modelHasMagnetism(self, model_index: int) -> bool:
+        """Whether a model carries magnetism (drives the magnetic curves and controls)."""
+        try:
+            return bool(self._project_lib.model_has_magnetism_at_index(model_index))
+        except AttributeError:
+            return False
+
+    @Property(bool, notify=magneticProfileChanged)
+    def anyModelHasMagnetism(self) -> bool:
+        """Whether any model is magnetic — the capability gate for the magnetic UI."""
+        try:
+            return any(self.modelHasMagnetism(index) for index in range(len(self._project_lib.models)))
+        except (TypeError, AttributeError):
+            return False
+
+    @Slot(int, str, result='QVariantList')
+    def getMagneticSldDataPointsForModel(self, model_index: int, curve: str) -> list:
+        """Points of one magnetic profile curve of a model, [] when not applicable.
+
+        `curve` is one of 'spin_up', 'spin_down', 'rho_m', 'theta_m'.
+        """
+        if curve not in self.MAGNETIC_SLD_CURVES:
+            console.error(f'Unknown magnetic SLD curve {curve!r}.')
+            return []
+        profiles = self._magnetic_sld_profiles(model_index)
+        data = profiles.get(curve)
+        if data is None:
+            return []
+        return [{'x': float(x), 'y': float(y)} for x, y in zip(data.x, data.y)]
+
+    def _magnetic_sld_segments(self, model_index: int, curve: str) -> list:
+        """One point list per contiguous piece of a magnetic curve.
+
+        `theta_m` exists only where there is a moment, so a sample with two
+        magnetic layers separated by a spacer produces two pieces. Drawing them
+        as one series would connect the ends with a line across the spacer,
+        implying a moment rotation where there is no moment at all.
+        """
+        if curve not in self.MAGNETIC_SLD_CURVES:
+            console.error(f'Unknown magnetic SLD curve {curve!r}.')
+            return []
+        data = self._magnetic_sld_profiles(model_index).get(curve)
+        if data is None or data.x.size == 0:
+            return []
+
+        x = np.asarray(data.x, dtype=float)
+        y = np.asarray(data.y, dtype=float)
+        # The profile is on a uniform z grid; a gap is a step much larger than
+        # the usual one.
+        steps = np.diff(x)
+        breaks = np.flatnonzero(steps > 2.0 * np.median(steps)) + 1 if steps.size else np.array([], dtype=int)
+        return [
+            [{'x': float(px), 'y': float(py)} for px, py in zip(piece_x, piece_y)]
+            for piece_x, piece_y in zip(np.split(x, breaks), np.split(y, breaks))
+            if piece_x.size > 0
+        ]
+
+    @Slot(int, str, result='QVariantList')
+    def getMagneticSldSegmentsForModel(self, model_index: int, curve: str) -> list:
+        """The pieces of one magnetic curve, as lists of points."""
+        return self._magnetic_sld_segments(model_index, curve)
+
+    @Slot(int, str, int, result='QVariantList')
+    def getMagneticSldSegment(self, model_index: int, curve: str, segment: int) -> list:
+        """Points of one piece of a magnetic curve ([] when it does not exist)."""
+        segments = self._magnetic_sld_segments(model_index, curve)
+        if 0 <= segment < len(segments):
+            return segments[segment]
+        return []
+
+    @Property('QVariantList', notify=magneticProfileChanged)
+    def visibleSldCurves(self) -> list:
+        """Magnetic profile curves the user asked to see."""
+        return [curve for curve in self.MAGNETIC_SLD_CURVES if curve in self._visible_sld_curves]
+
+    @Slot(str, result=bool)
+    def sldCurveVisible(self, curve: str) -> bool:
+        """Whether one magnetic profile curve is shown."""
+        return curve in self._visible_sld_curves
+
+    @Slot(str, bool)
+    def setSldCurveVisible(self, curve: str, visible: bool) -> None:
+        """Show or hide one magnetic profile curve on both SLD tabs.
+
+        The spin-up and spin-down potentials are a pair: they are only
+        meaningful together, so one checkbox toggles both.
+        """
+        curves = {'spin_up', 'spin_down'} if curve in ('spin_up', 'spin_down') else {curve}
+        unknown = curves - set(self.MAGNETIC_SLD_CURVES)
+        if unknown:
+            console.error(f'Unknown magnetic SLD curve(s) {sorted(unknown)}.')
+            return
+
+        visible_curves = set(self._visible_sld_curves)
+        visible_curves |= curves if visible else set()
+        visible_curves -= set() if visible else curves
+        if visible_curves != set(self._visible_sld_curves):
+            self._visible_sld_curves = frozenset(visible_curves)
+            self.magneticProfileChanged.emit()
+            self.sldChartRangesChanged.emit()
+
+    # Spin asymmetry (Phase 5b/5c)
+    def _spin_asymmetry(self, experiment_index: int = None) -> dict:
+        """SA of an experiment as ``{measured, calculated, masked_points}``, or {}.
+
+        Empty when the experiment has no pp/mm pair — the charts are hidden in
+        that case, so this is "nothing to draw", not an error.
+        """
+        if experiment_index is None:
+            experiment_index = self._project_lib.current_experiment_index
+        cached = getattr(self, '_spin_asymmetry_cache', None)
+        if cached is None:
+            cached = self._spin_asymmetry_cache = {}
+        if experiment_index in cached:
+            return cached[experiment_index]
+
+        try:
+            result = self._project_lib.spin_asymmetry_for_experiment_at_index(experiment_index)
+        except (IndexError, KeyError, ValueError) as e:
+            console.debug(f'No spin asymmetry for experiment {experiment_index}: {e}')
+            result = {}
+        except Exception as e:
+            console.error(f'Failed to compute the spin asymmetry of experiment {experiment_index}: {e!r}')
+            result = {}
+        cached[experiment_index] = result
+        return result
+
+    @Property(bool, notify=spinAsymmetryChanged)
+    def spinAsymmetryAvailable(self) -> bool:
+        """Whether the current experiment measured both pp and mm, so SA exists."""
+        try:
+            return bool(
+                self._project_lib.experiment_supports_spin_asymmetry_at_index(
+                    self._project_lib.current_experiment_index
+                )
+            )
+        except (IndexError, KeyError, AttributeError):
+            return False
+
+    @Property(bool, notify=spinAsymmetryChanged)
+    def spinAsymmetryCalculatedAvailable(self) -> bool:
+        """Whether a model SA curve can be drawn (needs a magnetic model)."""
+        return self._spin_asymmetry().get('calculated') is not None
+
+    @Property(int, notify=spinAsymmetryChanged)
+    def spinAsymmetryMaskedPoints(self) -> int:
+        """Measured points dropped because SA was noise over noise there."""
+        return int(self._spin_asymmetry().get('masked_points', 0))
+
+    @Property(int, notify=spinAsymmetryChanged)
+    def spinAsymmetryOutOfOverlapPoints(self) -> int:
+        """Measured points dropped because the two channels do not cover the same q."""
+        return int(self._spin_asymmetry().get('out_of_overlap_points', 0))
+
+    @Slot(int, result='QVariantList')
+    def getSpinAsymmetryPoints(self, experiment_index: int) -> list:
+        """Measured SA points with error bounds, ready for QML series."""
+        data = self._spin_asymmetry(experiment_index).get('measured')
+        if data is None or data.x.size == 0:
+            return []
+        # ye holds variances; the chart needs one standard deviation.
+        sigma = np.sqrt(np.clip(np.asarray(data.ye, dtype=float), 0.0, None))
+        if sigma.size != data.y.size:
+            sigma = np.zeros_like(data.y)
+        return [
+            {
+                'x': float(x),
+                'y': float(y),
+                'errorUpper': float(y + error),
+                'errorLower': float(y - error),
+            }
+            for x, y, error in zip(data.x, data.y, sigma)
+        ]
+
+    @Slot(int, result='QVariantList')
+    def getSpinAsymmetryCalculatedPoints(self, experiment_index: int) -> list:
+        """Model SA points, [] when the model is not magnetic."""
+        data = self._spin_asymmetry(experiment_index).get('calculated')
+        if data is None or data.x.size == 0:
+            return []
+        return [{'x': float(x), 'y': float(y)} for x, y in zip(data.x, data.y)]
+
+    def _spin_asymmetry_range(self) -> tuple:
+        """(min_x, max_x, min_y, max_y) over the drawn SA curves."""
+        result = self._spin_asymmetry()
+        measured = result.get('measured')
+        if measured is None or measured.x.size == 0:
+            return (0.0, 1.0, -1.0, 1.0)
+        sigma = np.sqrt(np.clip(np.asarray(measured.ye, dtype=float), 0.0, None))
+        if sigma.size != measured.y.size:
+            sigma = np.zeros_like(measured.y)
+        min_y = float(np.min(measured.y - sigma))
+        max_y = float(np.max(measured.y + sigma))
+        calculated = result.get('calculated')
+        if calculated is not None and calculated.y.size > 0:
+            min_y = min(min_y, float(np.min(calculated.y)))
+            max_y = max(max_y, float(np.max(calculated.y)))
+        # SA lies in [-1, 1] only while both reflectivities are positive, which
+        # background-subtracted data need not be. Start from that window so a
+        # normal dataset always gets the same, comparable axis, but expand it
+        # rather than drawing retained points off-canvas.
+        return (
+            float(np.min(measured.x)),
+            float(np.max(measured.x)),
+            min(-1.05, min_y),
+            max(1.05, max_y),
+        )
+
+    @Property(float, notify=spinAsymmetryChanged)
+    def spinAsymmetryMinX(self) -> float:
+        return self._spin_asymmetry_range()[0]
+
+    @Property(float, notify=spinAsymmetryChanged)
+    def spinAsymmetryMaxX(self) -> float:
+        return self._spin_asymmetry_range()[1]
+
+    @Property(float, notify=spinAsymmetryChanged)
+    def spinAsymmetryMinY(self) -> float:
+        return self._spin_asymmetry_range()[2]
+
+    @Property(float, notify=spinAsymmetryChanged)
+    def spinAsymmetryMaxY(self) -> float:
+        return self._spin_asymmetry_range()[3]
+
+    @Slot()
+    def notifySpinAsymmetryChanged(self) -> None:
+        """Recompute the spin asymmetry and tell QML.
+
+        Connected to everything that changes the data or the model: the SA
+        depends on both the measured channels and (for the model curve) every
+        fitted parameter.
+        """
+        self._spin_asymmetry_cache = {}
+        self.spinAsymmetryChanged.emit()
+
+    @Slot()
+    def notifyMagneticProfileChanged(self) -> None:
+        """Recompute the magnetic profiles and tell QML.
+
+        Connected to the sample/parameter change relays: making a layer magnetic
+        (or removing its magnetism) adds or removes curves and changes the SLD
+        y-range, and moving rho_m/theta_m changes the curves themselves.
+        """
+        self._magnetic_profile_cache = {}
+        self.magneticProfileChanged.emit()
+        self.sldChartRangesChanged.emit()
 
     @Slot(int, result=str)
     def getModelColor(self, model_index: int) -> str:

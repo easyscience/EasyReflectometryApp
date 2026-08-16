@@ -3,18 +3,19 @@
 // © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
-import QtQuick.Controls
 
-import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
 
 import Gui as Gui
 import Gui.Globals as Globals
 
+// Display controls for the magnetic depth profiles, directly below the
+// Magnetism group: make a layer magnetic and the control for showing it appears
+// right underneath. Absent entirely while no model is magnetic.
 EaElements.GroupBox {
-    title: qsTr("Calculation engine")
-    icon: 'calculator'
-    // The same control as the Sample page's group: one engine, one place that
-    // decides what happens when it cannot be changed.
-    Gui.CalculationEngineControl {}
+    title: qsTr("Magnetic profile")
+    collapsible: true
+    visible: Globals.BackendWrapper.plottingAnyModelHasMagnetism
+
+    Gui.MagneticProfileControl {}
 }

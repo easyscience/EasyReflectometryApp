@@ -252,9 +252,10 @@ class Layers:
         if bool(new_value) == is_magnetic:
             return False
         if new_value and not self.magnetism_supported:
+            engines = ', '.join(self._project_lib.calculators_supporting_magnetism) or 'none of the available engines'
             raise NotImplementedError(
-                f'The {self._project_lib.calculator} calculator cannot model magnetic layers. '
-                'Switch to refl1d on the Analysis page first.'
+                f'The {self._project_lib.calculator} calculation engine cannot model magnetic layers; '
+                f'magnetism needs {engines}.'
             )
         layer.magnetism = LayerMagnetism() if new_value else None
         if new_value:

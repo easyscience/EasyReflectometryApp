@@ -3,6 +3,20 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+
+    // Calculation engine (project-wide setting, also shown on the Sample page)
+    property var calculationEngines: ['refnx', 'refl1d']
+    property int calculationEngineIndex: 0
+    property var calculationEnginesSupportingMagnetism: ['refl1d']
+    signal calculationEngineChanged()
+    signal magnetismNeedsEngine(int index, string engine)
+    function setCalculationEngineIndex(value) {
+        console.debug(`setCalculationEngineIndex ${value}`)
+    }
+    function enableMagnetismWithEngineAtIndex(index, engine) {
+        console.debug(`enableMagnetismWithEngineAtIndex ${index} ${engine}`)
+    }
+
     // Signals to match the Python backend
     signal constraintsChanged
     // MATERIALS

@@ -113,6 +113,19 @@ EaElements.Dialog {
         }
 
         EaElements.Label {
+            // Polarized data loads and displays on any engine, but the
+            // calculated cross-sections need magnetism — say so here rather
+            // than leaving the user to wonder why only one channel is fitted.
+            visible: !Globals.BackendWrapper.sampleMagnetismSupported
+                     && Globals.BackendWrapper.sampleCalculationEnginesSupportingMagnetism.length > 0
+            color: EaStyle.Colors.themeForegroundMinor
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.fontPixelSize * 28
+            text: qsTr("Note: the channels will be loaded and displayed, but modelling them needs a magnetic sample, which only %1 can calculate. Switch the calculation engine on the Sample page when you get there.")
+                  .arg(Globals.BackendWrapper.sampleCalculationEnginesSupportingMagnetism.join(', '))
+        }
+
+        EaElements.Label {
             // Phase 2/3 limitation: Model.resolution_function is per experiment.
             color: EaStyle.Colors.themeForegroundMinor
             text: qsTr("Note: one resolution function is used for the whole experiment,\ntaken from the first assigned channel. Differing per-channel\nresolution metadata in the other files is ignored.")
