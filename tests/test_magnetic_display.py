@@ -409,10 +409,10 @@ class TestCalculationEngineUx:
 
     def test_engine_selector_is_available_on_the_sample_page(self):
         layout = (
-            ROOT / 'EasyReflectometryApp' / 'Gui' / 'Pages' / 'Sample' / 'Sidebar' / 'Basic' / 'Layout.qml'
+            ROOT / 'EasyReflectometryApp' / 'Gui' / 'Pages' / 'Sample' / 'Sidebar' / 'Advanced' / 'Layout.qml'
         ).read_text(encoding='utf-8')
         group = (
-            ROOT / 'EasyReflectometryApp' / 'Gui' / 'Pages' / 'Sample' / 'Sidebar' / 'Basic' / 'Groups'
+            ROOT / 'EasyReflectometryApp' / 'Gui' / 'Pages' / 'Sample' / 'Sidebar' / 'Advanced' / 'Groups'
             / 'CalculationEngine.qml'
         ).read_text(encoding='utf-8')
         analysis_group = (
@@ -424,6 +424,27 @@ class TestCalculationEngineUx:
         # Both pages drive the same control, so they cannot disagree.
         assert 'Gui.CalculationEngineControl' in group
         assert 'Gui.CalculationEngineControl' in analysis_group
+
+    def test_engine_rejection_is_shown_in_a_dialog(self):
+        """Logs are invisible in the GUI, so a refused switch must say why.
+
+        The dialog lives in the application window: the engine selector is
+        instantiated on two pages, and per-instance dialogs would stack.
+        """
+        window = (ROOT / 'EasyReflectometryApp' / 'Gui' / 'ApplicationWindow.qml').read_text(encoding='utf-8')
+        control = (ROOT / 'EasyReflectometryApp' / 'Gui' / 'CalculationEngineControl.qml').read_text(encoding='utf-8')
+
+        assert 'function onCalculationEngineRejected(message)' in window
+        assert 'engineRejectionDialog.open()' in window
+        assert 'onCalculationEngineRejected' not in control
+
+    def test_profile_failure_is_shown_in_the_sidebar(self):
+        """A magnetic model losing its curves must not be a silent debug log."""
+        control = (ROOT / 'EasyReflectometryApp' / 'Gui' / 'MagneticProfileControl.qml').read_text(encoding='utf-8')
+        wrapper = (ROOT / 'EasyReflectometryApp' / 'Gui' / 'Globals' / 'BackendWrapper.qml').read_text(encoding='utf-8')
+
+        assert 'plottingMagneticProfileError' in control
+        assert 'plottingMagneticProfileError' in wrapper
 
     def test_import_dialog_mentions_the_engine_limitation(self):
         dialog = (

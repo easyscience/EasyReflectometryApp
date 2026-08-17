@@ -2,7 +2,6 @@ module Groups
 
 
 AssemblyEditor AssemblyEditor.qml
-CalculationEngine CalculationEngine.qml
 LoadSample LoadSample.qml
 MagneticProfile MagneticProfile.qml
 Magnetism Magnetism.qml

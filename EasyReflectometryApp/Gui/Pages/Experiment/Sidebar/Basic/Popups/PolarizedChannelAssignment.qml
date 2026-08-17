@@ -24,7 +24,7 @@ EaElements.Dialog {
 
     // Rows: [{path, name, channel}] — channel is '' when the file is not used.
     property var assignmentRows: []
-    // Bumped on every edit so validation bindings re-evaluate.
+    // Incremented on every edit so we can re-evaluate validation bindings.
     property int editRevision: 0
 
     readonly property var channelValues: ['', 'pp', 'pm', 'mp', 'mm']
@@ -65,8 +65,7 @@ EaElements.Dialog {
     // The footer buttons only exist once the dialog is shown.
     onOpened: updateOkEnabled()
 
-    // Message from a backend rejection (validation the dialog cannot do itself,
-    // e.g. a file that disappeared, or a loader error).
+    // Message from a backend rejection.
     property string loadError: ''
 
     function openWith(rows) {
@@ -78,7 +77,7 @@ EaElements.Dialog {
     }
 
     onAccepted: {
-        // Belt and braces: OK is disabled while invalid, and the backend
+        // OK is disabled while invalid. The backend
         // validates the rows again before loading anything.
         if (!isValid) {
             assignmentRows = []
@@ -109,12 +108,12 @@ EaElements.Dialog {
         spacing: EaStyle.Sizes.fontPixelSize * 0.5
 
         EaElements.Label {
-            text: qsTr("One file per spin channel. Channels were pre-assigned from the\nORSO header or the file name — adjust them if needed.\nAny number of channels may be assigned (a single one is allowed);\nfiles set to 'not used' are ignored.")
+            text: qsTr("One file per spin channel. Channels were pre-assigned from the\nORSO header or the file name. Adjust them if needed.\nAny number of channels may be assigned (a single one is allowed);\nfiles set to 'not used' are ignored.")
         }
 
         EaElements.Label {
-            // Polarized data loads and displays on any engine, but the
-            // calculated cross-sections need magnetism — say so here rather
+            // Polarized data loads and displays in any engine, but the
+            // calculated cross-sections need magnetism: say so here rather
             // than leaving the user to wonder why only one channel is fitted.
             visible: !Globals.BackendWrapper.sampleMagnetismSupported
                      && Globals.BackendWrapper.sampleCalculationEnginesSupportingMagnetism.length > 0
@@ -126,7 +125,7 @@ EaElements.Dialog {
         }
 
         EaElements.Label {
-            // Phase 2/3 limitation: Model.resolution_function is per experiment.
+            // Model.resolution_function is per experiment.
             color: EaStyle.Colors.themeForegroundMinor
             text: qsTr("Note: one resolution function is used for the whole experiment,\ntaken from the first assigned channel. Differing per-channel\nresolution metadata in the other files is ignored.")
         }

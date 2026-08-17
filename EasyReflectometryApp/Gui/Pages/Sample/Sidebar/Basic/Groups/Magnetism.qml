@@ -209,7 +209,7 @@ EaElements.GroupBox {
             EaElements.Label {
                 wrapMode: Text.WordWrap
                 width: EaStyle.Sizes.fontPixelSize * 26
-                text: qsTr("Switching changes the whole project's calculation engine: reflectivity is recalculated and any fit results become stale. The sample and the data are untouched, and the engine can be changed back once no layer is magnetic.")
+                text: qsTr("Switching changes the calculation engine: reflectivity is recalculated and any fit results become stale. The sample and the data are unaffected, and the engine can be changed back once no layer is magnetic.")
             }
         }
     }

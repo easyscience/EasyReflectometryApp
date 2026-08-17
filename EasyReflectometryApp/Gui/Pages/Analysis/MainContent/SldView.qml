@@ -55,22 +55,29 @@ Item {
 
             background: Rectangle { color: EaStyle.Colors.chartBackground }
 
+            // All visible tabs share the width equally: 33% each with the spin
+            // asymmetry tab, 50%/50% without it.
+            readonly property int visibleTabCount: root.spinAsymmetryAvailable ? 3 : 2
+            readonly property real tabWidth: (width - spacing * (visibleTabCount - 1)) / visibleTabCount
+
             TabButton {
                 text: qsTr("SLD")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
+                width: tabBar.tabWidth
             }
             TabButton {
                 text: qsTr("Residuals")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
+                width: tabBar.tabWidth
             }
             TabButton {
                 text: qsTr("Spin asymmetry")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
                 visible: root.spinAsymmetryAvailable
-                width: visible ? implicitWidth : 0
+                width: visible ? tabBar.tabWidth : 0
             }
         }
 

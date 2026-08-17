@@ -426,12 +426,13 @@ class TestSampleBackendSlots:
 
         backend = Sample(project_lib=_project(calculator='refl1d'))
         backend.setLayerMagneticAtIndex(0, True)
-        failures = []
-        backend.magnetismFailed.connect(failures.append)
+        rejections = []
+        backend.calculationEngineRejected.connect(rejections.append)
 
         backend.setCalculationEngineIndex(backend.calculationEngines.index('refnx'))
 
-        assert len(failures) == 1 and 'refnx' in failures[0]
+        # The refusal goes to the engine selector's dialog, not the log.
+        assert len(rejections) == 1 and 'refnx' in rejections[0]
         assert backend.calculationEngines[backend.calculationEngineIndex] == 'refl1d'
         assert backend.layersMagnetism[0]['magnetic'] == 'True'
 

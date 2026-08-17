@@ -21,7 +21,7 @@ Column {
         topPadding: 0
         checked: Globals.BackendWrapper.plottingVisibleSldCurves.indexOf('spin_up') !== -1
         text: qsTr("Show ρ↑ and ρ↓")
-        ToolTip.text: qsTr("The potentials each spin state sees: ρ ± ρM·cos(θM − A)")
+        ToolTip.text: qsTr("ρ ± ρM·cos(θM − A) — the effective SLD each spin state sees")
         onToggled: Globals.BackendWrapper.plottingSetSldCurveVisible('spin_up', checked)
     }
 
@@ -29,7 +29,7 @@ Column {
         topPadding: 0
         checked: Globals.BackendWrapper.plottingVisibleSldCurves.indexOf('rho_m') !== -1
         text: qsTr("Show ρM")
-        ToolTip.text: qsTr("The magnetic scattering length density profile")
+        ToolTip.text: qsTr("Magnetic SLD profile")
         onToggled: Globals.BackendWrapper.plottingSetSldCurveVisible('rho_m', checked)
     }
 
@@ -37,7 +37,7 @@ Column {
         topPadding: 0
         checked: Globals.BackendWrapper.plottingVisibleSldCurves.indexOf('theta_m') !== -1
         text: qsTr("Show θM")
-        ToolTip.text: qsTr("The in-plane moment angle, on its own right-hand axis")
+        ToolTip.text: qsTr("In-plane moment angle, plotted on the right-hand axis")
         onToggled: Globals.BackendWrapper.plottingSetSldCurveVisible('theta_m', checked)
     }
 
@@ -45,6 +45,18 @@ Column {
         color: EaStyle.Colors.themeForegroundMinor
         wrapMode: Text.WordWrap
         width: EaStyle.Sizes.sideBarContentWidth
-        text: qsTr("ρ↑/ρ↓ are what each spin state sees; where a layer is non-magnetic they fall onto the nuclear SLD.")
+        text: qsTr("For non-magnetic layers, ρ↑ and ρ↓ collapse onto the nuclear SLD.")
+    }
+
+    // The magnetic profiles failed to compute (e.g. the calculator lost its
+    // magnetism binding): without this, the curves silently vanish and the
+    // reason is only in a log the GUI user cannot see.
+    EaElements.Label {
+        visible: Globals.BackendWrapper.plottingMagneticProfileError !== ''
+        color: EaStyle.Colors.red
+        wrapMode: Text.WordWrap
+        width: EaStyle.Sizes.sideBarContentWidth
+        text: qsTr("The magnetic profiles could not be computed: %1")
+              .arg(Globals.BackendWrapper.plottingMagneticProfileError)
     }
 }

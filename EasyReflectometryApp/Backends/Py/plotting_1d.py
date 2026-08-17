@@ -61,6 +61,9 @@ class Plotting1d(QObject):
     # collapse onto the nuclear curve, so a weakly magnetic sample still looks
     # like the familiar chart. rho_m/theta_m are parameter views and are opt-in.
     _visible_sld_curves: frozenset = frozenset({'spin_up', 'spin_down'})
+    # Why the magnetic profiles of a magnetic model could not be computed
+    # ('' = no failure). Class-level default for test stubs without __init__.
+    _magnetic_profile_error: str = ''
     # Cached result of the library channel-API check (None = not checked yet).
     _channel_api_error = None
 
@@ -90,6 +93,7 @@ class Plotting1d(QObject):
         # Magnetic depth profiles per model index; a refl1d evaluation each, and
         # every chart refresh reads them several times.
         self._magnetic_profile_cache: dict = {}
+        self._magnetic_profile_error = ''
 
         # Posterior predictive state
         self._posterior_q: list = []
@@ -810,13 +814,21 @@ class Plotting1d(QObject):
             return cache[model_index]
 
         try:
-            if not self._project_lib.model_has_magnetism_at_index(model_index):
-                profiles = {}
-            else:
-                profiles = self._project_lib.magnetic_sld_data_for_model_at_index(model_index)
-        except (IndexError, KeyError, ValueError, NotImplementedError, AttributeError) as e:
-            console.debug(f'No magnetic SLD profile for model {model_index}: {e}')
+            has_magnetism = bool(self._project_lib.model_has_magnetism_at_index(model_index))
+        except AttributeError:
+            has_magnetism = False
+        if not has_magnetism:
             profiles = {}
+        else:
+            try:
+                profiles = self._project_lib.magnetic_sld_data_for_model_at_index(model_index)
+                self._magnetic_profile_error = ''
+            except (IndexError, KeyError, ValueError, NotImplementedError, AttributeError) as e:
+                # A magnetic model without curves is a real problem, and the GUI
+                # user cannot read this log — record it for the sidebar too.
+                console.error(f'No magnetic SLD profile for model {model_index}: {e}')
+                self._magnetic_profile_error = str(e)
+                profiles = {}
         cache[model_index] = profiles
         return profiles
 
@@ -895,6 +907,11 @@ class Plotting1d(QObject):
     def visibleSldCurves(self) -> list:
         """Magnetic profile curves the user asked to see."""
         return [curve for curve in self.MAGNETIC_SLD_CURVES if curve in self._visible_sld_curves]
+
+    @Property(str, notify=magneticProfileChanged)
+    def magneticProfileError(self) -> str:
+        """Why a magnetic model has no curves ('' when everything computed)."""
+        return self._magnetic_profile_error
 
     @Slot(str, result=bool)
     def sldCurveVisible(self, curve: str) -> bool:

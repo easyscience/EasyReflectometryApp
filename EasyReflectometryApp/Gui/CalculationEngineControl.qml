@@ -37,4 +37,7 @@ Column {
         text: qsTr("Magnetic layers can only be modelled by %1.")
               .arg(Globals.BackendWrapper.sampleCalculationEnginesSupportingMagnetism.join(', '))
     }
+
+    // A refused switch is reported by a dialog in ApplicationWindow.qml: this
+    // control exists on two pages, and per-instance dialogs would stack.
 }

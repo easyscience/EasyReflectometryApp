@@ -77,6 +77,10 @@ class Sample(QObject):
     # Emitted when the Sample page changed the project's calculation engine, so
     # the Analysis page's selector and the plots follow.
     calculationEngineChanged = Signal()
+    # Emitted with the reason when a requested engine switch is refused (e.g.
+    # the sample has magnetic layers the engine cannot model). Logs are not
+    # visible in the GUI, so the engine selector shows this in a dialog.
+    calculationEngineRejected = Signal(str)
 
     qRangeChanged = Signal()
     constraintsChanged = Signal()
@@ -627,7 +631,7 @@ class Sample(QObject):
             changed = self._calculators_logic.set_current_index(new_value)
         except NotImplementedError as exception:
             logger.warning('Cannot change the calculation engine: %s', exception)
-            self.magnetismFailed.emit(str(exception))
+            self.calculationEngineRejected.emit(str(exception))
             self.calculationEngineChanged.emit()
             return
         if changed:

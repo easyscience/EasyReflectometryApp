@@ -67,12 +67,24 @@ Rectangle {
     // Line style per magnetic curve; the model colour carries the identity.
     function magneticCurveStyle(curve) {
         switch (curve) {
-        case 'spin_up':   return {dash: Qt.DashLine,    width: 1.5, lighten: false, label: qsTr("ρ↑ (spin-up potential)")}
-        case 'spin_down': return {dash: Qt.DashLine,    width: 1.5, lighten: true,  label: qsTr("ρ↓ (spin-down potential)")}
-        case 'rho_m':     return {dash: Qt.DotLine,     width: 1.5, lighten: false, label: qsTr("ρM (magnetic SLD)")}
-        case 'theta_m':   return {dash: Qt.DashDotLine, width: 1.0, lighten: false, label: qsTr("θM (moment angle)")}
+        case 'spin_up':   return {dash: Qt.DashLine,    width: 1.5, label: qsTr("ρ↑ (spin-up potential)")}
+        case 'spin_down': return {dash: Qt.DashLine,    width: 1.5, label: qsTr("ρ↓ (spin-down potential)")}
+        case 'rho_m':     return {dash: Qt.DotLine,     width: 1.5, label: qsTr("ρM (magnetic SLD)")}
+        case 'theta_m':   return {dash: Qt.DashDotLine, width: 1.0, label: qsTr("θM (moment angle)")}
         }
-        return {dash: Qt.SolidLine, width: 1.0, lighten: false, label: curve}
+        return {dash: Qt.SolidLine, width: 1.0, label: curve}
+    }
+
+    // Slight shade variations of the model colour, one per magnetic curve: the
+    // hue still says "which model", the shade helps tell the curves apart.
+    function magneticCurveColor(curve, baseColor) {
+        switch (curve) {
+        case 'spin_up':   return Qt.lighter(baseColor, 1.15)
+        case 'spin_down': return Qt.darker(baseColor, 1.2)
+        case 'rho_m':     return Qt.lighter(baseColor, 1.35)
+        case 'theta_m':   return Qt.darker(baseColor, 1.4)
+        }
+        return baseColor
     }
 
     ChartView {
@@ -540,9 +552,9 @@ Rectangle {
                 const line = chartView.createSeries(ChartView.SeriesTypeLine,
                                                     model.label + ' ' + curve + ' ' + s,
                                                     axisX, yAxis)
-                // Same hue as the model, different dash/lightness: colour stays
-                // "which model", the pattern says "which curve".
-                line.color = style.lighten ? Qt.lighter(model.color, 1.4) : model.color
+                // Same hue as the model, different dash and shade: colour stays
+                // "which model", the pattern and shade say "which curve".
+                line.color = magneticCurveColor(curve, model.color)
                 line.width = style.width
                 line.style = style.dash
                 line.useOpenGL = EaGlobals.Vars.useOpenGL

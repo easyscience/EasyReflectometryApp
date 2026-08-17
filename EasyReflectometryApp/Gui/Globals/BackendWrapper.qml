@@ -801,6 +801,13 @@ QtObject {
             return []
         }
     }
+    readonly property string plottingMagneticProfileError: {
+        try {
+            return activeBackend.plotting.magneticProfileError || ''
+        } catch (e) {
+            return ''
+        }
+    }
     readonly property var plottingSldThetaMinY: {
         try {
             return activeBackend.plotting.sldThetaMinY
