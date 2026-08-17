@@ -450,26 +450,36 @@ Rectangle {
         }
     }
 
-    // Refresh all chart series when data changes
+    // Refresh all chart series when data changes. One backend pass emits
+    // several of these signals back to back; Qt.callLater collapses the
+    // pending calls so the chart is rebuilt or refilled once per burst.
+    function scheduleChartRefresh() {
+        Qt.callLater(dispatchChartRefresh)
+    }
+
+    function dispatchChartRefresh() {
+        // A model may have become (non-)magnetic without changing whether
+        // *any* model is: then the series set itself has to be rebuilt.
+        if (magneticSeriesSignature() !== drawnMagneticSignature) {
+            recreateAllSeries()
+        } else {
+            refreshAllCharts()
+        }
+    }
+
     Connections {
         target: Globals.BackendWrapper
         function onSamplePageDataChanged() {
-            refreshAllCharts()
+            root.scheduleChartRefresh()
         }
         function onMagneticProfileChanged() {
-            // A model may have become (non-)magnetic without changing whether
-            // *any* model is: then the series set itself has to be rebuilt.
-            if (root.magneticSeriesSignature() !== root.drawnMagneticSignature) {
-                root.recreateAllSeries()
-            } else {
-                root.refreshAllCharts()
-            }
+            root.scheduleChartRefresh()
         }
         function onSamplePageResetAxes() {
             resetAxesTimer.start()
         }
         function onPlotModeChanged() {
-            refreshAllCharts()
+            root.scheduleChartRefresh()
             resetAxesTimer.start()
         }
         function onChartAxesResetRequested() {
@@ -569,18 +579,28 @@ Rectangle {
         const models = Globals.BackendWrapper.sampleModels
         for (let i = 0; i < sldSeries.length && i < models.length; i++) {
             const series = sldSeries[i]
-            if (series) {
-                series.clear()
-                const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(i)
-                for (let p = 0; p < points.length; p++) {
-                    series.append(points[p].x, points[p].y)
-                }
+            if (!series) {
+                continue
+            }
+            // The backend fills the series in one call; the append() loop is
+            // the fallback for a backend without the fill API (mock).
+            if (Globals.BackendWrapper.plottingFillSldSeriesForModel(series, i)) {
+                continue
+            }
+            series.clear()
+            const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(i)
+            for (let p = 0; p < points.length; p++) {
+                series.append(points[p].x, points[p].y)
             }
         }
 
         for (let m = 0; m < magneticSeries.length; m++) {
             const entry = magneticSeries[m]
             if (!entry.series) {
+                continue
+            }
+            if (Globals.BackendWrapper.plottingFillMagneticSldSegmentSeries(entry.series, entry.modelIndex,
+                                                                            entry.curve, entry.segment)) {
                 continue
             }
             entry.series.clear()

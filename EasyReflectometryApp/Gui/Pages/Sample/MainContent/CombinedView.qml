@@ -461,12 +461,18 @@ Rectangle {
         // Refresh sample series
         for (let i = 0; i < sampleSeries.length && i < models.length; i++) {
             const series = sampleSeries[i]
-            if (series) {
-                series.clear()
-                const points = Globals.BackendWrapper.plottingGetSampleDataPointsForModel(i)
-                for (let p = 0; p < points.length; p++) {
-                    series.append(points[p].x, points[p].y)
-                }
+            if (!series) {
+                continue
+            }
+            // The backend fills the series in one call; the append() loop is
+            // the fallback for a backend without the fill API (mock).
+            if (Globals.BackendWrapper.plottingFillSampleSeriesForModel(series, i)) {
+                continue
+            }
+            series.clear()
+            const points = Globals.BackendWrapper.plottingGetSampleDataPointsForModel(i)
+            for (let p = 0; p < points.length; p++) {
+                series.append(points[p].x, points[p].y)
             }
         }
     }

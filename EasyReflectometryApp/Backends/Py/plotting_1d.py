@@ -1,6 +1,11 @@
 import inspect
 
 import numpy as np
+
+# Registers the QtCharts wrapper types with shiboken: without this, a series
+# passed in from QML arrives as a bare QObject (no append/replaceNp methods)
+# and every one-call series fill silently falls back to the slow path.
+import PySide6.QtCharts  # noqa: F401
 from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.data import DataSet1D
@@ -792,6 +797,32 @@ class Plotting1d(QObject):
             console.debug(f'Error getting SLD data points for model {model_index}: {e}')
             return []
 
+    # One-call fills for QML-owned series: a JS append() loop crosses the
+    # QML/C++ boundary and re-signals per point; replaceNp() repaints once.
+    @Slot('QVariant', int)
+    def fillSampleSeriesForModel(self, series, model_index: int) -> None:
+        """Fill a QML-owned series with a model's reflectivity in one call."""
+        if series is None:
+            return
+        points = self.getSampleDataPointsForModel(model_index)
+        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+
+    @Slot('QVariant', int)
+    def fillSldSeriesForModel(self, series, model_index: int) -> None:
+        """Fill a QML-owned series with a model's nuclear SLD profile in one call."""
+        if series is None:
+            return
+        points = self.getSldDataPointsForModel(model_index)
+        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+
+    @Slot('QVariant', int, str, int)
+    def fillMagneticSldSegmentSeries(self, series, model_index: int, curve: str, segment: int) -> None:
+        """Fill a QML-owned series with one piece of a magnetic curve in one call."""
+        if series is None:
+            return
+        points = self.getMagneticSldSegment(model_index, curve, segment)
+        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+
     # Magnetic depth profiles (Phase 5a)
     MAGNETIC_SLD_CURVES = ('spin_up', 'spin_down', 'rho_m', 'theta_m')
 
@@ -1457,16 +1488,31 @@ class Plotting1d(QObject):
         if PLOT_BACKEND == 'QtCharts':
             self.qtchartsReplaceCalculatedOnSampleChartAndRedraw()
 
+    @staticmethod
+    def _replace_series_points(series, points) -> int:
+        """Replace a QtCharts series' content in one call.
+
+        One ``replaceNp()`` re-signals and repaints once; per-point
+        ``append()`` crosses the QML/C++ boundary and re-signals for every
+        single point. (The ``replace(QList<QPointF>)`` overload is not
+        exposed by PySide6 — only the numpy variants are.)
+        """
+        pts = list(points)
+        if not pts:
+            series.clear()
+            return 0
+        x = np.fromiter((point[0] for point in pts), dtype=np.float64, count=len(pts))
+        y = np.fromiter((point[1] for point in pts), dtype=np.float64, count=len(pts))
+        series.replaceNp(x, y)
+        return len(pts)
+
     def qtchartsReplaceCalculatedOnSampleChartAndRedraw(self):
         if not self._clear_qtcharts_series('samplePage', 'sampleSerie'):
             return
         series = self._qtcharts_series_ref('samplePage', 'sampleSerie')
-        nr_points = 0
-        for point in self.sample_data.data_points():
-            if point[1] <= 0:
-                continue
-            series.append(point[0], np.log10(point[1]))
-            nr_points = nr_points + 1
+        nr_points = self._replace_series_points(
+            series, ((point[0], np.log10(point[1])) for point in self.sample_data.data_points() if point[1] > 0)
+        )
         console.debug(IO.formatMsg('sub', 'Calc curve', f'{nr_points} points', 'on sample page', 'replaced'))
 
     @Slot()
@@ -1478,21 +1524,13 @@ class Plotting1d(QObject):
         # Draw on sample page
         series = self._chartRefs['QtCharts']['samplePage']['sldSerie']
         if series is not None:
-            series.clear()
-            nr_points = 0
-            for point in self.sld_data.data_points():
-                series.append(point[0], point[1])
-                nr_points = nr_points + 1
+            nr_points = self._replace_series_points(series, self.sld_data.data_points())
             console.debug(IO.formatMsg('sub', 'Sld curve', f'{nr_points} points', 'on sample page', 'replaced'))
 
         # Draw on analysis page
         analysis_series = self._chartRefs['QtCharts']['analysisPage']['sldSerie']
         if analysis_series is not None:
-            analysis_series.clear()
-            nr_points = 0
-            for point in self.sld_data.data_points():
-                analysis_series.append(point[0], point[1])
-                nr_points = nr_points + 1
+            nr_points = self._replace_series_points(analysis_series, self.sld_data.data_points())
             console.debug(IO.formatMsg('sub', 'Sld curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
     @Slot()
@@ -1510,7 +1548,9 @@ class Plotting1d(QObject):
         series_measured = self._qtcharts_series_ref('experimentPage', 'measuredSerie')
         series_error_upper = self._qtcharts_series_ref('experimentPage', 'errorUpperSerie')
         series_error_lower = self._qtcharts_series_ref('experimentPage', 'errorLowerSerie')
-        nr_points = 0
+        measured_points = []
+        error_upper_points = []
+        error_lower_points = []
         for point in self.experiment_data.data_points():
             q = point[0]
             r = point[1]
@@ -1521,12 +1561,14 @@ class Plotting1d(QObject):
             r_val = self._apply_rq4(q, r)
             error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
             error_lower = self._apply_rq4(q, error_lower_linear)
-            series_measured.append(q, np.log10(r_val))
-            series_error_upper.append(q, np.log10(error_upper))
-            series_error_lower.append(q, np.log10(error_lower))
-            nr_points = nr_points + 1
+            measured_points.append((q, np.log10(r_val)))
+            error_upper_points.append((q, np.log10(error_upper)))
+            error_lower_points.append((q, np.log10(error_lower)))
+        self._replace_series_points(series_measured, measured_points)
+        self._replace_series_points(series_error_upper, error_upper_points)
+        self._replace_series_points(series_error_lower, error_lower_points)
 
-        console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on experiment page', 'replaced'))
+        console.debug(IO.formatMsg('sub', 'Measured curve', f'{len(measured_points)} points', 'on experiment page', 'replaced'))
 
     def qtchartsReplaceMultiExperimentChartAndRedraw(self):
         """Draw multiple experiment series with distinct colors."""
@@ -1564,22 +1606,20 @@ class Plotting1d(QObject):
 
         series_measured = self._qtcharts_series_ref('analysisPage', 'measuredSerie')
         series_calculated = self._qtcharts_series_ref('analysisPage', 'calculatedSerie')
-        nr_points = 0
-        for point in self.experiment_data.data_points():
-            q = point[0]
-            r_meas = point[1]
-            if r_meas <= 0:
-                continue
-            r_meas = self._apply_rq4(q, r_meas)
-            series_measured.append(q, np.log10(r_meas))
-            nr_points = nr_points + 1
+        nr_points = self._replace_series_points(
+            series_measured,
+            (
+                (point[0], np.log10(self._apply_rq4(point[0], point[1])))
+                for point in self.experiment_data.data_points()
+                if point[1] > 0
+            ),
+        )
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
-        for point in self.model_data.data_points():
-            q = point[0]
-            r_calc = self._apply_rq4(q, point[1])
-            series_calculated.append(q, np.log10(r_calc))
-            nr_points = nr_points + 1
+        nr_points = self._replace_series_points(
+            series_calculated,
+            ((point[0], np.log10(self._apply_rq4(point[0], point[1]))) for point in self.model_data.data_points()),
+        )
         console.debug(IO.formatMsg('sub', 'Calculated curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
     # ------------------------------------------------------------------

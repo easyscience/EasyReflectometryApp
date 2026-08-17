@@ -302,19 +302,18 @@ class PyBackend(QObject):
         self._analysis.experimentsChanged.emit()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
-        self._plotting_1d.reset_data()
+        # _refresh_plots drops the plot caches itself before recomputing.
         self._refresh_plots()
 
     def _relay_sample_page_sample_changed(self):
-        self._plotting_1d.reset_data()
+        # Non-plot consequences of a sample edit only. Every edit that changes
+        # a curve also emits externalRefreshPlot (handled by _refresh_plots,
+        # which invalidates and recomputes everything once); when this relay
+        # also dropped the plot caches and re-notified the magnetic/spin
+        # asymmetry charts, each edit computed every refl1d curve twice.
         self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
-        self._plotting_1d.samplePageResetAxes.emit()
-        # Making a layer magnetic adds curves to the SLD chart and can add the
-        # model spin-asymmetry curve.
-        self._plotting_1d.notifyMagneticProfileChanged()
-        self._plotting_1d.notifySpinAsymmetryChanged()
 
     def _relay_experiment_page_experiment_changed(self):
         self._analysis.experimentsChanged.emit()
@@ -333,6 +332,9 @@ class PyBackend(QObject):
         self._sample.magnetismChanged.emit()
 
     def _refresh_plots(self):
+        # The single invalidate-and-recompute pass: drop every plot cache
+        # first, then notify each chart exactly once.
+        self._plotting_1d.reset_data()
         # The magnetic profile and the spin asymmetry follow both the sample
         # (a layer became magnetic, a parameter moved) and the data, so they are
         # refreshed wherever the ordinary plots are.

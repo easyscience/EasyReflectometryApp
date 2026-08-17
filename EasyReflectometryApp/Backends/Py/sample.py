@@ -179,6 +179,7 @@ class Sample(QObject):
     def removeMaterial(self, value: str) -> None:
         self._material_logic.remove_at_index(value)
         self.materialsTableChanged.emit()
+        self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
     @Slot()
@@ -1086,6 +1087,8 @@ class Sample(QObject):
         else:
             self._make_parameter_independent(param_obj)
         self.constraintsChanged.emit()
+        # Constraints move parameter values, so the curves change too.
+        self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
         self.layersChange.emit()
 
@@ -1181,6 +1184,8 @@ class Sample(QObject):
             self._constraint_states[unique_name] = state
 
         self.constraintsChanged.emit()
+        # Constraints move parameter values, so the curves change too.
+        self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
         self.layersChange.emit()
 
@@ -1276,6 +1281,8 @@ class Sample(QObject):
 
         if constraints_added > 0:
             self.constraintsChanged.emit()
+            # Constraints move parameter values, so the curves change too.
+            self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
             self.layersChange.emit()
 

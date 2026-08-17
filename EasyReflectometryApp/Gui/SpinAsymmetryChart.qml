@@ -249,7 +249,8 @@ Rectangle {
     Connections {
         target: Globals.BackendWrapper
         function onSpinAsymmetryChanged() {
-            root.refresh()
+            // Qt.callLater collapses a burst of notifications into one refresh.
+            Qt.callLater(root.refresh)
         }
     }
 

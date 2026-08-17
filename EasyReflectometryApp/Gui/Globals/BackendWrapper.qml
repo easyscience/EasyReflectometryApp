@@ -625,6 +625,32 @@ QtObject {
             return []
         }
     }
+    // One-call series fills (false = backend cannot fill, caller falls back
+    // to an append() loop — e.g. the mock backend).
+    function plottingFillSampleSeriesForModel(series, index) {
+        try {
+            activeBackend.plotting.fillSampleSeriesForModel(series, index)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingFillSldSeriesForModel(series, index) {
+        try {
+            activeBackend.plotting.fillSldSeriesForModel(series, index)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingFillMagneticSldSegmentSeries(series, index, curve, segment) {
+        try {
+            activeBackend.plotting.fillMagneticSldSegmentSeries(series, index, curve, segment)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
     function plottingGetModelColor(index) {
         try {
             return activeBackend.plotting.getModelColor(index)
