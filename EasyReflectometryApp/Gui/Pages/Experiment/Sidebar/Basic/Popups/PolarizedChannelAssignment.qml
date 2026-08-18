@@ -134,22 +134,26 @@ EaElements.Dialog {
             model: dialog.assignmentRows.length
 
             delegate: Row {
+                id: rowDelegate
+
+                property int rowIndex: index
+
                 spacing: EaStyle.Sizes.fontPixelSize
 
                 EaElements.Label {
                     width: EaStyle.Sizes.fontPixelSize * 18
                     anchors.verticalCenter: parent.verticalCenter
                     elide: Text.ElideLeft
-                    text: dialog.assignmentRows[index].name
-                    ToolTip.text: dialog.assignmentRows[index].path
+                    text: dialog.assignmentRows[rowDelegate.rowIndex].name
+                    ToolTip.text: dialog.assignmentRows[rowDelegate.rowIndex].path
                 }
 
                 EaElements.ComboBox {
                     width: EaStyle.Sizes.fontPixelSize * 8
                     model: dialog.channelTexts
-                    currentIndex: dialog.channelValues.indexOf(dialog.assignmentRows[index].channel)
+                    currentIndex: dialog.channelValues.indexOf(dialog.assignmentRows[rowDelegate.rowIndex].channel)
                     onActivated: {
-                        dialog.assignmentRows[index].channel = dialog.channelValues[currentIndex]
+                        dialog.assignmentRows[rowDelegate.rowIndex].channel = dialog.channelValues[currentIndex]
                         dialog.editRevision += 1
                     }
                 }

@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
 
 import Gui as Gui
 import Gui.Globals as Globals
@@ -48,7 +49,7 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        TabBar {
+        EaElements.TabBar {
             id: tabBar
             Layout.fillWidth: true
             Layout.preferredHeight: EaStyle.Sizes.toolButtonHeight
@@ -60,19 +61,19 @@ Item {
             readonly property int visibleTabCount: root.spinAsymmetryAvailable ? 3 : 2
             readonly property real tabWidth: (width - spacing * (visibleTabCount - 1)) / visibleTabCount
 
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("SLD")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
                 width: tabBar.tabWidth
             }
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Residuals")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
                 width: tabBar.tabWidth
             }
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Spin asymmetry")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight

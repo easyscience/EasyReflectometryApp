@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import EasyApplication.Gui.Style as EaStyle
+import EasyApplication.Gui.Elements as EaElements
 
 import Gui as Gui
 import Gui.Globals as Globals
@@ -24,7 +25,7 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        TabBar {
+        EaElements.TabBar {
             id: tabBar
 
             visible: root.spinAsymmetryAvailable
@@ -33,12 +34,12 @@ Item {
 
             background: Rectangle { color: EaStyle.Colors.chartBackground }
 
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Reflectivity")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
             }
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Spin asymmetry")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight

@@ -227,8 +227,7 @@ class Fitting:
         return list(experiments)
 
     _POLARIZED_SAMPLE_MESSAGE = (
-        'Bayesian sampling of polarized experiments is not supported yet — the sampler '
-        'has no notion of spin channels. Classical fitting of polarized data does work.'
+        'Bayesian sampling of polarized experiments is not supported yet.'
     )
 
     def _has_polarized_experiments(self) -> bool:
@@ -254,9 +253,9 @@ class Fitting:
                 self._show_results_dialog = True
                 return None, None, None, None, None
 
-            # One fit function per dataset: a polarized experiment expands to
-            # one per measured spin channel, all sharing its single model, so
-            # structural parameters stay common and the magnetic ones are
+            # One fit function per dataset. Polarized experiment contains
+            # one per measured spin channel. All are sharing a single model, so
+            # structural parameters stay common and the magnetic params are
             # constrained by every channel at once.
             multi_fitter = MultiFitter.for_experiments(experiments)
 
@@ -281,7 +280,7 @@ class Fitting:
             x_data = []
             y_data = []
             weights = []
-            # `fit_datasets` is the flat, per-channel dataset list matching the
+            # `fit_datasets` is the simple, per-channel dataset list matching the
             # fit functions; for unpolarized data it is just the experiments.
             for idx, dataset in enumerate(multi_fitter.fit_datasets):
                 x_vals = np.asarray(dataset.x)
