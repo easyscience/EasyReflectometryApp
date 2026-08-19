@@ -288,6 +288,54 @@ class TestEndToEndPolarizedImport:
         pp_points = plotting.getExperimentChannelDataPoints(0, 'pp')
         assert len(pp_points) == len(q)
 
+    def test_polarized_experiment_survives_save_and_reload(self, qcore_application, tmp_path):
+        """A polarized experiment must round-trip through the App's own save/load path.
+
+        Regression test for the data-loss bug flagged in PR #338 review: the
+        App's save() delegates straight to the library's save_as_json(), so
+        this only passes because the pinned easyreflectometry commit knows
+        how to (de)serialize a PolarizedDataSet. If the dependency ever moves
+        to a commit that regresses this, this test (not just the library's
+        own) must catch it.
+        """
+        from easyreflectometry import Project as RealProject
+        from easyreflectometry.data import PolarizedDataSet
+        from easyscience import global_object
+
+        from EasyReflectometryApp.Backends.Py.experiment import Experiment
+
+        q = np.linspace(0.01, 0.2, 15)
+        reflectivity = np.exp(-q * 30)
+        paths = []
+        for name in ('run_uu.dat', 'run_dd.dat'):
+            path = tmp_path / name
+            np.savetxt(path, np.column_stack([q, reflectivity, 0.01 * reflectivity]))
+            paths.append(path.as_uri())
+
+        project = RealProject()
+        project.set_path_project_parent(tmp_path)
+        project.calculator = 'refl1d'
+        project.default_model()
+        project._info['name'] = 'polarized round trip'
+        experiment = Experiment(project_lib=project)
+        rows = experiment.suggestPolarizedChannels(','.join(paths))
+        experiment.loadPolarized(rows)
+        original = project.experiments[0]
+
+        ProjectLogic(project_lib=project).save()
+        assert project.path_json.exists()
+
+        global_object.map._clear()
+        reloaded_project = RealProject()
+        ProjectLogic(project_lib=reloaded_project).load(str(project.path_json))
+        reloaded = reloaded_project.experiments[0]
+
+        assert isinstance(reloaded, PolarizedDataSet)
+        assert reloaded.available_channels == original.available_channels
+        for channel in original.available_channels:
+            assert np.allclose(reloaded[channel].x, original[channel].x)
+            assert np.allclose(reloaded[channel].y, original[channel].y)
+
     def test_imported_experiment_becomes_the_current_one(self, qcore_application, tmp_path):
         """With an experiment already loaded, the import must not stay invisible."""
         from easyreflectometry import Project as RealProject

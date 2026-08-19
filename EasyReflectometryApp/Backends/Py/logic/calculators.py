@@ -19,10 +19,15 @@ class Calculators:
         return self.index_of(self._project_lib.calculator)
 
     def index_of(self, name: str) -> int:
-        """Position of a calculator in the list (0 when it is not available)."""
+        """Position of a calculator in the list (-1 when it is not available).
+
+        0 is a real engine (typically refnx), so it must not stand in for
+        "not found" — callers rely on a negative result to detect a missing
+        engine (see `enableMagnetismWithEngineAtIndex`).
+        """
         if name in self._list_available_calculators:
             return self._list_available_calculators.index(name)
-        return 0
+        return -1
 
     def supporting_magnetism(self) -> list[str]:
         """Available calculators that can model magnetic layers."""

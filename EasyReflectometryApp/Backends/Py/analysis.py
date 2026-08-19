@@ -1,7 +1,6 @@
 import logging
 import os
 import time
-
 from typing import List
 from typing import Optional
 
@@ -656,11 +655,9 @@ class Analysis(QObject):
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
         if self._plotting is None:
             return
-        from easyreflectometry.analysis.bayesian import (
-            posterior_predictive_reflectivity,
-            posterior_predictive_sld_profile,
-        )
         import numpy as np
+        from easyreflectometry.analysis.bayesian import posterior_predictive_reflectivity
+        from easyreflectometry.analysis.bayesian import posterior_predictive_sld_profile
 
         posterior = self._bayesian_logic.posterior
         if posterior is None:
@@ -824,8 +821,8 @@ class Analysis(QObject):
 
     def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         out_dir = Path(tempfile.gettempdir()) / 'EasyReflectometryApp' / 'bayesian'
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -914,9 +911,8 @@ class Analysis(QObject):
             self._bayesian_logic.trace_plot_url = ''
             return
         try:
-            from easyreflectometry.analysis.bayesian import plot_trace
-
             import numpy as np
+            from easyreflectometry.analysis.bayesian import plot_trace
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 2:
                 draws = draws[np.newaxis, ...]  # (1, n_draws, n_params)
@@ -1516,6 +1512,6 @@ class Analysis(QObject):
             shutil.copy2(str(source_path), save_path)
             logger.info('Bayesian plot saved to %s', save_path)
             return True
-        except OSError as exc:
+        except OSError:
             logger.exception('Failed to save Bayesian plot to %s', save_path)
             return False

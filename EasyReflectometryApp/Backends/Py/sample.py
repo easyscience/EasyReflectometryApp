@@ -682,20 +682,28 @@ class Sample(QObject):
         """Switch the calculation engine, then make the layer magnetic.
 
         The confirmed half of `magnetismNeedsEngine`: the user has been told
-        that the engine changes, so both steps happen as one action.
+        that the engine changes, so both steps happen as one action. If
+        attaching magnetism fails after the engine switch, the switch is
+        rolled back rather than left half-applied (engine changed, layer
+        still non-magnetic, with no indication to the user).
         """
         engine_index = self._calculators_logic.index_of(engine)
         if engine_index < 0:
             self.magnetismFailed.emit(f'The {engine} calculation engine is not available.')
             return
+        previous_calculator = self._project_lib.calculator
+        engine_switched = False
         try:
-            if self._calculators_logic.set_current_index(engine_index):
-                self.calculationEngineChanged.emit()
+            engine_switched = self._calculators_logic.set_current_index(engine_index)
             changed = self._layers_logic.set_magnetic_at_index(index, True)
         except NotImplementedError as exception:
+            if engine_switched:
+                self._project_lib.calculator = previous_calculator
             logger.warning('Cannot enable magnetism: %s', exception)
             self.magnetismFailed.emit(str(exception))
             return
+        if engine_switched:
+            self.calculationEngineChanged.emit()
         if changed:
             self._emitMagnetismChanged()
 

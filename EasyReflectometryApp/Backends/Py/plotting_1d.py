@@ -654,21 +654,34 @@ class Plotting1d(QObject):
 
             for exp_idx in indices:
                 try:
-                    aligned = self._get_aligned_analysis_values(exp_idx)
-                    for item in aligned:
-                        q = item['q']
-                        residual = self._compute_residual(
-                            item['calculated'], item['measured'], item['sigma'])
-                        if min_x == float('inf'):
-                            min_x = q
-                        else:
-                            min_x = min(min_x, q)
-                        if max_x == float('-inf'):
-                            max_x = q
-                        else:
-                            max_x = max(max_x, q)
-                        min_y = min(min_y, residual)
-                        max_y = max(max_y, residual)
+                    # A polarized experiment draws one residual curve per visible
+                    # spin channel (see ResidualsView.qml); the range must cover
+                    # every one of them, not just the flattened first channel.
+                    experiment = self._project_lib.experimental_data_for_model_at_index(exp_idx)
+                    channels = [
+                        channel for channel in experiment_channel_values(experiment)
+                        if channel in self._visible_channels
+                    ]
+                    for channel in channels or ['']:
+                        aligned = self._get_aligned_analysis_values(exp_idx, channel)
+                        for item in aligned:
+                            if not item['has_calculated']:
+                                # No cross-section to compare against: ResidualsView
+                                # does not draw a point here either.
+                                continue
+                            q = item['q']
+                            residual = self._compute_residual(
+                                item['calculated'], item['measured'], item['sigma'])
+                            if min_x == float('inf'):
+                                min_x = q
+                            else:
+                                min_x = min(min_x, q)
+                            if max_x == float('-inf'):
+                                max_x = q
+                            else:
+                                max_x = max(max_x, q)
+                            min_y = min(min_y, residual)
+                            max_y = max(max_y, residual)
                 except Exception as e:
                     console.debug(f'Residual range error for experiment {exp_idx}: {e}')
                     continue
@@ -1358,7 +1371,11 @@ class Plotting1d(QObject):
         q_mask = (q_values >= self._project_lib.q_min) & (q_values <= self._project_lib.q_max)
         q_filtered = q_values[q_mask]
         measured_filtered = measured_values[q_mask]
-        sigma_filtered = sigma_values[q_mask] if sigma_values.size else np.zeros_like(measured_filtered)
+        variance_filtered = sigma_values[q_mask] if sigma_values.size else np.zeros_like(measured_filtered)
+        # ye holds variances (sigma**2), same convention as prepare_threaded_fit
+        # and getSpinAsymmetryPoints; convert to one standard deviation here so
+        # every consumer of 'sigma' (residuals, report error bars) agrees.
+        sigma_filtered = np.sqrt(np.clip(variance_filtered, 0.0, None))
 
         model_index = self._get_experiment_model_index(experiment_index, exp_data)
         if channel:

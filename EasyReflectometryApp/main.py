@@ -22,6 +22,7 @@ except ImportError:
 
 # Suppress matplotlib debug/verbose logging (especially font lookup spam)
 import logging as _logging
+
 _logging.getLogger('matplotlib').setLevel(_logging.WARNING)
 _logging.getLogger('matplotlib.font_manager').setLevel(_logging.WARNING)
 

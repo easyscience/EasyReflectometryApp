@@ -76,8 +76,28 @@ Rectangle {
                     }
                 }
 
-                // Watch for changes in multi-experiment mode property
-                onIsMultiExperimentModeChanged: {
+                // A polarized experiment has measured data and a calculated curve per
+                // spin channel, which the single measured/calculated pair cannot show,
+                // so it uses the same dynamic per-series path as a multi-experiment
+                // selection — even when only one experiment is selected.
+                property bool usesChannelSeries: Globals.BackendWrapper.plottingAnalysisUsesChannelSeries
+                readonly property bool useDynamicSeries: isMultiExperimentMode || usesChannelSeries
+
+                // Rows to draw: one per visible channel when any selected experiment is
+                // polarized, otherwise one per experiment.
+                readonly property var seriesDataList: {
+                    try {
+                        return usesChannelSeries
+                            ? Globals.BackendWrapper.plottingIndividualExperimentChannelDataList
+                            : Globals.BackendWrapper.plottingIndividualExperimentDataList
+                    } catch (e) {
+                        console.warn("CombinedView.seriesDataList failed:", e)
+                        return []
+                    }
+                }
+
+                // Watch for changes in multi-experiment mode / channel-series property
+                onUseDynamicSeriesChanged: {
                     updateMultiExperimentSeries()
                 }
 
@@ -86,6 +106,20 @@ Rectangle {
                     target: Globals.BackendWrapper.activeBackend ?? null
                     enabled: target !== null
                     function onMultiExperimentSelectionChanged() {
+                        analysisChartView.updateMultiExperimentSeries()
+                    }
+                }
+
+                // Toggling a spin channel changes which series must exist.
+                Connections {
+                    target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+                    enabled: target !== null
+                    function onChannelSelectionChanged() {
+                        if (analysisChartView.useDynamicSeries) {
+                            analysisChartView.updateMultiExperimentSeries()
+                        }
+                    }
+                    function onExperimentChannelsChanged() {
                         analysisChartView.updateMultiExperimentSeries()
                     }
                 }
@@ -221,18 +255,10 @@ Rectangle {
 
                 // Multi-experiment series management
                 function updateMultiExperimentSeries() {
-                    // Always get the latest value from backend
-                    var isMultiExp = false
-                    try {
-                        isMultiExp = Globals.BackendWrapper.plottingIsMultiExperimentMode || false
-                    } catch (e) {
-                        isMultiExp = false
-                    }
-
                     // Clear existing multi-experiment series
                     clearMultiExperimentSeries()
 
-                    if (!isMultiExp) {
+                    if (!useDynamicSeries) {
                         // Show default scatter series for single experiment
                         measured.visible = false
                         if (!measuredScatterSerie) {
@@ -250,8 +276,8 @@ Rectangle {
                         return
                     }
 
-                    // Get experiment data list
-                    var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
+                    // Get the rows to draw (one per experiment, or per spin channel)
+                    var experimentDataList = seriesDataList
 
                     // If no data available yet, keep default series visible as fallback
                     if (experimentDataList.length === 0) {
@@ -280,7 +306,7 @@ Rectangle {
                     for (var i = 0; i < experimentDataList.length; i++) {
                         var expData = experimentDataList[i]
                         if (expData.hasData) {
-                            createExperimentSeries(expData.index, expData.name, expData.color)
+                            createExperimentSeries(expData.index, expData.name, expData.color, expData.channel || "")
                         }
                     }
                 }
@@ -299,14 +325,18 @@ Rectangle {
                     multiExperimentSeries = []
                 }
 
-                function createExperimentSeries(expIndex, expName, color) {
+                function createExperimentSeries(expIndex, expName, color, channel) {
                     var xAxis = currentXAxis()
 
-                    // Look up the model color for this experiment
+                    // Look up the model color for this experiment. A per-channel series
+                    // keeps its own channel shade instead: one model colour for four
+                    // overlapping cross-sections would make them indistinguishable.
                     var modelColors = Globals.BackendWrapper.modelColorsForExperiment
-                    var modelColor = (modelColors && expIndex >= 0 && expIndex < modelColors.length)
-                                     ? modelColors[expIndex]
-                                     : color
+                    var modelColor = channel
+                                     ? color
+                                     : ((modelColors && expIndex >= 0 && expIndex < modelColors.length)
+                                        ? modelColors[expIndex]
+                                        : color)
 
                     // Create measured data series (scatter points)
                     var measuredSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
@@ -329,7 +359,8 @@ Rectangle {
                         calculatedSerie: calculatedSerie,
                         expIndex: expIndex,
                         expName: expName,
-                        color: color
+                        color: color,
+                        channel: channel || ""
                     }
                     multiExperimentSeries.push(seriesSet)
 
@@ -338,8 +369,9 @@ Rectangle {
                 }
 
                 function populateExperimentSeries(seriesSet) {
-                    // Get data points from backend (includes both measured and calculated)
-                    var dataPoints = Globals.BackendWrapper.plottingGetAnalysisDataPoints(seriesSet.expIndex)
+                    // Get data points from backend (includes both measured and calculated);
+                    // for a polarized experiment both belong to seriesSet.channel.
+                    var dataPoints = Globals.BackendWrapper.plottingGetAnalysisDataPoints(seriesSet.expIndex, seriesSet.channel)
 
                     // Clear existing points
                     seriesSet.measuredSerie.clear()
@@ -349,7 +381,11 @@ Rectangle {
                     for (var i = 0; i < dataPoints.length; i++) {
                         var point = dataPoints[i]
                         seriesSet.measuredSerie.append(point.x, point.measured)
-                        seriesSet.calculatedSerie.append(point.x, point.calculated)
+                        // A channel the model cannot calculate (spin-flip on a
+                        // non-magnetic model) has no curve; measured points still show.
+                        if (point.hasCalculated !== false) {
+                            seriesSet.calculatedSerie.append(point.x, point.calculated)
+                        }
                     }
                 }
                 
@@ -401,7 +437,7 @@ Rectangle {
                         logModeSeries = null
                     }
 
-                    if (isMultiExperimentMode) {
+                    if (useDynamicSeries) {
                         updateMultiExperimentSeries()
                     } else if (useLogQAxis) {
                         measured.visible = false
@@ -579,19 +615,19 @@ Rectangle {
 
                         // Single experiment legend
                         EaElements.Label {
-                            visible: !analysisChartView.isMultiExperimentMode
+                            visible: !analysisChartView.useDynamicSeries
                             text: Globals.Variables.lineStyleSymbol(analysisChartView.measSerie.style) + '  I (Measured)'
                             color: analysisChartView.measSerie.color
                         }
                         EaElements.Label {
-                            visible: !analysisChartView.isMultiExperimentMode
+                            visible: !analysisChartView.useDynamicSeries
                             text: Globals.Variables.lineStyleSymbol(analysisChartView.calcSerie.style) + ' (Calculated)'
                             color: analysisChartView.calcSerie.color
                         }
 
                         // Bayesian posterior predictive legend
                         Row {
-                            visible: !analysisChartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                            visible: !analysisChartView.useDynamicSeries && Globals.BackendWrapper.bayesianResultAvailable
                             spacing: EaStyle.Sizes.fontPixelSize * 0.3
                             Rectangle {
                                 width: EaStyle.Sizes.fontPixelSize * 1.2
@@ -605,7 +641,7 @@ Rectangle {
                             }
                         }
                         Row {
-                            visible: !analysisChartView.isMultiExperimentMode && Globals.BackendWrapper.bayesianResultAvailable
+                            visible: !analysisChartView.useDynamicSeries && Globals.BackendWrapper.bayesianResultAvailable
                             spacing: EaStyle.Sizes.fontPixelSize * 0.3
                             Rectangle {
                                 width: EaStyle.Sizes.fontPixelSize * 1.2
@@ -619,9 +655,9 @@ Rectangle {
                             }
                         }
 
-                        // Multi-experiment legend
+                        // Multi-experiment / channel legend
                         Column {
-                            visible: analysisChartView.isMultiExperimentMode
+                            visible: analysisChartView.useDynamicSeries
                             spacing: EaStyle.Sizes.fontPixelSize * 0.2
 
                             EaElements.Label {
@@ -632,7 +668,7 @@ Rectangle {
                             }
 
                             Repeater {
-                                model: analysisChartView.isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentDataList : []
+                                model: analysisChartView.useDynamicSeries ? analysisChartView.seriesDataList : []
                                 delegate: Row {
                                     spacing: EaStyle.Sizes.fontPixelSize * 0.3
 
@@ -712,8 +748,8 @@ Rectangle {
                 }
 
                 function recreateSeriesForCurrentMode() {
-                    if (isMultiExperimentMode) {
-                        // Multi-experiment mode: recreate all multi-experiment series
+                    if (useDynamicSeries) {
+                        // Multi-experiment / channel-series mode: recreate all dynamic series
                         updateMultiExperimentSeries()
                     } else if (useLogQAxis) {
                         // Single experiment, log mode: recreate log mode series

@@ -166,10 +166,14 @@ class Summary:
                     # legend entry, so the channel is still identifiable.
                     measured_label = label_name if y_calc is None else None
                     if ye is not None and ye.size == y.size:
+                        # ye holds variances (sigma**2); errorbar() needs one
+                        # standard deviation, same convention as the fitter
+                        # weights and the analysis-chart residuals.
+                        sigma = np.sqrt(np.clip(ye, 0.0, None))
                         ax_reflectivity.errorbar(
                             x,
                             y * scale_factor,
-                            ye * scale_factor,
+                            sigma * scale_factor,
                             marker='',
                             ls='',
                             color=color,

@@ -224,7 +224,7 @@ class _DataSet1DStub:
     def data_points(self):
         for i in range(len(self.x)):
             yield (self.x[i], self.y[i],
-                   self.ye[i] ** 2 if len(self.ye) > i else 0.0)
+                   self.ye[i] if len(self.ye) > i else 0.0)
 
 
 def _make_exp_data_stub(q, r, ye=None):
@@ -370,7 +370,7 @@ class TestGetResidualDataPoints:
         q = np.array([0.10])
         r_exp = np.array([1e-2])
         r_calc = np.array([3e-2])
-        ye = np.array([1e-3])  # sigma = 1e-3
+        ye = np.array([1e-3 ** 2])  # ye is variance; sigma = sqrt(ye) = 1e-3
         proj = _make_project_stub(q, r_exp, r_calc, ye=ye)
         p = _make_plotting_stub(proj)
 
@@ -386,7 +386,7 @@ class TestGetResidualDataPoints:
         q = np.array([0.10])
         r_exp = np.array([1e-2])
         r_calc = np.array([3e-2])
-        ye = np.array([1e-3])
+        ye = np.array([1e-3 ** 2])  # ye is variance
         proj = _make_project_stub(q, r_exp, r_calc, ye=ye)
         p_linear = _make_plotting_stub(proj, rq4=False)
         p_rq4 = _make_plotting_stub(proj, rq4=True)
@@ -470,7 +470,7 @@ class TestGetResidualRange:
         q = np.array([0.10])
         r_exp = np.array([1e-2])
         r_calc = np.array([3e-2])
-        ye = np.array([1e-3])
+        ye = np.array([1e-3 ** 2])  # ye is variance; sigma = sqrt(ye) = 1e-3
         proj = _make_project_stub(q, r_exp, r_calc, ye=ye)
         p = _make_plotting_stub(proj)
 
@@ -484,7 +484,7 @@ class TestGetResidualRange:
         q = np.array([0.10])
         r_exp = np.array([1e-2])
         r_calc = np.array([3e-2])
-        ye = np.array([1e-3])
+        ye = np.array([1e-3 ** 2])  # ye is variance
         proj = _make_project_stub(q, r_exp, r_calc, ye=ye)
 
         p_linear = _make_plotting_stub(proj, rq4=False)

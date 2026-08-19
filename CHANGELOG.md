@@ -2,19 +2,12 @@
 
 - Enabling magnetism no longer jumps to another page. Ticking a layer's
   "Magn." box while the current engine cannot model magnetism now asks whether
-  to switch the project to refl1d and does both in one step. The note next to
-  the table says this up front. It used to point at the Analysis page, which
-  stays disabled until Experiment has been visited. The calculation engine has
-  its own group on the Sample page, so the switch can be seen and undone where
-  magnetism is edited. The polarized import dialog also notes that modelling
-  the channels needs that engine.
+  to switch the project to refl1d and does both in one step. 
+  The calculation engine has its own group on the Sample page.
 - Selecting an engine that cannot model magnetism, while the sample already has
-  magnetic layers, is refused with a message on both pages. This used to raise
-  out of a QML-invoked slot and could take the application down without a
-  traceback.
+  magnetic layers, is refused with a message on both pages.
 - Fixed the calculation-engine selector showing the wrong engine after loading
-  a project that used a different one. The selection is read from the project,
-  not from a cached index.
+  a project that used a different one.
 - Magnetic depth profiles on the SLD chart (Sample and Analysis share the
   chart):
   - Once a layer is magnetic, the chart adds the spin-up and spin-down
@@ -58,11 +51,8 @@
     non-magnetic model) is shown as measured data only.
   - **Limitations:** one resolution function per polarized experiment (taken
     from the first assigned channel; the import dialog says so); Bayesian
-    sampling of polarized experiments is not supported yet; polarized
-    experiments are not yet saved in project files.
-  - Needs an `easyreflectometry` version with the per-channel experiment API.
-    If it is missing, the app reports an error instead of drawing empty
-    charts.
+    sampling of polarized experiments is not supported yet.
+  - Project save/load now fully supports polarized experiments.
 - Magnetism editing and polarized fitting:
   - New "Magnetism" group on the Sample page: one row per layer of the current
     assembly, with a magnetic on/off checkbox, magnetic SLD (ρM) and in-plane
