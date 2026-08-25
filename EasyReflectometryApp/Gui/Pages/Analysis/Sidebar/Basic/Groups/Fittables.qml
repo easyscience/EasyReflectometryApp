@@ -295,11 +295,16 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     width: EaStyle.Sizes.fontPixelSize * 5
-                    text: Globals.BackendWrapper.analysisFitableParameters[index].name
+                    // Derived (computed, read-only) parameters carry an ƒ badge; the
+                    // tooltip explains what they are computed from.
+                    readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
+                    text: (derived ? 'ƒ ' : '') + Globals.BackendWrapper.analysisFitableParameters[index].name
                     color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
                            Globals.BackendWrapper.analysisFitableParameters[index].independent  : true) ?
                            EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
-                    ToolTip.text: textFormat === Text.PlainText ? text : ''
+                    ToolTip.text: derived
+                                  ? qsTr("Derived, read-only: %1").arg(Globals.BackendWrapper.analysisFitableParameters[index].dependency || '')
+                                  : (textFormat === Text.PlainText ? text : '')
                 }
 
                 EaComponents.TableViewParameter {

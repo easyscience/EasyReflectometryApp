@@ -109,6 +109,7 @@ class Parameters:
                     'display_name': parameter['display_name'],
                     'group': parameter.get('group', ''),
                     'independent': parameter['independent'],
+                    'kind': parameter.get('kind', 'parameter'),
                     'object': parameter['object'],
                 }
             )
@@ -127,6 +128,7 @@ class Parameters:
                     'displayName': entry['display_name'],
                     'group': entry.get('group', ''),
                     'independent': entry['independent'],
+                    'kind': entry.get('kind', 'parameter'),
                 }
             )
         metadata.sort(key=lambda item: item['displayName'])
@@ -371,6 +373,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
             alias = _make_alias(prefixed_display_name or parameter.name)
             param_value = float(parameter.value)
+            is_derived = _is_derived_parameter(parameter, model)
             parameter_list.append(
                 {
                     'name': prefixed_display_name,
@@ -383,15 +386,40 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'max': float(parameter.max),
                     'min': float(parameter.min),
                     'units': parameter.unit,
-                    'fit': parameter.free,
+                    'fit': False if is_derived else parameter.free,
                     'independent': parameter.independent,
-                    'dependency': _get_dependency_expression(parameter, paths),
+                    'dependency': (
+                        _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
+                        if is_derived
+                        else _get_dependency_expression(parameter, paths)
+                    ),
+                    # Derived "calculation" parameters (e.g. the model's total film
+                    # thickness) are computed from the layers: shown read-only, never
+                    # fitted, but usable as aliases in constraint expressions.
+                    'kind': 'derived' if is_derived else 'parameter',
+                    'readOnly': is_derived,
                     'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
                     'object': parameter,  # Direct reference to the Parameter object
                 }
             )
 
     return parameter_list
+
+
+_DERIVED_DESCRIPTIONS = {
+    'total_thickness': 'Σ film layer thicknesses',
+}
+
+
+def _is_derived_parameter(parameter: Parameter, model) -> bool:
+    """True for the model-owned computed parameters (currently ``Model.total_thickness``)."""
+    derived = getattr(type(model), 'total_thickness', None)
+    if derived is None:
+        return False
+    try:
+        return model.total_thickness is parameter
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _build_param_object_paths(model) -> dict:

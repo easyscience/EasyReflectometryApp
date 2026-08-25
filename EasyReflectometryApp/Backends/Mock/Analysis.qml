@@ -39,6 +39,9 @@ QtObject {
 
     // Bayesian sampling
     readonly property bool isBayesianSelected: false
+    readonly property bool minimizerSupportsInequalities: true
+    readonly property string inequalityConstraintsWarning: ''
+    readonly property bool fitInfeasible: false
     readonly property int bayesianSamples: 10000
     readonly property int bayesianBurnIn: 2000
     readonly property int bayesianPopulation: 10

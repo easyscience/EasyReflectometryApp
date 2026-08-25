@@ -72,6 +72,9 @@ class StubFittingLogic:
         self.fit_cancelled = False
         self.fit_success = False
 
+    def snapshot_constraints_factory(self):
+        return None
+
     def prepare_for_threaded_sample(self):
         pass
 

@@ -396,6 +396,40 @@ QtObject {
         }
     }
 
+    // Inequality constraints (BUMPS-only fit penalties)
+    readonly property int inequalityConstraintsCount: 0
+    readonly property var violatedInequalityConstraints: []
+    function setInequalityConstraintEnabled(index, enabled) { console.debug(`setInequalityConstraintEnabled ${index} ${enabled}`) }
+
+    // Physics-constraint recipes
+    property var physicsConstraintRecipes: [
+        { id: 'conformal_roughness', assemblyIndex: 1, assemblyName: 'Multi-layer 1', assemblyType: 'Multi-layer',
+          title: 'Conformal roughness', description: 'Every interface of the assembly shares the roughness of its first layer.',
+          available: true, active: false, toggleable: true, reason: '', requires: [] },
+        { id: 'constant_period', assemblyIndex: 1, assemblyName: 'Multi-layer 1', assemblyType: 'Multi-layer',
+          title: 'Constant period Λ', description: 'The summed thickness of the layers stays constant.',
+          available: true, active: true, toggleable: true, reason: '', requires: [] },
+        { id: 'equal_apm', assemblyIndex: 2, assemblyName: 'Surfactant', assemblyType: 'Surfactant Layer',
+          title: 'Equal head/tail area per molecule', description: 'The head layer takes the area per molecule of the tail layer.',
+          available: true, active: false, toggleable: true, reason: '', requires: [] },
+        { id: 'solvent_roughness', assemblyIndex: 2, assemblyName: 'Surfactant', assemblyType: 'Surfactant Layer',
+          title: 'Solvent roughness follows the surfactant', description: 'The roughness of the layer below follows the tail roughness.',
+          available: false, active: false, toggleable: false, reason: 'Requires conformal roughness on the surfactant layer.', requires: ['conformal_roughness'] }
+    ]
+    function _setRecipeActive(assemblyIndex, recipeId, active) {
+        var recipes = physicsConstraintRecipes.slice()
+        for (let i = 0; i < recipes.length; i++) {
+            if (recipes[i].assemblyIndex === assemblyIndex && recipes[i].id === recipeId) {
+                recipes[i] = Object.assign({}, recipes[i], { active: active })
+            }
+        }
+        physicsConstraintRecipes = recipes
+        constraintsChanged()
+        return { success: true, message: '' }
+    }
+    function applyPhysicsConstraint(assemblyIndex, recipeId) { return _setRecipeActive(assemblyIndex, recipeId, true) }
+    function removePhysicsConstraint(assemblyIndex, recipeId) { return _setRecipeActive(assemblyIndex, recipeId, false) }
+
     // Q Range
     property double q_min: 4.
     property double q_max: 5.
