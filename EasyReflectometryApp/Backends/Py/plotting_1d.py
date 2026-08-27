@@ -1158,7 +1158,8 @@ class Plotting1d(QObject):
                 'errorUpper': float(y + error),
                 'errorLower': float(y - error),
             }
-            for x, y, error in zip(data.x, data.y, sigma)
+            # The chart shows the magnitude; the sign of SA is not displayed.
+            for x, y, error in zip(data.x, np.abs(data.y), sigma)
         ]
 
     @Slot(int, result='QVariantList')
@@ -1167,7 +1168,7 @@ class Plotting1d(QObject):
         data = self._spin_asymmetry(experiment_index).get('calculated')
         if data is None or data.x.size == 0:
             return []
-        return [{'x': float(x), 'y': float(y)} for x, y in zip(data.x, data.y)]
+        return [{'x': float(x), 'y': abs(float(y))} for x, y in zip(data.x, data.y)]
 
     def _spin_asymmetry_range(self) -> tuple:
         """(min_x, max_x, min_y, max_y) over the drawn SA curves."""
