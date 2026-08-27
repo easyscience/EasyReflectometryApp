@@ -36,6 +36,7 @@ class StubSample(QObject):
     assembliesTableChanged = Signal()
     assembliesIndexChanged = Signal()
     qRangeChanged = Signal()
+    magnetismChanged = Signal()
 
     def __init__(self, _project_lib):
         super().__init__()

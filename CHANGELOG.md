@@ -21,6 +21,15 @@
     Sample page, and in Analysis under "Plot control". Both use the same
     selection.
   - If no model is magnetic, the chart, legend and sidebar are unchanged.
+- The "Magnetic profile" group gained a "Show R↑↑ and R↓↓" switch: the Sample
+  page reflectivity chart then splits each magnetic model into its two
+  non-spin-flip cross-sections, dashed in the model's colour with their own
+  legend rows. Off by default, and hidden while no model is magnetic. Note that
+  for a magnetic sample the plain model curve is **not** an unpolarized average
+  — the calculator returns the up-up cross-section — so R↑↑ is drawn on top of
+  it; the sidebar says so. The Analysis chart is unaffected: it already draws
+  one calculated curve per measured spin channel when the experiment is
+  polarized.
 - Spin-asymmetry view, SA(q) = (R↑↑ − R↓↓)/(R↑↑ + R↓↓):
   - A "Spin asymmetry" tab on the Experiment page (measured data) and a third
     tab on the Analysis page's lower panel (measured data plus the model).

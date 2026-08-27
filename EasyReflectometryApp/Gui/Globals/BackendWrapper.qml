@@ -672,7 +672,9 @@ QtObject {
     signal posteriorPredictiveDataChanged()
     // Signal for posterior predictive SLD (Bayesian) overlay data updates
     signal posteriorPredictiveSldDataChanged()
-    // Magnetic profile curves / magnetic state of the models changed
+    // Magnetic display state changed: which magnetic curves are drawn (SLD
+    // chart), whether the sample chart splits a model into its spin
+    // cross-sections, or whether any model is magnetic at all
     signal magneticProfileChanged()
     // Spin-asymmetry availability or content changed
     signal spinAsymmetryChanged()
@@ -891,6 +893,29 @@ QtObject {
             activeBackend.plottingSetSldCurveVisible(curve, visible)
         } catch (e) {
             console.warn("plottingSetSldCurveVisible failed:", e)
+        }
+    }
+
+    // Model spin cross-sections on the sample page reflectivity chart
+    readonly property bool plottingShowModelChannels: {
+        try {
+            return activeBackend.plotting.showModelChannels || false
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingSetShowModelChannels(visible) {
+        try {
+            activeBackend.plotting.setShowModelChannels(visible)
+        } catch (e) {
+            console.warn("plottingSetShowModelChannels failed:", e)
+        }
+    }
+    function plottingFillSampleChannelSeriesForModel(series, index, channel) {
+        try {
+            activeBackend.plotting.fillSampleChannelSeriesForModel(series, index, channel)
+        } catch (e) {
+            console.warn("plottingFillSampleChannelSeriesForModel failed:", e)
         }
     }
 

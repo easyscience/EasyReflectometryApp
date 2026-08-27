@@ -15,6 +15,8 @@ import EasyApplication.Gui.Charts as EaCharts
 import Gui as Gui
 import Gui.Globals as Globals
 
+import "../../../Logic/ChannelCurves.js" as ChannelCurves
+
 
 Rectangle {
     id: container
@@ -26,6 +28,11 @@ Rectangle {
 
     // Store dynamically created series
     property var sampleSeries: []
+
+    // Model spin cross-sections: one entry per drawn curve. Empty unless a model
+    // is magnetic and the user asked for the split, so an ordinary project
+    // draws exactly the curves it always did.
+    property var channelSeries: []
 
     SplitView {
         anchors.fill: parent
@@ -237,6 +244,17 @@ Rectangle {
                                 color: Globals.BackendWrapper.sampleModels[index].color
                             }
                         }
+
+                        // One row per drawn cross-section; absent for a
+                        // non-magnetic project, where this Repeater is empty.
+                        Repeater {
+                            model: container.channelSeries.length
+                            EaElements.Label {
+                                readonly property var entry: container.channelSeries[index]
+                                text: '┄  ' + entry.label
+                                color: entry.series.color
+                            }
+                        }
                     }
                 }
 
@@ -388,6 +406,11 @@ Rectangle {
         function onSamplePageDataChanged() {
             refreshAllCharts()
         }
+        // The split was switched on/off, or a layer became (non-)magnetic: the
+        // set of series changes, so they are rebuilt rather than just refilled.
+        function onMagneticProfileChanged() {
+            Qt.callLater(recreateAllSeries)
+        }
         function onSamplePageResetAxes() {
             sampleCombinedResetAxesTimer.start()
             sldCombinedResetAxesTimer.start()
@@ -433,9 +456,16 @@ Rectangle {
             }
         }
         sampleSeries = []
+        ChannelCurves.remove(sampleChartView, channelSeries)
+        channelSeries = []
 
         // Determine which x-axis to use for sample chart based on log setting
         const sampleXAxisToUse = sampleChartView.useLogQAxis ? sampleAxisXLog : sampleAxisX
+
+        // Build into a local array and assign once: mutating an array held by a
+        // `property var` does not notify its bindings, so a push()ed legend row
+        // would never appear.
+        let newChannelSeries = []
 
         // Create new series for each model
         const models = Globals.BackendWrapper.sampleModels
@@ -448,7 +478,15 @@ Rectangle {
             // Connect hovered signal for tooltip
             sampleLine.hovered.connect((point, state) => showMainTooltip(sampleChartView, sampleDataToolTip, point, state))
             sampleSeries.push(sampleLine)
+
+            newChannelSeries = newChannelSeries.concat(
+                ChannelCurves.create(sampleChartView, ChartView, Globals.BackendWrapper, k, models[k],
+                                     sampleXAxisToUse, sampleAxisY, EaGlobals.Vars.useOpenGL,
+                                     (point, state) => showMainTooltip(sampleChartView, sampleDataToolTip,
+                                                                       point, state)))
         }
+
+        channelSeries = newChannelSeries
 
         // Populate data
         refreshAllCharts()
@@ -475,6 +513,8 @@ Rectangle {
                 series.append(points[p].x, points[p].y)
             }
         }
+
+        ChannelCurves.refresh(Globals.BackendWrapper, channelSeries)
     }
 
     // Logic

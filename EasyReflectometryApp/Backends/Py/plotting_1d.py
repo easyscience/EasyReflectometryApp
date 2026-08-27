@@ -9,6 +9,7 @@ import PySide6.QtCharts  # noqa: F401
 from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.data import DataSet1D
+from easyreflectometry.model import PercentageFwhm
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
@@ -53,7 +54,8 @@ class Plotting1d(QObject):
 
     # Magnetic depth profiles (Phase 5a).
     # magneticProfileChanged: which magnetic curves are drawn, or whether any
-    #   model is magnetic at all, changed — the SLD chart rebuilds its series.
+    #   model is magnetic at all, changed — the SLD chart rebuilds its series,
+    #   and so do the sample charts for the model spin cross-sections.
     magneticProfileChanged = Signal()
     # Spin asymmetry (Phase 5b/5c): availability or content of the SA charts.
     spinAsymmetryChanged = Signal()
@@ -69,6 +71,12 @@ class Plotting1d(QObject):
     # Why the magnetic profiles of a magnetic model could not be computed
     # ('' = no failure). Class-level default for test stubs without __init__.
     _magnetic_profile_error: str = ''
+    # Whether the sample chart splits a magnetic model into its spin
+    # cross-sections. Off by default, unlike the SLD pair: those collapse onto
+    # the curve they sit next to where a layer is non-magnetic, while R↓↓
+    # genuinely departs from R↑↑ — so the headline chart of an existing project
+    # stays as it was until the user asks for the split.
+    _show_model_channels: bool = False
     # Cached result of the library channel-API check (None = not checked yet).
     _channel_api_error = None
 
@@ -99,6 +107,10 @@ class Plotting1d(QObject):
         # every chart refresh reads them several times.
         self._magnetic_profile_cache: dict = {}
         self._magnetic_profile_error = ''
+        # Model cross-sections on the sample chart, and their cache (keyed by
+        # model index and channel; cleared with the other plot data).
+        self._show_model_channels = False
+        self._model_channel_cache: dict = {}
 
         # Posterior predictive state
         self._posterior_q: list = []
@@ -137,6 +149,7 @@ class Plotting1d(QObject):
         self._residual_range_cache = None
         self._spin_asymmetry_cache = {}
         self._magnetic_profile_cache = {}
+        self._model_channel_cache = {}
         console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
 
     def _apply_rq4(self, x, y):
@@ -983,6 +996,98 @@ class Plotting1d(QObject):
             self.magneticProfileChanged.emit()
             self.sldChartRangesChanged.emit()
 
+    # Model spin cross-sections on the sample chart.
+    #
+    # The plain model curve of a magnetic sample is not an unpolarized average:
+    # with magnetism enabled the calculator returns the cross-section of its
+    # current polarization channel, which is 'pp' and is never changed from
+    # here. So these curves are drawn *next to* that curve, and 'pp' lands on
+    # top of it — which is exactly what says that the plain curve is R↑↑.
+    MODEL_SPIN_CHANNELS = ('pp', 'mm')
+
+    def _model_channel_data(self, model_index: int, channel: str):
+        """One spin cross-section of a model, or None when there is none.
+
+        A non-magnetic model, a calculator without magnetism, and a model index
+        that no longer exists are all "nothing to draw" — the chart keeps the
+        single curve it draws today.
+
+        Resolution is switched off for the evaluation, the same swap
+        `sample_data_for_model_at_index` makes for the plain curve: the two are
+        drawn in one chart and a smeared cross-section next to an ideal curve
+        would compare the wrong things. The library's channel-aware entry point
+        does not do it, hence the swap here.
+
+        Cached per (model, channel): both cross-sections come out of one refl1d
+        evaluation, but each call still crosses the library, and a chart refresh
+        asks for every curve twice (once to fill, once for the range).
+        """
+        cache = getattr(self, '_model_channel_cache', None)
+        if cache is None:
+            cache = self._model_channel_cache = {}
+        key = (model_index, channel)
+        if key in cache:
+            return cache[key]
+
+        data = None
+        if channel in self.MODEL_SPIN_CHANNELS and self.modelHasMagnetism(model_index):
+            try:
+                model = self._project_lib.models[model_index]
+                original_resolution = model.resolution_function
+                model.resolution_function = PercentageFwhm(0)
+                try:
+                    data = self._project_lib.model_data_for_model_at_index(model_index, channel=channel)
+                finally:
+                    model.resolution_function = original_resolution
+            except (IndexError, KeyError, ValueError, NotImplementedError, AttributeError, TypeError) as e:
+                # Same root cause as a magnetic model without depth profiles
+                # (a calculator that lost its magnetism), and the sidebar group
+                # above already reports that one.
+                console.error(f'No {channel} cross-section for model {model_index}: {e}')
+        cache[key] = data
+        return data
+
+    @Slot(int, str, result='QVariantList')
+    def getSampleChannelDataPointsForModel(self, model_index: int, channel: str) -> list:
+        """Points of one model cross-section, [] when not applicable.
+
+        Same transformation as `getSampleDataPointsForModel`, so a cross-section
+        sits on the plain curve's axis: R(q)q⁴ if asked for, then log10.
+        """
+        data = self._model_channel_data(model_index, channel)
+        if data is None:
+            return []
+        points = []
+        for x_value, y_value in zip(data.x, data.y):
+            x_value = float(x_value)
+            y_value = float(y_value)
+            if y_value > 0:
+                y_value = self._apply_rq4(x_value, y_value)
+            y_log = float(np.log10(y_value)) if y_value > 0 else -10.0
+            points.append({'x': x_value, 'y': y_log})
+        return points
+
+    @Slot('QVariant', int, str)
+    def fillSampleChannelSeriesForModel(self, series, model_index: int, channel: str) -> None:
+        """Fill a QML-owned series with one model cross-section in one call."""
+        if series is None:
+            return
+        points = self.getSampleChannelDataPointsForModel(model_index, channel)
+        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+
+    @Property(bool, notify=magneticProfileChanged)
+    def showModelChannels(self) -> bool:
+        """Whether the sample chart splits a magnetic model into R↑↑ and R↓↓."""
+        return self._show_model_channels
+
+    @Slot(bool)
+    def setShowModelChannels(self, visible: bool) -> None:
+        """Show or hide the cross-sections. They are one control: a lone curve
+        says nothing, the information is in how the pair splits."""
+        if visible != self._show_model_channels:
+            self._show_model_channels = visible
+            self.magneticProfileChanged.emit()
+
     # Spin asymmetry (Phase 5b/5c)
     def _spin_asymmetry(self, experiment_index: int = None) -> dict:
         """SA of an experiment as ``{measured, calculated, masked_points}``, or {}.
@@ -1126,6 +1231,9 @@ class Plotting1d(QObject):
         y-range, and moving rho_m/theta_m changes the curves themselves.
         """
         self._magnetic_profile_cache = {}
+        # Magnetism appearing, disappearing or moving changes the model spin
+        # cross-sections too, and they are drawn from the same notification.
+        self._model_channel_cache = {}
         self.magneticProfileChanged.emit()
         self.sldChartRangesChanged.emit()
 
@@ -1482,6 +1590,9 @@ class Plotting1d(QObject):
         self._sample_data = {}
         self._model_data = {}
         self._sld_data = {}
+        # The cross-sections follow every fitted parameter, exactly like the
+        # curve they are drawn next to.
+        self._model_channel_cache = {}
         # Emit signals to update ranges and trigger QML refresh
         self.sampleChartRangesChanged.emit()
         self.sldChartRangesChanged.emit()
