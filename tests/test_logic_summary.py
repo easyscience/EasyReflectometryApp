@@ -1,3 +1,4 @@
+import pickle
 from types import SimpleNamespace
 
 import numpy as np
@@ -166,6 +167,27 @@ def test_summary_make_plot_save_plot_and_show_plot(tmp_path, monkeypatch):
 
     logic.show_plot(10.0, 8.0)
     assert fake_pyplot.show_called is True
+
+
+def test_summary_save_plot_as_pickled_matplotlib_object(tmp_path, monkeypatch):
+    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
+    project = make_summary_project(tmp_path)
+    logic = summary_module.Summary(project)
+    fake_pyplot = FakePyplot()
+    monkeypatch.setattr(logic, '_plt', lambda: fake_pyplot)
+    monkeypatch.setattr(logic, '_gridspec', lambda: FakeGridSpecModule)
+
+    target = tmp_path / 'plots' / 'plot.pickle'
+    logic.save_plot(str(target), 10.0, 8.0)
+
+    # The figure object is written, not rendered, and it survives the round trip.
+    assert fake_pyplot.figure_obj.saved is None
+    assert fake_pyplot.closed is fake_pyplot.figure_obj
+    with open(target, 'rb') as handle:
+        reloaded = pickle.load(handle)
+    assert len(reloaded.axes) == 2
+    assert reloaded.axes[0].errorbar_calls
+    assert reloaded.axes[1].plot_calls
 
 
 def test_summary_ordering_and_empty_sections(tmp_path, monkeypatch):

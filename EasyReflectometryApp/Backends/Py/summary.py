@@ -69,7 +69,7 @@ class Summary(QObject):
 
     @Property('QVariant', notify=plotFileNameChanged)
     def plotExportFormats(self):
-        return ['PDF', 'PNG', 'SVG']
+        return ['PDF', 'PNG', 'SVG', 'PICKLE']
 
     @Property(str, notify=summaryChanged)
     def asHtml(self):

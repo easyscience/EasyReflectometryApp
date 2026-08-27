@@ -1,4 +1,5 @@
 import logging
+import pickle
 from html import escape
 from pathlib import Path
 
@@ -12,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 class Summary:
+    # Written as a pickled matplotlib Figure instead of a rendered image.
+    PICKLE_SUFFIXES = ('.pickle', '.pkl')
+
     def __init__(self, project_lib: ProjectLib):
         self._created = True
 
@@ -78,8 +82,34 @@ class Summary:
         target_path = Path(file_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         figure = self.make_plot(width_cm, height_cm)
-        figure.savefig(target_path, dpi=600)
-        self._plt().close(figure)
+        try:
+            if target_path.suffix.lower() in self.PICKLE_SUFFIXES:
+                self._dump_figure(figure, target_path)
+            else:
+                figure.savefig(target_path, dpi=600)
+        finally:
+            self._plt().close(figure)
+
+    @staticmethod
+    def _dump_figure(figure, target_path: Path) -> None:
+        """Write the live matplotlib Figure itself, not a rendered image.
+
+        Reload it in any Python session to keep working with the plot::
+
+            import pickle
+            import matplotlib.pyplot as plt
+
+            figure = pickle.load(open('plots.pickle', 'rb'))
+            plt.show()
+
+        The axes, artists and data survive the round trip, so the chart can be
+        restyled, re-scaled or combined with other data afterwards - none of
+        which a PNG, SVG or PDF export allows. The figure is dumped before it
+        is closed so that matplotlib records it as pyplot-managed and hands it
+        back to pyplot on load.
+        """
+        with open(target_path, 'wb') as handle:
+            pickle.dump(figure, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def show_plot(self, width_cm: float, height_cm: float) -> None:
         self.make_plot(width_cm, height_cm)
