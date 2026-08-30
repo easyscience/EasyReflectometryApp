@@ -119,6 +119,26 @@ class FakeRepeatingMultilayer(FakeAssembly):
         self.repetitions = ValueHolder(repetitions)
 
 
+class FakeSolvatedMaterial:
+    """Mirrors MaterialSolvated: display name '<material> in <solvent>', inner dry
+    `.material`, and sld/isld as computed plain floats (not ValueHolders)."""
+
+    def __init__(self, material, solvent_name='D2O', sld=1.0, isld=0.0):
+        self.material = material
+        self.name = f'{material.name} in {solvent_name}'
+        self.sld = sld
+        self.isld = isld
+
+
+class FakeGradientLayer(FakeAssembly):
+    def __init__(self, name='Gradient', front_material=None, back_material=None, thickness=2.0):
+        super().__init__(name=name, assembly_type='Gradient-layer')
+        self.front_material = front_material or FakeMaterial('Air')
+        self.back_material = back_material or FakeMaterial('D2O')
+        self.thickness = thickness  # plain float, like the real GradientLayer
+        self.front_layer = self.layers[0]
+
+
 class FakeSurfactantLayer(FakeAssembly):
     def __init__(self, name='Surfactant Layer', layers=None):
         super().__init__(name=name, assembly_type='Surfactant Layer', layers=layers or [FakeLayer(), FakeLayer()])

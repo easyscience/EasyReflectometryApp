@@ -224,6 +224,24 @@ QtObject {
         },
     ]
 
+    // Structure view: same contract and value types as Backends/Py/logic/structure.py —
+    // thickness/indices/repetitions are numbers, everything else strings
+    readonly property var structure: [
+        { 'label': 'Air', 'material': 'Air', 'color': '#0173B2', 'color_end': '', 'sld': '0.00', 'isld': '0.00', 'thickness': 0.0, 'roughness': '0.0', 'assembly': 'Superphase', 'assembly_index': 0, 'layer_index': 0, 'kind': 'superphase', 'repetitions': 1 },
+        { 'label': 'TypeA', 'material': 'TypeA', 'color': '#DE8F05', 'color_end': '', 'sld': '1.00', 'isld': '0.01', 'thickness': 2.5, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 0, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'TypeB', 'material': 'TypeB', 'color': '#029E73', 'color_end': '', 'sld': '2.07', 'isld': '0.00', 'thickness': 5.0, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 1, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'TypeA', 'material': 'TypeA', 'color': '#DE8F05', 'color_end': '', 'sld': '1.00', 'isld': '0.01', 'thickness': 2.5, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 0, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'TypeB', 'material': 'TypeB', 'color': '#029E73', 'color_end': '', 'sld': '2.07', 'isld': '0.00', 'thickness': 5.0, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 1, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'Substrate', 'material': 'Si', 'color': '#D55E00', 'color_end': '', 'sld': '2.07', 'isld': '0.00', 'thickness': 0.0, 'roughness': '1.0', 'assembly': 'Substrate', 'assembly_index': 2, 'layer_index': 0, 'kind': 'subphase', 'repetitions': 1 },
+    ]
+    readonly property var structureLegend: [
+        { 'label': 'Air', 'color': '#0173B2' },
+        { 'label': 'TypeA', 'color': '#DE8F05' },
+        { 'label': 'TypeB', 'color': '#029E73' },
+        { 'label': 'Si', 'color': '#D55E00' },
+    ]
+    readonly property real structureTotalThickness: 15.0
+
     // Setters
     function setCurrentLayerIndex(value){
         console.debug(`setCurrentLayerIndex ${value}`)

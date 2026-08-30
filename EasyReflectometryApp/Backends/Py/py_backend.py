@@ -167,6 +167,18 @@ class PyBackend(QObject):
         self._sample.modelsTableChanged.connect(self._analysis.experimentsChanged)
         # Connect sample changes to multi-experiment selection signal
         self._sample.modelsTableChanged.connect(self.multiExperimentSelectionChanged)
+        # Structure view: refresh on any change to the stack. Signals overlap on some
+        # paths (harmless); assembliesTableChanged is the only signal a repetitions
+        # edit emits, modelsTableChanged the only one removeModel emits — keep both.
+        for signal in (
+            self._sample.layersChange,
+            self._sample.assembliesTableChanged,
+            self._sample.materialsTableChanged,
+            self._sample.modelsIndexChanged,
+            self._sample.modelsTableChanged,
+            self._sample.externalSampleChanged,
+        ):
+            signal.connect(self._sample._clearStructureCacheAndEmit)
 
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
@@ -183,6 +195,9 @@ class PyBackend(QObject):
         # A finished fit updates the goodness-of-fit; refresh the Summary tab's
         # HTML binding so it stops showing the stale pre-fit value.
         self._analysis.externalFittingChanged.connect(self._summary.summaryChanged)
+        # The fit path never emits a Sample signal; refresh the Structure view post-fit
+        self._analysis.externalParametersChanged.connect(self._sample._clearStructureCacheAndEmit)
+        self._analysis.externalFittingChanged.connect(self._sample._clearStructureCacheAndEmit)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
         # Update status bar when parameters change (e.g. fit checkbox toggle, post-fit)

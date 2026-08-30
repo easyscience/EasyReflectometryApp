@@ -1,3 +1,11 @@
+# Unreleased
+
+- Added a **Structure** tab on the Model page: a schematic view of the layer stack with one
+  colored box per layer (colors per material, heights following thickness, "× N" badges for
+  collapsed repeating multilayers, legend and total-thickness caption). Boxes show tooltips
+  with material/SLD/thickness/roughness, clicking selects the layer in the sidebar editor,
+  and the view updates live on edits and after fits ([#242](https://github.com/easyscience/reflectometry-lib/issues/242)).
+
 # Version 1.4.0 (3 Aug 2026)
 
 - Added Bayesian analysis: run MCMC sampling alongside classical fitting, with posterior median and credibility intervals on the main chart, trace/corner-style plots per parameter, a dedicated status display with cancellation support, and plot export.

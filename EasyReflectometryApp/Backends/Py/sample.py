@@ -21,6 +21,7 @@ from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
 from .logic.parameters import Parameters as ParametersLogic
 from .logic.project import Project as ProjectLogic
+from .logic.structure import flatten as flatten_structure
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,8 @@ class Sample(QObject):
     layersChange = Signal()
     layersIndexChanged = Signal()
 
+    structureChanged = Signal()
+
     qRangeChanged = Signal()
     constraintsChanged = Signal()
 
@@ -84,6 +87,7 @@ class Sample(QObject):
         self._parameters_logic = ParametersLogic(project_lib)
 
         self._chached_layers = None
+        self._cached_structure = None
         self._constraint_states: Dict[str, dict[str, Any]] = {}
 
         self.connect_logic()
@@ -581,6 +585,30 @@ class Sample(QObject):
     def _clearCacheAndEmitLayersChanged(self):
         self._chached_layers = None
         self.layersChange.emit()
+
+    # # #
+    # Structure view (flattened whole-stack representation)
+    # # #
+    @Property('QVariantList', notify=structureChanged)
+    def structure(self) -> list[dict]:
+        return self._structure_parts()[0]
+
+    @Property('QVariantList', notify=structureChanged)
+    def structureLegend(self) -> list[dict]:
+        return self._structure_parts()[1]
+
+    @Property(float, notify=structureChanged)
+    def structureTotalThickness(self) -> float:
+        return self._structure_parts()[2]
+
+    def _structure_parts(self) -> tuple[list[dict], list[dict], float]:
+        if self._cached_structure is None:
+            self._cached_structure = flatten_structure(self._project_lib)
+        return self._cached_structure
+
+    def _clearStructureCacheAndEmit(self):
+        self._cached_structure = None
+        self.structureChanged.emit()
 
     # # #
     # Constraints
