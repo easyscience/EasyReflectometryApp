@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -285,6 +286,11 @@ class FakeParameter:
         self.enabled = enabled
         self.dependency_expression = dependency_expression
         self.dependency_map = dependency_map or {}
+
+    @property
+    def error(self):
+        # Mirrors easyscience's Parameter: the error is the square root of the variance.
+        return math.sqrt(self.variance)
 
     def make_dependent_on(self, dependency_expression, dependency_map):
         self.independent = False

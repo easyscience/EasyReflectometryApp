@@ -379,7 +379,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'alias': alias,
                     'unique_name': parameter.unique_name,
                     'value': param_value,
-                    'error': float(parameter.variance),
+                    'error': float(parameter.error),
                     'max': float(parameter.max),
                     'min': float(parameter.min),
                     'units': parameter.unit,
