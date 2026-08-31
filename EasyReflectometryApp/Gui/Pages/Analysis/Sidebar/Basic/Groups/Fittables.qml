@@ -347,10 +347,18 @@ EaElements.GroupBox {
                     color: EaStyle.Colors.themeForegroundDisabled
                 }
 
+                // A derived row is computed from other parameters and never fitted:
+                // the core recomputes its bounds by interval arithmetic over the
+                // operands, so they are an envelope, not limits anyone set or that
+                // anything enforces. Showing them next to editable bounds only
+                // invites reading them as physical limits, so leave the cells empty.
                 EaComponents.TableViewParameter {
-                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
-                    text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].min).replace('Infinity', 'inf')
+                    readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
+                    enabled: !derived &&
+                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
+                    text: derived ? '' :
+                          EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].min).replace('Infinity', 'inf')
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'min' field of fittable on Analysis page ***")
@@ -360,9 +368,12 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewParameter {
-                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true
-                    text: EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].max).replace('Infinity', 'inf')
+                    readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
+                    enabled: !derived &&
+                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
+                    text: derived ? '' :
+                          EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].max).replace('Infinity', 'inf')
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'max' field of fittable on Analysis page ***")

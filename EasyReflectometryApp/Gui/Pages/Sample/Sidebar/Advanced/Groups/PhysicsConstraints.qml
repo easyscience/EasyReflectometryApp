@@ -20,7 +20,7 @@ EaElements.GroupBox {
     id: physicsGroup
     title: qsTr("Physics constraints")
     collapsible: true
-    collapsed: false
+    collapsed: true
     last: false
 
     property string lastMessage: ""

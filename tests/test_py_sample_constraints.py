@@ -258,6 +258,25 @@ class TestPhysicsRecipes:
         assert backend.removePhysicsConstraint(2, 'conformal_roughness')['success']
         assert film_b.layers[1].roughness.independent is True
 
+    def test_constant_period_clamps_the_free_layers(self, project_and_backend):
+        project, backend = project_and_backend
+        film_b = project.models[0].sample[2]
+        first, second = film_b.layers[0].thickness, film_b.layers[1].thickness
+        assert backend.applyPhysicsConstraint(2, 'constant_period')['success']
+
+        # The period is the whole budget, so the free layer cannot exceed it and
+        # the tied layer can never be driven to a negative thickness.
+        assert first.max == pytest.approx(60.0)
+        first.value = 1.0e6
+        assert first.value == pytest.approx(60.0)
+        assert second.value == pytest.approx(0.0)
+        assert second.min >= 0.0
+        assert project.models[0].total_thickness.min >= 0.0
+
+        # Removing the recipe hands the original bound back
+        assert backend.removePhysicsConstraint(2, 'constant_period')['success']
+        assert first.max == float('inf')
+
     def test_solvent_roughness_requires_and_follows_conformal(self, project_and_backend):
         project, backend = project_and_backend
         surf = project.models[0].sample[3]

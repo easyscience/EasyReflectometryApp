@@ -17,6 +17,7 @@ as active too.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any
 from typing import Callable
@@ -219,14 +220,55 @@ def _period_owned(assembly, ctx):
     return []
 
 
+# The tied layer takes whatever the others leave over, so on its own the
+# recipe lets a fit push the free layers past the period and drive the
+# remainder negative - a layer of negative thickness. The period is the whole
+# budget: cap each free layer at the headroom it actually leaves, sharing the
+# slack in proportion to the current thicknesses. The original maxima are
+# stashed on the parameters so removing the recipe gives them back.
+_PERIOD_MAX_BACKUP = '_period_previous_max'
+
+
+def _clamp_period_partners(free: list[Parameter], remainder: float) -> None:
+    """Shrink the free thicknesses so the tied remainder cannot go below zero."""
+    occupied = sum(float(parameter.value) for parameter in free)
+    if occupied <= 0.0 or remainder < 0.0:
+        # Nothing to share out, or the period is already exhausted; leave the
+        # bounds alone rather than pin every layer at its current value.
+        return
+    for parameter in free:
+        headroom = float(parameter.value) * (1.0 + remainder / occupied)
+        if headroom >= float(parameter.max):
+            continue
+        if math.isclose(headroom, float(parameter.min), rel_tol=1e-9, abs_tol=0.0):
+            continue  # min == max is rejected by the core; this layer cannot move anyway
+        if not hasattr(parameter, _PERIOD_MAX_BACKUP):
+            setattr(parameter, _PERIOD_MAX_BACKUP, float(parameter.max))
+        parameter.max = headroom
+
+
+def _restore_period_partners(free: list[Parameter]) -> None:
+    """Give back the maxima :func:`_clamp_period_partners` narrowed."""
+    for parameter in free:
+        previous = getattr(parameter, _PERIOD_MAX_BACKUP, None)
+        if previous is None:
+            continue
+        delattr(parameter, _PERIOD_MAX_BACKUP)
+        if previous > float(parameter.max):
+            parameter.max = previous
+
+
 def _period_apply(assembly, ctx):
     layers = _layers(assembly)
     thicknesses = [layer.thickness for layer in layers]
     constrain_to_sum(thicknesses[-1], thicknesses)  # the last layer absorbs the remainder
+    _clamp_period_partners(thicknesses[:-1], float(thicknesses[-1].value))
 
 
 def _period_remove(assembly, ctx):
-    unconstrain(_layers(assembly)[-1].thickness)
+    layers = _layers(assembly)
+    unconstrain(layers[-1].thickness)
+    _restore_period_partners([layer.thickness for layer in layers[:-1]])
 
 
 # --------------------------------------------------------------------------- mixtures (informational)
