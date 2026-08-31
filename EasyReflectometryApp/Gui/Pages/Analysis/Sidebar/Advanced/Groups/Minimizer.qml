@@ -25,7 +25,7 @@ EaElements.GroupBox {
             width: EaStyle.Sizes.sideBarContentWidth
             visible: Globals.BackendWrapper.sampleInequalityConstraintsCount > 0 &&
                      Globals.BackendWrapper.analysisInequalityConstraintsWarning.length > 0
-            text: "⚠ " + Globals.BackendWrapper.analysisInequalityConstraintsWarning
+            text: qsTr("⚠ %1").arg(Globals.BackendWrapper.analysisInequalityConstraintsWarning)
             wrapMode: Text.Wrap
             color: EaStyle.Colors.themeAccent
         }

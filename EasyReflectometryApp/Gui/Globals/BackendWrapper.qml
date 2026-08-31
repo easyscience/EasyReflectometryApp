@@ -268,7 +268,9 @@ QtObject {
     readonly property int sampleInequalityConstraintsCount: activeBackend.sample.inequalityConstraintsCount
     readonly property var sampleViolatedInequalityConstraints: activeBackend.sample.violatedInequalityConstraints
     readonly property var samplePhysicsConstraintRecipes: activeBackend.sample.physicsConstraintRecipes
-    function sampleSetInequalityConstraintEnabled(index, enabled) { activeBackend.sample.setInequalityConstraintEnabled(index, enabled) }
+    // Note: the backends also expose setInequalityConstraintEnabled(index, enabled)
+    // (disable-without-delete); wrap it here once the constraints table grows a
+    // per-row enable control.
     function sampleApplyPhysicsConstraint(assemblyIndex, recipeId) { return activeBackend.sample.applyPhysicsConstraint(assemblyIndex, recipeId) }
     function sampleRemovePhysicsConstraint(assemblyIndex, recipeId) { return activeBackend.sample.removePhysicsConstraint(assemblyIndex, recipeId) }
 

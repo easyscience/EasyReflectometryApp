@@ -419,8 +419,16 @@ QtObject {
     function _setRecipeActive(assemblyIndex, recipeId, active) {
         var recipes = physicsConstraintRecipes.slice()
         for (let i = 0; i < recipes.length; i++) {
-            if (recipes[i].assemblyIndex === assemblyIndex && recipes[i].id === recipeId) {
+            if (recipes[i].assemblyIndex !== assemblyIndex) {
+                continue
+            }
+            if (recipes[i].id === recipeId) {
                 recipes[i] = Object.assign({}, recipes[i], { active: active })
+            } else if (!active && recipes[i].requires.indexOf(recipeId) !== -1) {
+                // Mirror the Py backend's cascade: removing a recipe also
+                // removes the recipes that require it (e.g. solvent roughness
+                // needs conformal roughness).
+                recipes[i] = Object.assign({}, recipes[i], { active: false })
             }
         }
         physicsConstraintRecipes = recipes

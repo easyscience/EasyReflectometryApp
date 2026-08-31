@@ -304,9 +304,13 @@ EaElements.GroupBox {
                 const relation = constraintsGroup.currentRelationValue()
                 const shown = relation === '>' ? '≥' : (relation === '<' ? '≤' : relation)
                 const base = qsTr("Preview: %1 %2").arg(shown).arg(constraintsGroup.expressionPreview)
-                return constraintsGroup.lastConstraintType === 'inequality'
-                        ? base + qsTr("  (inequality — enforced by BUMPS minimizers)")
-                        : base
+                if (constraintsGroup.lastConstraintType !== 'inequality') {
+                    return base
+                }
+                // e.g. '90 - t_B': the 90 is read in the dependent's unit (Å vs nm footgun)
+                const literalHint = /(^|[^\w.])\d/.test(expressionEditor.text)
+                                  ? qsTr("; numeric literals read in the dependent parameter's unit") : ""
+                return base + qsTr("  (inequality — enforced by BUMPS minimizers%1)").arg(literalHint)
             }
             color: EaStyle.Colors.themeForegroundMinor
             wrapMode: Text.Wrap
@@ -447,7 +451,12 @@ EaElements.GroupBox {
                                         : qsTr("Inequality constraint (BUMPS penalty)")
                             }
                             if (constraint.type === 'recipe') {
-                                return qsTr("Physics constraint: %1 tied parameter(s)").arg(constraint.count || 0)
+                                // A manual tie matching a recipe's pattern is grouped
+                                // under the recipe row; listing the members shows
+                                // exactly which parameters this row stands for.
+                                const members = constraint.members && constraint.members.length
+                                              ? "\n" + constraint.members.join(", ") : ""
+                                return qsTr("Physics constraint: %1 tied parameter(s)").arg(constraint.count || 0) + members
                             }
                             return qsTr("Equality constraint")
                         }

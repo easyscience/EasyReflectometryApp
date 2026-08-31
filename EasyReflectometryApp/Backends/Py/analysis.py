@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 class Analysis(QObject):
     minimizerChanged = Signal()
+    # The inequality-constraint notices depend on the selected minimizer *and*
+    # on which inequality constraints are enabled; this fires for both events
+    # (minimizerChanged is forwarded in __init__, the sample backend's
+    # constraintsChanged is forwarded by PyBackend). A dedicated signal keeps
+    # constraint edits from re-notifying every minimizer-bound property, which
+    # would reset e.g. the minimizer combo box model on every layer change.
+    inequalityContextChanged = Signal()
     calculatorChanged = Signal()
     # Emitted with the reason when a calculator cannot be selected.
     calculatorChangeRejected = Signal(str)
@@ -61,6 +68,8 @@ class Analysis(QObject):
         self._fitter_thread = None
         # Connect stopFit signal to slot
         self.stopFit.connect(self._onStopFit)
+        # A minimizer switch changes the inequality-constraint notices too.
+        self.minimizerChanged.connect(self.inequalityContextChanged)
         # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
         self._selected_experiment_indices = []
         # Initialize selected experiments after construction to avoid binding loops
@@ -188,12 +197,12 @@ class Analysis(QObject):
     # Inequality constraints (BUMPS-only fit penalties)
     # ------------------------------------------------------------------
 
-    @Property(bool, notify=minimizerChanged)
+    @Property(bool, notify=inequalityContextChanged)
     def minimizerSupportsInequalities(self) -> bool:
         """True when the selected engine (or Bayesian sampling) enforces inequality constraints."""
         return self._minimizers_logic.supports_inequalities()
 
-    @Property(str, notify=minimizerChanged)
+    @Property(str, notify=inequalityContextChanged)
     def inequalityConstraintsWarning(self) -> str:
         """Notice shown next to the minimizer / constraints when inequalities are active."""
         return self._fitting_logic.inequality_constraints_warning(self._minimizers_logic)

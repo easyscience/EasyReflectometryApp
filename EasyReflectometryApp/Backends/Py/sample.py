@@ -15,6 +15,7 @@ from easyreflectometry.inequality_constraints import evaluate_spec
 from easyscience.variable.descriptor_number import DescriptorNumber
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QTimer
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
@@ -107,6 +108,12 @@ class Sample(QObject):
 
         self._chached_layers = None
         self._constraint_states: Dict[str, dict[str, Any]] = {}
+        # Child of self (not QTimer.singleShot) so a pending notification can
+        # never outlive this backend or keep it - and the project - alive.
+        self._constraints_notify_timer = QTimer(self)
+        self._constraints_notify_timer.setSingleShot(True)
+        self._constraints_notify_timer.setInterval(0)
+        self._constraints_notify_timer.timeout.connect(self.constraintsChanged)
         self._physics_constraints_logic = PhysicsConstraintsLogic(project_lib)
 
         self.connect_logic()
@@ -115,9 +122,15 @@ class Sample(QObject):
         self.assembliesIndexChanged.connect(self.layersConnectChanges)
         # Inequality rows carry a "satisfied" flag evaluated at the current
         # values, so parameter edits must refresh the constraints list too.
-        self.layersChange.connect(self.constraintsChanged)
+        # `constraintsList` is expensive (asteval of every expression, recipe
+        # ownership across all assemblies), so bursts of layersChange within one
+        # event-loop turn are coalesced into a single constraintsChanged.
+        self.layersChange.connect(self._scheduleConstraintsChanged)
         # The magnetism table lists the current assembly's layers.
         self.assembliesIndexChanged.connect(self.magnetismChanged)
+
+    def _scheduleConstraintsChanged(self) -> None:
+        self._constraints_notify_timer.start()
 
     # # #
     # Materials
@@ -759,6 +772,23 @@ class Sample(QObject):
                 used_aliases[alias] = parameter
         return used_aliases
 
+    @staticmethod
+    def _make_interpreter(aliases: Dict[str, DescriptorNumber], numeric: bool = False) -> Interpreter:
+        """A sandboxed interpreter with the globals and parameter aliases in scope.
+
+        With `numeric`, aliases resolve to plain float values instead of the
+        unit-carrying parameter objects.
+        """
+        interpreter = Interpreter(config=_ASTEVAL_CONFIG)
+        for name, value in _GLOBAL_SYMBOLS.items():
+            interpreter.symtable[name] = value
+            if isinstance(value, numbers.Number):
+                interpreter.readonly_symbols.add(name)
+        for alias, dependency in aliases.items():
+            interpreter.symtable[alias] = float(dependency.value) if numeric else dependency
+            interpreter.readonly_symbols.add(alias)
+        return interpreter
+
     def _evaluate_constraint_expression(
         self,
         expression: str,
@@ -766,20 +796,10 @@ class Sample(QObject):
         all_aliases: Dict[str, DescriptorNumber] | None = None,
     ) -> DescriptorNumber | numbers.Number:
         """Evaluate constraint expression with all available parameter aliases in scope."""
-        interpreter = Interpreter(config=_ASTEVAL_CONFIG)
-
-        # Add global symbols (numpy, etc.)
-        for name, value in _GLOBAL_SYMBOLS.items():
-            interpreter.symtable[name] = value
-            if isinstance(value, numbers.Number):
-                interpreter.readonly_symbols.add(name)
-
         # Add ALL parameter aliases to the symbol table (not just dependencies)
         # This allows validation to work even if we haven't detected the parameter yet
         aliases_to_add = all_aliases if all_aliases is not None else dependency_map
-        for alias, dependency in aliases_to_add.items():
-            interpreter.symtable[alias] = dependency
-            interpreter.readonly_symbols.add(alias)
+        interpreter = self._make_interpreter(aliases_to_add)
 
         try:
             result = interpreter.eval(expression, raise_errors=True)
@@ -801,12 +821,7 @@ class Sample(QObject):
         Fallback for inequality expressions mixing literals with parameters
         ('90 - t_b'), which the unit-carrying evaluation cannot represent.
         """
-        interpreter = Interpreter(config=_ASTEVAL_CONFIG)
-        for name, value in _GLOBAL_SYMBOLS.items():
-            interpreter.symtable[name] = value
-        for alias, dependency in all_aliases.items():
-            interpreter.symtable[alias] = float(dependency.value)
-            interpreter.readonly_symbols.add(alias)
+        interpreter = self._make_interpreter(all_aliases, numeric=True)
         result = interpreter.eval(expression, raise_errors=True)
         if not isinstance(result, numbers.Number):
             raise TypeError('Expression must evaluate to a numeric value.')
@@ -894,15 +909,22 @@ class Sample(QObject):
             # Inequality expressions may mix numeric literals with parameters
             # ('90 - t_b'), which the unit-carrying arithmetic rejects. They are
             # evaluated numerically during the fit anyway (literals read in the
-            # unit of the dependent parameter), so retry with plain values.
-            # Equality constraints go through `make_dependent_on`, which needs
-            # the unit-carrying form — no fallback there.
-            message = str(error).lower()
-            if relation == '=' or not dependency_map or ('unit' not in message and 'dimensionless' not in message):
+            # unit of the dependent parameter), so always retry any inequality
+            # that references parameters with plain values — the numeric path is
+            # strictly more permissive and `check_units` still verifies the
+            # resulting spec. Equality constraints go through
+            # `make_dependent_on`, which needs the unit-carrying form — no
+            # fallback there.
+            if relation == '=' or not dependency_map:
                 raise RuntimeError(str(error)) from None
-            evaluation_result = self._evaluate_constraint_expression_numeric(
-                expression_text, all_aliases=alias_lookup
-            )
+            try:
+                evaluation_result = self._evaluate_constraint_expression_numeric(
+                    expression_text, all_aliases=alias_lookup
+                )
+            except Exception:
+                # Report the original, unit-aware error: it names the actual
+                # conflict instead of the fallback's symptom.
+                raise RuntimeError(str(error)) from None
 
         pretty_expression = self._pretty_expression(expression_text, display_lookup)
 
@@ -1011,7 +1033,10 @@ class Sample(QObject):
                     parameter = self._project_lib.resolve_parameter_path(path)
                     alias_display[alias] = display_by_object.get(id(parameter), display_lookup.get(alias, alias))
                 except KeyError:
-                    alias_display[alias] = f'<missing {alias}>'
+                    # The parameter behind this alias no longer exists (e.g. its
+                    # layer was removed); keep the alias so the user can tell
+                    # which term broke, but label it clearly.
+                    alias_display[alias] = f'{alias} (missing)'
             lhs_display = self._pretty_expression(spec.lhs_expression, alias_display)
             rhs_display = self._pretty_expression(spec.rhs_expression, alias_display)
             try:
@@ -1188,6 +1213,9 @@ class Sample(QObject):
                         'relation': '',
                         'type': 'recipe',
                         'enabled': True,
+                        # Recipe ties are identities and hold by construction;
+                        # this is not a feasibility check like the inequality
+                        # rows' flag — do not repurpose it as one.
                         'satisfied': True,
                         'count': group['count'],
                         'members': [],
@@ -1263,8 +1291,12 @@ class Sample(QObject):
         return {'success': True, 'message': ''}
 
     def _emit_constraints_changed(self) -> None:
-        """Constraints move parameter values, so the curves and tables change too."""
-        self.constraintsChanged.emit()
+        """Constraints move parameter values, so the curves and tables change too.
+
+        `layersChange` already forwards (coalesced) to `constraintsChanged`, so
+        it is not emitted here as well — that would evaluate the expensive
+        constraints list twice per change.
+        """
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
         self.layersChange.emit()
@@ -1307,7 +1339,11 @@ class Sample(QObject):
             self.constraintsChanged.emit()
             return
         if row.get('type') == 'recipe':
-            self.removePhysicsConstraint(int(row['assemblyIndex']), str(row['recipeId']))
+            result = self.removePhysicsConstraint(int(row['assemblyIndex']), str(row['recipeId']))
+            if isinstance(result, dict) and not result.get('success', True):
+                logger.warning(
+                    'Removing physics constraint %s failed: %s', row.get('recipeId'), result.get('message', '')
+                )
             return
 
         # Resolve by unique_name (parameter identity), not display name, so two
@@ -1326,11 +1362,7 @@ class Sample(QObject):
             self._restore_parameter_state(param_obj, state['previous'])
         else:
             self._make_parameter_independent(param_obj)
-        self.constraintsChanged.emit()
-        # Constraints move parameter values, so the curves change too.
-        self.externalRefreshPlot.emit()
-        self.externalSampleChanged.emit()
-        self.layersChange.emit()
+        self._emit_constraints_changed()
 
     def _find_parameter_object_by_unique_name(self, unique_name: str):
         """Find a parameter object by its unique_name (stable identity)."""
@@ -1438,11 +1470,7 @@ class Sample(QObject):
                 )
             self._constraint_states[unique_name] = state
 
-        self.constraintsChanged.emit()
-        # Constraints move parameter values, so the curves change too.
-        self.externalRefreshPlot.emit()
-        self.externalSampleChanged.emit()
-        self.layersChange.emit()
+        self._emit_constraints_changed()
 
         return {
             'success': True,
@@ -1535,11 +1563,7 @@ class Sample(QObject):
                         continue
 
         if constraints_added > 0:
-            self.constraintsChanged.emit()
-            # Constraints move parameter values, so the curves change too.
-            self.externalRefreshPlot.emit()
-            self.externalSampleChanged.emit()
-            self.layersChange.emit()
+            self._emit_constraints_changed()
 
     def _build_model_parameters_map(self, model) -> Dict[str, DescriptorNumber]:
         """Build a map of relative parameter paths to parameter objects for a model.

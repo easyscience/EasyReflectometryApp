@@ -154,6 +154,15 @@ class TestInequalityConstraints:
         assert backend.inequalityConstraintsCount == 0
         assert backend.violatedInequalityConstraints == []
 
+    def test_enable_toggle_out_of_range_is_a_no_op(self, project_and_backend):
+        _, backend = project_and_backend
+        idx = _dependent_index(backend, 'Film A thickness')
+        alias_b = _alias(backend, 'Film B thickness')
+        backend.addConstraint(idx, '<', f'{alias_b} * 2')
+        backend.setInequalityConstraintEnabled(5, False)
+        backend.setInequalityConstraintEnabled(-1, False)
+        assert backend.inequalityConstraintsCount == 1
+
 
 class TestFitScreening:
     def _with_inequality(self, project_and_backend, relation='<'):
@@ -211,6 +220,10 @@ class TestFitScreening:
         assert 'outside' in fitting.fit_progress_message
         fitting.on_fit_progress({'iteration': 4, 'chi2': 2.0, 'infeasible': False})
         assert fitting.fit_infeasible is False
+        fitting.on_fit_progress({'iteration': 5, 'chi2': 1e12, 'infeasible': True})
+        fitting.clear_fit_progress()
+        assert fitting.fit_infeasible is False
+        assert fitting.fit_progress_message == ''
 
 
 class TestPhysicsRecipes:
@@ -276,6 +289,25 @@ class TestPhysicsRecipes:
         # Removing the recipe hands the original bound back
         assert backend.removePhysicsConstraint(2, 'constant_period')['success']
         assert first.max == float('inf')
+
+    def test_constant_period_clamp_survives_reload_and_restores(self, project_and_backend):
+        project, backend = project_and_backend
+        film_b = project.models[0].sample[2]
+        assert backend.applyPhysicsConstraint(2, 'constant_period')['success']
+        assert film_b.layers[0].thickness.max == pytest.approx(60.0)
+
+        project_dict = json.loads(json.dumps(project.as_dict()))
+        global_object.map._clear()
+        reloaded = Project()
+        reloaded_backend = Sample(reloaded)
+        reloaded.from_dict(project_dict)
+
+        # The clamp survives the round-trip, and removing the recipe afterwards
+        # still hands back the original (pre-clamp) bound.
+        reloaded_first = reloaded.models[0].sample[2].layers[0].thickness
+        assert reloaded_first.max == pytest.approx(60.0)
+        assert reloaded_backend.removePhysicsConstraint(2, 'constant_period')['success']
+        assert reloaded_first.max == float('inf')
 
     def test_solvent_roughness_requires_and_follows_conformal(self, project_and_backend):
         project, backend = project_and_backend

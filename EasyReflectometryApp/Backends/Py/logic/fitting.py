@@ -262,10 +262,7 @@ class Fitting:
         them (a fit started from an infeasible point would begin on the BUMPS
         penalty plateau where only the penalty slope guides the optimizer).
         """
-        try:
-            active = [spec for spec in self._project_lib.inequality_constraints if spec.enabled]
-        except AttributeError:
-            return None
+        active = [spec for spec in self._project_lib.inequality_constraints if spec.enabled]
         if not active:
             return None
         if not minimizers_logic.supports_inequalities():
@@ -284,10 +281,7 @@ class Fitting:
 
     def inequality_constraints_warning(self, minimizers_logic: 'Minimizers') -> str:
         """Non-blocking notice about how inequalities will be enforced."""
-        try:
-            active = [spec for spec in self._project_lib.inequality_constraints if spec.enabled]
-        except AttributeError:
-            return ''
+        active = [spec for spec in self._project_lib.inequality_constraints if spec.enabled]
         if not active:
             return ''
         if not minimizers_logic.supports_inequalities():
@@ -303,12 +297,10 @@ class Fitting:
         """Build the BUMPS ``constraints_factory`` from the enabled inequality constraints *now*.
 
         Taken when the fit worker starts so that constraints edited while the
-        fit runs cannot change what the worker enforces.
+        fit runs cannot change what the worker enforces. Returns ``None`` when
+        no inequality constraint is enabled.
         """
-        try:
-            return self._project_lib.build_constraints_factory()
-        except AttributeError:
-            return None
+        return self._project_lib.build_constraints_factory()
 
     def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> tuple:
         """Prepare data for threaded fitting.

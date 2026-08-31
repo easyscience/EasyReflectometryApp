@@ -35,6 +35,9 @@ class Minimizers:
     def is_bayesian_selected(self) -> bool:
         return self._list_available_minimizers[self._minimizer_current_index] is None
 
+    def _selected_package(self) -> str:
+        return getattr(self.selected_minimizer_enum(), 'package', '')
+
     def supports_inequalities(self) -> bool:
         """Whether the engine that will actually run the fit can enforce inequality constraints.
 
@@ -44,15 +47,13 @@ class Minimizers:
         """
         if self.is_bayesian_selected():
             return True
-        selected = self.selected_minimizer_enum()
-        return selected is not None and getattr(selected, 'package', '') == 'bumps'
+        return self._selected_package() == 'bumps'
 
     def enforces_inequalities_weakly(self) -> bool:
         """``Bumps_lm`` spreads the penalty over the residuals instead of skipping the model."""
         if self.is_bayesian_selected():
             return False
-        selected = self.selected_minimizer_enum()
-        return selected is not None and getattr(selected, 'package', '') == 'bumps' and selected.method == 'lm'
+        return self._selected_package() == 'bumps' and getattr(self.selected_minimizer_enum(), 'method', '') == 'lm'
 
     def selected_minimizer_enum(self):
         """Return the AvailableMinimizers enum for the currently selected minimizer.

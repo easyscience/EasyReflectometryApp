@@ -37,6 +37,7 @@ class StubSample(QObject):
     assembliesIndexChanged = Signal()
     qRangeChanged = Signal()
     magnetismChanged = Signal()
+    constraintsChanged = Signal()
 
     def __init__(self, _project_lib):
         super().__init__()
@@ -65,6 +66,7 @@ class StubAnalysis(QObject):
     externalExperimentChanged = Signal()
     experimentsChanged = Signal()
     parametersChanged = Signal()
+    inequalityContextChanged = Signal()
 
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)

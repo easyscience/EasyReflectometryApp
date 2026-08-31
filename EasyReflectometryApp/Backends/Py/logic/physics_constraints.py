@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 EasyReflectometry contributors <support@easyreflectometry.org>
+# SPDX-License-Identifier: BSD-3-Clause
+# © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
+
 """Physics-constraint recipes: one-click groups of parameter dependencies.
 
 The library already knows how to tie parameters according to physics —
@@ -17,14 +21,16 @@ as active too.
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass
 from typing import Any
 from typing import Callable
 from typing import Optional
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.constraints import clamp_sum_partners
 from easyreflectometry.constraints import constrain_to_sum
+from easyreflectometry.constraints import is_constrained_to_sum
+from easyreflectometry.constraints import restore_sum_partners
 from easyreflectometry.constraints import unconstrain
 from easyreflectometry.sample import BaseAssembly
 from easyreflectometry.sample import Bilayer
@@ -89,13 +95,14 @@ def _conformal_roughness_active(assembly, ctx):
         return False
     if isinstance(assembly, GradientLayer):
         return True
-    if isinstance(assembly, (SurfactantLayer, Bilayer)):
-        return bool(assembly.conformal_roughness)
     return bool(assembly.conformal_roughness)
 
 
 def _set_conformal_roughness(status):
     def _set(assembly, ctx):
+        # Every assembly persists this itself: SurfactantLayer/Bilayer always
+        # did, Multilayer/RepeatingMultilayer serialize the flag since the
+        # `improved_constraints` lib branch.
         assembly.conformal_roughness = status
 
     return _set
@@ -128,7 +135,7 @@ def _conformal_thickness_active(assembly, ctx):
 
 def _set_conformal_thickness(status):
     def _set(assembly, ctx):
-        assembly.conformal_thickness = status
+        assembly.conformal_thickness = status  # persisted by the assembly itself
 
     return _set
 
@@ -213,62 +220,24 @@ def _period_owned(assembly, ctx):
     if len(layers) < 2:
         return []
     last = layers[-1].thickness
-    dependency_map = getattr(last, '_dependency_map', {}) or {}
-    others = {id(layer.thickness) for layer in layers[:-1]}
-    if (not last.independent) and 'total' in dependency_map and others <= {id(p) for p in dependency_map.values()}:
-        return [last]
-    return []
-
-
-# The tied layer takes whatever the others leave over, so on its own the
-# recipe lets a fit push the free layers past the period and drive the
-# remainder negative - a layer of negative thickness. The period is the whole
-# budget: cap each free layer at the headroom it actually leaves, sharing the
-# slack in proportion to the current thicknesses. The original maxima are
-# stashed on the parameters so removing the recipe gives them back.
-_PERIOD_MAX_BACKUP = '_period_previous_max'
-
-
-def _clamp_period_partners(free: list[Parameter], remainder: float) -> None:
-    """Shrink the free thicknesses so the tied remainder cannot go below zero."""
-    occupied = sum(float(parameter.value) for parameter in free)
-    if occupied <= 0.0 or remainder < 0.0:
-        # Nothing to share out, or the period is already exhausted; leave the
-        # bounds alone rather than pin every layer at its current value.
-        return
-    for parameter in free:
-        headroom = float(parameter.value) * (1.0 + remainder / occupied)
-        if headroom >= float(parameter.max):
-            continue
-        if math.isclose(headroom, float(parameter.min), rel_tol=1e-9, abs_tol=0.0):
-            continue  # min == max is rejected by the core; this layer cannot move anyway
-        if not hasattr(parameter, _PERIOD_MAX_BACKUP):
-            setattr(parameter, _PERIOD_MAX_BACKUP, float(parameter.max))
-        parameter.max = headroom
-
-
-def _restore_period_partners(free: list[Parameter]) -> None:
-    """Give back the maxima :func:`_clamp_period_partners` narrowed."""
-    for parameter in free:
-        previous = getattr(parameter, _PERIOD_MAX_BACKUP, None)
-        if previous is None:
-            continue
-        delattr(parameter, _PERIOD_MAX_BACKUP)
-        if previous > float(parameter.max):
-            parameter.max = previous
+    thicknesses = [layer.thickness for layer in layers]
+    return [last] if is_constrained_to_sum(last, thicknesses) else []
 
 
 def _period_apply(assembly, ctx):
     layers = _layers(assembly)
     thicknesses = [layer.thickness for layer in layers]
     constrain_to_sum(thicknesses[-1], thicknesses)  # the last layer absorbs the remainder
-    _clamp_period_partners(thicknesses[:-1], float(thicknesses[-1].value))
+    # On its own the constraint lets a fit push the free layers past the
+    # period and drive the remainder to a negative thickness; the lib caps
+    # the free maxima (and, with the project, persists the originals).
+    clamp_sum_partners(thicknesses[:-1], float(thicknesses[-1].value))
 
 
 def _period_remove(assembly, ctx):
     layers = _layers(assembly)
     unconstrain(layers[-1].thickness)
-    _restore_period_partners([layer.thickness for layer in layers[:-1]])
+    restore_sum_partners([layer.thickness for layer in layers[:-1]])
 
 
 # --------------------------------------------------------------------------- mixtures (informational)
@@ -333,7 +302,7 @@ RECIPES: list[Recipe] = [
     Recipe(
         id='solvent_roughness',
         title='Solvent roughness follows the surfactant',
-        description='The roughness of the layer below the surfactant follows the tail roughness.',
+        description='The roughness of the first layer of the assembly below the surfactant follows the tail roughness.',
         applies_to=lambda a: isinstance(a, SurfactantLayer),
         available=_solvent_roughness_available,
         active=lambda a, c: bool(_solvent_roughness_owned(a, c)),
@@ -380,7 +349,7 @@ class PhysicsConstraints:
 
     @property
     def _sample(self):
-        models = self._project_lib._models
+        models = self._project_lib.models
         if not len(models):
             return None
         return models[self._project_lib.current_model_index].sample
@@ -409,7 +378,9 @@ class PhysicsConstraints:
                     continue
                 try:
                     available, reason = recipe.available(assembly, ctx)
-                    active = bool(recipe.active(assembly, ctx)) if available or not recipe.toggleable else False
+                    # Report the graph truth even for unavailable recipes: a tie
+                    # left behind by a script must not be hidden as "inactive".
+                    active = bool(recipe.active(assembly, ctx))
                 except Exception as error:  # noqa: BLE001 - a broken model must not hide the panel
                     logger.debug('Recipe %s unavailable for %s: %s', recipe.id, assembly.name, error)
                     available, reason, active = False, str(error), False
@@ -483,9 +454,7 @@ class PhysicsConstraints:
                             'title': recipe.title,
                             'assemblyIndex': assembly_index,
                             'assemblyName': assembly.name,
-                            'count': 0,
+                            'count': len(parameters),
                         },
                     )
-                for parameter in parameters:
-                    owned[parameter.unique_name]['count'] = len(parameters)
         return owned

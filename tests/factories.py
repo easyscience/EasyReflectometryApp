@@ -362,7 +362,15 @@ class FakeProject:
         self.q_max = 0.5
         self.q_resolution = 200
         self.parameters = []
+        # Inequality-constraint API of the real Project (BUMPS fit penalties).
+        self.inequality_constraints = []
         self.calls = []
+
+    def violated_inequality_constraints(self):
+        return [spec for spec in self.inequality_constraints if getattr(spec, 'violated', False)]
+
+    def build_constraints_factory(self):
+        return None
 
     def default_model(self):
         self.calls.append(('default_model',))
