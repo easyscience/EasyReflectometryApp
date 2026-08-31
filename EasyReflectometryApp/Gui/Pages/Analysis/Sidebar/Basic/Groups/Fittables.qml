@@ -299,12 +299,18 @@ EaElements.GroupBox {
                     // tooltip explains what they are computed from.
                     readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
                     text: (derived ? 'ƒ ' : '') + Globals.BackendWrapper.analysisFitableParameters[index].name
+                    textFormat: Text.PlainText
                     color: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
                            Globals.BackendWrapper.analysisFitableParameters[index].independent  : true) ?
                            EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
+                    // The embedded TableViewLabel tooltip only appears while the
+                    // text is elided, so a hover on a truncated name (e.g.
+                    // 'Ni on Si L... roughness') reveals the full name.
                     ToolTip.text: derived
-                                  ? qsTr("Derived, read-only: %1").arg(Globals.BackendWrapper.analysisFitableParameters[index].dependency || '')
-                                  : (textFormat === Text.PlainText ? text : '')
+                                  ? qsTr("%1 — derived, read-only: %2")
+                                        .arg(text)
+                                        .arg(Globals.BackendWrapper.analysisFitableParameters[index].dependency || '')
+                                  : text
                 }
 
                 EaComponents.TableViewParameter {
