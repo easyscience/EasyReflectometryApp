@@ -32,6 +32,7 @@ class Fitting:
         self._fit_iteration = 0
         self._fit_interim_chi2 = 0.0
         self._fit_interim_reduced_chi2 = 0.0
+        self._fit_infeasible = False
         self._fit_running_message = ''
         self._fit_preview_parameter_values: dict = {}
         self._fit_has_preview_update = False
@@ -95,6 +96,11 @@ class Fitting:
         return self._fit_interim_reduced_chi2
 
     @property
+    def fit_infeasible(self) -> bool:
+        """True while the optimizer sits on the BUMPS inequality-penalty plateau."""
+        return self._fit_infeasible
+
+    @property
     def fit_progress_message(self) -> str:
         return self._fit_running_message
 
@@ -144,8 +150,15 @@ class Fitting:
         self._fit_preview_parameter_values = dict(payload.get('parameter_values', {}) or {})
         self._fit_has_preview_update = bool(payload.get('refresh_plots', False))
         self._fit_has_interim_update = True
+        # While an inequality constraint is violated BUMPS skips the model and
+        # reports the 1e12 penalty as chi2 — meaningless, so don't show it.
+        self._fit_infeasible = bool(payload.get('infeasible', False))
 
-        if self._fit_iteration > 0:
+        if self._fit_infeasible:
+            self._fit_running_message = (
+                f'Fitting... iter {self._fit_iteration}, outside the inequality constraints'
+            )
+        elif self._fit_iteration > 0:
             self._fit_running_message = (
                 f'Fitting... iter {self._fit_iteration}, Chi2 = {self._fit_interim_chi2:.6g}'
             )
@@ -156,6 +169,7 @@ class Fitting:
         self._fit_iteration = 0
         self._fit_interim_chi2 = 0.0
         self._fit_interim_reduced_chi2 = 0.0
+        self._fit_infeasible = False
         self._fit_running_message = ''
         self._fit_preview_parameter_values = {}
         self._fit_has_preview_update = False
@@ -236,6 +250,58 @@ class Fitting:
             getattr(experiment, 'available_channels', None) is not None for experiment in self._ordered_experiments()
         )
 
+    # ------------------------------------------------------------------
+    # Inequality constraints (BUMPS penalties)
+    # ------------------------------------------------------------------
+
+    def inequality_constraints_error(self, minimizers_logic: 'Minimizers') -> str | None:
+        """Reason a fit must not start because of the project's inequality constraints.
+
+        Returns ``None`` when the fit may proceed: no enabled inequality, or the
+        selected engine enforces them and the current parameter values satisfy
+        them (a fit started from an infeasible point would begin on the BUMPS
+        penalty plateau where only the penalty slope guides the optimizer).
+        """
+        active = [spec for spec in self._project_lib.inequality_constraints if spec.enabled]
+        if not active:
+            return None
+        if not minimizers_logic.supports_inequalities():
+            return (
+                'Inequality constraints are only supported by the BUMPS minimizers (and Bayesian sampling). '
+                'Switch the minimizer or remove the inequality constraints.'
+            )
+        violated = self._project_lib.violated_inequality_constraints()
+        if violated:
+            names = ', '.join(spec.name or str(spec) for spec in violated)
+            return (
+                f'The current parameter values violate the inequality constraint(s): {names}. '
+                'Adjust the values so every constraint holds before fitting.'
+            )
+        return None
+
+    def inequality_constraints_warning(self, minimizers_logic: 'Minimizers') -> str:
+        """Non-blocking notice about how inequalities will be enforced."""
+        active = [spec for spec in self._project_lib.inequality_constraints if spec.enabled]
+        if not active:
+            return ''
+        if not minimizers_logic.supports_inequalities():
+            return 'Inequality constraints are not enforced by the selected minimizer; fits are refused.'
+        if minimizers_logic.enforces_inequalities_weakly():
+            return (
+                'Bumps_lm enforces inequality constraints only weakly (the penalty is spread over the residuals); '
+                'prefer Bumps (amoeba) or Bumps_newton.'
+            )
+        return ''
+
+    def snapshot_constraints_factory(self):
+        """Build the BUMPS ``constraints_factory`` from the enabled inequality constraints *now*.
+
+        Taken when the fit worker starts so that constraints edited while the
+        fit runs cannot change what the worker enforces. Returns ``None`` when
+        no inequality constraint is enabled.
+        """
+        return self._project_lib.build_constraints_factory()
+
     def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> tuple:
         """Prepare data for threaded fitting.
 
@@ -252,6 +318,18 @@ class Fitting:
                 self._finished = True
                 self._show_results_dialog = True
                 return None, None, None, None, None
+
+            constraints_error = self.inequality_constraints_error(minimizers_logic)
+            if constraints_error:
+                logger.warning('Fit refused: %s', constraints_error)
+                self._fit_error_message = constraints_error
+                self._running = False
+                self._finished = True
+                self._show_results_dialog = True
+                return None, None, None, None, None
+            constraints_warning = self.inequality_constraints_warning(minimizers_logic)
+            if constraints_warning:
+                logger.warning(constraints_warning)
 
             # One fit function per dataset. Polarized experiment contains
             # one per measured spin channel. All are sharing a single model, so
@@ -376,6 +454,15 @@ class Fitting:
             experiments = self._ordered_experiments()
             if not experiments:
                 self._fit_error_message = 'No experiments to sample'
+                self._running = False
+                self._finished = True
+                self._show_results_dialog = True
+                return None, None
+
+            constraints_error = self.inequality_constraints_error(minimizers_logic)
+            if constraints_error:
+                logger.warning('Sampling refused: %s', constraints_error)
+                self._fit_error_message = constraints_error
                 self._running = False
                 self._finished = True
                 self._show_results_dialog = True

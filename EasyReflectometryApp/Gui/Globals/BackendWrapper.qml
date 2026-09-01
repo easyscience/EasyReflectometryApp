@@ -264,6 +264,16 @@ QtObject {
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
     function sampleConstrainModelsParameters(modelIndices) { activeBackend.sample.constrainModelsParameters(modelIndices) }
 
+    // Inequality constraints (BUMPS-only fit penalties) and physics-constraint recipes
+    readonly property int sampleInequalityConstraintsCount: activeBackend.sample.inequalityConstraintsCount
+    readonly property var sampleViolatedInequalityConstraints: activeBackend.sample.violatedInequalityConstraints
+    readonly property var samplePhysicsConstraintRecipes: activeBackend.sample.physicsConstraintRecipes
+    // Note: the backends also expose setInequalityConstraintEnabled(index, enabled)
+    // (disable-without-delete); wrap it here once the constraints table grows a
+    // per-row enable control.
+    function sampleApplyPhysicsConstraint(assemblyIndex, recipeId) { return activeBackend.sample.applyPhysicsConstraint(assemblyIndex, recipeId) }
+    function sampleRemovePhysicsConstraint(assemblyIndex, recipeId) { return activeBackend.sample.removePhysicsConstraint(assemblyIndex, recipeId) }
+
     // Q range
     readonly property var sampleQMin: activeBackend.sample.q_min
     function sampleSetQMin(value) { activeBackend.sample.setQMin(value) }
@@ -399,6 +409,9 @@ QtObject {
 
     // Bayesian sampling
     readonly property bool analysisIsBayesianSelected: activeBackend.analysis.isBayesianSelected
+    readonly property bool analysisMinimizerSupportsInequalities: activeBackend.analysis.minimizerSupportsInequalities
+    readonly property string analysisInequalityConstraintsWarning: activeBackend.analysis.inequalityConstraintsWarning
+    readonly property bool analysisFitInfeasible: activeBackend.analysis.fitInfeasible
 
     readonly property int bayesianSamples: activeBackend.analysis.bayesianSamples
     readonly property int bayesianBurnIn: activeBackend.analysis.bayesianBurnIn

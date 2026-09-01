@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 class Analysis(QObject):
     minimizerChanged = Signal()
+    # The inequality-constraint notices depend on the selected minimizer *and*
+    # on which inequality constraints are enabled; this fires for both events
+    # (minimizerChanged is forwarded in __init__, the sample backend's
+    # constraintsChanged is forwarded by PyBackend). A dedicated signal keeps
+    # constraint edits from re-notifying every minimizer-bound property, which
+    # would reset e.g. the minimizer combo box model on every layer change.
+    inequalityContextChanged = Signal()
     calculatorChanged = Signal()
     # Emitted with the reason when a calculator cannot be selected.
     calculatorChangeRejected = Signal(str)
@@ -61,6 +68,8 @@ class Analysis(QObject):
         self._fitter_thread = None
         # Connect stopFit signal to slot
         self.stopFit.connect(self._onStopFit)
+        # A minimizer switch changes the inequality-constraint notices too.
+        self.minimizerChanged.connect(self.inequalityContextChanged)
         # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
         self._selected_experiment_indices = []
         # Initialize selected experiments after construction to avoid binding loops
@@ -183,6 +192,25 @@ class Analysis(QObject):
     @Property(bool, notify=minimizerChanged)
     def isBayesianSelected(self) -> bool:
         return self._minimizers_logic.is_bayesian_selected()
+
+    # ------------------------------------------------------------------
+    # Inequality constraints (BUMPS-only fit penalties)
+    # ------------------------------------------------------------------
+
+    @Property(bool, notify=inequalityContextChanged)
+    def minimizerSupportsInequalities(self) -> bool:
+        """True when the selected engine (or Bayesian sampling) enforces inequality constraints."""
+        return self._minimizers_logic.supports_inequalities()
+
+    @Property(str, notify=inequalityContextChanged)
+    def inequalityConstraintsWarning(self) -> str:
+        """Notice shown next to the minimizer / constraints when inequalities are active."""
+        return self._fitting_logic.inequality_constraints_warning(self._minimizers_logic)
+
+    @Property(bool, notify=fittingChanged)
+    def fitInfeasible(self) -> bool:
+        """Whether the last progress report came from the BUMPS penalty plateau."""
+        return self._fitting_logic.fit_infeasible
 
     # ------------------------------------------------------------------
     # Bayesian sampling progress properties
@@ -455,12 +483,15 @@ class Analysis(QObject):
                 self.fitFailed.emit(self._fitting_logic.fit_error_message)
             return
 
-        # Create and configure worker
+        # Create and configure worker. The inequality constraints are snapshotted
+        # here so edits made while the fit runs cannot change what it enforces.
+        fit_kwargs = {'weights': weights, 'method': method}
+        fit_kwargs.update(self._constraints_kwargs())
         self._fitter_thread = FitterWorker(
             fitter=fitter,
             method_name='fit',
             args=(x_data, y_data),
-            kwargs={'weights': weights, 'method': method},
+            kwargs=fit_kwargs,
             parent=self,
         )
         self._fitter_thread.finished.connect(self._on_fit_finished)
@@ -469,6 +500,15 @@ class Analysis(QObject):
         self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
+
+    def _constraints_kwargs(self) -> dict:
+        """``{'constraints_factory': ...}`` for the worker when inequality constraints are active, else ``{}``.
+
+        The factory is built *now* (a snapshot of the enabled constraints) so
+        that edits made while the fit runs cannot change what it enforces.
+        """
+        factory = self._fitting_logic.snapshot_constraints_factory()
+        return {'constraints_factory': factory} if factory is not None else {}
 
     def _is_stale_worker_signal(self) -> bool:
         """Return True when a worker signal comes from a superseded worker.
@@ -606,6 +646,7 @@ class Analysis(QObject):
                 'thin': self._bayesian_logic.thin,
                 'population': self._bayesian_logic.population,
                 'initializer': self._bayesian_logic.initializer,
+                **self._constraints_kwargs(),
             },
             parent=self,
         )

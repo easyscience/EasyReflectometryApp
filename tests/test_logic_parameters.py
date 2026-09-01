@@ -167,9 +167,21 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
 
     metadata = logic.constraint_metadata()
     assert metadata == [
-        {'alias': 'hidden_background', 'displayName': 'Hidden background', 'group': 'Experiment', 'independent': True},
-        {'alias': 'instrument_scale', 'displayName': 'Instrument scale', 'group': 'Instrument', 'independent': True},
-        {'alias': 'layer_thickness', 'displayName': 'Layer thickness', 'group': 'Layer', 'independent': False},
+        {
+            'alias': 'hidden_background',
+            'displayName': 'Hidden background',
+            'group': 'Experiment',
+            'independent': True,
+            'kind': 'parameter',
+        },
+        {
+            'alias': 'instrument_scale',
+            'displayName': 'Instrument scale',
+            'group': 'Instrument',
+            'independent': True,
+            'kind': 'parameter',
+        },
+        {'alias': 'layer_thickness', 'displayName': 'Layer thickness', 'group': 'Layer', 'independent': False, 'kind': 'parameter'},
     ]
 
     logic.set_variability_filter_criteria('all')

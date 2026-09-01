@@ -244,6 +244,9 @@ class PyBackend(QObject):
         self._sample.modelsTableChanged.connect(self._analysis.experimentsChanged)
         # Connect sample changes to multi-experiment selection signal
         self._sample.modelsTableChanged.connect(self.multiExperimentSelectionChanged)
+        # Adding/removing/toggling an inequality constraint changes the
+        # engine-support notices shown on the Analysis and Sample pages.
+        self._sample.constraintsChanged.connect(self._analysis.inequalityContextChanged)
 
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
