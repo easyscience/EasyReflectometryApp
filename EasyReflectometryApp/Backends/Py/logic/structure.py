@@ -9,7 +9,16 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
     """Flatten the current model's sample into drawable boxes for the Structure view.
 
     Returns (structure, legend, total_thickness):
-    - structure: one dict per drawn box, top to bottom (contract in MD/VISUAL_LAYERS_PLAN.md §3.2)
+    - structure: one dict per drawn box, top to bottom, with the keys
+        label            layer name, or assembly name for a gradient
+        material         material name, or 'front -> back' for a gradient
+        color            box color; color_end is the second color of a gradient, else ''
+        sld, isld        real/imaginary SLD of the material, preformatted to 2 decimals
+        thickness        layer thickness in Angstrom, as a float
+        roughness        upper roughness in Angstrom, preformatted to 1 decimal
+        assembly         assembly name, and assembly_index/layer_index to address the layer
+        kind             'layer' | 'gradient' | 'superphase' | 'subphase'
+        repetitions      n for a collapsed repeating multilayer, else 1
     - legend: distinct {label, color} pairs in stack order
     - total_thickness: physical total in Angstrom (collapsed repeats counted n times, caps excluded)
     """

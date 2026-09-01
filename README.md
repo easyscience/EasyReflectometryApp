@@ -31,13 +31,14 @@ Current main features of **EasyReflectometry**:
 - Growing support for flexible _item_ types, including chemically consistent models.
 - Ability to corefine multiple contrasts of reflectometry data.
 - Multiple minimization engines: [lmfit](https://lmfit.github.io/lmfit-py), [bumps](https://github.com/bumps/bumps) and [DFO-LS](https://github.com/numericalalgorithmsgroup/dfols) (including the differential evolution method).
+- Support for magnetic structures: a magnetic scattering length density and in-plane moment angle per layer, refined with [refl1d](https://refl1d.readthedocs.io/en/latest/).
+- Support for polarised reflectometry measurements: import of one file per spin channel, spin-asymmetry views, and simultaneous refinement of all measured spin channels against a single model.
 - Interactive HTML and standard PDF report generation.
 - Undo/redo for both parameter changes and fitting.
 - Saving and loading of projects.
 
 Planned improvements / new functionality for **EasyReflectometry**:
 
-- Support for magnetic structures and polarised reflectometry measurements.
 - Support for mixed model reflectometry datasets.
 - Reading of q-dependent resolution from a file.
 
