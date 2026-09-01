@@ -3,6 +3,8 @@ module Groups
 
 AssemblyEditor AssemblyEditor.qml
 LoadSample LoadSample.qml
+MagneticProfile MagneticProfile.qml
+Magnetism Magnetism.qml
 MaterialEditor MaterialEditor.qml
 ModelEditor ModelEditor.qml
 ModelSelector ModelSelector.qml

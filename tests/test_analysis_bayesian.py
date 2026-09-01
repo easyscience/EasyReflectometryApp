@@ -3,8 +3,6 @@
 """Exhaustive tests for Bayesian functionality in the analysis backend layer."""
 
 import logging
-import os
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -17,7 +15,6 @@ from PySide6.QtCore import Signal
 
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
 from tests.factories import make_project
-
 
 # ---------------------------------------------------------------------------
 # Stub helpers  (reuse + extend the stubs from test_analysis.py)
@@ -74,6 +71,9 @@ class StubFittingLogic:
         self.fit_error_message = ''
         self.fit_cancelled = False
         self.fit_success = False
+
+    def snapshot_constraints_factory(self):
+        return None
 
     def prepare_for_threaded_sample(self):
         pass
@@ -210,7 +210,6 @@ def analysis(monkeypatch):
     monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubMinimizersLogic)
     monkeypatch.setattr(analysis_module, 'FitterWorker', StubWorker)
     # Replace the fitting logic with our stub
-    from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
     monkeypatch.setattr(analysis_module, 'FittingLogic', lambda _project_lib: StubFittingLogic())
 
     project = make_project()

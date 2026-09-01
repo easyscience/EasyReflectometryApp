@@ -3,6 +3,20 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+
+    // Calculation engine (project-wide setting, also shown on the Sample page)
+    property var calculationEngines: ['refnx', 'refl1d']
+    property int calculationEngineIndex: 0
+    property var calculationEnginesSupportingMagnetism: ['refl1d']
+    signal calculationEngineChanged()
+    signal magnetismNeedsEngine(int index, string engine)
+    function setCalculationEngineIndex(value) {
+        console.debug(`setCalculationEngineIndex ${value}`)
+    }
+    function enableMagnetismWithEngineAtIndex(index, engine) {
+        console.debug(`enableMagnetismWithEngineAtIndex ${index} ${engine}`)
+    }
+
     // Signals to match the Python backend
     signal constraintsChanged
     // MATERIALS
@@ -268,6 +282,23 @@ QtObject {
         console.debug(`setCurrentLayerSolvation ${value}`)
     }
 
+    // Layer magnetism (polarized analysis)
+    readonly property bool magnetismSupported: true
+    readonly property var layersMagnetism: [
+        { 'label': 'label 1', 'magnetic': 'True', 'rho_m': '5.0', 'theta_m': '40.0' },
+        { 'label': 'label 2', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0' },
+        { 'label': 'label 3', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0' },
+    ]
+    function setLayerMagneticAtIndex(index, value) {
+        console.debug(`setLayerMagneticAtIndex ${index} ${value}`)
+    }
+    function setLayerRhoMAtIndex(index, value) {
+        console.debug(`setLayerRhoMAtIndex ${index} ${value}`)
+    }
+    function setLayerThetaMAtIndex(index, value) {
+        console.debug(`setLayerThetaMAtIndex ${index} ${value}`)
+    }
+
     // Table functions
     function removeLayer(value) {
         console.debug(`removeLayer ${value}`)
@@ -382,6 +413,48 @@ QtObject {
             constraintsChanged()
         }
     }
+
+    // Inequality constraints (BUMPS-only fit penalties)
+    readonly property int inequalityConstraintsCount: 0
+    readonly property var violatedInequalityConstraints: []
+    function setInequalityConstraintEnabled(index, enabled) { console.debug(`setInequalityConstraintEnabled ${index} ${enabled}`) }
+
+    // Physics-constraint recipes
+    property var physicsConstraintRecipes: [
+        { id: 'conformal_roughness', assemblyIndex: 1, assemblyName: 'Multi-layer 1', assemblyType: 'Multi-layer',
+          title: 'Conformal roughness', description: 'Every interface of the assembly shares the roughness of its first layer.',
+          available: true, active: false, toggleable: true, reason: '', requires: [] },
+        { id: 'constant_period', assemblyIndex: 1, assemblyName: 'Multi-layer 1', assemblyType: 'Multi-layer',
+          title: 'Constant period Λ', description: 'The summed thickness of the layers stays constant.',
+          available: true, active: true, toggleable: true, reason: '', requires: [] },
+        { id: 'equal_apm', assemblyIndex: 2, assemblyName: 'Surfactant', assemblyType: 'Surfactant Layer',
+          title: 'Equal head/tail area per molecule', description: 'The head layer takes the area per molecule of the tail layer.',
+          available: true, active: false, toggleable: true, reason: '', requires: [] },
+        { id: 'solvent_roughness', assemblyIndex: 2, assemblyName: 'Surfactant', assemblyType: 'Surfactant Layer',
+          title: 'Solvent roughness follows the surfactant', description: 'The roughness of the layer below follows the tail roughness.',
+          available: false, active: false, toggleable: false, reason: 'Requires conformal roughness on the surfactant layer.', requires: ['conformal_roughness'] }
+    ]
+    function _setRecipeActive(assemblyIndex, recipeId, active) {
+        var recipes = physicsConstraintRecipes.slice()
+        for (let i = 0; i < recipes.length; i++) {
+            if (recipes[i].assemblyIndex !== assemblyIndex) {
+                continue
+            }
+            if (recipes[i].id === recipeId) {
+                recipes[i] = Object.assign({}, recipes[i], { active: active })
+            } else if (!active && recipes[i].requires.indexOf(recipeId) !== -1) {
+                // Mirror the Py backend's cascade: removing a recipe also
+                // removes the recipes that require it (e.g. solvent roughness
+                // needs conformal roughness).
+                recipes[i] = Object.assign({}, recipes[i], { active: false })
+            }
+        }
+        physicsConstraintRecipes = recipes
+        constraintsChanged()
+        return { success: true, message: '' }
+    }
+    function applyPhysicsConstraint(assemblyIndex, recipeId) { return _setRecipeActive(assemblyIndex, recipeId, true) }
+    function removePhysicsConstraint(assemblyIndex, recipeId) { return _setRecipeActive(assemblyIndex, recipeId, false) }
 
     // Q Range
     property double q_min: 4.

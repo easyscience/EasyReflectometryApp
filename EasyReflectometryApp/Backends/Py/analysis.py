@@ -1,7 +1,6 @@
 import logging
 import os
 import time
-
 from typing import List
 from typing import Optional
 
@@ -14,7 +13,11 @@ from PySide6.QtCore import Slot
 
 from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
+from .logic.experiments import CHANNEL_LABELS
 from .logic.experiments import Experiments as ExperimentLogic
+from .logic.experiments import channel_shade
+from .logic.experiments import experiment_channel_values
+from .logic.experiments import flatten_polarized
 from .logic.fitting import Fitting as FittingLogic
 from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
@@ -26,7 +29,16 @@ logger = logging.getLogger(__name__)
 
 class Analysis(QObject):
     minimizerChanged = Signal()
+    # The inequality-constraint notices depend on the selected minimizer *and*
+    # on which inequality constraints are enabled; this fires for both events
+    # (minimizerChanged is forwarded in __init__, the sample backend's
+    # constraintsChanged is forwarded by PyBackend). A dedicated signal keeps
+    # constraint edits from re-notifying every minimizer-bound property, which
+    # would reset e.g. the minimizer combo box model on every layer change.
+    inequalityContextChanged = Signal()
     calculatorChanged = Signal()
+    # Emitted with the reason when a calculator cannot be selected.
+    calculatorChangeRejected = Signal(str)
     experimentsChanged = Signal()
     parametersChanged = Signal()
     parametersIndexChanged = Signal()
@@ -56,6 +68,8 @@ class Analysis(QObject):
         self._fitter_thread = None
         # Connect stopFit signal to slot
         self.stopFit.connect(self._onStopFit)
+        # A minimizer switch changes the inequality-constraint notices too.
+        self.minimizerChanged.connect(self.inequalityContextChanged)
         # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
         self._selected_experiment_indices = []
         # Initialize selected experiments after construction to avoid binding loops
@@ -178,6 +192,25 @@ class Analysis(QObject):
     @Property(bool, notify=minimizerChanged)
     def isBayesianSelected(self) -> bool:
         return self._minimizers_logic.is_bayesian_selected()
+
+    # ------------------------------------------------------------------
+    # Inequality constraints (BUMPS-only fit penalties)
+    # ------------------------------------------------------------------
+
+    @Property(bool, notify=inequalityContextChanged)
+    def minimizerSupportsInequalities(self) -> bool:
+        """True when the selected engine (or Bayesian sampling) enforces inequality constraints."""
+        return self._minimizers_logic.supports_inequalities()
+
+    @Property(str, notify=inequalityContextChanged)
+    def inequalityConstraintsWarning(self) -> str:
+        """Notice shown next to the minimizer / constraints when inequalities are active."""
+        return self._fitting_logic.inequality_constraints_warning(self._minimizers_logic)
+
+    @Property(bool, notify=fittingChanged)
+    def fitInfeasible(self) -> bool:
+        """Whether the last progress report came from the BUMPS penalty plateau."""
+        return self._fitting_logic.fit_infeasible
 
     # ------------------------------------------------------------------
     # Bayesian sampling progress properties
@@ -450,12 +483,15 @@ class Analysis(QObject):
                 self.fitFailed.emit(self._fitting_logic.fit_error_message)
             return
 
-        # Create and configure worker
+        # Create and configure worker. The inequality constraints are snapshotted
+        # here so edits made while the fit runs cannot change what it enforces.
+        fit_kwargs = {'weights': weights, 'method': method}
+        fit_kwargs.update(self._constraints_kwargs())
         self._fitter_thread = FitterWorker(
             fitter=fitter,
             method_name='fit',
             args=(x_data, y_data),
-            kwargs={'weights': weights, 'method': method},
+            kwargs=fit_kwargs,
             parent=self,
         )
         self._fitter_thread.finished.connect(self._on_fit_finished)
@@ -464,6 +500,15 @@ class Analysis(QObject):
         self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
+
+    def _constraints_kwargs(self) -> dict:
+        """``{'constraints_factory': ...}`` for the worker when inequality constraints are active, else ``{}``.
+
+        The factory is built *now* (a snapshot of the enabled constraints) so
+        that edits made while the fit runs cannot change what it enforces.
+        """
+        factory = self._fitting_logic.snapshot_constraints_factory()
+        return {'constraints_factory': factory} if factory is not None else {}
 
     def _is_stale_worker_signal(self) -> bool:
         """Return True when a worker signal comes from a superseded worker.
@@ -601,6 +646,7 @@ class Analysis(QObject):
                 'thin': self._bayesian_logic.thin,
                 'population': self._bayesian_logic.population,
                 'initializer': self._bayesian_logic.initializer,
+                **self._constraints_kwargs(),
             },
             parent=self,
         )
@@ -650,11 +696,9 @@ class Analysis(QObject):
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
         if self._plotting is None:
             return
-        from easyreflectometry.analysis.bayesian import (
-            posterior_predictive_reflectivity,
-            posterior_predictive_sld_profile,
-        )
         import numpy as np
+        from easyreflectometry.analysis.bayesian import posterior_predictive_reflectivity
+        from easyreflectometry.analysis.bayesian import posterior_predictive_sld_profile
 
         posterior = self._bayesian_logic.posterior
         if posterior is None:
@@ -818,8 +862,8 @@ class Analysis(QObject):
 
     def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         out_dir = Path(tempfile.gettempdir()) / 'EasyReflectometryApp' / 'bayesian'
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -908,9 +952,8 @@ class Analysis(QObject):
             self._bayesian_logic.trace_plot_url = ''
             return
         try:
-            from easyreflectometry.analysis.bayesian import plot_trace
-
             import numpy as np
+            from easyreflectometry.analysis.bayesian import plot_trace
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 2:
                 draws = draws[np.newaxis, ...]  # (1, n_draws, n_params)
@@ -1028,7 +1071,16 @@ class Analysis(QObject):
 
     @Slot(int)
     def setCalculatorCurrentIndex(self, new_value: int) -> None:
-        if self._calculators_logic.set_current_index(new_value):
+        try:
+            changed = self._calculators_logic.set_current_index(new_value)
+        except NotImplementedError as exception:
+            # A calculator that cannot model the sample's magnetism would raise
+            # deep inside the library; report it and keep the current engine.
+            logger.warning('Cannot change the calculator: %s', exception)
+            self.calculatorChangeRejected.emit(str(exception))
+            self.calculatorChanged.emit()
+            return
+        if changed:
             self.calculatorChanged.emit()
             self.externalCalculatorChanged.emit()
 
@@ -1037,6 +1089,16 @@ class Analysis(QObject):
     @Property('QVariantList', notify=experimentsChanged)
     def experimentsAvailable(self) -> List[str]:
         return self._experiments_logic.available()
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsPolarized(self) -> List[bool]:
+        """Per-experiment flag: True for polarized (per-channel) experiments."""
+        return self._experiments_logic.polarized_flags()
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsChannelCount(self) -> List[int]:
+        """Per-experiment number of measured spin channels (0 when unpolarized)."""
+        return self._experiments_logic.channel_counts()
 
     @Property(int, notify=experimentsChanged)
     def experimentCurrentIndex(self) -> int:
@@ -1123,6 +1185,15 @@ class Analysis(QObject):
         """Return the list of selected experiment indices."""
         return self._selected_experiment_indices
 
+    @Slot(int)
+    def selectExperimentAtIndex(self, index: int) -> None:
+        """Make one experiment the current and only selected one.
+
+        Used after an import so the charts show the experiment that was just
+        loaded instead of staying on the previously selected one.
+        """
+        self.setSelectedExperimentIndices([index])
+
     @Slot('QVariantList')
     def setSelectedExperimentIndices(self, indices: List[int]) -> None:
         """Set multiple selected experiment indices."""
@@ -1160,10 +1231,14 @@ class Analysis(QObject):
             return DataSet1D(name='No experiments selected', x=np.empty(0), y=np.empty(0), ye=np.empty(0), xe=np.empty(0))
 
         all_x, all_y, all_ye, all_xe = [], [], [], []
+        visible_channels = self._visible_channels()
 
         for exp_idx in self._selected_experiment_indices:
             try:
-                data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                data = flatten_polarized(
+                    self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx),
+                    visible_channels,
+                )
                 if data.x.size > 0:  # Only include non-empty datasets
                     all_x.extend(data.x)
                     all_y.extend(data.y)
@@ -1193,10 +1268,17 @@ class Analysis(QObject):
             name=combined_name, x=np.array(x_sorted), y=np.array(y_sorted), ye=np.array(ye_sorted), xe=np.array(xe_sorted)
         )
 
-    def get_individual_experiment_data_list(self):
+    def get_individual_experiment_data_list(self, expand_channels: bool = False):
         """
         Get individual experiment data for each selected experiment.
         Returns a list of dictionaries with data, name, and color for each experiment.
+
+        With `expand_channels`, a polarized experiment contributes one entry per
+        visible measured channel (each carrying its `channel` and a channel
+        shade of the experiment color) instead of being flattened to a single
+        one — used by the experiment chart, which draws per-channel series.
+        Consumers that are not channel aware yet (analysis, residuals) keep the
+        flat one-entry-per-experiment list.
         """
 
         if not self._selected_experiment_indices:
@@ -1218,23 +1300,56 @@ class Analysis(QObject):
             '#7BB8B8',  # Soft Cyan
         ]
 
+        visible_channels = self._visible_channels()
+
         for idx, exp_idx in enumerate(self._selected_experiment_indices):
             try:
-                data = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
-                if data.x.size > 0:  # Only include non-empty datasets
-                    exp_name = (
-                        self._experiments_logic.available()[exp_idx]
-                        if exp_idx < len(self._experiments_logic.available())
-                        else f'Experiment {exp_idx + 1}'
-                    )
-                    color = color_palette[exp_idx % len(color_palette)]
+                experiment = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
+                exp_name = (
+                    self._experiments_logic.available()[exp_idx]
+                    if exp_idx < len(self._experiments_logic.available())
+                    else f'Experiment {exp_idx + 1}'
+                )
+                color = color_palette[exp_idx % len(color_palette)]
 
-                    experiment_data_list.append({'data': data, 'name': exp_name, 'color': color, 'index': exp_idx})
-            except (IndexError, AttributeError) as e:
+                # A polarized experiment contributes one entry per visible
+                # measured channel, so nothing the user selected is dropped.
+                channels = (
+                    [channel for channel in experiment_channel_values(experiment) if channel in visible_channels]
+                    if expand_channels
+                    else []
+                )
+                if not channels:
+                    data = flatten_polarized(experiment, visible_channels)
+                    if data.x.size > 0:  # Only include non-empty datasets
+                        experiment_data_list.append(
+                            {'data': data, 'name': exp_name, 'color': color, 'index': exp_idx, 'channel': ''}
+                        )
+                    continue
+
+                for channel in channels:
+                    data = experiment[channel]
+                    if data.x.size == 0:
+                        continue
+                    experiment_data_list.append(
+                        {
+                            'data': data,
+                            'name': f'{exp_name} ({CHANNEL_LABELS[channel]} {channel})',
+                            'color': channel_shade(color, channel),
+                            'index': exp_idx,
+                            'channel': channel,
+                        }
+                    )
+            except (IndexError, AttributeError, KeyError) as e:
                 logger.warning('Error accessing experiment %s: %s', exp_idx, e)
                 continue
 
         return experiment_data_list
+
+    def _visible_channels(self) -> set:
+        """Channels the user kept visible (all of them when plotting is unavailable)."""
+        visible = getattr(self._plotting, '_visible_channels', None)
+        return set(visible) if visible else set(CHANNEL_LABELS)
 
     @Property('QVariantList', notify=experimentsChanged)
     def selectedExperimentDataList(self) -> List[dict]:
@@ -1438,6 +1553,6 @@ class Analysis(QObject):
             shutil.copy2(str(source_path), save_path)
             logger.info('Bayesian plot saved to %s', save_path)
             return True
-        except OSError as exc:
+        except OSError:
             logger.exception('Failed to save Bayesian plot to %s', save_path)
             return False

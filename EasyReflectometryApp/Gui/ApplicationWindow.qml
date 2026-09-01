@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 
+import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
@@ -202,6 +203,39 @@ EaComponents.ApplicationWindow {
                     Globals.References.resetActive = false
                     resetStateDialog.close()
                 }
+            }
+        }
+    }
+
+    // A refused calculation engine switch only reaches the log otherwise,
+    // which the GUI user cannot see. One dialog here rather than one per
+    // engine selector (Sample and Analysis pages), so it cannot stack.
+    Connections {
+        target: Globals.BackendWrapper.activeBackend ? Globals.BackendWrapper.activeBackend.sample : null
+        enabled: target !== null
+        ignoreUnknownSignals: true
+        function onCalculationEngineRejected(message) {
+            engineRejectionDialog.message = message
+            engineRejectionDialog.open()
+        }
+    }
+
+    EaElements.Dialog {
+        id: engineRejectionDialog
+
+        property string message: ''
+
+        title: qsTr("Cannot change the calculation engine")
+        standardButtons: Dialog.Ok
+        closePolicy: Popup.CloseOnEscape
+
+        // The Column caps the dialog at the label's wrapped width; a bare
+        // label would size the dialog to the unwrapped text instead.
+        Column {
+            EaElements.Label {
+                wrapMode: Text.WordWrap
+                width: EaStyle.Sizes.fontPixelSize * 26
+                text: engineRejectionDialog.message
             }
         }
     }

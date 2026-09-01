@@ -14,7 +14,10 @@ EaComponents.ContentPage {
     mainView: EaComponents.MainContent {
         items: [
             Loader {
-                source: `MainContent/ExperimentView.qml`
+                // Reflectivity chart, plus a spin-asymmetry tab when the current
+                // experiment has both non-spin-flip channels. Without one the
+                // page is the single chart it has always been.
+                source: `MainContent/ExperimentTabs.qml`
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             }
         ]

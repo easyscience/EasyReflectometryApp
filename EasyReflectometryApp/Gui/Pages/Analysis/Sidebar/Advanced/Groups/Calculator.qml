@@ -8,18 +8,13 @@ import QtQuick.Controls
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 EaElements.GroupBox {
     title: qsTr("Calculation engine")
     icon: 'calculator'
-    EaElements.GroupRow {
-
-        EaElements.ComboBox {
-            width: EaStyle.Sizes.sideBarContentWidth
-            model: Globals.BackendWrapper.analysisCalculatorsAvailable
-            currentIndex: Globals.BackendWrapper.analysisCalculatorCurrentIndex
-            onCurrentIndexChanged: Globals.BackendWrapper.analysisSetCalculatorCurrentIndex(currentIndex)
-        }
-    }
+    // The same control as the Sample page's group: one engine, one place that
+    // decides what happens when it cannot be changed.
+    Gui.CalculationEngineControl {}
 }

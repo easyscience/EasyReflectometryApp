@@ -19,6 +19,17 @@ EaElements.GroupBox {
         width: parent.width
         spacing: 0
 
+        // Inequality constraints are BUMPS penalties: tell the user when the
+        // selected engine cannot (or only weakly can) enforce the ones defined.
+        EaElements.Label {
+            width: EaStyle.Sizes.sideBarContentWidth
+            visible: Globals.BackendWrapper.sampleInequalityConstraintsCount > 0 &&
+                     Globals.BackendWrapper.analysisInequalityConstraintsWarning.length > 0
+            text: qsTr("⚠ %1").arg(Globals.BackendWrapper.analysisInequalityConstraintsWarning)
+            wrapMode: Text.Wrap
+            color: EaStyle.Colors.themeAccent
+        }
+
         EaElements.GroupRow{
             EaElements.ComboBox {
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2

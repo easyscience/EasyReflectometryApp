@@ -9,17 +9,23 @@ from typing import Tuple
 import numpy as np
 from asteval import Interpreter
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.inequality_constraints import InequalitySpec
+from easyreflectometry.inequality_constraints import check_units
+from easyreflectometry.inequality_constraints import evaluate_spec
 from easyscience.variable.descriptor_number import DescriptorNumber
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QTimer
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
 from .logic.assemblies import Assemblies as AssembliesLogic
+from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.layers import Layers as LayersLogic
 from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
 from .logic.parameters import Parameters as ParametersLogic
+from .logic.physics_constraints import PhysicsConstraints as PhysicsConstraintsLogic
 from .logic.project import Project as ProjectLogic
 from .logic.structure import flatten as flatten_structure
 
@@ -69,6 +75,19 @@ class Sample(QObject):
     layersIndexChanged = Signal()
 
     structureChanged = Signal()
+    # Per-layer magnetism (rho_m / theta_m) and calculator capability.
+    magnetismChanged = Signal()
+    magnetismFailed = Signal(str)
+    # Emitted with (layer index, engine name) when making a layer magnetic needs
+    # a different calculation engine; the UI asks before anything is changed.
+    magnetismNeedsEngine = Signal(int, str)
+    # Emitted when the Sample page changed the project's calculation engine, so
+    # the Analysis page's selector and the plots follow.
+    calculationEngineChanged = Signal()
+    # Emitted with the reason when a requested engine switch is refused (e.g.
+    # the sample has magnetic layers the engine cannot model). Logs are not
+    # visible in the GUI, so the engine selector shows this in a dialog.
+    calculationEngineRejected = Signal(str)
 
     qRangeChanged = Signal()
     constraintsChanged = Signal()
@@ -81,6 +100,9 @@ class Sample(QObject):
         self._project_lib = project_lib
         self._material_logic = MaterialLogic(project_lib)
         self._models_logic = ModelsLogic(project_lib)
+        # The engine is a project-wide setting; this logic derives its index
+        # from the project, so the Analysis page's selector cannot disagree.
+        self._calculators_logic = CalculatorsLogic(project_lib)
         self._assemblies_logic = AssembliesLogic(project_lib)
         self._layers_logic = LayersLogic(project_lib)
         self._project_logic = ProjectLogic(project_lib)
@@ -89,11 +111,29 @@ class Sample(QObject):
         self._chached_layers = None
         self._cached_structure = None
         self._constraint_states: Dict[str, dict[str, Any]] = {}
+        # Child of self (not QTimer.singleShot) so a pending notification can
+        # never outlive this backend or keep it - and the project - alive.
+        self._constraints_notify_timer = QTimer(self)
+        self._constraints_notify_timer.setSingleShot(True)
+        self._constraints_notify_timer.setInterval(0)
+        self._constraints_notify_timer.timeout.connect(self.constraintsChanged)
+        self._physics_constraints_logic = PhysicsConstraintsLogic(project_lib)
 
         self.connect_logic()
 
     def connect_logic(self) -> None:
         self.assembliesIndexChanged.connect(self.layersConnectChanges)
+        # Inequality rows carry a "satisfied" flag evaluated at the current
+        # values, so parameter edits must refresh the constraints list too.
+        # `constraintsList` is expensive (asteval of every expression, recipe
+        # ownership across all assemblies), so bursts of layersChange within one
+        # event-loop turn are coalesced into a single constraintsChanged.
+        self.layersChange.connect(self._scheduleConstraintsChanged)
+        # The magnetism table lists the current assembly's layers.
+        self.assembliesIndexChanged.connect(self.magnetismChanged)
+
+    def _scheduleConstraintsChanged(self) -> None:
+        self._constraints_notify_timer.start()
 
     # # #
     # Materials
@@ -163,6 +203,7 @@ class Sample(QObject):
     def removeMaterial(self, value: str) -> None:
         self._material_logic.remove_at_index(value)
         self.materialsTableChanged.emit()
+        self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
     @Slot()
@@ -585,6 +626,126 @@ class Sample(QObject):
     def _clearCacheAndEmitLayersChanged(self):
         self._chached_layers = None
         self.layersChange.emit()
+        # The magnetism table lists the same layers, so it goes stale whenever
+        # a layer is added, removed, reordered or renamed.
+        self.magnetismChanged.emit()
+
+    # # #
+    # Calculation engine (shared project setting, shown here because magnetism
+    # depends on it)
+    # # #
+    @Property('QVariantList', notify=calculationEngineChanged)
+    def calculationEngines(self) -> list[str]:
+        """Available calculation engines."""
+        return self._calculators_logic.available()
+
+    @Property(int, notify=calculationEngineChanged)
+    def calculationEngineIndex(self) -> int:
+        """The project's active calculation engine."""
+        return self._calculators_logic.current_index()
+
+    @Property('QVariantList', notify=calculationEngineChanged)
+    def calculationEnginesSupportingMagnetism(self) -> list[str]:
+        """Engines that can model magnetic layers."""
+        return self._calculators_logic.supporting_magnetism()
+
+    @Slot(int)
+    def setCalculationEngineIndex(self, new_value: int) -> None:
+        """Switch the project's calculation engine from the Sample page."""
+        try:
+            changed = self._calculators_logic.set_current_index(new_value)
+        except NotImplementedError as exception:
+            logger.warning('Cannot change the calculation engine: %s', exception)
+            self.calculationEngineRejected.emit(str(exception))
+            self.calculationEngineChanged.emit()
+            return
+        if changed:
+            self.calculationEngineChanged.emit()
+            self.magnetismChanged.emit()
+
+    # # #
+    # Layer magnetism
+    # # #
+    @Property(bool, notify=magnetismChanged)
+    def magnetismSupported(self) -> bool:
+        """Whether the active calculator can model magnetic layers (refl1d only)."""
+        return self._layers_logic.magnetism_supported
+
+    @Property('QVariantList', notify=magnetismChanged)
+    def layersMagnetism(self) -> list[dict[str, str]]:
+        """Per-layer magnetism of the current assembly, one row per layer."""
+        return self._layers_logic.magnetism
+
+    @Slot(int, bool)
+    def setLayerMagneticAtIndex(self, index: int, new_value: bool) -> None:
+        """Attach or remove magnetism on one layer.
+
+        Magnetism is only modelled by some calculation engines. Rather than
+        refusing and pointing at another page, ask the UI to confirm the switch
+        (`magnetismNeedsEngine`); nothing is changed until it comes back through
+        `enableMagnetismWithEngineAtIndex`. A calculator that cannot model
+        magnetism still reports the reason instead of raising out of a
+        QML-invoked slot (which would abort the process).
+        """
+        if new_value and not self._layers_logic.magnetism_supported:
+            engines = self._calculators_logic.supporting_magnetism()
+            if engines:
+                self.magnetismNeedsEngine.emit(index, engines[0])
+                return
+        try:
+            changed = self._layers_logic.set_magnetic_at_index(index, new_value)
+        except NotImplementedError as exception:
+            logger.warning('Cannot change layer magnetism: %s', exception)
+            self.magnetismFailed.emit(str(exception))
+            return
+        if changed:
+            self._emitMagnetismChanged()
+
+    @Slot(int, str)
+    def enableMagnetismWithEngineAtIndex(self, index: int, engine: str) -> None:
+        """Switch the calculation engine, then make the layer magnetic.
+
+        The confirmed half of `magnetismNeedsEngine`: the user has been told
+        that the engine changes, so both steps happen as one action. If
+        attaching magnetism fails after the engine switch, the switch is
+        rolled back rather than left half-applied (engine changed, layer
+        still non-magnetic, with no indication to the user).
+        """
+        engine_index = self._calculators_logic.index_of(engine)
+        if engine_index < 0:
+            self.magnetismFailed.emit(f'The {engine} calculation engine is not available.')
+            return
+        previous_calculator = self._project_lib.calculator
+        engine_switched = False
+        try:
+            engine_switched = self._calculators_logic.set_current_index(engine_index)
+            changed = self._layers_logic.set_magnetic_at_index(index, True)
+        except NotImplementedError as exception:
+            if engine_switched:
+                self._project_lib.calculator = previous_calculator
+            logger.warning('Cannot enable magnetism: %s', exception)
+            self.magnetismFailed.emit(str(exception))
+            return
+        if engine_switched:
+            self.calculationEngineChanged.emit()
+        if changed:
+            self._emitMagnetismChanged()
+
+    @Slot(int, float)
+    def setLayerRhoMAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_rho_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    @Slot(int, float)
+    def setLayerThetaMAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_theta_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    def _emitMagnetismChanged(self) -> None:
+        """Magnetism edits change the model, its parameters and every curve."""
+        self._clearCacheAndEmitLayersChanged()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
 
     # # #
     # Structure view (flattened whole-stack representation)
@@ -638,6 +799,23 @@ class Sample(QObject):
                 used_aliases[alias] = parameter
         return used_aliases
 
+    @staticmethod
+    def _make_interpreter(aliases: Dict[str, DescriptorNumber], numeric: bool = False) -> Interpreter:
+        """A sandboxed interpreter with the globals and parameter aliases in scope.
+
+        With `numeric`, aliases resolve to plain float values instead of the
+        unit-carrying parameter objects.
+        """
+        interpreter = Interpreter(config=_ASTEVAL_CONFIG)
+        for name, value in _GLOBAL_SYMBOLS.items():
+            interpreter.symtable[name] = value
+            if isinstance(value, numbers.Number):
+                interpreter.readonly_symbols.add(name)
+        for alias, dependency in aliases.items():
+            interpreter.symtable[alias] = float(dependency.value) if numeric else dependency
+            interpreter.readonly_symbols.add(alias)
+        return interpreter
+
     def _evaluate_constraint_expression(
         self,
         expression: str,
@@ -645,20 +823,10 @@ class Sample(QObject):
         all_aliases: Dict[str, DescriptorNumber] | None = None,
     ) -> DescriptorNumber | numbers.Number:
         """Evaluate constraint expression with all available parameter aliases in scope."""
-        interpreter = Interpreter(config=_ASTEVAL_CONFIG)
-
-        # Add global symbols (numpy, etc.)
-        for name, value in _GLOBAL_SYMBOLS.items():
-            interpreter.symtable[name] = value
-            if isinstance(value, numbers.Number):
-                interpreter.readonly_symbols.add(name)
-
         # Add ALL parameter aliases to the symbol table (not just dependencies)
         # This allows validation to work even if we haven't detected the parameter yet
         aliases_to_add = all_aliases if all_aliases is not None else dependency_map
-        for alias, dependency in aliases_to_add.items():
-            interpreter.symtable[alias] = dependency
-            interpreter.readonly_symbols.add(alias)
+        interpreter = self._make_interpreter(aliases_to_add)
 
         try:
             result = interpreter.eval(expression, raise_errors=True)
@@ -668,6 +836,22 @@ class Sample(QObject):
                 available = ', '.join(sorted(aliases_to_add.keys())[:10])  # Show first 10
                 raise NameError(f'{str(e)}\nAvailable aliases: {available}...') from None
             raise
+        return result
+
+    def _evaluate_constraint_expression_numeric(
+        self,
+        expression: str,
+        all_aliases: Dict[str, DescriptorNumber],
+    ) -> numbers.Number:
+        """Evaluate a constraint expression over plain parameter *values*.
+
+        Fallback for inequality expressions mixing literals with parameters
+        ('90 - t_b'), which the unit-carrying evaluation cannot represent.
+        """
+        interpreter = self._make_interpreter(all_aliases, numeric=True)
+        result = interpreter.eval(expression, raise_errors=True)
+        if not isinstance(result, numbers.Number):
+            raise TypeError('Expression must evaluate to a numeric value.')
         return result
 
     @staticmethod
@@ -749,7 +933,25 @@ class Sample(QObject):
         except SyntaxError as error:
             raise SyntaxError(str(error).split('\n')[-1]) from None
         except Exception as error:
-            raise RuntimeError(str(error)) from None
+            # Inequality expressions may mix numeric literals with parameters
+            # ('90 - t_b'), which the unit-carrying arithmetic rejects. They are
+            # evaluated numerically during the fit anyway (literals read in the
+            # unit of the dependent parameter), so always retry any inequality
+            # that references parameters with plain values — the numeric path is
+            # strictly more permissive and `check_units` still verifies the
+            # resulting spec. Equality constraints go through
+            # `make_dependent_on`, which needs the unit-carrying form — no
+            # fallback there.
+            if relation == '=' or not dependency_map:
+                raise RuntimeError(str(error)) from None
+            try:
+                evaluation_result = self._evaluate_constraint_expression_numeric(
+                    expression_text, all_aliases=alias_lookup
+                )
+            except Exception:
+                # Report the original, unit-aware error: it names the actual
+                # conflict instead of the fallback's symptom.
+                raise RuntimeError(str(error)) from None
 
         pretty_expression = self._pretty_expression(expression_text, display_lookup)
 
@@ -773,7 +975,15 @@ class Sample(QObject):
             }
 
         if dependency_map:
-            raise ValueError('Inequality constraints cannot reference other parameters.')
+            # Cross-parameter inequality: a fit penalty (BUMPS engines only),
+            # not a bound on the parameter itself.
+            return self._prepare_inequality_instruction(
+                dependent_entry=independent_entries[dependent_index],
+                relation=relation,
+                expression_text=expression_text,
+                dependency_map=dependency_map,
+                pretty_expression=pretty_expression,
+            )
 
         numeric_value = self._to_float(evaluation_result)
         mode = 'lower_bound' if relation == '>' else 'upper_bound'
@@ -783,6 +993,97 @@ class Sample(QObject):
             'pretty_expression': self._format_numeric(numeric_value),
             'relation': relation,
         }
+
+    # The GUI's '>' / '<' relations read as ≥ / ≤.
+    _INEQUALITY_OPS = {'>': '>=', '<': '<='}
+
+    def _prepare_inequality_instruction(
+        self,
+        dependent_entry: dict[str, Any],
+        relation: str,
+        expression_text: str,
+        dependency_map: Dict[str, DescriptorNumber],
+        pretty_expression: str,
+    ) -> dict[str, Any]:
+        dependent = dependent_entry['object']
+        lhs_alias = dependent_entry.get('alias') or 'lhs'
+        if dependent in dependency_map.values():
+            raise ValueError('The expression cannot reference the constrained parameter itself.')
+        lhs_path = self._project_lib.parameter_path(dependent)
+        if lhs_path is None:
+            raise ValueError('The dependent parameter cannot be addressed in the project.')
+        rhs_paths: Dict[str, str] = {}
+        for alias, parameter in dependency_map.items():
+            path = self._project_lib.parameter_path(parameter)
+            if path is None:
+                raise ValueError(f"Parameter '{alias}' cannot be addressed in the project.")
+            rhs_paths[alias] = path
+        spec = InequalitySpec(
+            lhs_expression=lhs_alias,
+            op=self._INEQUALITY_OPS[relation],
+            rhs_expression=expression_text,
+            lhs_paths={lhs_alias: lhs_path},
+            rhs_paths=rhs_paths,
+            name=f"{dependent_entry.get('display_name', lhs_alias)} {self._INEQUALITY_OPS[relation]} {pretty_expression}",
+        )
+        check_units(spec, self._project_lib.resolve_parameter_path)
+        evaluation = evaluate_spec(spec, self._project_lib.resolve_parameter_path)
+        return {
+            'mode': 'inequality',
+            'expression': expression_text,
+            'dependency_map': dependency_map,
+            'pretty_expression': pretty_expression,
+            'relation': relation,
+            'spec': spec,
+            'satisfied': evaluation.satisfied,
+            'warning': (
+                ''
+                if evaluation.satisfied
+                else (
+                    f'Current values violate this constraint ({self._format_numeric(evaluation.lhs)} vs '
+                    f'{self._format_numeric(evaluation.rhs)}); fits will not start until they do. '
+                    'Inequality constraints are enforced by the BUMPS minimizers only.'
+                )
+            ),
+        }
+
+    def _inequality_constraint_rows(self, display_lookup: Dict[str, str]) -> list[dict[str, Any]]:
+        """Rows of `constraintsList` describing the project's inequality constraints."""
+        rows: list[dict[str, Any]] = []
+        context = self._parameters_logic.constraint_context()
+        display_by_object = {id(entry['object']): entry['display_name'] for entry in context}
+        relation_text = {'<=': '≤', '<': '<', '>=': '≥', '>': '>'}
+        for index, spec in enumerate(self._project_lib.inequality_constraints):
+            alias_display: Dict[str, str] = {}
+            for alias, path in spec.paths.items():
+                try:
+                    parameter = self._project_lib.resolve_parameter_path(path)
+                    alias_display[alias] = display_by_object.get(id(parameter), display_lookup.get(alias, alias))
+                except KeyError:
+                    # The parameter behind this alias no longer exists (e.g. its
+                    # layer was removed); keep the alias so the user can tell
+                    # which term broke, but label it clearly.
+                    alias_display[alias] = f'{alias} (missing)'
+            lhs_display = self._pretty_expression(spec.lhs_expression, alias_display)
+            rhs_display = self._pretty_expression(spec.rhs_expression, alias_display)
+            try:
+                satisfied = evaluate_spec(spec, self._project_lib.resolve_parameter_path).satisfied
+            except Exception:  # noqa: BLE001 - unresolved path: shown, flagged, never crashes the list
+                satisfied = False
+            rows.append(
+                {
+                    'dependentName': lhs_display,
+                    'uniqueName': f'inequality:{index}',
+                    'inequalityIndex': index,
+                    'expression': rhs_display,
+                    'rawExpression': str(spec),
+                    'relation': relation_text.get(spec.op, spec.op),
+                    'type': 'inequality',
+                    'enabled': bool(spec.enabled),
+                    'satisfied': bool(satisfied),
+                }
+            )
+        return rows
 
     @staticmethod
     def _ensure_parameter_independent(parameter: DescriptorNumber) -> None:
@@ -916,9 +1217,38 @@ class Sample(QObject):
         """Get the list of active constraints with display metadata."""
         constraints: list[dict[str, str]] = []
         context, _, display_lookup = self._build_constraint_context()
+        owned = self._physics_constraints_logic.owned_parameters()
+        recipe_rows: dict[tuple, dict[str, Any]] = {}
 
         for entry in context:
             parameter_obj = entry['object']
+            if entry.get('kind') == 'derived':
+                # Model-owned calculations (total thickness) are not user constraints.
+                continue
+            group = owned.get(getattr(parameter_obj, 'unique_name', None))
+            if group is not None:
+                # One row per active physics recipe instead of N cryptic ties.
+                key = (group['recipeId'], group['assemblyIndex'])
+                if key not in recipe_rows:
+                    recipe_rows[key] = {
+                        'dependentName': group['assemblyName'],
+                        'uniqueName': f"recipe:{group['recipeId']}:{group['assemblyIndex']}",
+                        'recipeId': group['recipeId'],
+                        'assemblyIndex': group['assemblyIndex'],
+                        'expression': group['title'],
+                        'rawExpression': f"{group['title']} ({group['count']} tied parameter(s))",
+                        'relation': '',
+                        'type': 'recipe',
+                        'enabled': True,
+                        # Recipe ties are identities and hold by construction;
+                        # this is not a feasibility check like the inequality
+                        # rows' flag — do not repurpose it as one.
+                        'satisfied': True,
+                        'count': group['count'],
+                        'members': [],
+                    }
+                recipe_rows[key]['members'].append(entry['display_name'])
+                continue
             state = self._resolve_constraint_state(parameter_obj, display_lookup)
             if state is None:
                 continue
@@ -947,10 +1277,75 @@ class Sample(QObject):
                     'rawExpression': raw_expression,
                     'relation': relation,
                     'type': mode,
+                    'enabled': True,
+                    'satisfied': True,
                 }
             )
 
+        constraints.extend(recipe_rows.values())
+        constraints.extend(self._inequality_constraint_rows(display_lookup))
         return constraints
+
+    # ----- physics-constraint recipes -----
+
+    @Property('QVariantList', notify=constraintsChanged)
+    def physicsConstraintRecipes(self) -> list[dict[str, Any]]:
+        """Declarative recipe list (per assembly of the current model) for the GUI."""
+        try:
+            return self._physics_constraints_logic.recipes()
+        except Exception:  # noqa: BLE001
+            logger.exception('Failed to build the physics-constraint recipes')
+            return []
+
+    @Slot(int, str, result='QVariant')
+    def applyPhysicsConstraint(self, assembly_index: int, recipe_id: str):
+        try:
+            changed = self._physics_constraints_logic.apply(int(assembly_index), recipe_id)
+        except Exception as error:  # noqa: BLE001
+            return {'success': False, 'message': str(error)}
+        if changed:
+            self._emit_constraints_changed()
+        return {'success': True, 'message': ''}
+
+    @Slot(int, str, result='QVariant')
+    def removePhysicsConstraint(self, assembly_index: int, recipe_id: str):
+        try:
+            changed = self._physics_constraints_logic.remove(int(assembly_index), recipe_id)
+        except Exception as error:  # noqa: BLE001
+            return {'success': False, 'message': str(error)}
+        if changed:
+            self._emit_constraints_changed()
+        return {'success': True, 'message': ''}
+
+    def _emit_constraints_changed(self) -> None:
+        """Constraints move parameter values, so the curves and tables change too.
+
+        `layersChange` already forwards (coalesced) to `constraintsChanged`, so
+        it is not emitted here as well — that would evaluate the expensive
+        constraints list twice per change.
+        """
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
+        self.layersChange.emit()
+
+    @Property(int, notify=constraintsChanged)
+    def inequalityConstraintsCount(self) -> int:
+        return len([spec for spec in self._project_lib.inequality_constraints if spec.enabled])
+
+    @Property('QVariantList', notify=constraintsChanged)
+    def violatedInequalityConstraints(self) -> list[str]:
+        """Names of enabled inequality constraints the current values violate."""
+        try:
+            return [spec.name or str(spec) for spec in self._project_lib.violated_inequality_constraints()]
+        except Exception:  # noqa: BLE001
+            return []
+
+    @Slot(int, bool)
+    def setInequalityConstraintEnabled(self, index: int, enabled: bool) -> None:
+        specs = self._project_lib.inequality_constraints
+        if 0 <= index < len(specs):
+            specs[index].enabled = bool(enabled)
+            self.constraintsChanged.emit()
 
     @Slot(int)
     def removeConstraintByIndex(self, index: int) -> None:
@@ -963,6 +1358,19 @@ class Sample(QObject):
 
         constraints_list = self.constraintsList
         if index >= len(constraints_list):
+            return
+
+        row = constraints_list[index]
+        if row.get('type') == 'inequality':
+            self._project_lib.remove_inequality_constraint(int(row['inequalityIndex']))
+            self.constraintsChanged.emit()
+            return
+        if row.get('type') == 'recipe':
+            result = self.removePhysicsConstraint(int(row['assemblyIndex']), str(row['recipeId']))
+            if isinstance(result, dict) and not result.get('success', True):
+                logger.warning(
+                    'Removing physics constraint %s failed: %s', row.get('recipeId'), result.get('message', '')
+                )
             return
 
         # Resolve by unique_name (parameter identity), not display name, so two
@@ -981,9 +1389,7 @@ class Sample(QObject):
             self._restore_parameter_state(param_obj, state['previous'])
         else:
             self._make_parameter_independent(param_obj)
-        self.constraintsChanged.emit()
-        self.externalSampleChanged.emit()
-        self.layersChange.emit()
+        self._emit_constraints_changed()
 
     def _find_parameter_object_by_unique_name(self, unique_name: str):
         """Find a parameter object by its unique_name (stable identity)."""
@@ -1012,6 +1418,7 @@ class Sample(QObject):
             'preview': instruction.get('pretty_expression', ''),
             'relation': instruction.get('relation', '='),
             'type': instruction.get('mode', ''),
+            'warning': instruction.get('warning', ''),
         }
 
     @Slot(int, str, str, result='QVariant')
@@ -1021,11 +1428,25 @@ class Sample(QObject):
         except Exception as error:  # noqa: BLE001
             return {'success': False, 'message': str(error)}
 
+        mode = instruction['mode']
+        if mode == 'inequality':
+            try:
+                self._project_lib.add_inequality_constraint(instruction['spec'], validate=False)
+            except Exception as error:  # noqa: BLE001
+                return {'success': False, 'message': str(error)}
+            self.constraintsChanged.emit()
+            return {
+                'success': True,
+                'message': '',
+                'preview': instruction.get('pretty_expression', ''),
+                'relation': instruction.get('relation', '='),
+                'type': mode,
+                'warning': instruction.get('warning', ''),
+            }
+
         dependent = self._get_independent_parameter_entries()[dependent_index]['object']
         previous_state = self._capture_parameter_state(dependent)
         self._ensure_parameter_independent(dependent)
-
-        mode = instruction['mode']
 
         try:
             if mode == 'dynamic':
@@ -1076,9 +1497,7 @@ class Sample(QObject):
                 )
             self._constraint_states[unique_name] = state
 
-        self.constraintsChanged.emit()
-        self.externalSampleChanged.emit()
-        self.layersChange.emit()
+        self._emit_constraints_changed()
 
         return {
             'success': True,
@@ -1171,9 +1590,7 @@ class Sample(QObject):
                         continue
 
         if constraints_added > 0:
-            self.constraintsChanged.emit()
-            self.externalSampleChanged.emit()
-            self.layersChange.emit()
+            self._emit_constraints_changed()
 
     def _build_model_parameters_map(self, model) -> Dict[str, DescriptorNumber]:
         """Build a map of relative parameter paths to parameter objects for a model.

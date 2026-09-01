@@ -17,7 +17,7 @@ QtObject {
 
     readonly property string fileUrl: 'file:///Users/andpe/ExampleProject/summary'
     readonly property string plotFileUrl: 'file:///Users/andpe/ExampleProject/plots'
-    readonly property var plotExportFormats: ["PDF", "PNG", "SVG"]
+    readonly property var plotExportFormats: ["PDF", "PNG", "SVG", "PICKLE"]
 
     readonly property string asHtml: '
 <!DOCTYPE html>

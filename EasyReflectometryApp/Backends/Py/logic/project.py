@@ -144,6 +144,33 @@ class Project:
         q_max_changed = self._sync_q_max_with_loaded_experiments()
         return loaded_count, q_max_changed
 
+    def suggest_polarized_channel_assignment(self, paths: list[str]) -> dict[str, str]:
+        """Suggested spin channel per file, as channel-value strings ('' when undetected)."""
+        suggestion = self._project_lib.suggest_polarized_channel_assignment(paths)
+        return {path: (channel.value if channel is not None else '') for path, channel in suggestion.items()}
+
+    def load_polarized_experiment(self, channel_to_path: dict[str, str]) -> tuple[int, bool]:
+        """Load one polarized experiment from a channel → file mapping.
+
+        :return: (list position of the new experiment, whether q_max changed).
+        """
+        key = self._project_lib.load_polarized_experiment(channel_to_path)
+        q_max_changed = self._sync_q_max_with_loaded_experiments()
+        return self._position_of_experiment(key), q_max_changed
+
+    def _position_of_experiment(self, key) -> int:
+        """Position of an experiment key in the ordered experiment list (-1 if unknown).
+
+        The UI addresses experiments by list position, which only matches the
+        storage key while the keys are contiguous.
+        """
+        experiments = self._project_lib._experiments
+        try:
+            keys = sorted(experiments.keys()) if hasattr(experiments, 'keys') else list(range(len(experiments)))
+            return keys.index(key)
+        except (AttributeError, TypeError, ValueError):
+            return -1
+
     def _sync_q_max_with_loaded_experiments(self) -> bool:
         """Set model q_max to the largest q value found in loaded experiments.
 
@@ -160,7 +187,15 @@ class Project:
             experiment_iterable = experiments
 
         q_max_candidates = []
+        datasets = []
         for experiment in experiment_iterable:
+            channels = getattr(experiment, 'channels', None)
+            if channels is not None:
+                # A polarized experiment: one dataset per spin channel.
+                datasets.extend(channels.values())
+            else:
+                datasets.append(experiment)
+        for experiment in datasets:
             x_values = getattr(experiment, 'x', None)
             if x_values is None:
                 continue

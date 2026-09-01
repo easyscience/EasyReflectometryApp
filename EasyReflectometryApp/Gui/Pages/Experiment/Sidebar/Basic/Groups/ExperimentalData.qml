@@ -12,7 +12,7 @@ EaElements.GroupBox {
     collapsible: false
     enabled: Globals.Constants.proxy.fitter.isFitFinished
 
-    Row {
+    Column {
         spacing: EaStyle.Sizes.fontPixelSize
 
         EaElements.SideBarButton {
@@ -28,6 +28,25 @@ EaElements.GroupBox {
 
             Loader {
                 source: '../Popups/OpenExperimentFile.qml'
+            }
+        }
+
+        EaElements.SideBarButton {
+            enabled: true
+            wide: true
+            fontIcon: "magnet"
+            text: qsTr("Load polarized experiment (file per channel)")
+
+            onClicked: {
+                console.debug(`Clicking '${text}' button ::: ${this}`)
+                Globals.References.pages.experiment.sidebar.basic.popups.loadPolarizedExperimentFilesDialog.open()
+            }
+
+            Loader {
+                source: '../Popups/OpenPolarizedExperimentFiles.qml'
+            }
+            Loader {
+                source: '../Popups/PolarizedChannelAssignment.qml'
             }
         }
     }
