@@ -16,6 +16,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
 from .logic.assemblies import Assemblies as AssembliesLogic
+from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.layers import Layers as LayersLogic
 from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
@@ -67,6 +68,20 @@ class Sample(QObject):
     layersChange = Signal()
     layersIndexChanged = Signal()
 
+    # Per-layer magnetism (rho_m / theta_m) and calculator capability.
+    magnetismChanged = Signal()
+    magnetismFailed = Signal(str)
+    # Emitted with (layer index, engine name) when making a layer magnetic needs
+    # a different calculation engine; the UI asks before anything is changed.
+    magnetismNeedsEngine = Signal(int, str)
+    # Emitted when the Sample page changed the project's calculation engine, so
+    # the Analysis page's selector and the plots follow.
+    calculationEngineChanged = Signal()
+    # Emitted with the reason when a requested engine switch is refused (e.g.
+    # the sample has magnetic layers the engine cannot model). Logs are not
+    # visible in the GUI, so the engine selector shows this in a dialog.
+    calculationEngineRejected = Signal(str)
+
     qRangeChanged = Signal()
     constraintsChanged = Signal()
 
@@ -78,6 +93,9 @@ class Sample(QObject):
         self._project_lib = project_lib
         self._material_logic = MaterialLogic(project_lib)
         self._models_logic = ModelsLogic(project_lib)
+        # The engine is a project-wide setting; this logic derives its index
+        # from the project, so the Analysis page's selector cannot disagree.
+        self._calculators_logic = CalculatorsLogic(project_lib)
         self._assemblies_logic = AssembliesLogic(project_lib)
         self._layers_logic = LayersLogic(project_lib)
         self._project_logic = ProjectLogic(project_lib)
@@ -90,6 +108,8 @@ class Sample(QObject):
 
     def connect_logic(self) -> None:
         self.assembliesIndexChanged.connect(self.layersConnectChanges)
+        # The magnetism table lists the current assembly's layers.
+        self.assembliesIndexChanged.connect(self.magnetismChanged)
 
     # # #
     # Materials
@@ -159,6 +179,7 @@ class Sample(QObject):
     def removeMaterial(self, value: str) -> None:
         self._material_logic.remove_at_index(value)
         self.materialsTableChanged.emit()
+        self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
     @Slot()
@@ -581,6 +602,126 @@ class Sample(QObject):
     def _clearCacheAndEmitLayersChanged(self):
         self._chached_layers = None
         self.layersChange.emit()
+        # The magnetism table lists the same layers, so it goes stale whenever
+        # a layer is added, removed, reordered or renamed.
+        self.magnetismChanged.emit()
+
+    # # #
+    # Calculation engine (shared project setting, shown here because magnetism
+    # depends on it)
+    # # #
+    @Property('QVariantList', notify=calculationEngineChanged)
+    def calculationEngines(self) -> list[str]:
+        """Available calculation engines."""
+        return self._calculators_logic.available()
+
+    @Property(int, notify=calculationEngineChanged)
+    def calculationEngineIndex(self) -> int:
+        """The project's active calculation engine."""
+        return self._calculators_logic.current_index()
+
+    @Property('QVariantList', notify=calculationEngineChanged)
+    def calculationEnginesSupportingMagnetism(self) -> list[str]:
+        """Engines that can model magnetic layers."""
+        return self._calculators_logic.supporting_magnetism()
+
+    @Slot(int)
+    def setCalculationEngineIndex(self, new_value: int) -> None:
+        """Switch the project's calculation engine from the Sample page."""
+        try:
+            changed = self._calculators_logic.set_current_index(new_value)
+        except NotImplementedError as exception:
+            logger.warning('Cannot change the calculation engine: %s', exception)
+            self.calculationEngineRejected.emit(str(exception))
+            self.calculationEngineChanged.emit()
+            return
+        if changed:
+            self.calculationEngineChanged.emit()
+            self.magnetismChanged.emit()
+
+    # # #
+    # Layer magnetism
+    # # #
+    @Property(bool, notify=magnetismChanged)
+    def magnetismSupported(self) -> bool:
+        """Whether the active calculator can model magnetic layers (refl1d only)."""
+        return self._layers_logic.magnetism_supported
+
+    @Property('QVariantList', notify=magnetismChanged)
+    def layersMagnetism(self) -> list[dict[str, str]]:
+        """Per-layer magnetism of the current assembly, one row per layer."""
+        return self._layers_logic.magnetism
+
+    @Slot(int, bool)
+    def setLayerMagneticAtIndex(self, index: int, new_value: bool) -> None:
+        """Attach or remove magnetism on one layer.
+
+        Magnetism is only modelled by some calculation engines. Rather than
+        refusing and pointing at another page, ask the UI to confirm the switch
+        (`magnetismNeedsEngine`); nothing is changed until it comes back through
+        `enableMagnetismWithEngineAtIndex`. A calculator that cannot model
+        magnetism still reports the reason instead of raising out of a
+        QML-invoked slot (which would abort the process).
+        """
+        if new_value and not self._layers_logic.magnetism_supported:
+            engines = self._calculators_logic.supporting_magnetism()
+            if engines:
+                self.magnetismNeedsEngine.emit(index, engines[0])
+                return
+        try:
+            changed = self._layers_logic.set_magnetic_at_index(index, new_value)
+        except NotImplementedError as exception:
+            logger.warning('Cannot change layer magnetism: %s', exception)
+            self.magnetismFailed.emit(str(exception))
+            return
+        if changed:
+            self._emitMagnetismChanged()
+
+    @Slot(int, str)
+    def enableMagnetismWithEngineAtIndex(self, index: int, engine: str) -> None:
+        """Switch the calculation engine, then make the layer magnetic.
+
+        The confirmed half of `magnetismNeedsEngine`: the user has been told
+        that the engine changes, so both steps happen as one action. If
+        attaching magnetism fails after the engine switch, the switch is
+        rolled back rather than left half-applied (engine changed, layer
+        still non-magnetic, with no indication to the user).
+        """
+        engine_index = self._calculators_logic.index_of(engine)
+        if engine_index < 0:
+            self.magnetismFailed.emit(f'The {engine} calculation engine is not available.')
+            return
+        previous_calculator = self._project_lib.calculator
+        engine_switched = False
+        try:
+            engine_switched = self._calculators_logic.set_current_index(engine_index)
+            changed = self._layers_logic.set_magnetic_at_index(index, True)
+        except NotImplementedError as exception:
+            if engine_switched:
+                self._project_lib.calculator = previous_calculator
+            logger.warning('Cannot enable magnetism: %s', exception)
+            self.magnetismFailed.emit(str(exception))
+            return
+        if engine_switched:
+            self.calculationEngineChanged.emit()
+        if changed:
+            self._emitMagnetismChanged()
+
+    @Slot(int, float)
+    def setLayerRhoMAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_rho_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    @Slot(int, float)
+    def setLayerThetaMAtIndex(self, index: int, new_value: float) -> None:
+        if self._layers_logic.set_theta_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    def _emitMagnetismChanged(self) -> None:
+        """Magnetism edits change the model, its parameters and every curve."""
+        self._clearCacheAndEmitLayersChanged()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
 
     # # #
     # Constraints
@@ -954,6 +1095,8 @@ class Sample(QObject):
         else:
             self._make_parameter_independent(param_obj)
         self.constraintsChanged.emit()
+        # Constraints move parameter values, so the curves change too.
+        self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
         self.layersChange.emit()
 
@@ -1049,6 +1192,8 @@ class Sample(QObject):
             self._constraint_states[unique_name] = state
 
         self.constraintsChanged.emit()
+        # Constraints move parameter values, so the curves change too.
+        self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
         self.layersChange.emit()
 
@@ -1144,6 +1289,8 @@ class Sample(QObject):
 
         if constraints_added > 0:
             self.constraintsChanged.emit()
+            # Constraints move parameter values, so the curves change too.
+            self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
             self.layersChange.emit()
 

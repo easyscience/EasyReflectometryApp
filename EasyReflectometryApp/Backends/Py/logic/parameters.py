@@ -88,6 +88,10 @@ class Parameters:
             return not _is_experiment_parameter(parameter)
         if normalized == 'experiment':
             return _is_experiment_parameter(parameter)
+        if normalized in {'magnetic', 'magnetism'}:
+            # The magnetic parameters are named after the physics (rho_m/theta_m),
+            # so neither word appears in their text; match them explicitly.
+            return 'rho_m' in searchable_text or 'theta_m' in searchable_text
         if normalized in {'cell', 'atom_site'}:
             return normalized in searchable_text
         if normalized == 'b_iso':
@@ -264,6 +268,9 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     # Layer parameter names that need model prefix
     LAYER_PARAMS = {'thickness', 'roughness'}
+    # Magnetism sits one level below the layer (Layer -> LayerMagnetism -> param),
+    # but belongs to the layer just as much, so it is named the same way.
+    MAGNETISM_PARAMS = {'rho_m', 'theta_m'}
 
     def _make_alias(name: str) -> str:
         base = re.sub(r'[^0-9A-Za-z]+', '_', name).strip('_').lower()
@@ -293,6 +300,11 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
             if _is_layer_parameter(param) and len(path) >= 4:
                 parent_name = path[-4].name
+            elif _is_magnetism_parameter(param) and len(path) >= 5:
+                # ... -> Assembly -> LayerCollection -> Layer -> LayerMagnetism -> param:
+                # one level deeper, so the assembly is path[-5]. Without this the
+                # group would read 'EasyLayerMagnetism', which names nothing.
+                parent_name = path[-5].name
             else:
                 parent_name = path[-2].name
             return f'{parent_name} {param_name}', parent_name
@@ -319,6 +331,14 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         """Check if parameter is a layer parameter (thickness or roughness)."""
         return param.name.lower() in LAYER_PARAMS
 
+    def _is_magnetism_parameter(param: Parameter) -> bool:
+        """Check if parameter is a layer magnetism parameter (rho_m or theta_m)."""
+        return param.name.lower() in MAGNETISM_PARAMS
+
+    def _is_per_layer_parameter(param: Parameter) -> bool:
+        """Per-layer parameters exist once per model and carry the model prefix."""
+        return _is_layer_parameter(param) or _is_magnetism_parameter(param)
+
     parameter_list = []
 
     # Process parameters for each model
@@ -335,7 +355,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                 continue
 
             # For non-layer parameters, skip if already processed (they're shared across models)
-            is_layer_param = _is_layer_parameter(parameter)
+            is_layer_param = _is_per_layer_parameter(parameter)
             if not is_layer_param:
                 if parameter.unique_name in processed_unique_names:
                     continue
@@ -359,7 +379,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'alias': alias,
                     'unique_name': parameter.unique_name,
                     'value': param_value,
-                    'error': float(parameter.variance),
+                    'error': float(parameter.error),
                     'max': float(parameter.max),
                     'min': float(parameter.min),
                     'units': parameter.unit,

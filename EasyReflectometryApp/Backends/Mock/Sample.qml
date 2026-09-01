@@ -3,6 +3,20 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+
+    // Calculation engine (project-wide setting, also shown on the Sample page)
+    property var calculationEngines: ['refnx', 'refl1d']
+    property int calculationEngineIndex: 0
+    property var calculationEnginesSupportingMagnetism: ['refl1d']
+    signal calculationEngineChanged()
+    signal magnetismNeedsEngine(int index, string engine)
+    function setCalculationEngineIndex(value) {
+        console.debug(`setCalculationEngineIndex ${value}`)
+    }
+    function enableMagnetismWithEngineAtIndex(index, engine) {
+        console.debug(`enableMagnetismWithEngineAtIndex ${index} ${engine}`)
+    }
+
     // Signals to match the Python backend
     signal constraintsChanged
     // MATERIALS
@@ -248,6 +262,23 @@ QtObject {
     }
     function setCurrentLayerSolvation(value) {
         console.debug(`setCurrentLayerSolvation ${value}`)
+    }
+
+    // Layer magnetism (polarized analysis)
+    readonly property bool magnetismSupported: true
+    readonly property var layersMagnetism: [
+        { 'label': 'label 1', 'magnetic': 'True', 'rho_m': '5.0', 'theta_m': '40.0' },
+        { 'label': 'label 2', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0' },
+        { 'label': 'label 3', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0' },
+    ]
+    function setLayerMagneticAtIndex(index, value) {
+        console.debug(`setLayerMagneticAtIndex ${index} ${value}`)
+    }
+    function setLayerRhoMAtIndex(index, value) {
+        console.debug(`setLayerRhoMAtIndex ${index} ${value}`)
+    }
+    function setLayerThetaMAtIndex(index, value) {
+        console.debug(`setLayerThetaMAtIndex ${index} ${value}`)
     }
 
     // Table functions

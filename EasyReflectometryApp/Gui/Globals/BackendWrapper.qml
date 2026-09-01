@@ -140,6 +140,43 @@ QtObject {
     function sampleMoveSelectedModelUp() { activeBackend.sample.moveSelectedModelUp() }
     function sampleMoveSelectedModelDown() { activeBackend.sample.moveSelectedModelDown() }
 
+    // Calculation engine (project-wide; also exposed on the Analysis page)
+    readonly property var sampleCalculationEngines: {
+        try {
+            return activeBackend.sample.calculationEngines || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property int sampleCalculationEngineIndex: {
+        try {
+            return activeBackend.sample.calculationEngineIndex || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var sampleCalculationEnginesSupportingMagnetism: {
+        try {
+            return activeBackend.sample.calculationEnginesSupportingMagnetism || []
+        } catch (e) {
+            return []
+        }
+    }
+    function sampleSetCalculationEngineIndex(value) {
+        try {
+            activeBackend.sample.setCalculationEngineIndex(value)
+        } catch (e) {
+            console.warn("sampleSetCalculationEngineIndex failed:", e)
+        }
+    }
+    function sampleEnableMagnetismWithEngineAtIndex(index, engine) {
+        try {
+            activeBackend.sample.enableMagnetismWithEngineAtIndex(index, engine)
+        } catch (e) {
+            console.warn("sampleEnableMagnetismWithEngineAtIndex failed:", e)
+        }
+    }
+
     // Sample
     readonly property var sampleAssemblies: activeBackend.sample.assemblies
     readonly property string sampleCurrentAssemblyName: activeBackend.sample.currentAssemblyName
@@ -192,6 +229,27 @@ QtObject {
     function sampleSetCurrentLayerSolvation(value) { activeBackend.sample.setCurrentLayerSolvation(value) }
     function sampleSetLayerSolvationAtIndex(index, value) { activeBackend.sample.setLayerSolvationAtIndex(index, value) }
 
+    // Layer magnetism (polarized analysis). Only the refl1d calculator can
+    // model magnetic layers, so the editor is gated on sampleMagnetismSupported.
+    readonly property bool sampleMagnetismSupported: {
+        try {
+            return activeBackend.sample.magnetismSupported || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var sampleLayersMagnetism: {
+        try {
+            return activeBackend.sample.layersMagnetism || []
+        } catch (e) {
+            console.warn("sampleLayersMagnetism failed:", e)
+            return []
+        }
+    }
+    function sampleSetLayerMagneticAtIndex(index, value) { activeBackend.sample.setLayerMagneticAtIndex(index, value) }
+    function sampleSetLayerRhoMAtIndex(index, value) { activeBackend.sample.setLayerRhoMAtIndex(index, value) }
+    function sampleSetLayerThetaMAtIndex(index, value) { activeBackend.sample.setLayerThetaMAtIndex(index, value) }
+
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
@@ -226,12 +284,42 @@ QtObject {
     readonly property var experimentResolution: activeBackend.experiment.resolution
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
     function experimentLoad(value) { activeBackend.experiment.load(value) }
+    // Polarized experiment import (one file per spin channel)
+    function experimentSuggestPolarizedChannels(value) { return activeBackend.experiment.suggestPolarizedChannels(value) }
+    // Returns '' on success, or the reason the import was rejected. The backend
+    // validates the rows itself and raises, which would otherwise surface only
+    // as an uncaught slot exception.
+    function experimentLoadPolarized(value) {
+        try {
+            activeBackend.experiment.loadPolarized(value)
+        } catch (e) {
+            console.warn("experimentLoadPolarized failed:", e)
+            return (e && e.message) ? e.message : qsTr("The polarized experiment could not be loaded.")
+        }
+        return ''
+    }
 
 
     ///////////////
     // Analysis page
     ///////////////
     readonly property var analysisExperimentsAvailable: activeBackend.analysis.experimentsAvailable
+    readonly property var analysisExperimentsPolarized: {
+        try {
+            return activeBackend.analysis.experimentsPolarized || []
+        } catch (e) {
+            return []
+        }
+    }
+    // Measured spin channels per experiment (0 when unpolarized), shown next to
+    // the polarization badge in the experiment lists.
+    readonly property var analysisExperimentsChannelCount: {
+        try {
+            return activeBackend.analysis.experimentsChannelCount || []
+        } catch (e) {
+            return []
+        }
+    }
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
     function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
@@ -537,6 +625,32 @@ QtObject {
             return []
         }
     }
+    // One-call series fills (false = backend cannot fill, caller falls back
+    // to an append() loop — e.g. the mock backend).
+    function plottingFillSampleSeriesForModel(series, index) {
+        try {
+            activeBackend.plotting.fillSampleSeriesForModel(series, index)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingFillSldSeriesForModel(series, index) {
+        try {
+            activeBackend.plotting.fillSldSeriesForModel(series, index)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingFillMagneticSldSegmentSeries(series, index, curve, segment) {
+        try {
+            activeBackend.plotting.fillMagneticSldSegmentSeries(series, index, curve, segment)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
     function plottingGetModelColor(index) {
         try {
             return activeBackend.plotting.getModelColor(index)
@@ -558,6 +672,12 @@ QtObject {
     signal posteriorPredictiveDataChanged()
     // Signal for posterior predictive SLD (Bayesian) overlay data updates
     signal posteriorPredictiveSldDataChanged()
+    // Magnetic display state changed: which magnetic curves are drawn (SLD
+    // chart), whether the sample chart splits a model into its spin
+    // cross-sections, or whether any model is magnetic at all
+    signal magneticProfileChanged()
+    // Spin-asymmetry availability or content changed
+    signal spinAsymmetryChanged()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
@@ -578,6 +698,12 @@ QtObject {
         }
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.posteriorPredictiveSldDataChanged) {
             activeBackend.plotting.posteriorPredictiveSldDataChanged.connect(posteriorPredictiveSldDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.magneticProfileChanged) {
+            activeBackend.plotting.magneticProfileChanged.connect(magneticProfileChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.spinAsymmetryChanged) {
+            activeBackend.plotting.spinAsymmetryChanged.connect(spinAsymmetryChanged)
         }
     }
 
@@ -602,6 +728,16 @@ QtObject {
             return []
         }
     }
+    // Same list, but a polarized experiment appears once per visible spin
+    // channel — for charts that draw per-channel series.
+    readonly property var plottingIndividualExperimentChannelDataList: {
+        try {
+            return activeBackend.plottingIndividualExperimentChannelDataList || []
+        } catch (e) {
+            console.warn("plottingIndividualExperimentChannelDataList failed:", e)
+            return []
+        }
+    }
     function plottingGetExperimentDataPoints(index) {
         try {
             return activeBackend.plottingGetExperimentDataPoints(index)
@@ -610,19 +746,249 @@ QtObject {
             return []
         }
     }
-    function plottingGetAnalysisDataPoints(index) {
+    // `channel` is optional: pass a spin channel ('pp'/'pm'/'mp'/'mm') to get
+    // that cross-section of a polarized experiment, '' for the ordinary curve.
+    function plottingGetAnalysisDataPoints(index, channel) {
         try {
-            return activeBackend.plottingGetAnalysisDataPoints(index)
+            return activeBackend.plottingGetAnalysisDataPoints(index, channel || "")
         } catch (e) {
             console.warn("plottingGetAnalysisDataPoints failed:", e)
             return []
         }
     }
-    function plottingGetResidualDataPoints(index) {
+    function plottingGetResidualDataPoints(index, channel) {
         try {
-            return activeBackend.plottingGetResidualDataPoints(index)
+            return activeBackend.plottingGetResidualDataPoints(index, channel || "")
         } catch (e) {
             console.warn("plottingGetResidualDataPoints failed:", e)
+            return []
+        }
+    }
+    // True when the analysis/residual charts must draw one series per channel.
+    readonly property bool plottingAnalysisUsesChannelSeries: {
+        try {
+            return activeBackend.plottingAnalysisUsesChannelSeries || false
+        } catch (e) {
+            return false
+        }
+    }
+
+    // Polarized experiment (spin channel) plotting support
+    readonly property bool plottingCurrentExperimentIsPolarized: {
+        try {
+            return activeBackend.plotting.currentExperimentIsPolarized || false
+        } catch (e) {
+            console.warn("plottingCurrentExperimentIsPolarized failed:", e)
+            return false
+        }
+    }
+    readonly property var plottingExperimentChannelList: {
+        try {
+            return activeBackend.plotting.experimentChannelList || []
+        } catch (e) {
+            console.warn("plottingExperimentChannelList failed:", e)
+            return []
+        }
+    }
+    function plottingGetExperimentChannels(index) {
+        try {
+            return activeBackend.plottingGetExperimentChannels(index)
+        } catch (e) {
+            console.warn("plottingGetExperimentChannels failed:", e)
+            return []
+        }
+    }
+    function plottingGetExperimentChannelDataPoints(index, channel) {
+        try {
+            return activeBackend.plottingGetExperimentChannelDataPoints(index, channel)
+        } catch (e) {
+            console.warn("plottingGetExperimentChannelDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingSetChannelVisible(channel, visible) {
+        try {
+            activeBackend.plottingSetChannelVisible(channel, visible)
+        } catch (e) {
+            console.warn("plottingSetChannelVisible failed:", e)
+        }
+    }
+
+    // Magnetic depth profiles on the shared SLD chart (Sample and Analysis)
+    readonly property bool plottingAnyModelHasMagnetism: {
+        try {
+            return activeBackend.plotting.anyModelHasMagnetism || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var plottingVisibleSldCurves: {
+        try {
+            return activeBackend.plotting.visibleSldCurves || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property string plottingMagneticProfileError: {
+        try {
+            return activeBackend.plotting.magneticProfileError || ''
+        } catch (e) {
+            return ''
+        }
+    }
+    readonly property var plottingSldThetaMinY: {
+        try {
+            return activeBackend.plotting.sldThetaMinY
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSldThetaMaxY: {
+        try {
+            return activeBackend.plotting.sldThetaMaxY
+        } catch (e) {
+            return 360
+        }
+    }
+    function plottingModelHasMagnetism(index) {
+        try {
+            return activeBackend.plottingModelHasMagnetism(index)
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingGetMagneticSldDataPointsForModel(index, curve) {
+        try {
+            return activeBackend.plottingGetMagneticSldDataPointsForModel(index, curve)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldDataPointsForModel failed:", e)
+            return []
+        }
+    }
+    function plottingGetMagneticSldSegmentsForModel(index, curve) {
+        try {
+            return activeBackend.plottingGetMagneticSldSegmentsForModel(index, curve)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldSegmentsForModel failed:", e)
+            return []
+        }
+    }
+    function plottingGetMagneticSldSegment(index, curve, segment) {
+        try {
+            return activeBackend.plottingGetMagneticSldSegment(index, curve, segment)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldSegment failed:", e)
+            return []
+        }
+    }
+    function plottingSldCurveVisible(curve) {
+        try {
+            return activeBackend.plottingSldCurveVisible(curve)
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingSetSldCurveVisible(curve, visible) {
+        try {
+            activeBackend.plottingSetSldCurveVisible(curve, visible)
+        } catch (e) {
+            console.warn("plottingSetSldCurveVisible failed:", e)
+        }
+    }
+
+    // Model spin cross-sections on the sample page reflectivity chart
+    readonly property bool plottingShowModelChannels: {
+        try {
+            return activeBackend.plotting.showModelChannels || false
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingSetShowModelChannels(visible) {
+        try {
+            activeBackend.plotting.setShowModelChannels(visible)
+        } catch (e) {
+            console.warn("plottingSetShowModelChannels failed:", e)
+        }
+    }
+    function plottingFillSampleChannelSeriesForModel(series, index, channel) {
+        try {
+            activeBackend.plotting.fillSampleChannelSeriesForModel(series, index, channel)
+        } catch (e) {
+            console.warn("plottingFillSampleChannelSeriesForModel failed:", e)
+        }
+    }
+
+    // Spin asymmetry
+    readonly property bool plottingSpinAsymmetryAvailable: {
+        try {
+            return activeBackend.plotting.spinAsymmetryAvailable || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property bool plottingSpinAsymmetryCalculatedAvailable: {
+        try {
+            return activeBackend.plotting.spinAsymmetryCalculatedAvailable || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property int plottingSpinAsymmetryMaskedPoints: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaskedPoints || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property int plottingSpinAsymmetryOutOfOverlapPoints: {
+        try {
+            return activeBackend.plotting.spinAsymmetryOutOfOverlapPoints || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSpinAsymmetryMinX: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMinX
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSpinAsymmetryMaxX: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaxX
+        } catch (e) {
+            return 1
+        }
+    }
+    readonly property var plottingSpinAsymmetryMinY: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMinY
+        } catch (e) {
+            return -1
+        }
+    }
+    readonly property var plottingSpinAsymmetryMaxY: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaxY
+        } catch (e) {
+            return 1
+        }
+    }
+    function plottingGetSpinAsymmetryPoints(index) {
+        try {
+            return activeBackend.plottingGetSpinAsymmetryPoints(index)
+        } catch (e) {
+            console.warn("plottingGetSpinAsymmetryPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetSpinAsymmetryCalculatedPoints(index) {
+        try {
+            return activeBackend.plottingGetSpinAsymmetryCalculatedPoints(index)
+        } catch (e) {
+            console.warn("plottingGetSpinAsymmetryCalculatedPoints failed:", e)
             return []
         }
     }

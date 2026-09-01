@@ -13,5 +13,6 @@ tutorial.md
 tutorials/model_def.md
 tutorials/load_data.md
 tutorials/simple_fitting.md
+tutorials/summary.md
 tutorials/settings.md
 ```

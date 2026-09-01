@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -286,6 +287,11 @@ class FakeParameter:
         self.dependency_expression = dependency_expression
         self.dependency_map = dependency_map or {}
 
+    @property
+    def error(self):
+        # Mirrors easyscience's Parameter: the error is the square root of the variance.
+        return math.sqrt(self.variance)
+
     def make_dependent_on(self, dependency_expression, dependency_map):
         self.independent = False
         self.dependency_expression = dependency_expression
@@ -341,6 +347,11 @@ class FakeProject:
         self.current_layer_index = 0
         self._calculator = FakeCalculatorController(calculator_interfaces or ['refnx', 'refl1d'])
         self._calculator_name = calculator_name
+        # Engine capability, as the real Project reports it.
+        self.calculators_supporting_magnetism = [
+            name for name in (calculator_interfaces or ['refnx', 'refl1d']) if name == 'refl1d'
+        ]
+        self.models_have_magnetism = False
         self.minimizer = FakeMinimizerValue(minimizer_name)
         self._fitter = None
         self.fitter = None
@@ -394,11 +405,27 @@ class FakeProject:
         self.calls.append(('replace_models_from_orso', sample))
         self.models[:] = [sample]
 
-    def experimental_data_for_model_at_index(self, index):
-        self.calls.append(('experimental_data_for_model_at_index', index))
+    def experimental_data_for_model_at_index(self, index, channel=None):
+        self.calls.append(('experimental_data_for_model_at_index', index, channel))
         if index >= len(self.models):
             raise IndexError(index)
         return object()
+
+    def suggest_polarized_channel_assignment(self, paths):
+        self.calls.append(('suggest_polarized_channel_assignment', tuple(paths)))
+        # Simple deterministic stub: uu/dd tokens resolve, everything else does not.
+        suggestion = {}
+        for path in paths:
+            if '_uu' in path:
+                suggestion[path] = SimpleNamespace(value='pp')
+            elif '_dd' in path:
+                suggestion[path] = SimpleNamespace(value='mm')
+            else:
+                suggestion[path] = None
+        return suggestion
+
+    def load_polarized_experiment(self, channel_to_path):
+        self.calls.append(('load_polarized_experiment', dict(channel_to_path)))
 
     def set_path_project_parent(self, path):
         self.calls.append(('set_path_project_parent', path))

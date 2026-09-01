@@ -334,7 +334,11 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewLabel {
-                    text: formatError(Globals.BackendWrapper.analysisFitableParameters[index].error)
+                    // A constrained (dependent) parameter derives its value from another
+                    // parameter, so it has no error of its own to report.
+                    text: (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
+                           Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
+                           formatError(Globals.BackendWrapper.analysisFitableParameters[index].error) : ''
                     color: EaStyle.Colors.themeForegroundDisabled
                 }
 

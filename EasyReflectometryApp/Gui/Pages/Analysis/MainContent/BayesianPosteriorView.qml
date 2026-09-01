@@ -46,33 +46,33 @@ Rectangle {
         }
 
         // Subtab bar
-        TabBar {
+        EaElements.TabBar {
             id: subtabBar
             Layout.fillWidth: true
             Layout.preferredHeight: EaStyle.Sizes.toolButtonHeight
             background: Rectangle { color: EaStyle.Colors.chartBackground }
 
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Marginals")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
             }
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Corner Plot")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
             }
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Traces")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
             }
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("2D Heatmap")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight
             }
-            TabButton {
+            EaElements.TabButton {
                 text: qsTr("Diagnostics")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight

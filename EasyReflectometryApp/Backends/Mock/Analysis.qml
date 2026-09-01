@@ -11,6 +11,9 @@ QtObject {
 
     readonly property var experimentsAvailable: ['experiment_1', 'experiment_2', 'experiment_3']
     readonly property int experimentCurrentIndex: 2
+    // Polarization badge / channel count columns of the experiment lists
+    readonly property var experimentsPolarized: [false, false, false]
+    readonly property var experimentsChannelCount: [0, 0, 0]
 
     // Minimizer
     readonly property double minimizerTolerance: 1.0

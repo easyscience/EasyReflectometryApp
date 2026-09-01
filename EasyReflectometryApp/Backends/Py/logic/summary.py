@@ -1,4 +1,5 @@
 import logging
+import pickle
 from html import escape
 from pathlib import Path
 
@@ -6,8 +7,15 @@ import numpy as np
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.summary import Summary as SummaryLib
 
+from .experiments import CHANNEL_COLORS
+
+logger = logging.getLogger(__name__)
+
 
 class Summary:
+    # Written as a pickled matplotlib Figure instead of a rendered image.
+    PICKLE_SUFFIXES = ('.pickle', '.pkl')
+
     def __init__(self, project_lib: ProjectLib):
         self._created = True
 
@@ -74,8 +82,34 @@ class Summary:
         target_path = Path(file_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         figure = self.make_plot(width_cm, height_cm)
-        figure.savefig(target_path, dpi=600)
-        self._plt().close(figure)
+        try:
+            if target_path.suffix.lower() in self.PICKLE_SUFFIXES:
+                self._dump_figure(figure, target_path)
+            else:
+                figure.savefig(target_path, dpi=600)
+        finally:
+            self._plt().close(figure)
+
+    @staticmethod
+    def _dump_figure(figure, target_path: Path) -> None:
+        """Write the live matplotlib Figure itself, not a rendered image.
+
+        Reload it in any Python session to keep working with the plot::
+
+            import pickle
+            import matplotlib.pyplot as plt
+
+            figure = pickle.load(open('plots.pickle', 'rb'))
+            plt.show()
+
+        The axes, artists and data survive the round trip, so the chart can be
+        restyled, re-scaled or combined with other data afterwards - none of
+        which a PNG, SVG or PDF export allows. The figure is dumped before it
+        is closed so that matplotlib records it as pyplot-managed and hands it
+        back to pyplot on load.
+        """
+        with open(target_path, 'wb') as handle:
+            pickle.dump(figure, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def show_plot(self, width_cm: float, height_cm: float) -> None:
         self.make_plot(width_cm, height_cm)
@@ -93,6 +127,23 @@ class Summary:
         import matplotlib.gridspec as gridspec
 
         return gridspec
+
+    @staticmethod
+    def _calculated_curve(model, x, channel=None):
+        """Calculated reflectivity for one model, per spin channel when given.
+
+        Returns None when the channel cannot be calculated (a spin-flip channel
+        of a non-magnetic model, or a calculator without magnetism support): no
+        overlay is better than the wrong one.
+        """
+        calculator = model.interface()
+        if channel is None:
+            return np.asarray(calculator.reflectity_profile(x, model.unique_name))
+        try:
+            return np.asarray(calculator.reflectivity_profile_channel(x, model.unique_name, channel))
+        except (ValueError, NotImplementedError, AttributeError) as exception:
+            logger.warning('No calculated curve for channel %s: %s', channel.value, exception)
+            return None
 
     def make_plot(self, width_cm: float, height_cm: float):
         plt = self._plt()
@@ -112,33 +163,65 @@ class Summary:
         experiments = self._ordered_experiments()
         if experiments:
             for offset, (experiment_index, experiment) in enumerate(experiments):
-                x = np.asarray(experiment.x)
-                y = np.asarray(experiment.y)
-                if x.size == 0 or y.size == 0:
-                    continue
-
-                ye = np.asarray(experiment.ye) if getattr(experiment, 'ye', None) is not None else None
-                model = experiment.model
-                model.interface = self._project_lib._calculator
-                y_calc = np.asarray(model.interface().reflectity_profile(x, model.unique_name))
-                scale_factor = 10**offset
-
-                color = getattr(model, 'color', None) or '#1f77b4'
-                if ye is not None and ye.size == y.size:
-                    ax_reflectivity.errorbar(
-                        x,
-                        y * scale_factor,
-                        ye * scale_factor,
-                        marker='',
-                        ls='',
-                        color=color,
-                        alpha=0.45,
-                    )
+                experiment_name = experiment.name or f'Experiment {experiment_index + 1}'
+                channels = getattr(experiment, 'available_channels', None)
+                if channels is None:
+                    datasets = [(experiment_name, experiment, None)]
                 else:
-                    ax_reflectivity.plot(x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45)
+                    # Polarized experiment: one series per measured spin channel.
+                    datasets = [
+                        (f'{experiment_name} ({channel.value})', experiment[channel], channel) for channel in channels
+                    ]
+                for label_name, dataset, channel in datasets:
+                    x = np.asarray(dataset.x)
+                    y = np.asarray(dataset.y)
+                    if x.size == 0 or y.size == 0:
+                        continue
 
-                label_name = experiment.name or f'Experiment {experiment_index + 1}'
-                ax_reflectivity.plot(x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name)
+                    ye = np.asarray(dataset.ye) if getattr(dataset, 'ye', None) is not None else None
+                    model = experiment.model
+                    model.interface = self._project_lib._calculator
+                    # Each channel needs its own spin cross-section; the
+                    # channel-agnostic call would repeat one curve under four
+                    # channel labels. None means "cannot be calculated" (e.g. a
+                    # spin-flip channel of a non-magnetic model) — then the
+                    # measured data is shown without a calculated overlay.
+                    y_calc = self._calculated_curve(model, x, channel)
+                    scale_factor = 10**offset
+
+                    color = CHANNEL_COLORS[channel.value] if channel is not None else (
+                        getattr(model, 'color', None) or '#1f77b4'
+                    )
+                    # Without a calculated curve the measured series carries the
+                    # legend entry, so the channel is still identifiable.
+                    measured_label = label_name if y_calc is None else None
+                    if ye is not None and ye.size == y.size:
+                        # ye holds variances (sigma**2); errorbar() needs one
+                        # standard deviation, same convention as the fitter
+                        # weights and the analysis-chart residuals.
+                        sigma = np.sqrt(np.clip(ye, 0.0, None))
+                        ax_reflectivity.errorbar(
+                            x,
+                            y * scale_factor,
+                            sigma * scale_factor,
+                            marker='',
+                            ls='',
+                            color=color,
+                            alpha=0.45,
+                        )
+                        if measured_label is not None:
+                            ax_reflectivity.plot(
+                                x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45, label=measured_label
+                            )
+                    else:
+                        ax_reflectivity.plot(
+                            x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45, label=measured_label
+                        )
+
+                    if y_calc is not None:
+                        ax_reflectivity.plot(
+                            x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name
+                        )
         else:
             for model_index, model in enumerate(self._project_lib.models):
                 sample_data = self._project_lib.sample_data_for_model_at_index(model_index)
