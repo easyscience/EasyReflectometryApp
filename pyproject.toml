@@ -31,7 +31,7 @@ classifiers = [
 requires-python = '>=3.12'
 dependencies = [
   'easyapplication',
-  'easyreflectometry @ git+https://github.com/easyscience/reflectometry-lib.git@improved_constraints',
+  'easyreflectometry @ git+https://github.com/easyscience/reflectometry-lib.git@develop',
   #'easyreflectometry',
   'asteval',
   'PySide6',
