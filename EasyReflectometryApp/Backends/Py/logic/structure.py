@@ -40,11 +40,14 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
         if collapsed:
             boxes[-len(assembly.layers)]['repetitions'] = repetitions
 
-    # The first/last drawn layers are the semi-infinite superphase/subphase caps
+    # The first/last drawn layers are the semi-infinite superphase/subphase caps and are
+    # excluded from the total. Only a plain layer is retagged: a gradient assembly at either
+    # end keeps its own kind (and its thickness), and a lone box is a superphase only.
     if boxes:
-        boxes[0]['kind'] = 'superphase'
-        boxes[-1]['kind'] = 'subphase'
-        total_thickness -= boxes[0]['thickness'] + (boxes[-1]['thickness'] if len(boxes) > 1 else 0.0)
+        for box, kind in ((boxes[0], 'superphase'), (boxes[-1], 'subphase')):
+            if box['kind'] == 'layer':
+                box['kind'] = kind
+                total_thickness -= box['thickness']
 
     legend = []
     seen = set()

@@ -62,6 +62,16 @@ def test_single_assembly_tags_first_and_last_layer_only():
     assert total == 50.0
 
 
+def test_lone_layer_is_tagged_superphase_only():
+    materials = make_material_collection(make_material('Air'))
+    sample = make_sample(make_assembly(name='Only', layers=[make_layer(name='Air Layer', material=materials[0], thickness=10.0)]))
+
+    boxes, _, total = flatten(_project(sample, materials))
+
+    assert [box['kind'] for box in boxes] == ['superphase']  # not overwritten by the subphase tag
+    assert total == 0.0  # the only box is a cap, so no finite film is left
+
+
 def test_small_repeating_multilayer_expands():
     materials = make_material_collection(make_material('Air'), make_material('A'), make_material('B'))
     repeating = FakeRepeatingMultilayer(
@@ -120,6 +130,20 @@ def test_gradient_layer_collapses_to_one_box():
     assert grad_box['color'] == COLORS[0]
     assert grad_box['color_end'] == COLORS[1]
     assert total == 2.0
+
+
+def test_gradient_at_either_end_keeps_its_kind_and_thickness():
+    materials = make_material_collection(make_material('Air'), make_material('D2O'))
+    sample = make_sample(
+        FakeGradientLayer(name='Top Grad', front_material=materials[0], back_material=materials[1], thickness=2.0),
+        make_assembly(name='Mid', layers=[make_layer(material=materials[1], thickness=25.0)]),
+        FakeGradientLayer(name='Bottom Grad', front_material=materials[1], back_material=materials[0], thickness=3.0),
+    )
+
+    boxes, _, total = flatten(_project(sample, materials))
+
+    assert [box['kind'] for box in boxes] == ['gradient', 'layer', 'gradient']  # caps never overwrite a gradient
+    assert total == 30.0  # no cap thickness to exclude
 
 
 def test_ad_hoc_material_gets_fallback_color_without_raising():
