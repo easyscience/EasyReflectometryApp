@@ -12,12 +12,17 @@ import Gui.Globals as Globals
 EaComponents.ContentPage {
     mainView: EaComponents.MainContent {
         tabs: [
-            EaElements.TabButton { text: qsTr('Reflectivity') }
+            EaElements.TabButton { text: qsTr('Reflectivity') },
+            EaElements.TabButton { text: qsTr('Structure') }
        ]
 
         items: [
             Loader {
                 source: `MainContent/CombinedView.qml`
+                onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
+            },
+            Loader {
+                source: `MainContent/StructureView.qml`
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             }
         ]

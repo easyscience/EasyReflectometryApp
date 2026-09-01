@@ -35,6 +35,8 @@ class StubSample(QObject):
     modelsIndexChanged = Signal()
     assembliesTableChanged = Signal()
     assembliesIndexChanged = Signal()
+    layersChange = Signal()
+    structureChanged = Signal()
     qRangeChanged = Signal()
     magnetismChanged = Signal()
     constraintsChanged = Signal()
@@ -42,9 +44,14 @@ class StubSample(QObject):
     def __init__(self, _project_lib):
         super().__init__()
         self.clear_calls = 0
+        self.structure_clear_calls = 0
 
     def _clearCacheAndEmitLayersChanged(self):
         self.clear_calls += 1
+
+    def _clearStructureCacheAndEmit(self):
+        self.structure_clear_calls += 1
+        self.structureChanged.emit()
 
 
 class StubExperiment(QObject):
@@ -390,3 +397,25 @@ class TestPlottingGetAnalysisDataPointsDelegation:
 
         plotting.getAnalysisDataPoints.assert_called_once_with(5, '')
 
+
+
+def test_backend_wires_structure_refresh_to_sample_and_analysis_signals(monkeypatch, qcore_application):
+    # The Structure view must refresh on every stack-changing signal, including
+    # modelsTableChanged (the only signal removeModel emits), assembliesTableChanged
+    # (the only signal a repetitions edit emits), and the post-fit Analysis signals
+    # (the fit path never emits a Sample signal).
+    backend = _make_backend(monkeypatch)
+
+    for signal in (
+        backend._sample.layersChange,
+        backend._sample.assembliesTableChanged,
+        backend._sample.materialsTableChanged,
+        backend._sample.modelsIndexChanged,
+        backend._sample.modelsTableChanged,
+        backend._sample.externalSampleChanged,
+        backend._analysis.externalParametersChanged,
+        backend._analysis.externalFittingChanged,
+    ):
+        signal.emit()
+
+    assert backend._sample.structure_clear_calls == 8

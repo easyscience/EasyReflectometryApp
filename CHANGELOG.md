@@ -1,5 +1,10 @@
 # Unreleased
 
+- Added a **Structure** tab on the Model page: a schematic view of the layer stack with one
+  colored box per layer (colors per material, heights following thickness, "× N" badges for
+  collapsed repeating multilayers, legend and total-thickness caption). Boxes show tooltips
+  with material/SLD/thickness/roughness, clicking selects the layer in the sidebar editor,
+  and the view updates live on edits and after fits ([#242](https://github.com/easyscience/reflectometry-lib/issues/242)).
 - Enabling magnetism no longer jumps to another page. Ticking a layer's
   "Magn." box while the current engine cannot model magnetism now asks whether
   to switch the project to refl1d and does both in one step. 

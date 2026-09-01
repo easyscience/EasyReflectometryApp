@@ -201,6 +201,11 @@ QtObject {
     function sampleSetCurrentAssemblyConformalRoughness(value) { activeBackend.sample.setCurrentAssemblyConformalRoughness(value) }
     function sampleSetCurrentAssemblyRepeatedLayerReptitions(value) { activeBackend.sample.setCurrentAssemblyRepeatedLayerReptitions(value) }
 
+    // Structure view (flattened whole-stack representation)
+    readonly property var sampleStructure: activeBackend.sample.structure
+    readonly property var sampleStructureLegend: activeBackend.sample.structureLegend
+    readonly property real sampleStructureTotalThickness: activeBackend.sample.structureTotalThickness
+
     // Layer
     readonly property var sampleLayers: activeBackend.sample.layers
     readonly property string sampleCurrentLayerName: activeBackend.sample.currentLayerName

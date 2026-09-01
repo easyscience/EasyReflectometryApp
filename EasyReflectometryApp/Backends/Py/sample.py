@@ -27,6 +27,7 @@ from .logic.models import Models as ModelsLogic
 from .logic.parameters import Parameters as ParametersLogic
 from .logic.physics_constraints import PhysicsConstraints as PhysicsConstraintsLogic
 from .logic.project import Project as ProjectLogic
+from .logic.structure import flatten as flatten_structure
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class Sample(QObject):
     layersChange = Signal()
     layersIndexChanged = Signal()
 
+    structureChanged = Signal()
     # Per-layer magnetism (rho_m / theta_m) and calculator capability.
     magnetismChanged = Signal()
     magnetismFailed = Signal(str)
@@ -107,6 +109,7 @@ class Sample(QObject):
         self._parameters_logic = ParametersLogic(project_lib)
 
         self._chached_layers = None
+        self._cached_structure = None
         self._constraint_states: Dict[str, dict[str, Any]] = {}
         # Child of self (not QTimer.singleShot) so a pending notification can
         # never outlive this backend or keep it - and the project - alive.
@@ -743,6 +746,30 @@ class Sample(QObject):
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
+
+    # # #
+    # Structure view (flattened whole-stack representation)
+    # # #
+    @Property('QVariantList', notify=structureChanged)
+    def structure(self) -> list[dict]:
+        return self._structure_parts()[0]
+
+    @Property('QVariantList', notify=structureChanged)
+    def structureLegend(self) -> list[dict]:
+        return self._structure_parts()[1]
+
+    @Property(float, notify=structureChanged)
+    def structureTotalThickness(self) -> float:
+        return self._structure_parts()[2]
+
+    def _structure_parts(self) -> tuple[list[dict], list[dict], float]:
+        if self._cached_structure is None:
+            self._cached_structure = flatten_structure(self._project_lib)
+        return self._cached_structure
+
+    def _clearStructureCacheAndEmit(self):
+        self._cached_structure = None
+        self.structureChanged.emit()
 
     # # #
     # Constraints
