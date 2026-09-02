@@ -15,3 +15,8 @@ When data is loaded, it is possible to change instrumental parameters that affec
 - **A**: Scale the data by the given value.
 - **B**: Set the level where data merges into the experimental background.
 - **C**: Instrumental resolution that percentage varies as a function of Q.
+
+## Polarised data
+A measurement that recorded several spin channels is loaded with the second button,
+`Load polarized experiment (file per channel)`, which takes one file per channel and asks
+how to assign them. See [polarised data](./polarized_data.md).
