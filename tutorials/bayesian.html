@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Loading experimental data &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Bayesian analysis &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
   
   
   
@@ -44,13 +44,13 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/load_data';</script>
-    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/load_data.html" />
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/bayesian';</script>
+    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/bayesian.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Simple fitting with a slab model" href="simple_fitting.html" />
-    <link rel="prev" title="Material and model setup" href="model_def.html" />
+    <link rel="next" title="Summary" href="summary.html" />
+    <link rel="prev" title="Polarised data" href="polarized_data.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -165,11 +165,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="model_def.html">Material and model setup</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Loading experimental data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="load_data.html">Loading experimental data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="simple_fitting.html">Simple fitting with a slab model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="magnetism.html">Magnetic layers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="polarized_data.html">Polarised data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="bayesian.html">Bayesian analysis</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Bayesian analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="summary.html">Summary</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasets.html">Demo datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="settings.html">Settings</a></li>
@@ -227,7 +227,7 @@
       
       
       
-      <li><a href="../_sources/tutorials/load_data.md" target="_blank"
+      <li><a href="../_sources/tutorials/bayesian.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -311,7 +311,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Loading experimental data</h1>
+    <h1>Bayesian analysis</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -321,9 +321,15 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#starting-a-sampling-run">Starting a sampling run</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-the-results">Reading the results</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#on-the-reflectivity-chart">On the reflectivity chart</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-bayesian-posterior-tab">The Bayesian Posterior tab</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-results-are-discarded">When results are discarded</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#limitations">Limitations</a></li>
 </ul>
             </nav>
         </div>
@@ -335,32 +341,133 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="loading-experimental-data">
-<h1>Loading experimental data<a class="headerlink" href="#loading-experimental-data" title="Link to this heading">#</a></h1>
-<section id="load-data">
-<h2>Load data<a class="headerlink" href="#load-data" title="Link to this heading">#</a></h2>
-<p>Experimental data must be <strong>.dat</strong>, <strong>.txt</strong>, or <strong>.ort</strong> to be loaded into the EasyReflectometryApp.<br />
-Data is loaded in the <code class="docutils literal notranslate"><span class="pre">Experimental</span></code> page, by pressing the <code class="docutils literal notranslate"><span class="pre">Import</span> <span class="pre">experimental</span> <span class="pre">data</span></code>.</p>
-<p><img alt="Loading data" src="../_images/exp_load.png" /></p>
+  <section id="bayesian-analysis">
+<h1>Bayesian analysis<a class="headerlink" href="#bayesian-analysis" title="Link to this heading">#</a></h1>
+<p>Next to the classical minimisers the app can sample the posterior distribution of the fitted
+parameters with the BUMPS DREAM sampler. Instead of a single best value per parameter you
+get a distribution: a median, a credible interval, and the correlations between parameters.</p>
+<section id="starting-a-sampling-run">
+<h2>Starting a sampling run<a class="headerlink" href="#starting-a-sampling-run" title="Link to this heading">#</a></h2>
+<p>Bayesian sampling is selected like a minimiser. In <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> › <code class="docutils literal notranslate"><span class="pre">Advanced</span></code> ›
+<strong>Minimization method</strong>, pick <strong>BUMPS-DREAM (Bayesian)</strong> - the first entry of the
+<strong>Minimizer</strong> drop-down.</p>
+<!-- TODO: screenshot of the Minimization method group in Bayesian mode -> _images/anal_bayesian_settings.png -->
+<p>The settings below the drop-down change with the choice. Instead of the classical
+<strong>Tolerance</strong> and <strong>Max evaluations</strong>, the sampler shows:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Setting</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Samples</strong></p></td>
+<td><p>Total number of samples to draw.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Burn-in steps</strong></p></td>
+<td><p>Initial steps discarded before the chains are recorded.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Population</strong></p></td>
+<td><p>Number of chains walking the parameter space.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Thinning</strong></p></td>
+<td><p>Keep every n-th draw, to reduce autocorrelation.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Initializer</strong></p></td>
+<td><p>How the starting population is spread over the parameter ranges.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The parameters that are sampled, and the ranges they are sampled in, are the ones ticked
+for fitting in the <code class="docutils literal notranslate"><span class="pre">Basic</span> <span class="pre">controls</span></code>, exactly as for a classical fit.</p>
+<p>With the Bayesian minimiser selected, the fit button in <code class="docutils literal notranslate"><span class="pre">Basic</span> <span class="pre">controls</span></code> reads
+<strong>Start sampling</strong> instead of <strong>Start fitting</strong>. It becomes <strong>Cancel fitting</strong> while a run
+is in progress; cancelling keeps the interface locked until the worker has actually
+stopped, so a superseded run can never write into the parameters of the next one.</p>
+</section>
+<section id="reading-the-results">
+<h2>Reading the results<a class="headerlink" href="#reading-the-results" title="Link to this heading">#</a></h2>
+<section id="on-the-reflectivity-chart">
+<h3>On the reflectivity chart<a class="headerlink" href="#on-the-reflectivity-chart" title="Link to this heading">#</a></h3>
+<p>When a run finishes, the <code class="docutils literal notranslate"><span class="pre">Reflectivity</span></code> tab of the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page gains two extra items,
+with their own legend entries:</p>
 <ul class="simple">
-<li><p><strong>A</strong>: Open your file manager to load data in the mentioned format.</p></li>
+<li><p><strong>Posterior median</strong> - the median calculated curve over the retained draws.</p></li>
+<li><p><strong>95% credible interval</strong> - the band containing 95 % of the posterior predictive curves.</p></li>
 </ul>
 </section>
-<section id="instrumental-parameters">
-<h2>Instrumental parameters<a class="headerlink" href="#instrumental-parameters" title="Link to this heading">#</a></h2>
-<p>When data is loaded, it is possible to change instrumental parameters that affect the data.</p>
-<p><img alt="Setting experimental parameters" src="../_images/exp_data.png" /></p>
+<section id="the-bayesian-posterior-tab">
+<h3>The Bayesian Posterior tab<a class="headerlink" href="#the-bayesian-posterior-tab" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page has a second main tab, <strong>Bayesian Posterior</strong>, holding five views.
+Until a run has finished, it shows <em>“No Bayesian results available. Run a BUMPS-DREAM
+sampling to see posterior distributions.”</em></p>
+<!-- TODO: screenshot of the Bayesian Posterior tab -> _images/anal_bayesian_posterior.png -->
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>View</p></th>
+<th class="head"><p>Shows</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Marginals</strong></p></td>
+<td><p>Marginal posterior distribution of each sampled parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Corner Plot</strong></p></td>
+<td><p>Pairwise parameter correlations together with the marginals.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Traces</strong></p></td>
+<td><p>The MCMC chain traces, for eyeballing mixing and burn-in.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>2D Heatmap</strong></p></td>
+<td><p>Joint posterior density of any two chosen parameters - pick them with the <strong>X-axis</strong> and <strong>Y-axis</strong> selectors.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Diagnostics</strong></p></td>
+<td><p>Convergence diagnostics, see below.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Each view has a <strong>Save</strong> button that writes the plot to disk.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <strong>Marginals</strong>, <strong>Corner Plot</strong> and <strong>Traces</strong> views are rendered with <code class="docutils literal notranslate"><span class="pre">plotly</span></code>. If it is
+not installed the view says so and gives the install command; the rest of the app is
+unaffected.</p>
+</div>
+</section>
+<section id="diagnostics">
+<h3>Diagnostics<a class="headerlink" href="#diagnostics" title="Link to this heading">#</a></h3>
+<p>The <strong>Diagnostics</strong> view reports whether the run can be trusted:</p>
 <ul class="simple">
-<li><p><strong>A</strong>: Scale the data by the given value.</p></li>
-<li><p><strong>B</strong>: Set the level where data merges into the experimental background.</p></li>
-<li><p><strong>C</strong>: Instrumental resolution that percentage varies as a function of Q.</p></li>
+<li><p><strong>Sampling Configuration</strong> - requested samples, burn-in steps, thinning, population
+(chains), retained draws and number of parameters, as actually used by the run.</p></li>
+<li><p><strong>Acceptance Rate</strong> of the sampler.</p></li>
+<li><p><strong>Gelman-Rubin R̂</strong> per parameter. Values close to 1 indicate that the chains have
+converged on the same distribution.</p></li>
 </ul>
 </section>
-<section id="polarised-data">
-<h2>Polarised data<a class="headerlink" href="#polarised-data" title="Link to this heading">#</a></h2>
-<p>A measurement that recorded several spin channels is loaded with the second button,
-<code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">polarized</span> <span class="pre">experiment</span> <span class="pre">(file</span> <span class="pre">per</span> <span class="pre">channel)</span></code>, which takes one file per channel and asks
-how to assign them. See <a class="reference internal" href="polarized_data.html"><span class="std std-doc">polarised data</span></a>.</p>
+</section>
+<section id="when-results-are-discarded">
+<h2>When results are discarded<a class="headerlink" href="#when-results-are-discarded" title="Link to this heading">#</a></h2>
+<p>Posterior results describe one specific run of one specific model, so the app clears them -
+the overlays, the plots and the results dialog - as soon as they would become stale:</p>
+<ul class="simple">
+<li><p>when a project is created, loaded or reset,</p></li>
+<li><p>when a classical fit is started,</p></li>
+<li><p>when a new sampling run is started.</p></li>
+</ul>
+</section>
+<section id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Polarised experiments cannot be sampled yet.</strong> Fitting them classically is supported,
+see <a class="reference internal" href="polarized_data.html"><span class="std std-doc">polarised data</span></a>, but a Bayesian run over a polarised experiment
+is not available.</p></li>
+<li><p>Data files without an uncertainty column are sampled with zero variances, which the
+sampler reports with a message. The fit is still performed, but the resulting credible
+intervals should not be read as measurement uncertainties.</p></li>
+</ul>
 </section>
 </section>
 
@@ -376,20 +483,20 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="model_def.html"
+       href="polarized_data.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Material and model setup</p>
+        <p class="prev-next-title">Polarised data</p>
       </div>
     </a>
     <a class="right-next"
-       href="simple_fitting.html"
+       href="summary.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Simple fitting with a slab model</p>
+        <p class="prev-next-title">Summary</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -409,9 +516,15 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#starting-a-sampling-run">Starting a sampling run</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-the-results">Reading the results</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#on-the-reflectivity-chart">On the reflectivity chart</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-bayesian-posterior-tab">The Bayesian Posterior tab</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-results-are-discarded">When results are discarded</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#limitations">Limitations</a></li>
 </ul>
   </nav></div>
 

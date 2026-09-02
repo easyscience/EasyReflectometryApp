@@ -167,6 +167,11 @@
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Material and model setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="load_data.html">Loading experimental data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="simple_fitting.html">Simple fitting with a slab model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="magnetism.html">Magnetic layers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="polarized_data.html">Polarised data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bayesian.html">Bayesian analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="summary.html">Summary</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datasets.html">Demo datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="settings.html">Settings</a></li>
 </ul>
 
@@ -320,9 +325,17 @@ document.write(`
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#material-editor">Material editor</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-creation-and-editing">Model creation and editing</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-editor">Layer editor</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetism">Magnetism</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#structure-view">Structure view</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#physics-constraints">Physics constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#single-constraints">Single constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-constraints">Model constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#trying-the-constraints-out">Trying the constraints out</a></li>
+</ul>
+</li>
 </ul>
             </nav>
         </div>
@@ -382,22 +395,127 @@ By clicking an assembly, the <code class="docutils literal notranslate"><span cl
 <li><p><strong>2</strong>+<strong>3</strong>: Setting the Thickness and Upper Roughness of the material in Angstrom, Å.</p></li>
 </ul>
 </section>
+<section id="magnetism">
+<h3>Magnetism<a class="headerlink" href="#magnetism" title="Link to this heading">#</a></h3>
+<p>A layer can also be given a magnetisation, in the <code class="docutils literal notranslate"><span class="pre">Magnetism</span></code> group below the layer editor.
+This needs the <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> calculation engine and is described in
+<a class="reference internal" href="magnetism.html"><span class="std std-doc">magnetic layers</span></a>.</p>
+</section>
+</section>
+<section id="structure-view">
+<h2>Structure view<a class="headerlink" href="#structure-view" title="Link to this heading">#</a></h2>
+<p>The main window has a <strong>Structure</strong> tab next to <strong>Reflectivity</strong> showing a schematic of
+the current model’s layer stack: one colored box per layer, ambient medium on top, substrate
+at the bottom. Boxes share a color per material (see the legend), box heights follow layer
+thickness, and repeated multilayers with many repetitions are drawn once with a “× N” badge.</p>
+<!-- TODO: screenshot of the Structure tab -> _images/sample_structure.png -->
+<p>Hover a box for its material, SLD, thickness and roughness; click it to select that layer in
+the sidebar editor. The view updates immediately when the model changes, including after a fit.</p>
+<p>Note the view is a schematic, not a to-scale cross-section: heights are clamped so very thin
+layers stay visible and very thick ones do not crowd out the rest.</p>
 </section>
 <section id="advanced-controls">
 <h2>Advanced controls<a class="headerlink" href="#advanced-controls" title="Link to this heading">#</a></h2>
-<p>In the advanced controls, it is possible to apply a specific Q-range of interest and sample constraints on the model.</p>
+<p>In the advanced controls, it is possible to apply a specific Q-range of interest, to choose
+the calculation engine, and to constrain the parameters of the model.</p>
 <p><img alt="Advanced controls" src="../_images/sample_adv.png" /></p>
 <ul class="simple">
 <li><p><strong>A</strong>: Setting min. Q value of interest.</p></li>
 <li><p><strong>B</strong>: Setting max. Q value of interest.</p></li>
-<li><p><strong>C</strong>: Setting Q-resolution.<br><br></p></li>
-<li><p><strong>D</strong>: Set 1. dependent parameter.</p></li>
-<li><p><strong>E</strong>: Set 2. dependent parameter.</p></li>
-<li><p><strong>F</strong>: Set the mathematical operator (+,-,*,/) for <strong>G</strong> to apply to <strong>E</strong>.</p></li>
-<li><p><strong>G</strong>: Numeric value to apply to <strong>F</strong>.</p></li>
-<li><p><strong>H</strong>: Set the comparison operators (=,&lt;,&gt;) between <strong>D</strong> and <strong>E</strong>.</p></li>
-<li><p><strong>I</strong>: Apply the sample constraint to the model.</p></li>
+<li><p><strong>C</strong>: Setting Q-resolution.</p></li>
 </ul>
+<p>The <strong>Calculation engine</strong> group selects between <code class="docutils literal notranslate"><span class="pre">refnx</span></code> and <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> for this project. The
+same selector is available on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page. Only <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> can model magnetic layers,
+so selecting <code class="docutils literal notranslate"><span class="pre">refnx</span></code> while the sample has magnetic layers is refused - see
+<a class="reference internal" href="magnetism.html"><span class="std std-doc">magnetic layers</span></a>.</p>
+<p>Below these sit three constraint groups, from the most specific to the most general.</p>
+<section id="physics-constraints">
+<h3>Physics constraints<a class="headerlink" href="#physics-constraints" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">Physics</span> <span class="pre">constraints</span></code> group applies physically motivated constraints to an assembly with
+one click. The list is per assembly of the current model, and only shows the recipes that
+make sense for that assembly type; a recipe that cannot be applied right now is marked
+<code class="docutils literal notranslate"><span class="pre">n/a</span></code> with the reason, and one that is always in force is marked <code class="docutils literal notranslate"><span class="pre">always</span> <span class="pre">on</span></code>.</p>
+<!-- TODO: screenshot of the Physics constraints group -> _images/sample_physics_constraints.png -->
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Recipe</p></th>
+<th class="head"><p>Effect</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Conformal roughness</strong></p></td>
+<td><p>Every interface of the assembly shares the roughness of its first layer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Conformal thickness</strong></p></td>
+<td><p>Every layer of the assembly shares the thickness of its first layer.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Constant period Λ</strong></p></td>
+<td><p>The summed thickness of the layers stays constant: the last layer absorbs whatever the others change by.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Equal head/tail area per molecule</strong></p></td>
+<td><p>The head layer takes the area per molecule of the tail layer (surfactant layers).</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Symmetric head groups</strong></p></td>
+<td><p>The back head layer follows the front head layer thickness and area per molecule (bilayers).</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Solvent roughness follows the surfactant</strong></p></td>
+<td><p>The roughness of the first layer below the surfactant follows the tail roughness. Needs <strong>Conformal roughness</strong>.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Mixture fractions sum to 1</strong></p></td>
+<td><p>Material mixtures and solvated materials keep their fractions normalised. Always on, not toggleable.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Each active recipe appears as a single row in the <code class="docutils literal notranslate"><span class="pre">Active</span> <span class="pre">Constraints</span></code> table of the
+<code class="docutils literal notranslate"><span class="pre">Single</span> <span class="pre">constraints</span></code> group, of type <code class="docutils literal notranslate"><span class="pre">physics</span></code>, counting the parameters it ties together.</p>
+</section>
+<section id="single-constraints">
+<h3>Single constraints<a class="headerlink" href="#single-constraints" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">Single</span> <span class="pre">constraints</span></code> group creates numeric or symbolic relationships between individual
+parameters.</p>
+<!-- TODO: screenshot of the Single constraints group -> _images/sample_constraints.png -->
+<ol class="arabic simple">
+<li><p>Pick the <strong>dependent parameter</strong> from the drop-down.</p></li>
+<li><p>Pick the relation: <code class="docutils literal notranslate"><span class="pre">=</span></code>, <code class="docutils literal notranslate"><span class="pre">≤</span></code> or <code class="docutils literal notranslate"><span class="pre">≥</span></code>.</p></li>
+<li><p>Type the <strong>expression</strong>, for example <code class="docutils literal notranslate"><span class="pre">np.sqrt(1</span> <span class="pre">/</span> <span class="pre">sld_ni)</span> <span class="pre">+</span> <span class="pre">4</span></code>. Use
+<strong>Insert parameter alias…</strong> to paste the alias of another parameter rather than typing
+it, and <strong>Insert total film thickness</strong> to use the read-only sum of all layer thicknesses
+between superphase and subphase.</p></li>
+<li><p>Check the <strong>Preview</strong> line, which shows how the constraint will read - and, for an
+inequality, that numeric literals are interpreted in the dependent parameter’s unit.</p></li>
+<li><p>Press <strong>Add constraint</strong>.</p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">=</span></code> ties the parameter to the expression, so it is no longer free. <code class="docutils literal notranslate"><span class="pre">≤</span></code> and <code class="docutils literal notranslate"><span class="pre">≥</span></code> against other
+parameters become <strong>inequality constraints</strong>, which are enforced as penalties during
+fitting.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Inequality constraints need a BUMPS minimizer (<code class="docutils literal notranslate"><span class="pre">Analysis</span></code> › <code class="docutils literal notranslate"><span class="pre">Minimization</span> <span class="pre">method</span></code>). With
+<code class="docutils literal notranslate"><span class="pre">lmfit</span></code> or <code class="docutils literal notranslate"><span class="pre">DFO-LS</span></code> selected the group shows a warning and fits are refused until the
+minimizer is changed or the inequality is removed. A warning also appears when the current
+parameter values violate an inequality, and again fits will not start until they hold.</p>
+</div>
+<p>Existing constraints are listed in the <code class="docutils literal notranslate"><span class="pre">Active</span> <span class="pre">Constraints</span></code> table, with columns <code class="docutils literal notranslate"><span class="pre">No.</span></code>,
+<code class="docutils literal notranslate"><span class="pre">Type</span></code>, <code class="docutils literal notranslate"><span class="pre">Parameter</span></code> and <code class="docutils literal notranslate"><span class="pre">Expression</span></code>. The <code class="docutils literal notranslate"><span class="pre">Type</span></code> column tells the kinds apart - <code class="docutils literal notranslate"><span class="pre">expr</span></code> for a
+plain equality, <code class="docutils literal notranslate"><span class="pre">≤</span> <span class="pre">≥</span></code> for an inequality, <code class="docutils literal notranslate"><span class="pre">physics</span></code> for a recipe from the group above,
+<code class="docutils literal notranslate"><span class="pre">bound</span></code> for an upper bound and <code class="docutils literal notranslate"><span class="pre">value</span></code> for a fixed value - and each row can be removed
+individually.</p>
+</section>
+<section id="model-constraints">
+<h3>Model constraints<a class="headerlink" href="#model-constraints" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">constraints</span></code> group ties whole models together rather than single parameters:
+select two or more models and press <strong>Constrain models parameters</strong> to constrain all of
+their matching parameters at once. This is the tool for co-refining several contrasts that
+share a structure. The resulting constraints are listed in the <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">Constraints</span></code> table
+below the selector and can be removed there.</p>
+<!-- TODO: screenshot of the Model constraints group -> _images/sample_model_constraints.png -->
+</section>
+<section id="trying-the-constraints-out">
+<h3>Trying the constraints out<a class="headerlink" href="#trying-the-constraints-out" title="Link to this heading">#</a></h3>
+<p>Four simulated datasets with a known ground truth are provided for exercising these
+features - see <a class="reference internal" href="datasets.html"><span class="std std-doc">demo datasets</span></a>.</p>
+</section>
 </section>
 </section>
 
@@ -450,9 +568,17 @@ By clicking an assembly, the <code class="docutils literal notranslate"><span cl
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#material-editor">Material editor</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-creation-and-editing">Model creation and editing</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-editor">Layer editor</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetism">Magnetism</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#structure-view">Structure view</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#physics-constraints">Physics constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#single-constraints">Single constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-constraints">Model constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#trying-the-constraints-out">Trying the constraints out</a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 

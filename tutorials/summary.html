@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Loading experimental data &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Summary &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
   
   
   
@@ -44,13 +44,13 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/load_data';</script>
-    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/load_data.html" />
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/summary';</script>
+    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/summary.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Simple fitting with a slab model" href="simple_fitting.html" />
-    <link rel="prev" title="Material and model setup" href="model_def.html" />
+    <link rel="next" title="Demo datasets" href="datasets.html" />
+    <link rel="prev" title="Bayesian analysis" href="bayesian.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -165,12 +165,12 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="model_def.html">Material and model setup</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Loading experimental data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="load_data.html">Loading experimental data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="simple_fitting.html">Simple fitting with a slab model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="magnetism.html">Magnetic layers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="polarized_data.html">Polarised data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="bayesian.html">Bayesian analysis</a></li>
-<li class="toctree-l1"><a class="reference internal" href="summary.html">Summary</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Summary</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasets.html">Demo datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="settings.html">Settings</a></li>
 </ul>
@@ -227,7 +227,7 @@
       
       
       
-      <li><a href="../_sources/tutorials/load_data.md" target="_blank"
+      <li><a href="../_sources/tutorials/summary.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -311,7 +311,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Loading experimental data</h1>
+    <h1>Summary</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -321,9 +321,12 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-report">The report</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#export-summary">Export summary</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#export-plots">Export plots</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#saving-charts-as-matplotlib-objects">Saving charts as matplotlib objects</a></li>
+</ul>
+</li>
 </ul>
             </nav>
         </div>
@@ -335,32 +338,85 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="loading-experimental-data">
-<h1>Loading experimental data<a class="headerlink" href="#loading-experimental-data" title="Link to this heading">#</a></h1>
-<section id="load-data">
-<h2>Load data<a class="headerlink" href="#load-data" title="Link to this heading">#</a></h2>
-<p>Experimental data must be <strong>.dat</strong>, <strong>.txt</strong>, or <strong>.ort</strong> to be loaded into the EasyReflectometryApp.<br />
-Data is loaded in the <code class="docutils literal notranslate"><span class="pre">Experimental</span></code> page, by pressing the <code class="docutils literal notranslate"><span class="pre">Import</span> <span class="pre">experimental</span> <span class="pre">data</span></code>.</p>
-<p><img alt="Loading data" src="../_images/exp_load.png" /></p>
+  <section id="summary">
+<h1>Summary<a class="headerlink" href="#summary" title="Link to this heading">#</a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">Summary</span></code> tab collects everything the project knows after a fit into a single report:
+the project information, the sample parameters, the loaded experiments and the refinement
+result. The report is shown in the main window, and the sidebar exports it - as a document,
+or as figures.</p>
+<section id="the-report">
+<h2>The report<a class="headerlink" href="#the-report" title="Link to this heading">#</a></h2>
+<p>The main window renders the report with four sections:</p>
 <ul class="simple">
-<li><p><strong>A</strong>: Open your file manager to load data in the mentioned format.</p></li>
+<li><p><strong>Project information</strong>: title, description and the number of loaded experiments.</p></li>
+<li><p><strong>Sample</strong>: every parameter of the current model, as <code class="docutils literal notranslate"><span class="pre">Name</span></code>, <code class="docutils literal notranslate"><span class="pre">Value</span></code>, <code class="docutils literal notranslate"><span class="pre">Unit</span></code> and <code class="docutils literal notranslate"><span class="pre">Error</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">Error</span></code> column shows the uncertainty determined by the fit. Parameters that were not
+fitted (fixed parameters, and everything before the first fit) have no uncertainty, so
+their <code class="docutils literal notranslate"><span class="pre">Error</span></code> cell is left <strong>empty</strong>.</p></li>
+<li><p><strong>Experiments</strong>: one row per measured dataset, with its q-range, number of points and
+resolution function. A polarized experiment contributes one row per measured spin
+channel, named after the channel (<code class="docutils literal notranslate"><span class="pre">pp</span></code>, <code class="docutils literal notranslate"><span class="pre">pm</span></code>, <code class="docutils literal notranslate"><span class="pre">mp</span></code>, <code class="docutils literal notranslate"><span class="pre">mm</span></code>).</p></li>
+<li><p><strong>Refinement</strong>: calculation engine, minimizer, goodness of fit, and the number of total,
+free, fixed and constrained parameters.</p></li>
+</ul>
+<p>Long experiment names are truncated in the table; hover over one to see the full name.</p>
+</section>
+<section id="export-summary">
+<h2>Export summary<a class="headerlink" href="#export-summary" title="Link to this heading">#</a></h2>
+<p>The <strong>Export summary</strong> group in the sidebar writes the report to disk.</p>
+<ul class="simple">
+<li><p><strong>Name</strong>: the file name, without extension.</p></li>
+<li><p><strong>Format</strong>: <code class="docutils literal notranslate"><span class="pre">HTML</span></code> or <code class="docutils literal notranslate"><span class="pre">PDF</span></code>. The HTML export embeds interactive plotly charts; the PDF
+export embeds static images of the same charts, because the PDF converter cannot run the
+JavaScript behind the interactive ones.</p></li>
+<li><p><strong>Location</strong>: the full output path. Use the folder icon to pick a different directory. The default location is the project home directory.</p></li>
+<li><p><strong>Save</strong>: writes the file and confirms the result in a dialog.</p></li>
 </ul>
 </section>
-<section id="instrumental-parameters">
-<h2>Instrumental parameters<a class="headerlink" href="#instrumental-parameters" title="Link to this heading">#</a></h2>
-<p>When data is loaded, it is possible to change instrumental parameters that affect the data.</p>
-<p><img alt="Setting experimental parameters" src="../_images/exp_data.png" /></p>
+<section id="export-plots">
+<h2>Export plots<a class="headerlink" href="#export-plots" title="Link to this heading">#</a></h2>
+<p>The <strong>Export plots</strong> group saves the reflectivity and SLD charts as a two-panel matplotlib
+figure. Both panels are drawn from the current project: the measured data with its error
+bars, the calculated curve for each spin channel, and the SLD profile of every model.</p>
 <ul class="simple">
-<li><p><strong>A</strong>: Scale the data by the given value.</p></li>
-<li><p><strong>B</strong>: Set the level where data merges into the experimental background.</p></li>
-<li><p><strong>C</strong>: Instrumental resolution that percentage varies as a function of Q.</p></li>
+<li><p><strong>Open in matplotlib</strong>: opens the figure in an interactive matplotlib window without
+writing anything to disk. Useful for a quick look, and for matplotlib’s own zoom, pan and
+save-image tools.</p></li>
+<li><p><strong>Name</strong>: the figure file name, without extension.</p></li>
+<li><p><strong>Format</strong>: <code class="docutils literal notranslate"><span class="pre">PDF</span></code>, <code class="docutils literal notranslate"><span class="pre">PNG</span></code>, <code class="docutils literal notranslate"><span class="pre">SVG</span></code> or <code class="docutils literal notranslate"><span class="pre">PICKLE</span></code> (see below).</p></li>
+<li><p><strong>Location</strong>: the full output path, extension included. Use the folder icon to pick a
+different directory.</p></li>
+<li><p><strong>Width (cm)</strong> / <strong>Height (cm)</strong>: the size of the saved figure. Images are written at
+600 dpi.</p></li>
+<li><p><strong>Save plot</strong>: writes the figure and confirms the result in a dialog.</p></li>
 </ul>
+<section id="saving-charts-as-matplotlib-objects">
+<h3>Saving charts as matplotlib objects<a class="headerlink" href="#saving-charts-as-matplotlib-objects" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">PDF</span></code>, <code class="docutils literal notranslate"><span class="pre">PNG</span></code> and <code class="docutils literal notranslate"><span class="pre">SVG</span></code> are rendered images: what you see is all you get. Choosing <strong>PICKLE</strong>
+instead writes the live matplotlib <code class="docutils literal notranslate"><span class="pre">Figure</span></code> object itself, as a <code class="docutils literal notranslate"><span class="pre">.pickle</span></code> file, so the chart
+can be reopened and reworked in any Python session:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">'plots.pickle'</span><span class="p">,</span> <span class="s1">'rb'</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+    <span class="n">figure</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The figure comes back attached to <code class="docutils literal notranslate"><span class="pre">pyplot</span></code>, with its axes, artists, scales and data intact.
+That makes it the format to pick when the chart is a starting point rather than a final
+result - for example to</p>
+<ul class="simple">
+<li><p>restyle it for a paper or a talk (colors, fonts, legend, axis limits),</p></li>
+<li><p>add curves from another source to the same axes,</p></li>
+<li><p>read the plotted values back out of the artists, e.g.
+<code class="docutils literal notranslate"><span class="pre">figure.axes[0].lines[0].get_xydata()</span></code>,</p></li>
+<li><p>and re-export it to any image format afterwards with <code class="docutils literal notranslate"><span class="pre">figure.savefig(...)</span></code>.</p></li>
+</ul>
+<p>The file is written with the standard library <code class="docutils literal notranslate"><span class="pre">pickle</span></code> module, so reading it back requires
+matplotlib to be installed - and, as with any pickle, only load files you trust.</p>
 </section>
-<section id="polarised-data">
-<h2>Polarised data<a class="headerlink" href="#polarised-data" title="Link to this heading">#</a></h2>
-<p>A measurement that recorded several spin channels is loaded with the second button,
-<code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">polarized</span> <span class="pre">experiment</span> <span class="pre">(file</span> <span class="pre">per</span> <span class="pre">channel)</span></code>, which takes one file per channel and asks
-how to assign them. See <a class="reference internal" href="polarized_data.html"><span class="std std-doc">polarised data</span></a>.</p>
 </section>
 </section>
 
@@ -376,20 +432,20 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="model_def.html"
+       href="bayesian.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Material and model setup</p>
+        <p class="prev-next-title">Bayesian analysis</p>
       </div>
     </a>
     <a class="right-next"
-       href="simple_fitting.html"
+       href="datasets.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Simple fitting with a slab model</p>
+        <p class="prev-next-title">Demo datasets</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -409,9 +465,12 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-report">The report</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#export-summary">Export summary</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#export-plots">Export plots</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#saving-charts-as-matplotlib-objects">Saving charts as matplotlib objects</a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Loading experimental data &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Demo datasets &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
   
   
   
@@ -44,13 +44,13 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/load_data';</script>
-    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/load_data.html" />
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/datasets';</script>
+    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/datasets.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Simple fitting with a slab model" href="simple_fitting.html" />
-    <link rel="prev" title="Material and model setup" href="model_def.html" />
+    <link rel="next" title="Settings" href="settings.html" />
+    <link rel="prev" title="Summary" href="summary.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -165,13 +165,13 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="model_def.html">Material and model setup</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Loading experimental data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="load_data.html">Loading experimental data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="simple_fitting.html">Simple fitting with a slab model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="magnetism.html">Magnetic layers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="polarized_data.html">Polarised data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="bayesian.html">Bayesian analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="summary.html">Summary</a></li>
-<li class="toctree-l1"><a class="reference internal" href="datasets.html">Demo datasets</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Demo datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="settings.html">Settings</a></li>
 </ul>
 
@@ -227,7 +227,7 @@
       
       
       
-      <li><a href="../_sources/tutorials/load_data.md" target="_blank"
+      <li><a href="../_sources/tutorials/datasets.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -298,9 +298,7 @@ document.write(`
   </button>
 `);
 </script>
-<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -311,21 +309,11 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Loading experimental data</h1>
+    <h1>Demo datasets</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -335,33 +323,54 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="loading-experimental-data">
-<h1>Loading experimental data<a class="headerlink" href="#loading-experimental-data" title="Link to this heading">#</a></h1>
-<section id="load-data">
-<h2>Load data<a class="headerlink" href="#load-data" title="Link to this heading">#</a></h2>
-<p>Experimental data must be <strong>.dat</strong>, <strong>.txt</strong>, or <strong>.ort</strong> to be loaded into the EasyReflectometryApp.<br />
-Data is loaded in the <code class="docutils literal notranslate"><span class="pre">Experimental</span></code> page, by pressing the <code class="docutils literal notranslate"><span class="pre">Import</span> <span class="pre">experimental</span> <span class="pre">data</span></code>.</p>
-<p><img alt="Loading data" src="../_images/exp_load.png" /></p>
+  <section id="demo-datasets">
+<h1>Demo datasets<a class="headerlink" href="#demo-datasets" title="Link to this heading">#</a></h1>
+<p>The repository ships four simulated neutron reflectometry datasets for trying out the
+constraint features described in <a class="reference internal" href="model_def.html"><span class="std std-doc">material and model setup</span></a>. They live in
+<a class="reference external" href="https://github.com/easyScience/EasyReflectometryApp/tree/master/examples/datasets"><code class="docutils literal notranslate"><span class="pre">examples/datasets</span></code></a>,
+together with a
+<a class="reference external" href="https://github.com/easyScience/EasyReflectometryApp/blob/master/examples/datasets/README.md">full write-up</a>
+of each demo and the script that regenerates them.</p>
+<p>All four are ORSO <code class="docutils literal notranslate"><span class="pre">.ort</span></code> files simulated from a <strong>known structure</strong> with 4 % noise and 5 %
+<code class="docutils literal notranslate"><span class="pre">dQ/Q</span></code> resolution, so every demo has a right answer to compare the fit against. The ground
+truth is recorded in each file’s header, and each header also carries the sample structure
+in the ORSO model language, so the files can be opened in two ways:</p>
 <ul class="simple">
-<li><p><strong>A</strong>: Open your file manager to load data in the mentioned format.</p></li>
+<li><p><strong>Model</strong> › <code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">a</span> <span class="pre">sample</span></code> › <strong>Load sample from file</strong> builds the layer stack for you,
+with the true thicknesses, roughnesses and SLDs as starting values. Change those starting
+values before fitting, so there is something to find.</p></li>
+<li><p><strong>Experiment</strong> › <strong>Load experiment(s) from file(s)</strong> loads the reflectivity curve, which
+also works with a hand-built sample.</p></li>
 </ul>
-</section>
-<section id="instrumental-parameters">
-<h2>Instrumental parameters<a class="headerlink" href="#instrumental-parameters" title="Link to this heading">#</a></h2>
-<p>When data is loaded, it is possible to change instrumental parameters that affect the data.</p>
-<p><img alt="Setting experimental parameters" src="../_images/exp_data.png" /></p>
-<ul class="simple">
-<li><p><strong>A</strong>: Scale the data by the given value.</p></li>
-<li><p><strong>B</strong>: Set the level where data merges into the experimental background.</p></li>
-<li><p><strong>C</strong>: Instrumental resolution that percentage varies as a function of Q.</p></li>
-</ul>
-</section>
-<section id="polarised-data">
-<h2>Polarised data<a class="headerlink" href="#polarised-data" title="Link to this heading">#</a></h2>
-<p>A measurement that recorded several spin channels is loaded with the second button,
-<code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">polarized</span> <span class="pre">experiment</span> <span class="pre">(file</span> <span class="pre">per</span> <span class="pre">channel)</span></code>, which takes one file per channel and asks
-how to assign them. See <a class="reference internal" href="polarized_data.html"><span class="std std-doc">polarised data</span></a>.</p>
-</section>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Dataset</p></th>
+<th class="head"><p>Demonstrates</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">two_layer_film.ort</span></code></p></td>
+<td><p>A two-layer film whose total thickness is known (exactly 90 Å) - the thickness budget and the derived total film thickness.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">swapped_layers.ort</span></code></p></td>
+<td><p>A layer-ordering inequality: started from the swapped guess, the fit only recovers the truth with a <code class="docutils literal notranslate"><span class="pre">≤</span></code> constraint between the two thicknesses.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ni_ti_multilayer.ort</span></code></p></td>
+<td><p>A <code class="docutils literal notranslate"><span class="pre">[Ti</span> <span class="pre">/</span> <span class="pre">Ni]</span> <span class="pre">×</span> <span class="pre">8</span></code> repeating multilayer with a Bragg peak that pins the period - the <strong>Constant period Λ</strong> and <strong>Conformal roughness</strong> recipes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dppc_monolayer.ort</span></code></p></td>
+<td><p>A DPPC monolayer at the air/D2O interface - the surfactant recipes (equal head/tail area per molecule, solvent roughness).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For <code class="docutils literal notranslate"><span class="pre">ni_ti_multilayer.ort</span></code> the loaded stack arrives flattened (8 × [Ti | Ni] becomes 16
+layers in one assembly); rebuild it as a <code class="docutils literal notranslate"><span class="pre">Repeating</span> <span class="pre">Multi-layer</span></code> by hand for the
+constant-period demo. For <code class="docutils literal notranslate"><span class="pre">dppc_monolayer.ort</span></code> the loaded stack is the slab equivalent of
+the surfactant; replace it with a <code class="docutils literal notranslate"><span class="pre">Surfactant</span> <span class="pre">layer</span></code> assembly for the surfactant recipes.</p>
+</div>
 </section>
 
 
@@ -376,20 +385,20 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="model_def.html"
+       href="summary.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Material and model setup</p>
+        <p class="prev-next-title">Summary</p>
       </div>
     </a>
     <a class="right-next"
-       href="simple_fitting.html"
+       href="settings.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Simple fitting with a slab model</p>
+        <p class="prev-next-title">Settings</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -399,23 +408,6 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
             </div>
             
             
-              
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item">
-  <div class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav class="bd-toc-nav page-toc">
-    <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

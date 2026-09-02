@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Loading experimental data &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Magnetic layers &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
   
   
   
@@ -44,13 +44,13 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/load_data';</script>
-    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/load_data.html" />
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/magnetism';</script>
+    <link rel="canonical" href="https://docs.easyreflectometry.org/tutorials/magnetism.html" />
     <link rel="icon" href="../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Simple fitting with a slab model" href="simple_fitting.html" />
-    <link rel="prev" title="Material and model setup" href="model_def.html" />
+    <link rel="next" title="Polarised data" href="polarized_data.html" />
+    <link rel="prev" title="Simple fitting with a slab model" href="simple_fitting.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -165,9 +165,9 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="model_def.html">Material and model setup</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Loading experimental data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="load_data.html">Loading experimental data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="simple_fitting.html">Simple fitting with a slab model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="magnetism.html">Magnetic layers</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Magnetic layers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="polarized_data.html">Polarised data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="bayesian.html">Bayesian analysis</a></li>
 <li class="toctree-l1"><a class="reference internal" href="summary.html">Summary</a></li>
@@ -227,7 +227,7 @@
       
       
       
-      <li><a href="../_sources/tutorials/load_data.md" target="_blank"
+      <li><a href="../_sources/tutorials/magnetism.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -311,7 +311,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Loading experimental data</h1>
+    <h1>Magnetic layers</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -321,9 +321,12 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-magnetism-group">The Magnetism group</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#switching-the-calculation-engine">Switching the calculation engine</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fitting-m-and-m">Fitting ρM and θM</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetic-depth-profiles">Magnetic depth profiles</a></li>
 </ul>
             </nav>
         </div>
@@ -335,32 +338,104 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="loading-experimental-data">
-<h1>Loading experimental data<a class="headerlink" href="#loading-experimental-data" title="Link to this heading">#</a></h1>
-<section id="load-data">
-<h2>Load data<a class="headerlink" href="#load-data" title="Link to this heading">#</a></h2>
-<p>Experimental data must be <strong>.dat</strong>, <strong>.txt</strong>, or <strong>.ort</strong> to be loaded into the EasyReflectometryApp.<br />
-Data is loaded in the <code class="docutils literal notranslate"><span class="pre">Experimental</span></code> page, by pressing the <code class="docutils literal notranslate"><span class="pre">Import</span> <span class="pre">experimental</span> <span class="pre">data</span></code>.</p>
-<p><img alt="Loading data" src="../_images/exp_load.png" /></p>
-<ul class="simple">
-<li><p><strong>A</strong>: Open your file manager to load data in the mentioned format.</p></li>
-</ul>
+  <section id="magnetic-layers">
+<h1>Magnetic layers<a class="headerlink" href="#magnetic-layers" title="Link to this heading">#</a></h1>
+<p>A layer can be given a magnetisation, so that the two neutron spin states see different
+scattering length densities. This page covers the <strong>Model</strong> page controls; loading and
+fitting measured spin channels is described in
+<a class="reference internal" href="polarized_data.html"><span class="std std-doc">polarised data</span></a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Magnetic layers can only be calculated by <code class="docutils literal notranslate"><span class="pre">refl1d</span></code>. <code class="docutils literal notranslate"><span class="pre">refnx</span></code> has no magnetism, so the app
+asks to switch the project’s calculation engine the first time a layer is made magnetic.</p>
+</div>
+<section id="the-magnetism-group">
+<h2>The Magnetism group<a class="headerlink" href="#the-magnetism-group" title="Link to this heading">#</a></h2>
+<p>The <strong>Magnetism</strong> group is in the basic controls of the <strong>Model</strong> page, below the layer
+editor. It is titled after the assembly currently selected in the <code class="docutils literal notranslate"><span class="pre">Layer</span> <span class="pre">editor</span></code>, for
+example <code class="docutils literal notranslate"><span class="pre">Magnetism:</span> <span class="pre">Multi-layer</span></code>, and shows one row per layer of that assembly.</p>
+<!-- TODO: screenshot of the Magnetism group -> _images/sample_magnetism.png -->
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Column</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>No.</strong></p></td>
+<td><p>Position of the layer in the assembly.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Layer</strong></p></td>
+<td><p>Layer name, as in the <code class="docutils literal notranslate"><span class="pre">Layer</span> <span class="pre">editor</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>ρM/10⁻⁶Å⁻²</strong></p></td>
+<td><p>Magnetic scattering length density of the layer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>θM/°</strong></p></td>
+<td><p>In-plane angle of the magnetic moment.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Magn.</strong></p></td>
+<td><p>Makes the layer magnetic. Unticking it removes the magnetisation.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ρM</span></code> and <code class="docutils literal notranslate"><span class="pre">θM</span></code> are only editable once <strong>Magn.</strong> is ticked.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">θM</span> <span class="pre">=</span> <span class="pre">270°</span></code> aligns the moment with the guide field, which produces no spin-flip
+scattering. This is the value to start from for a simple saturated film.</p>
+</div>
+<section id="switching-the-calculation-engine">
+<h3>Switching the calculation engine<a class="headerlink" href="#switching-the-calculation-engine" title="Link to this heading">#</a></h3>
+<p>Ticking <strong>Magn.</strong> while the project uses an engine that cannot model magnetism opens the
+<strong>Switch calculation engine?</strong> dialog. Accepting it makes the layer magnetic <em>and</em> switches
+the project to <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> in one step - the page does not change under you.</p>
+<p>Switching recalculates the reflectivity and makes any existing fit result stale; the sample
+and the loaded data are untouched. The engine can be switched back once no layer is
+magnetic any more.</p>
+<p>The engine itself lives in the <strong>Calculation engine</strong> group of the advanced controls on the
+<strong>Model</strong> page (and in <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> › <code class="docutils literal notranslate"><span class="pre">Advanced</span></code>, see
+<a class="reference internal" href="simple_fitting.html"><span class="std std-doc">simple fitting</span></a>). Selecting an engine that cannot model magnetism
+while the sample still has magnetic layers is refused, with a message on both pages.</p>
 </section>
-<section id="instrumental-parameters">
-<h2>Instrumental parameters<a class="headerlink" href="#instrumental-parameters" title="Link to this heading">#</a></h2>
-<p>When data is loaded, it is possible to change instrumental parameters that affect the data.</p>
-<p><img alt="Setting experimental parameters" src="../_images/exp_data.png" /></p>
-<ul class="simple">
-<li><p><strong>A</strong>: Scale the data by the given value.</p></li>
-<li><p><strong>B</strong>: Set the level where data merges into the experimental background.</p></li>
-<li><p><strong>C</strong>: Instrumental resolution that percentage varies as a function of Q.</p></li>
-</ul>
 </section>
-<section id="polarised-data">
-<h2>Polarised data<a class="headerlink" href="#polarised-data" title="Link to this heading">#</a></h2>
-<p>A measurement that recorded several spin channels is loaded with the second button,
-<code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">polarized</span> <span class="pre">experiment</span> <span class="pre">(file</span> <span class="pre">per</span> <span class="pre">channel)</span></code>, which takes one file per channel and asks
-how to assign them. See <a class="reference internal" href="polarized_data.html"><span class="std std-doc">polarised data</span></a>.</p>
+<section id="fitting-m-and-m">
+<h2>Fitting ρM and θM<a class="headerlink" href="#fitting-m-and-m" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ρM</span></code> and <code class="docutils literal notranslate"><span class="pre">θM</span></code> appear in the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> parameter table like any other layer parameter,
+named after their assembly and model - for example <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">Fe</span> <span class="pre">rho_m</span></code>. They come with default
+limits, a fit checkbox and can be used in constraints. The parameter name filter accepts
+<code class="docutils literal notranslate"><span class="pre">magnetic</span></code> as a keyword to show only the magnetic parameters.</p>
+</section>
+<section id="magnetic-depth-profiles">
+<h2>Magnetic depth profiles<a class="headerlink" href="#magnetic-depth-profiles" title="Link to this heading">#</a></h2>
+<p>Once at least one layer is magnetic, the <strong>Magnetic profile</strong> group appears in the basic
+controls, below <strong>Magnetism</strong>. The same switches are repeated in <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> ›
+<code class="docutils literal notranslate"><span class="pre">Advanced</span></code> › <code class="docutils literal notranslate"><span class="pre">Plot</span> <span class="pre">control</span></code>, and the two share one selection.</p>
+<!-- TODO: screenshot of the Magnetic profile group -> _images/sample_magnetic_profile.png -->
+<ul class="simple">
+<li><p><strong>Show ρ↑ and ρ↓</strong> - adds the spin-up and spin-down potentials
+<code class="docutils literal notranslate"><span class="pre">ρ</span> <span class="pre">±</span> <span class="pre">ρM·cos(θM</span> <span class="pre">−</span> <span class="pre">A)</span></code> for each magnetic model to the SLD chart, dashed in the model’s
+colour. For non-magnetic layers the two curves collapse onto the nuclear SLD.</p></li>
+<li><p><strong>Show ρM</strong> - the magnetic SLD profile on its own.</p></li>
+<li><p><strong>Show θM</strong> - the in-plane moment angle, on its own right-hand axis. <code class="docutils literal notranslate"><span class="pre">θM</span></code> is only defined
+where there is a moment, so the curve is drawn in pieces rather than joined across the
+gaps.</p></li>
+<li><p><strong>Show R↑↑ and R↓↓</strong> - splits each magnetic model’s reflectivity into its two
+non-spin-flip cross-sections on the <strong>Model</strong> page reflectivity chart, dashed in the
+model’s colour with their own legend rows. Off by default.</p></li>
+</ul>
+<p>The y-range of the SLD chart covers every visible curve and grows when a curve is switched
+on, so <code class="docutils literal notranslate"><span class="pre">ρ</span> <span class="pre">+</span> <span class="pre">ρM</span></code> is never clipped. If no model is magnetic, the chart, its legend and the
+sidebar are unchanged.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For a magnetic sample the plain model curve is <strong>not</strong> an unpolarised average - the
+calculator returns the ↑↑ cross-section - so <code class="docutils literal notranslate"><span class="pre">R↑↑</span></code> is drawn on top of it. The sidebar says
+so as well.</p>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> reflectivity chart is unaffected by this switch: it already draws one
+calculated curve per measured spin channel when the experiment is polarised.</p>
 </section>
 </section>
 
@@ -376,20 +451,20 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="model_def.html"
+       href="simple_fitting.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Material and model setup</p>
+        <p class="prev-next-title">Simple fitting with a slab model</p>
       </div>
     </a>
     <a class="right-next"
-       href="simple_fitting.html"
+       href="polarized_data.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Simple fitting with a slab model</p>
+        <p class="prev-next-title">Polarised data</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -409,9 +484,12 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-magnetism-group">The Magnetism group</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#switching-the-calculation-engine">Switching the calculation engine</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fitting-m-and-m">Fitting ρM and θM</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetic-depth-profiles">Magnetic depth profiles</a></li>
 </ul>
   </nav></div>
 

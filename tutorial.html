@@ -167,6 +167,11 @@
 <li class="toctree-l1"><a class="reference internal" href="tutorials/model_def.html">Material and model setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/load_data.html">Loading experimental data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/simple_fitting.html">Simple fitting with a slab model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/magnetism.html">Magnetic layers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/polarized_data.html">Polarised data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/bayesian.html">Bayesian analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/summary.html">Summary</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/datasets.html">Demo datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/settings.html">Settings</a></li>
 </ul>
 
@@ -319,6 +324,7 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#home-page">Home page</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intialise-project">Intialise project</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#save-and-settings">Save and settings</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-structure-view">Sample structure view</a></li>
 </ul>
             </nav>
         </div>
@@ -374,6 +380,17 @@ This project is used going forward to explain the app.</p>
 <li><p><strong>C</strong>: Setting, is further explained in settings.</p></li>
 </ul>
 </section>
+<section id="sample-structure-view">
+<h2>Sample structure view<a class="headerlink" href="#sample-structure-view" title="Link to this heading">#</a></h2>
+<p>The <strong>Model</strong> page has a <strong>Structure</strong> tab next to <strong>Reflectivity</strong> showing a schematic of
+the current model’s layer stack: one colored box per layer, ambient medium on top, substrate
+at the bottom. Boxes share a color per material (see the legend), box heights follow layer
+thickness, and repeated multilayers with many repetitions are drawn once with a “× N” badge.</p>
+<p>Hover a box for its material, SLD, thickness and roughness; click it to select that layer in
+the sidebar editor. The view updates immediately when the model changes, including after a fit.</p>
+<p>Note the view is a schematic, not a to-scale cross-section: heights are clamped so very thin
+layers stay visible and very thick ones do not crowd out the rest.</p>
+</section>
 </section>
 
 
@@ -424,6 +441,7 @@ This project is used going forward to explain the app.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#home-page">Home page</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intialise-project">Intialise project</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#save-and-settings">Save and settings</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-structure-view">Sample structure view</a></li>
 </ul>
   </nav></div>
 
