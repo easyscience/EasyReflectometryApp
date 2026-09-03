@@ -224,6 +224,11 @@ EaElements.GroupBox {
                 checked: densityMaterialSection.isDensity ?
                              densityMaterialSection.densityMaterial.sld_coupled : true
                 ToolTip.text: qsTr("When re-enabled, SLD/iSLD are recalculated from the formula and density; manually entered or fitted SLD values are discarded.")
+                // toggled() also fires on the programmatic `checked` rebind below
+                // (materialsTableChanged from our own backend call, or a row
+                // selection change) — this only stays a no-op loop because
+                // set_sld_coupled_at_index() in the backend refuses to re-emit
+                // when the state already matches. Don't drop that guard.
                 onToggled: {
                     Globals.BackendWrapper.sampleSetMaterialSldCoupledAtIndex(
                                 Globals.BackendWrapper.sampleCurrentMaterialIndex, checked)

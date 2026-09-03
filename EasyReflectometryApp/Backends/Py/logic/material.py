@@ -157,10 +157,14 @@ class Material:
             value = float(new_value)
         except (TypeError, ValueError):
             return False
-        if material.density.value != value:
+        if material.density.value == value:
+            return False
+        try:
             material.density.value = value
-            return True
-        return False
+        except Exception:
+            logger.warning('Rejected out-of-bounds density %r', value)
+            return False
+        return True
 
 
 def _from_materials_collection_to_list_of_dicts(materials_collection: MaterialCollection) -> list[dict[str, str]]:
