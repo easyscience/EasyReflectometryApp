@@ -78,7 +78,9 @@ EaElements.GroupBox {
                     // A coupled density material derives SLD from formula & density.
                     readonly property bool sldLocked: Globals.BackendWrapper.sampleMaterials[index].kind === 'density' &&
                                                       Globals.BackendWrapper.sampleMaterials[index].sld_coupled
-                    enabled: !sldLocked
+                    // readOnly rather than enabled:false: a disabled item receives no
+                    // hover events, so its ToolTip could never explain the lock.
+                    readOnly: sldLocked
                     ToolTip.text: sldLocked ?
                                       qsTr("Derived from formula and density — uncheck 'SLD computed from formula and density' below to edit") :
                                       ''
@@ -89,7 +91,9 @@ EaElements.GroupBox {
                 EaComponents.TableViewTextInput {
                     readonly property bool sldLocked: Globals.BackendWrapper.sampleMaterials[index].kind === 'density' &&
                                                       Globals.BackendWrapper.sampleMaterials[index].sld_coupled
-                    enabled: !sldLocked
+                    // readOnly rather than enabled:false: a disabled item receives no
+                    // hover events, so its ToolTip could never explain the lock.
+                    readOnly: sldLocked
                     ToolTip.text: sldLocked ?
                                       qsTr("Derived from formula and density — uncheck 'SLD computed from formula and density' below to edit") :
                                       ''
@@ -160,6 +164,12 @@ EaElements.GroupBox {
                 Globals.BackendWrapper.sampleMaterials[Globals.BackendWrapper.sampleCurrentMaterialIndex]
             readonly property bool isDensity:
                 densityMaterial !== undefined && densityMaterial.kind === 'density'
+            // Formula and density drive the SLD only while coupled. Once the user
+            // takes the SLD over, they are inert inputs (the Analysis table marks
+            // the matching parameters 'inactive' too), so show them read-only
+            // instead of inviting edits that change nothing.
+            readonly property bool sldCoupled:
+                isDensity ? densityMaterial.sld_coupled : true
 
             visible: isDensity
             spacing: EaStyle.Sizes.fontPixelSize * 0.5
@@ -179,6 +189,10 @@ EaElements.GroupBox {
                     topInset: formulaLabel.height
                     topPadding: topInset + padding
                     horizontalAlignment: TextInput.AlignLeft
+                    readOnly: !densityMaterialSection.sldCoupled
+                    ToolTip.text: densityMaterialSection.sldCoupled ?
+                                      '' :
+                                      qsTr("Unused while SLD is set directly — check 'SLD computed from formula and density' below to edit")
                     text: densityMaterialSection.isDensity ? densityMaterialSection.densityMaterial.formula : ''
                     onEditingFinished: {
                         Globals.BackendWrapper.sampleSetMaterialFormulaAtIndex(
@@ -203,6 +217,10 @@ EaElements.GroupBox {
                     topInset: densityLabel.height
                     topPadding: topInset + padding
                     horizontalAlignment: TextInput.AlignLeft
+                    readOnly: !densityMaterialSection.sldCoupled
+                    ToolTip.text: densityMaterialSection.sldCoupled ?
+                                      '' :
+                                      qsTr("Unused while SLD is set directly — check 'SLD computed from formula and density' below to edit")
                     text: densityMaterialSection.isDensity ? densityMaterialSection.densityMaterial.density : ''
                     onEditingFinished: {
                         Globals.BackendWrapper.sampleSetMaterialDensityAtIndex(
