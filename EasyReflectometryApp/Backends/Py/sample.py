@@ -198,6 +198,34 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
+    def _emitDensityMaterialChanged(self) -> None:
+        """Signal fan-out for density-material edits (formula, density, the
+        sld_coupled toggle). Beyond the usual material-edit trio, these change
+        which parameters are fittable/inactive (rebuilds the Analysis table via
+        the modelsTableChanged wiring in py_backend) and can invalidate user
+        constraints referencing the material's sld/isld.
+        """
+        self.materialsTableChanged.emit()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
+        self.modelsTableChanged.emit()
+        self._scheduleConstraintsChanged()
+
+    @Slot(int, bool)
+    def setMaterialSldCoupledAtIndex(self, index: int, coupled: bool) -> None:
+        if self._material_logic.set_sld_coupled_at_index(index, coupled):
+            self._emitDensityMaterialChanged()
+
+    @Slot(int, str)
+    def setMaterialFormulaAtIndex(self, index: int, formula: str) -> None:
+        if self._material_logic.set_formula_at_index(index, formula):
+            self._emitDensityMaterialChanged()
+
+    @Slot(int, str)
+    def setMaterialDensityAtIndex(self, index: int, new_value: str) -> None:
+        if self._material_logic.set_density_at_index(index, new_value):
+            self._emitDensityMaterialChanged()
+
     # Actions
     @Slot(str)
     def removeMaterial(self, value: str) -> None:

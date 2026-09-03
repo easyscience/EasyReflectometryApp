@@ -532,7 +532,11 @@ EaElements.GroupBox {
     }
 
     function formatError(value) {
-        if (value === undefined || value === 0 || isNaN(value)) return ''
+        // A Python None (the minimizer completed but produced no error bars, e.g.
+        // lmfit's gradient-free powell/cobyla) crosses the PySide6 QVariant
+        // boundary as undefined, not null — check both.
+        if (value === undefined || value === null) return 'n/a'
+        if (value === 0 || isNaN(value)) return ''
         var s = Number(value.toPrecision(2)).toString()
         if (s.length <= 6) return s
         return value.toExponential(1)

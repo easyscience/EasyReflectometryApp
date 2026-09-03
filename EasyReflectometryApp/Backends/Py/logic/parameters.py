@@ -374,6 +374,12 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             alias = _make_alias(prefixed_display_name or parameter.name)
             param_value = float(parameter.value)
             is_derived = _is_derived_parameter(parameter, model)
+            # A density material's input knobs (density, mw, scattering
+            # lengths) stop affecting the reflectivity once the material's
+            # sld/isld are decoupled — shown greyed with a note, never hidden
+            # (enabled must stay True: _parameter_matches_filters drops
+            # enabled=False rows from the list entirely).
+            is_inactive = _is_inactive_density_knob(parameter, path)
             parameter_list.append(
                 {
                     'name': prefixed_display_name,
@@ -382,22 +388,27 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'alias': alias,
                     'unique_name': parameter.unique_name,
                     'value': param_value,
-                    'error': float(parameter.error),
+                    # None means the minimizer produced no error bars (e.g. lmfit's
+                    # gradient-free methods); the GUI renders it as 'n/a', distinct
+                    # from a numeric zero which is shown as an empty cell.
+                    'error': float(parameter.error) if parameter.error is not None else None,
                     'max': float(parameter.max),
                     'min': float(parameter.min),
                     'units': parameter.unit,
-                    'fit': False if is_derived else parameter.free,
+                    'fit': False if (is_derived or is_inactive) else parameter.free,
                     'independent': parameter.independent,
                     'dependency': (
-                        _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
+                        _INACTIVE_KNOB_NOTE
+                        if is_inactive
+                        else _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
                         if is_derived
                         else _get_dependency_expression(parameter, paths)
                     ),
                     # Derived "calculation" parameters (e.g. the model's total film
                     # thickness) are computed from the layers: shown read-only, never
                     # fitted, but usable as aliases in constraint expressions.
-                    'kind': 'derived' if is_derived else 'parameter',
-                    'readOnly': is_derived,
+                    'kind': 'derived' if is_derived else 'inactive' if is_inactive else 'parameter',
+                    'readOnly': is_derived or is_inactive,
                     'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
                     'object': parameter,  # Direct reference to the Parameter object
                 }
@@ -409,6 +420,24 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 _DERIVED_DESCRIPTIONS = {
     'total_thickness': 'Σ film layer thicknesses',
 }
+
+# The input knobs of a density material (MaterialDensity); inactive when the
+# material's sld/isld are decoupled from them.
+_DENSITY_KNOB_NAMES = {'density', 'molecular_weight', 'scattering_length_real', 'scattering_length_imag'}
+_INACTIVE_KNOB_NOTE = 'unused (SLD is fitted directly)'
+
+
+def _is_inactive_density_knob(parameter: Parameter, path) -> bool:
+    """True for a density-material knob whose material is decoupled.
+
+    Duck-typed on the owner's ``sld_coupled`` (only ``MaterialDensity``
+    carries it); the getattr default True keeps every other owner active.
+    """
+    if path is None or len(path) < 2:
+        return False
+    if parameter.name not in _DENSITY_KNOB_NAMES:
+        return False
+    return getattr(path[-2], 'sld_coupled', True) is False
 
 
 def _is_derived_parameter(parameter: Parameter, model) -> bool:

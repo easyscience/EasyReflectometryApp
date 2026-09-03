@@ -1,7 +1,22 @@
+import logging
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import MaterialCollection
+
+logger = logging.getLogger(__name__)
+
+
+def _is_density_material(material) -> bool:
+    """Density materials (``MaterialDensity``) expose the ``sld_coupled``
+    toggle; duck-typed so test fakes and future material types work."""
+    return hasattr(material, 'sld_coupled')
+
+
+def _sld_is_writable(material) -> bool:
+    """A coupled density material derives sld/isld from density — writing to
+    the dependent parameter would raise, so the setters refuse instead."""
+    return getattr(material.sld, 'independent', True)
 
 
 class Material:
@@ -66,30 +81,84 @@ class Material:
         return False
 
     def set_sld_at_current_index(self, new_value: float) -> bool:
-        if self._materials[self.index].sld.value != new_value:
-            self._materials[self.index].sld.value = new_value
+        material = self._materials[self.index]
+        if not _sld_is_writable(material):
+            return False
+        if material.sld.value != new_value:
+            material.sld.value = new_value
             return True
         return False
 
     def set_sld_at_index(self, index: int, new_value: float) -> bool:
         if not (0 <= index < len(self._materials)):
             return False
-        if self._materials[index].sld.value != new_value:
-            self._materials[index].sld.value = new_value
+        material = self._materials[index]
+        if not _sld_is_writable(material):
+            return False
+        if material.sld.value != new_value:
+            material.sld.value = new_value
             return True
         return False
 
     def set_isld_at_current_index(self, new_value: float) -> bool:
-        if self._materials[self.index].isld.value != new_value:
-            self._materials[self.index].isld.value = new_value
+        material = self._materials[self.index]
+        if not _sld_is_writable(material):
+            return False
+        if material.isld.value != new_value:
+            material.isld.value = new_value
             return True
         return False
 
     def set_isld_at_index(self, index: int, new_value: float) -> bool:
         if not (0 <= index < len(self._materials)):
             return False
-        if self._materials[index].isld.value != new_value:
-            self._materials[index].isld.value = new_value
+        material = self._materials[index]
+        if not _sld_is_writable(material):
+            return False
+        if material.isld.value != new_value:
+            material.isld.value = new_value
+            return True
+        return False
+
+    def set_sld_coupled_at_index(self, index: int, coupled: bool) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        material = self._materials[index]
+        if not _is_density_material(material):
+            return False
+        if bool(material.sld_coupled) == bool(coupled):
+            return False
+        material.sld_coupled = bool(coupled)
+        return True
+
+    def set_formula_at_index(self, index: int, formula: str) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        material = self._materials[index]
+        if not _is_density_material(material):
+            return False
+        formula = formula.strip()
+        if not formula or material.chemical_structure == formula:
+            return False
+        try:
+            material.chemical_structure = formula
+        except Exception:
+            logger.warning('Rejected invalid chemical formula %r', formula)
+            return False
+        return True
+
+    def set_density_at_index(self, index: int, new_value: float) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        material = self._materials[index]
+        if not _is_density_material(material):
+            return False
+        try:
+            value = float(new_value)
+        except (TypeError, ValueError):
+            return False
+        if material.density.value != value:
+            material.density.value = value
             return True
         return False
 
@@ -97,5 +166,16 @@ class Material:
 def _from_materials_collection_to_list_of_dicts(materials_collection: MaterialCollection) -> list[dict[str, str]]:
     materials_list = []
     for material in materials_collection:
-        materials_list.append({'label': material.name, 'sld': str(material.sld.value), 'isld': str(material.isld.value)})
+        is_density = _is_density_material(material)
+        materials_list.append(
+            {
+                'label': material.name,
+                'sld': str(material.sld.value),
+                'isld': str(material.isld.value),
+                'kind': 'density' if is_density else 'sld',
+                'formula': material.chemical_structure if is_density else '',
+                'density': str(material.density.value) if is_density else '',
+                'sld_coupled': bool(material.sld_coupled) if is_density else True,
+            }
+        )
     return materials_list

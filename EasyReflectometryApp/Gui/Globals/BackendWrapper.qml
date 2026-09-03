@@ -118,6 +118,9 @@ QtObject {
     function sampleSetMaterialSldAtIndex(index, value) { activeBackend.sample.setMaterialSldAtIndex(index, value) }
     function sampleSetCurrentMaterialISld(value) { activeBackend.sample.setCurrentMaterialISld(value) }
     function sampleSetMaterialISldAtIndex(index, value) { activeBackend.sample.setMaterialISldAtIndex(index, value) }
+    function sampleSetMaterialSldCoupledAtIndex(index, value) { activeBackend.sample.setMaterialSldCoupledAtIndex(index, value) }
+    function sampleSetMaterialFormulaAtIndex(index, value) { activeBackend.sample.setMaterialFormulaAtIndex(index, value) }
+    function sampleSetMaterialDensityAtIndex(index, value) { activeBackend.sample.setMaterialDensityAtIndex(index, value) }
     function sampleRemoveMaterial(value) { activeBackend.sample.removeMaterial(value) }
     function sampleAddNewMaterial() { activeBackend.sample.addNewMaterial() }
     function sampleDuplicateSelectedMaterial() { activeBackend.sample.duplicateSelectedMaterial() }
