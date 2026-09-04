@@ -36,7 +36,10 @@ def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive
     _patch_tree_types(monkeypatch)
 
     density = make_parameter(name='density', unique_name='density', value=2.33, free=True, enabled=True)
-    mw = make_parameter(name='molecular_weight', unique_name='mw', value=28.09, free=False, enabled=True)
+    # molecular_weight is intentionally absent: in the lib it is a
+    # DescriptorNumber (a formula constant), so the Parameter tree walk
+    # never yields it. The scattering length stands in as the second knob.
+    b_real = make_parameter(name='scattering_length_real', unique_name='b_real', value=4.15, free=False, enabled=True)
     thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
 
     def build_model(sld_coupled):
@@ -46,16 +49,16 @@ def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive
         model.sample = [assembly]
         # Density-material knobs live under the material node, which carries
         # the sld_coupled toggle (duck-typed stand-in for MaterialDensity).
-        material = FakeNode('SiDensity', 'm1_mat', density=density, molecular_weight=mw)
+        material = FakeNode('SiDensity', 'm1_mat', density=density, scattering_length_real=b_real)
         material.sld_coupled = sld_coupled
         model.material = material
         return model
 
     decoupled = parameters_module._from_parameters_to_list_of_dicts(
-        [density, mw, thickness], make_model_collection(build_model(sld_coupled=False))
+        [density, b_real, thickness], make_model_collection(build_model(sld_coupled=False))
     )
     rows = {entry['display_name']: entry for entry in decoupled}
-    for label in ('SiDensity density', 'SiDensity molecular_weight'):
+    for label in ('SiDensity density', 'SiDensity scattering_length_real'):
         assert rows[label]['kind'] == 'inactive'
         assert rows[label]['fit'] is False
         assert rows[label]['readOnly'] is True
@@ -66,12 +69,12 @@ def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive
     assert rows['M1 LayerA thickness']['fit'] is True
 
     coupled = parameters_module._from_parameters_to_list_of_dicts(
-        [density, mw, thickness], make_model_collection(build_model(sld_coupled=True))
+        [density, b_real, thickness], make_model_collection(build_model(sld_coupled=True))
     )
     rows = {entry['display_name']: entry for entry in coupled}
     assert rows['SiDensity density']['kind'] == 'parameter'
     assert rows['SiDensity density']['fit'] is True
-    assert rows['SiDensity molecular_weight']['kind'] == 'parameter'
+    assert rows['SiDensity scattering_length_real']['kind'] == 'parameter'
 
 
 def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_shared_params(monkeypatch):

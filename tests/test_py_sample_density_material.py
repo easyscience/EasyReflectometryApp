@@ -100,12 +100,11 @@ def test_decouple_clears_free_on_density_knobs(backend_with_density_material):
     project, backend, index = backend_with_density_material
     material = project._materials[index]
     material.density.free = True
-    material.molecular_weight.free = True
+    material.scattering_length_real.free = True
 
     backend.setMaterialSldCoupledAtIndex(index, False)
 
     assert material.density.free is False
-    assert material.molecular_weight.free is False
     assert material.scattering_length_real.free is False
     assert material.scattering_length_imag.free is False
     # None of the cleared knobs are independent+free, whatever model they
@@ -114,8 +113,21 @@ def test_decouple_clears_free_on_density_knobs(backend_with_density_material):
         parameter.independent and parameter.free
         for parameter in (
             material.density,
-            material.molecular_weight,
             material.scattering_length_real,
             material.scattering_length_imag,
         )
     )
+
+
+def test_molecular_weight_is_a_descriptor_not_a_parameter(backend_with_density_material):
+    """mw is a constant of the formula: as a DescriptorNumber it never enters
+    project.parameters, so it cannot be freed into the fit (it is fully
+    degenerate with density) and needs no app-side gating."""
+    project, backend, index = backend_with_density_material
+    material = project._materials[index]
+
+    assert not hasattr(material.molecular_weight, 'free')
+    assert material.molecular_weight not in project.parameters
+    # The formula setter still refreshes it through the descriptor.
+    backend.setMaterialFormulaAtIndex(index, 'B')
+    assert material.molecular_weight.value == pytest.approx(10.81)

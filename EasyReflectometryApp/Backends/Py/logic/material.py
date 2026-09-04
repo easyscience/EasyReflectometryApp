@@ -24,7 +24,9 @@ def _parameter_is_writable(parameter) -> bool:
 # A density material's fittable input knobs; cleared (free = False) when the
 # material's sld/isld are decoupled from them so an already-ticked knob
 # doesn't keep entering the fit after its row goes inactive in the GUI.
-_DENSITY_KNOB_NAMES = ('density', 'molecular_weight', 'scattering_length_real', 'scattering_length_imag')
+# molecular_weight is deliberately absent: it is a DescriptorNumber (a
+# formula constant, never fittable) and has no `free` flag.
+_DENSITY_KNOB_NAMES = ('density', 'scattering_length_real', 'scattering_length_imag')
 
 
 class Material:

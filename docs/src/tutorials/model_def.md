@@ -41,9 +41,13 @@ density**:
   the field snaps back).
 - **Unchecked**: `sld`/`isld` become ordinary independent parameters - editable here and
   fittable on the `Analysis` page exactly like a plain material's (they arrive fixed, so
-  tick their `Fit` box). The `density`, `molecular_weight` and scattering-length rows are
-  greyed with the note `unused (SLD is fitted directly)`, because they no longer affect
-  the reflectivity - they cannot be fitted or edited until the box is checked again.
+  tick their `Fit` box). The `density` and scattering-length rows are greyed with the
+  note `unused (SLD is fitted directly)`, because they no longer affect the
+  reflectivity - they cannot be fitted or edited until the box is checked again.
+
+The molecular weight never appears in the `Analysis` table: it is a constant of the
+chemical formula (recomputed whenever the formula is edited), not a fittable parameter -
+fitting it alongside density would be degenerate, since only their ratio enters the SLD.
 
 ```{warning}
 Re-checking the box restores the coupling by **recalculating** SLD/iSLD from the current

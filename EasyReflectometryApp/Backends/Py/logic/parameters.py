@@ -435,8 +435,10 @@ _DERIVED_DESCRIPTIONS = {
 }
 
 # The input knobs of a density material (MaterialDensity); inactive when the
-# material's sld/isld are decoupled from them.
-_DENSITY_KNOB_NAMES = {'density', 'molecular_weight', 'scattering_length_real', 'scattering_length_imag'}
+# material's sld/isld are decoupled from them. molecular_weight is not listed:
+# it is a DescriptorNumber, so the Parameter tree walk never yields it and it
+# never appears in this table at all.
+_DENSITY_KNOB_NAMES = {'density', 'scattering_length_real', 'scattering_length_imag'}
 _INACTIVE_KNOB_NOTE = 'unused (SLD is fitted directly)'
 
 

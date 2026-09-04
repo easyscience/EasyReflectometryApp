@@ -91,8 +91,9 @@
   detail panel on the Sample page: an editable chemical formula and density,
   and a **"SLD computed from formula and density"** checkbox. Checked
   (default), SLD/iSLD are read-only and derived; unchecked, they become
-  ordinary fittable parameters while density/molecular weight/scattering
-  length are greyed out as unused. A ρ badge marks density materials in the
+  ordinary fittable parameters while density and the scattering lengths are
+  greyed out as unused. The molecular weight is a formula constant and never
+  appears as a fittable parameter. A ρ badge marks density materials in the
   materials table. Re-checking the box recalculates SLD/iSLD, discarding any
   manually entered or fitted values and any constraint on them.
 - Parameter table rows where the minimizer produced no error bars (e.g. some
