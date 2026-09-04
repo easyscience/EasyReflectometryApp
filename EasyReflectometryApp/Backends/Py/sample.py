@@ -198,6 +198,58 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
+    def _emitDensityMaterialChanged(self) -> None:
+        """Signal fan-out for density-material edits (formula, density, the
+        sld_coupled toggle). Beyond the usual material-edit trio, these change
+        which parameters are fittable/inactive (rebuilds the Analysis table via
+        the modelsTableChanged wiring in py_backend) and can invalidate user
+        constraints referencing the material's sld/isld.
+        """
+        self.materialsTableChanged.emit()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
+        self.modelsTableChanged.emit()
+        self._scheduleConstraintsChanged()
+
+    @Slot(int, bool)
+    def setMaterialSldCoupledAtIndex(self, index: int, coupled: bool) -> None:
+        if coupled:
+            self._drop_stale_sld_constraint_states(index)
+        if self._material_logic.set_sld_coupled_at_index(index, coupled):
+            self._emitDensityMaterialChanged()
+
+    def _drop_stale_sld_constraint_states(self, index: int) -> None:
+        """Re-coupling calls MaterialDensity._setup_sld_constraints(), which
+        overwrites sld/isld's dependency directly (bypassing addConstraint/
+        removeConstraint) and silently discards any user constraint on those
+        parameters. Without this, `_constraint_states` keeps the stale entry
+        and the constraints table keeps showing an expression that no longer
+        reflects the actual (now density-derived) dependency.
+        """
+        materials = self._material_logic._materials
+        if not (0 <= index < len(materials)):
+            return
+        material = materials[index]
+        if getattr(material, 'sld_coupled', True):
+            return  # already coupled: no user constraint to have been overwritten
+        for parameter in (getattr(material, 'sld', None), getattr(material, 'isld', None)):
+            unique_name = getattr(parameter, 'unique_name', None)
+            if unique_name and self._constraint_states.pop(unique_name, None) is not None:
+                logger.warning(
+                    'Dropped stale user constraint on %s: re-coupling SLD to formula/density overwrites it.',
+                    unique_name,
+                )
+
+    @Slot(int, str)
+    def setMaterialFormulaAtIndex(self, index: int, formula: str) -> None:
+        if self._material_logic.set_formula_at_index(index, formula):
+            self._emitDensityMaterialChanged()
+
+    @Slot(int, str)
+    def setMaterialDensityAtIndex(self, index: int, new_value: str) -> None:
+        if self._material_logic.set_density_at_index(index, new_value):
+            self._emitDensityMaterialChanged()
+
     # Actions
     @Slot(str)
     def removeMaterial(self, value: str) -> None:

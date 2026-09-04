@@ -32,6 +32,51 @@ def _patch_tree_types(monkeypatch):
     monkeypatch.setattr(parameters_module, 'ModelBase', FakeNode)
 
 
+def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive(monkeypatch):
+    _patch_tree_types(monkeypatch)
+
+    density = make_parameter(name='density', unique_name='density', value=2.33, free=True, enabled=True)
+    # molecular_weight is intentionally absent: in the lib it is a
+    # DescriptorNumber (a formula constant), so the Parameter tree walk
+    # never yields it. The scattering length stands in as the second knob.
+    b_real = make_parameter(name='scattering_length_real', unique_name='b_real', value=4.15, free=False, enabled=True)
+    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+
+    def build_model(sld_coupled):
+        model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
+        layer = FakeNode('Layer', 'm1_layer', thickness=thickness)
+        assembly = FakeNode('LayerA', 'm1_asm', layers=[layer])
+        model.sample = [assembly]
+        # Density-material knobs live under the material node, which carries
+        # the sld_coupled toggle (duck-typed stand-in for MaterialDensity).
+        material = FakeNode('SiDensity', 'm1_mat', density=density, scattering_length_real=b_real)
+        material.sld_coupled = sld_coupled
+        model.material = material
+        return model
+
+    decoupled = parameters_module._from_parameters_to_list_of_dicts(
+        [density, b_real, thickness], make_model_collection(build_model(sld_coupled=False))
+    )
+    rows = {entry['display_name']: entry for entry in decoupled}
+    for label in ('SiDensity density', 'SiDensity scattering_length_real'):
+        assert rows[label]['kind'] == 'inactive'
+        assert rows[label]['fit'] is False
+        assert rows[label]['readOnly'] is True
+        assert rows[label]['enabled'] is True  # greyed, never filtered out
+        assert rows[label]['dependency'] == 'unused (SLD is fitted directly)'
+    # Non-knob parameters are untouched.
+    assert rows['M1 LayerA thickness']['kind'] == 'parameter'
+    assert rows['M1 LayerA thickness']['fit'] is True
+
+    coupled = parameters_module._from_parameters_to_list_of_dicts(
+        [density, b_real, thickness], make_model_collection(build_model(sld_coupled=True))
+    )
+    rows = {entry['display_name']: entry for entry in coupled}
+    assert rows['SiDensity density']['kind'] == 'parameter'
+    assert rows['SiDensity density']['fit'] is True
+    assert rows['SiDensity scattering_length_real']['kind'] == 'parameter'
+
+
 def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_shared_params(monkeypatch):
     _patch_tree_types(monkeypatch)
 
@@ -194,6 +239,29 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
     assert free_parameter.min == 0.2
     assert free_parameter.max == 3.2
     assert free_parameter.free is False
+
+
+def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
+    """An inactive density knob must not be tickable into the fit through
+    any caller, QML checkbox or not — same class of bug the Select-All skip
+    fixed for the fittables table."""
+    project = make_project()
+    logic = parameters_module.Parameters(project)
+    inactive_parameter = make_parameter(name='Density', unique_name='density', value=2.33, free=False)
+    mocked_parameters = [
+        {
+            'display_name': 'SiDensity density',
+            'unique_name': 'density',
+            'kind': 'inactive',
+            'enabled': True,
+            'object': inactive_parameter,
+        },
+    ]
+    monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
+
+    logic.set_current_index(0)
+    assert logic.set_current_parameter_fit(True) is False
+    assert inactive_parameter.free is False
 
 
 def test_add_constraint_supports_arithmetic_and_constant_dependencies():

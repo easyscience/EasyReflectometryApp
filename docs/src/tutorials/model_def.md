@@ -20,6 +20,47 @@ The materials are added by the real and imaginary components of the scattering l
 - **B**: Duplicating the last clicked material.
 - **C**: Changes the ordering of materials.
 
+### Density materials
+A material can also be defined by its **chemical formula and mass density** instead of a
+numeric SLD. Such *density materials* enter a project when a sample is loaded from an ORSO
+model that defines a material this way (`Load a sample`), and they are marked with a **ρ**
+badge next to their row number in the Material editor table.
+
+Selecting a ρ row reveals a detail panel below the table with the material's chemical
+formula, its mass density (in g/cm³) and the checkbox **SLD computed from formula and
+density**:
+
+<!-- TODO: screenshot of the density material panel -> _images/sample_material_density.png -->
+
+- **Checked** (the default): the SLD is physics, not an input - it is computed as
+  `SLD = Nᴀ · ρ · b / M` from the density ρ, the formula's coherent neutron scattering
+  length *b* and molecular weight *M*. The SLD/iSLD cells in the table are therefore
+  read-only, and on the `Analysis` page the material's `sld`/`isld` parameters are shown
+  greyed as dependent while **`density` is the parameter to fit**. Editing the formula
+  updates the scattering length and molecular weight (an invalid formula is rejected and
+  the field snaps back).
+- **Unchecked**: `sld`/`isld` become ordinary independent parameters - editable here and
+  fittable on the `Analysis` page exactly like a plain material's (they arrive fixed, so
+  tick their `Fit` box). The `density` and scattering-length rows are greyed with the
+  note `unused (SLD is fitted directly)`, because they no longer affect the
+  reflectivity - they cannot be fitted or edited until the box is checked again.
+
+The molecular weight never appears in the `Analysis` table: it is a constant of the
+chemical formula (recomputed whenever the formula is edited), not a fittable parameter -
+fitting it alongside density would be degenerate, since only their ratio enters the SLD.
+
+```{warning}
+Re-checking the box restores the coupling by **recalculating** SLD/iSLD from the current
+formula and density - manually entered or fitted SLD values are discarded.
+```
+
+The choice is per material and is saved with the project; projects saved before this
+feature load with the coupling enabled. Note that toggling the coupling is not undoable.
+If you add a constraint on `sld`/`isld` while unchecked and then re-check the box, that
+constraint is silently discarded - re-checking always recomputes SLD/iSLD from the
+formula and density. The `Active Constraints` table refreshes after a toggle, but it does
+not flag rows that the toggle invalidated, so review it yourself after switching modes.
+
 ### Model creation and editing
 For creating new models, the `Models selector` tab is used, and then for setting the assemblies in the model the `Model editor` is used.  
 
