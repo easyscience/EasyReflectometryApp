@@ -13,10 +13,18 @@ def _is_density_material(material) -> bool:
     return hasattr(material, 'sld_coupled')
 
 
-def _sld_is_writable(material) -> bool:
+def _parameter_is_writable(parameter) -> bool:
     """A coupled density material derives sld/isld from density — writing to
-    the dependent parameter would raise, so the setters refuse instead."""
-    return getattr(material.sld, 'independent', True)
+    the dependent parameter would raise, so the setters refuse instead.
+    Checked per-parameter (not just `sld`): the lib guards sld and isld
+    individually since they can disagree mid-toggle."""
+    return getattr(parameter, 'independent', True)
+
+
+# A density material's fittable input knobs; cleared (free = False) when the
+# material's sld/isld are decoupled from them so an already-ticked knob
+# doesn't keep entering the fit after its row goes inactive in the GUI.
+_DENSITY_KNOB_NAMES = ('density', 'molecular_weight', 'scattering_length_real', 'scattering_length_imag')
 
 
 class Material:
@@ -82,7 +90,7 @@ class Material:
 
     def set_sld_at_current_index(self, new_value: float) -> bool:
         material = self._materials[self.index]
-        if not _sld_is_writable(material):
+        if not _parameter_is_writable(material.sld):
             return False
         if material.sld.value != new_value:
             material.sld.value = new_value
@@ -93,7 +101,7 @@ class Material:
         if not (0 <= index < len(self._materials)):
             return False
         material = self._materials[index]
-        if not _sld_is_writable(material):
+        if not _parameter_is_writable(material.sld):
             return False
         if material.sld.value != new_value:
             material.sld.value = new_value
@@ -102,7 +110,7 @@ class Material:
 
     def set_isld_at_current_index(self, new_value: float) -> bool:
         material = self._materials[self.index]
-        if not _sld_is_writable(material):
+        if not _parameter_is_writable(material.isld):
             return False
         if material.isld.value != new_value:
             material.isld.value = new_value
@@ -113,7 +121,7 @@ class Material:
         if not (0 <= index < len(self._materials)):
             return False
         material = self._materials[index]
-        if not _sld_is_writable(material):
+        if not _parameter_is_writable(material.isld):
             return False
         if material.isld.value != new_value:
             material.isld.value = new_value
@@ -129,6 +137,15 @@ class Material:
         if bool(material.sld_coupled) == bool(coupled):
             return False
         material.sld_coupled = bool(coupled)
+        if not coupled:
+            # The GUI greys these rows out (kind: 'inactive') but that is
+            # display-only — the fitter reads Parameter.free, so a knob
+            # ticked before decoupling would otherwise keep entering the
+            # minimizer after it stops affecting the reflectivity.
+            for knob_name in _DENSITY_KNOB_NAMES:
+                knob = getattr(material, knob_name, None)
+                if knob is not None:
+                    knob.free = False
         return True
 
     def set_formula_at_index(self, index: int, formula: str) -> bool:

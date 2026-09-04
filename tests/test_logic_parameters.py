@@ -238,6 +238,29 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
     assert free_parameter.free is False
 
 
+def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
+    """An inactive density knob must not be tickable into the fit through
+    any caller, QML checkbox or not — same class of bug the Select-All skip
+    fixed for the fittables table."""
+    project = make_project()
+    logic = parameters_module.Parameters(project)
+    inactive_parameter = make_parameter(name='Density', unique_name='density', value=2.33, free=False)
+    mocked_parameters = [
+        {
+            'display_name': 'SiDensity density',
+            'unique_name': 'density',
+            'kind': 'inactive',
+            'enabled': True,
+            'object': inactive_parameter,
+        },
+    ]
+    monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
+
+    logic.set_current_index(0)
+    assert logic.set_current_parameter_fit(True) is False
+    assert inactive_parameter.free is False
+
+
 def test_add_constraint_supports_arithmetic_and_constant_dependencies():
     independent = make_parameter(name='Scale', unique_name='scale', value=2.0)
     dependent = make_parameter(name='Background', unique_name='background', value=0.5)

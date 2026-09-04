@@ -161,6 +161,13 @@ class Parameters:
             return enabled_params[self._current_index]
         return None
 
+    def _get_current_parameter_entry(self) -> dict[str, Any] | None:
+        """Get the current row (with 'kind'/'object') from the enabled rows."""
+        enabled_entries = [p for p in self.parameters if p.get('enabled', True)]
+        if 0 <= self._current_index < len(enabled_entries):
+            return enabled_entries[self._current_index]
+        return None
+
     def set_current_parameter_value(self, new_value: str) -> bool:
         parameter = self._get_current_parameter()
         if parameter is None:
@@ -213,9 +220,15 @@ class Parameters:
         return False
 
     def set_current_parameter_fit(self, new_value: bool) -> bool:
-        parameter = self._get_current_parameter()
-        if parameter is None:
+        entry = self._get_current_parameter_entry()
+        if entry is None:
             return False
+        if entry.get('kind') == 'inactive':
+            # Same class of bug the Select-All skip fixed: an inactive
+            # density knob no longer affects the reflectivity and must not
+            # be tickable into the fit through any caller, QML or not.
+            return False
+        parameter = entry['object']
         if bool(new_value) != parameter.free:
             parameter.free = bool(new_value)
             return True

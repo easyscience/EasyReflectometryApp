@@ -87,6 +87,16 @@
     only the first visible channel was shown. A channel the model cannot
     calculate (spin-flip on a non-magnetic sample) shows measured points only
     and contributes no residuals.
+- Density materials (formula + mass density, as loaded from ORSO) now have a
+  detail panel on the Sample page: an editable chemical formula and density,
+  and a **"SLD computed from formula and density"** checkbox. Checked
+  (default), SLD/iSLD are read-only and derived; unchecked, they become
+  ordinary fittable parameters while density/molecular weight/scattering
+  length are greyed out as unused. A ρ badge marks density materials in the
+  materials table. Re-checking the box recalculates SLD/iSLD, discarding any
+  manually entered or fitted values and any constraint on them.
+- Parameter table rows where the minimizer produced no error bars (e.g. some
+  gradient-free methods) now show `n/a` instead of a blank/error cell.
 
 # Version 1.4.0 (3 Aug 2026)
 

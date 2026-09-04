@@ -223,7 +223,7 @@ EaElements.GroupBox {
                 text: qsTr("SLD computed from formula and density")
                 checked: densityMaterialSection.isDensity ?
                              densityMaterialSection.densityMaterial.sld_coupled : true
-                ToolTip.text: qsTr("When re-enabled, SLD/iSLD are recalculated from the formula and density; manually entered or fitted SLD values are discarded.")
+                ToolTip.text: qsTr("When re-enabled, SLD/iSLD are recalculated from the formula and density; manually entered or fitted SLD values, and any constraint on SLD/iSLD, are discarded.")
                 // toggled() also fires on the programmatic `checked` rebind below
                 // (materialsTableChanged from our own backend call, or a row
                 // selection change) — this only stays a no-op loop because

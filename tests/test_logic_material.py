@@ -100,6 +100,19 @@ def test_set_density_at_index():
     assert logic.set_density_at_index(0, 'abc') is False  # not a number
 
 
+def test_set_density_at_index_clamps_below_the_min_bound():
+    # The core's Parameter.value setter clamps out-of-bounds writes to
+    # min/max rather than raising (unlike __init__, which raises) — so a
+    # negative density silently becomes 0.0, not rejected. The setter's
+    # try/except guards a hypothetical raise without assuming one.
+    materials = make_material_collection(make_density_material('Si', 2.33))
+    project = make_project(materials=materials)
+    logic = Material(project)
+
+    assert logic.set_density_at_index(0, '-1') is True
+    assert materials[0].density.value == pytest.approx(0.0)
+
+
 def test_material_logic_add_duplicate_move_and_remove():
     materials = make_material_collection(
         make_material('Air', sld=0.0),

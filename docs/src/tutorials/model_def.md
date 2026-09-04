@@ -51,9 +51,11 @@ formula and density - manually entered or fitted SLD values are discarded.
 ```
 
 The choice is per material and is saved with the project; projects saved before this
-feature load with the coupling enabled. Note that toggling the coupling is not undoable,
-and a constraint that references the material's `sld`/`isld` may become invalid when the
-coupling changes - the `Active Constraints` table is revalidated on toggle.
+feature load with the coupling enabled. Note that toggling the coupling is not undoable.
+If you add a constraint on `sld`/`isld` while unchecked and then re-check the box, that
+constraint is silently discarded - re-checking always recomputes SLD/iSLD from the
+formula and density. The `Active Constraints` table refreshes after a toggle, but it does
+not flag rows that the toggle invalidated, so review it yourself after switching modes.
 
 ### Model creation and editing
 For creating new models, the `Models selector` tab is used, and then for setting the assemblies in the model the `Model editor` is used.  

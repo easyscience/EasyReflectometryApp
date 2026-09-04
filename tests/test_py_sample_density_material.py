@@ -91,3 +91,31 @@ def test_sld_slot_refused_while_coupled(backend_with_density_material):
     backend.setMaterialSldCoupledAtIndex(index, False)
     backend.setMaterialSldAtIndex(index, 9.9)
     assert material.sld.value == 9.9
+
+
+def test_decouple_clears_free_on_density_knobs(backend_with_density_material):
+    """A knob ticked 'Fit' while coupled must not keep entering the fit once
+    its row goes inactive — the GUI overlay (kind: 'inactive') is display
+    only, `Parameter.free` is what the minimizer actually reads."""
+    project, backend, index = backend_with_density_material
+    material = project._materials[index]
+    material.density.free = True
+    material.molecular_weight.free = True
+
+    backend.setMaterialSldCoupledAtIndex(index, False)
+
+    assert material.density.free is False
+    assert material.molecular_weight.free is False
+    assert material.scattering_length_real.free is False
+    assert material.scattering_length_imag.free is False
+    # None of the cleared knobs are independent+free, whatever model they
+    # end up wired into — the predicate `count_free_parameters` itself uses.
+    assert not any(
+        parameter.independent and parameter.free
+        for parameter in (
+            material.density,
+            material.molecular_weight,
+            material.scattering_length_real,
+            material.scattering_length_imag,
+        )
+    )
