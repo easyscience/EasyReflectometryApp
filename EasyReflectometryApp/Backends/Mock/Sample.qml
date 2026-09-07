@@ -27,17 +27,29 @@ QtObject {
         {
             'label': 'label 1',
             'sld': '1.23456',
-            'isld': '-1.23456'
+            'isld': '-1.23456',
+            'kind': 'sld',
+            'formula': '',
+            'density': '',
+            'sld_coupled': true
         },
         {
             'label': 'label 2',
             'sld': '2.34567',
-            'isld': '-2.34567'
+            'isld': '-2.34567',
+            'kind': 'sld',
+            'formula': '',
+            'density': '',
+            'sld_coupled': true
         },
         {
-            'label': 'label 3',
+            'label': 'SiO2 density',
             'sld': '3.45678',
-            'isld': '-3.45678'
+            'isld': '-3.45678',
+            'kind': 'density',
+            'formula': 'SiO2',
+            'density': '2.196',
+            'sld_coupled': true
         },
     ]
     readonly property var materialNames: materials.map(function (item) { return item.label })
@@ -54,6 +66,15 @@ QtObject {
     }
     function setCurrentMaterialISld(value) {
         console.debug(`setCurrentMaterialISld ${value}`)
+    }
+    function setMaterialSldCoupledAtIndex(index, value) {
+        console.debug(`setMaterialSldCoupledAtIndex ${index} ${value}`)
+    }
+    function setMaterialFormulaAtIndex(index, value) {
+        console.debug(`setMaterialFormulaAtIndex ${index} ${value}`)
+    }
+    function setMaterialDensityAtIndex(index, value) {
+        console.debug(`setMaterialDensityAtIndex ${index} ${value}`)
     }
 
 
