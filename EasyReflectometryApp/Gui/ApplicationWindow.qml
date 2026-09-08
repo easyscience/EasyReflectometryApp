@@ -34,13 +34,16 @@ EaComponents.ApplicationWindow {
             // Disabled when the project is already on disk unchanged, so that an enabled button
             // is itself the signal that there is something to save. Saving also serializes the
             // same model state the fitter thread is writing to, so it is blocked during a fit
-            // rather than silently storing half-updated parameters.
-            enabled: Globals.BackendWrapper.projectCreated
-                     && Globals.BackendWrapper.projectHasUnsavedChanges
-                     && !Globals.BackendWrapper.analysisFittingRunning
+            // rather than silently storing half-updated parameters. The success flash keeps the
+            // enabled style, otherwise the check mark is drawn greyed out because the save that
+            // triggered it has just disabled the button.
+            enabled: applicationWindow.canSaveProject || saveFlashTimer.running
             highlighted: true
             fontIcon: saveFlashTimer.running ? "check-circle" : "save"
             ToolTip.text: {
+                if (saveFlashTimer.running) {
+                    return qsTr("Project saved")
+                }
                 if (Globals.BackendWrapper.analysisFittingRunning) {
                     return qsTr("Saving is disabled while a fit is running")
                 }
@@ -49,7 +52,11 @@ EaComponents.ApplicationWindow {
                 }
                 return qsTr("Save current state of the project")
             }
-            onClicked: Globals.BackendWrapper.projectSave()
+            onClicked: {
+                if (applicationWindow.canSaveProject) {
+                    Globals.BackendWrapper.projectSave()
+                }
+            }
 
             // Success feedback in place, where the user just clicked. A save during the flash
             // restarts it rather than cutting it short.
@@ -187,15 +194,34 @@ EaComponents.ApplicationWindow {
     // MISC
     ///////
 
-    // Closing with unsaved work asks first. Qt5 had this (Components/CloseDialog.qml) and the
-    // Qt6 migration left `onClosing: Qt.quit()` as a no-op, so this restores the behaviour —
-    // with the Cancel button the Qt5 dialog was missing.
+    // Whether there is a project on disk that differs from what is in memory and can be written
+    // right now. Shared by the Save button, the Ctrl+S shortcut and the close prompt.
+    readonly property bool canSaveProject: Globals.BackendWrapper.projectCreated
+                                           && Globals.BackendWrapper.projectHasUnsavedChanges
+                                           && !Globals.BackendWrapper.analysisFittingRunning
+
+    // Closing with unsaved work asks first. Qt5 had this (Components/CloseDialog.qml); the Qt6
+    // migration replaced it with `onClosing: Qt.quit()`, which exited unconditionally without
+    // asking. This restores the prompt, with the Cancel button the Qt5 dialog was missing.
+    //
+    // The prompt is gated on a created project as well as on the flag: before a create there is
+    // nothing on disk that the edits could be "unsaved" relative to, and "Save and exit" would
+    // otherwise write the defaults over whatever project sits at the chosen path.
     onClosing: function(close) {
-        if (Globals.BackendWrapper.projectHasUnsavedChanges) {
+        if (Globals.BackendWrapper.projectCreated
+                && Globals.BackendWrapper.projectHasUnsavedChanges
+                && !applicationWindow.discardChangesOnClose) {
             close.accepted = false
             closeDialog.open()
         }
     }
+
+    // Set by "Exit without saving" (and test mode) before the window is closed. In Qt 6,
+    // Qt.quit() does not stop the event loop directly: it asks every top-level window to close
+    // first, which runs onClosing again, so a handler that rejects the close while the project
+    // is dirty would swallow the quit and reopen the prompt forever. Recording the decision here
+    // lets onClosing honour it.
+    property bool discardChangesOnClose: false
 
     // Set while the close dialog's "Save and exit" is in flight. Unlike Qt5, which quit
     // unconditionally, the app only exits once the save has actually reported success — a failed
@@ -205,6 +231,9 @@ EaComponents.ApplicationWindow {
     EaElements.Dialog {
         id: closeDialog
         title: qsTr('Unsaved Changes')
+        // Modal, so the user cannot keep editing, start a fit or hit the window's close button
+        // again behind the question. (EaElements.Dialog is modeless by default.)
+        modal: true
         closePolicy: Popup.CloseOnEscape
 
         EaElements.Label {
@@ -223,13 +252,14 @@ EaComponents.ApplicationWindow {
                 text: qsTr('Exit without saving')
                 onClicked: {
                     closeDialog.close()
-                    Qt.quit()
+                    applicationWindow.discardChangesOnClose = true
+                    applicationWindow.close()
                 }
             }
 
             EaElements.Button {
                 text: qsTr('Save and exit')
-                enabled: !Globals.BackendWrapper.analysisFittingRunning
+                enabled: applicationWindow.canSaveProject
                 onClicked: {
                     closeDialog.close()
                     applicationWindow.quitAfterSave = true
@@ -241,7 +271,7 @@ EaComponents.ApplicationWindow {
 
     Shortcut {
         sequences: [StandardKey.Save]
-        enabled: saveButton.enabled
+        enabled: applicationWindow.canSaveProject
         onActivated: Globals.BackendWrapper.projectSave()
     }
 
@@ -249,6 +279,7 @@ EaComponents.ApplicationWindow {
     // successful save flashes the tool button and updates the status bar instead of interrupting.
     Connections {
         target: Globals.BackendWrapper
+        ignoreUnknownSignals: true
 
         function onProjectSaved(path) {
             saveFlashTimer.restart()
@@ -270,6 +301,7 @@ EaComponents.ApplicationWindow {
         id: projectSaveErrorDialog
         title: qsTr('Project Save Error')
         standardButtons: Dialog.Ok
+        modal: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         property string errorMessage: ''
@@ -285,6 +317,7 @@ EaComponents.ApplicationWindow {
         id: resetStateDialog
 
         title: qsTr("Reset state")
+        modal: true
 
         EaElements.Label {
             horizontalAlignment: Text.AlignHCenter
@@ -372,6 +405,8 @@ EaComponents.ApplicationWindow {
             console.debug('*** TEST MODE START ***')
             delay(30000, function() {
                 console.debug('*** TEST MODE 30 s DELAYED END ***')
+                // The harness must never hang on the unsaved-changes prompt.
+                applicationWindow.discardChangesOnClose = true
                 Qt.quit()
             })
         }

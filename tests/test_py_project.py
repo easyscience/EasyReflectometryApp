@@ -1,4 +1,7 @@
 import warnings
+from datetime import datetime
+
+import pytest
 
 from EasyReflectometryApp.Backends.Py import project as project_module
 
@@ -18,6 +21,11 @@ class StubProjectLogic:
         self.reset_calls = 0
         self.added_samples = []
         self.replaced_samples = []
+        # Stands in for the model/experiment content the real fingerprint covers.
+        self.content_version = 0
+
+    def content_fingerprint(self) -> str:
+        return f'{self.name}|{self.description}|{self.root_path}|{self.content_version}'
 
     def create(self):
         self.created_calls += 1
@@ -25,23 +33,30 @@ class StubProjectLogic:
 
     def load(self, path):
         self.loaded_paths.append(path)
+        self.created = True
 
     def save(self):
         self.saved_calls += 1
 
     def reset(self):
         self.reset_calls += 1
+        self.created = False
 
     def add_sample_from_orso(self, sample):
         self.added_samples.append(sample)
+        self.content_version += 1
 
     def replace_models_from_orso(self, sample):
         self.replaced_samples.append(sample)
+        self.content_version += 1
 
 
-def _build_project(monkeypatch):
+def _build_project(monkeypatch, created=False):
     monkeypatch.setattr(project_module, 'ProjectLogic', StubProjectLogic)
-    return project_module.Project(project_lib=object())
+    project = project_module.Project(project_lib=object())
+    if created:
+        project.create()
+    return project
 
 
 def test_setters_emit_only_on_change(monkeypatch, qcore_application):
@@ -102,6 +117,20 @@ def test_sample_load_append_and_replace(monkeypatch, qcore_application):
     assert loaded['count'] == 2
 
 
+def test_sample_load_marks_the_project_dirty(monkeypatch, qcore_application):
+    """An imported sample is content to save, even though the relay signal it emits is not
+    classified as dirtying (it is the same one a project load uses)."""
+    project = _build_project(monkeypatch, created=True)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+    monkeypatch.setattr(project_module.orso, 'load_orso', lambda path: 'orso-data')
+    monkeypatch.setattr(project_module, 'load_orso_model', lambda _orso_data: 'sample-model')
+    assert project.hasUnsavedChanges is False
+
+    project.sampleLoad('sample.orso', append=True)
+
+    assert project.hasUnsavedChanges is True
+
+
 def test_sample_load_emits_warning_when_model_missing(monkeypatch, qcore_application):
     project = _build_project(monkeypatch)
     monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
@@ -146,6 +175,35 @@ def test_load_emits_error_on_outdated_file_format(monkeypatch, qcore_application
     assert loaded['count'] == 0
 
 
+@pytest.mark.parametrize(
+    ('exception', 'expected_fragment'),
+    [
+        (FileNotFoundError('nowhere/project.json'), 'does not exist'),
+        (PermissionError('denied'), 'could not be read'),
+    ],
+)
+def test_load_reports_file_system_failures(monkeypatch, qcore_application, exception, expected_fragment):
+    """The library raises for a missing or unreadable file; the slot must report, not propagate."""
+    project = _build_project(monkeypatch)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+
+    def _raise(_path):
+        raise exception
+
+    monkeypatch.setattr(project._logic, 'load', _raise)
+    errors = []
+    project.projectLoadError.connect(lambda msg: errors.append(msg))
+    loaded = {'count': 0}
+    project.externalProjectLoaded.connect(lambda: loaded.__setitem__('count', loaded['count'] + 1))
+
+    project.load('nowhere/project.json')
+
+    assert len(errors) == 1
+    assert expected_fragment in errors[0]
+    assert 'nowhere/project.json' in errors[0]
+    assert loaded['count'] == 0
+
+
 def _spy_save_signals(project):
     saved = []
     errors = []
@@ -158,6 +216,7 @@ def _spy_save_signals(project):
 
 def test_save_emits_projectSaved_and_stamps_last_saved(monkeypatch, qcore_application):
     project = _build_project(monkeypatch)
+    project._logic.created = True
     saved, errors, stamps = _spy_save_signals(project)
 
     assert project.lastSaved == ''
@@ -168,10 +227,27 @@ def test_save_emits_projectSaved_and_stamps_last_saved(monkeypatch, qcore_applic
     assert errors == []
     assert len(stamps) == 1
     assert project.lastSaved != ''
+    # An aware stamp is unambiguous wherever it ends up; QML parses the offset correctly.
+    assert datetime.fromisoformat(project.lastSaved).tzinfo is not None
+
+
+def test_save_refuses_when_no_project_has_been_created(monkeypatch, qcore_application):
+    """Saving before a create would write the defaults over whatever sits at the current path."""
+    project = _build_project(monkeypatch)
+    saved, errors, stamps = _spy_save_signals(project)
+
+    project.save()
+
+    assert project._logic.saved_calls == 0
+    assert saved == []
+    assert stamps == []
+    assert len(errors) == 1
+    assert 'No project has been created' in errors[0]
 
 
 def test_save_emits_error_and_leaves_last_saved_untouched(monkeypatch, qcore_application):
     project = _build_project(monkeypatch)
+    project._logic.created = True
 
     def _raise_permission_error():
         raise PermissionError('project.json is open in another program')
@@ -189,20 +265,28 @@ def test_save_emits_error_and_leaves_last_saved_untouched(monkeypatch, qcore_app
     assert 'open in another program' in errors[0]
 
 
-def test_save_reports_serialization_failure(monkeypatch, qcore_application):
+@pytest.mark.parametrize(
+    'exception',
+    [
+        ValueError('constraint depends on an unreachable parameter'),
+        TypeError('Object of type float32 is not JSON serializable'),
+    ],
+)
+def test_save_reports_serialization_failure(monkeypatch, qcore_application, exception):
     project = _build_project(monkeypatch)
+    project._logic.created = True
 
-    def _raise_value_error():
-        raise ValueError('constraint depends on an unreachable parameter')
+    def _raise():
+        raise exception
 
-    monkeypatch.setattr(project._logic, 'save', _raise_value_error)
+    monkeypatch.setattr(project._logic, 'save', _raise)
     _saved, errors, _stamps = _spy_save_signals(project)
 
     project.save()
 
     assert len(errors) == 1
     assert 'cannot be serialized' in errors[0]
-    assert 'unreachable parameter' in errors[0]
+    assert str(exception) in errors[0]
 
 
 def test_create_reports_save_through_the_same_signals(monkeypatch, qcore_application):
@@ -216,11 +300,11 @@ def test_create_reports_save_through_the_same_signals(monkeypatch, qcore_applica
     assert project.lastSaved != ''
 
 
-def test_create_emits_error_when_the_project_file_already_exists(monkeypatch, qcore_application):
+def test_create_emits_error_when_the_project_directory_already_exists(monkeypatch, qcore_application):
     project = _build_project(monkeypatch)
 
     def _raise_file_exists():
-        raise FileExistsError('File already exists project.json')
+        raise FileExistsError('Directory C:/tmp/demo-project already exists')
 
     monkeypatch.setattr(project._logic, 'create', _raise_file_exists)
     saved, errors, _stamps = _spy_save_signals(project)
@@ -232,13 +316,15 @@ def test_create_emits_error_when_the_project_file_already_exists(monkeypatch, qc
     assert saved == []
     assert project.lastSaved == ''
     assert len(errors) == 1
-    assert 'A project already exists at "project.json"' in errors[0]
+    # Names the directory, which is what collided, and tells the user what to change.
+    assert 'A project already exists at "C:/tmp/demo-project"' in errors[0]
+    assert 'Choose a different name or location' in errors[0]
     # The UI is still told to re-read `created`, so it reflects the real state after a failure.
     assert created_counts['created'] == 1
 
 
 def test_reset_and_load_clear_the_last_saved_stamp(monkeypatch, qcore_application):
-    project = _build_project(monkeypatch)
+    project = _build_project(monkeypatch, created=True)
     monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
 
     project.save()
@@ -246,6 +332,7 @@ def test_reset_and_load_clear_the_last_saved_stamp(monkeypatch, qcore_applicatio
     project.reset()
     assert project.lastSaved == ''
 
+    project.load('other.json')
     project.save()
     assert project.lastSaved != ''
     project.load('other.json')
@@ -278,9 +365,48 @@ def test_lifecycle_leaves_the_project_clean(monkeypatch, qcore_application):
     assert project.hasUnsavedChanges is False
 
 
+def test_deferred_relay_after_a_load_does_not_dirty(monkeypatch, qcore_application):
+    """The sample relays part of a load through a 0 ms timer, so a dirtying signal can land after
+    the load has finished and cleared the flag. It carries no edit, so it must not count."""
+    project = _build_project(monkeypatch)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+
+    project.load('other.json')
+    assert project.hasUnsavedChanges is False
+
+    project.markDirty()  # what the timer's constraintsChanged does once the event loop turns
+
+    assert project.hasUnsavedChanges is False
+
+
+def test_signal_that_changes_nothing_does_not_dirty_but_a_real_edit_does(monkeypatch, qcore_application):
+    """Selection changes emit the same signals as edits; only content decides."""
+    project = _build_project(monkeypatch, created=True)
+
+    project.markDirty()
+    assert project.hasUnsavedChanges is False
+
+    project._logic.content_version += 1
+    project.markDirty()
+    assert project.hasUnsavedChanges is True
+
+
+def test_project_that_cannot_be_fingerprinted_is_treated_as_changed(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch, created=True)
+
+    def _raise():
+        raise ValueError('constraint depends on an unreachable parameter')
+
+    monkeypatch.setattr(project._logic, 'content_fingerprint', _raise)
+
+    project.markDirty()
+
+    assert project.hasUnsavedChanges is True
+
+
 def test_failed_save_keeps_the_project_dirty(monkeypatch, qcore_application):
     """The edits are still only in memory, so the close prompt must keep firing."""
-    project = _build_project(monkeypatch)
+    project = _build_project(monkeypatch, created=True)
 
     def _raise_permission_error():
         raise PermissionError('locked')
@@ -294,23 +420,26 @@ def test_failed_save_keeps_the_project_dirty(monkeypatch, qcore_application):
     assert project.hasUnsavedChanges is True
 
 
-def test_failed_create_does_not_report_a_clean_project(monkeypatch, qcore_application):
+def test_edits_before_a_create_are_not_unsaved_changes(monkeypatch, qcore_application):
+    """Before a create there is nothing on disk for the edits to differ from, so neither the
+    Save button nor the close prompt has anything to offer. In particular a failed create must
+    not leave a "dirty" project whose "Save and exit" would overwrite the colliding one."""
     project = _build_project(monkeypatch)
     project.setName('Edited')
+    assert project.hasUnsavedChanges is False
 
     def _raise_file_exists():
         raise FileExistsError('collision')
 
     monkeypatch.setattr(project._logic, 'create', _raise_file_exists)
-
     project.create()
 
-    # create() failed, so nothing reached disk; the name edit is still unsaved.
-    assert project.hasUnsavedChanges is True
+    assert project.created is False
+    assert project.hasUnsavedChanges is False
 
 
 def test_unsaved_changes_notifies_only_on_transitions(monkeypatch, qcore_application):
-    project = _build_project(monkeypatch)
+    project = _build_project(monkeypatch, created=True)
     changes = []
     project.hasUnsavedChangesChanged.connect(lambda: changes.append(project.hasUnsavedChanges))
 

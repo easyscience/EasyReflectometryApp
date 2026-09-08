@@ -9,8 +9,10 @@ QtObject {
     property string lastSaved: ''
     property bool hasUnsavedChanges: false
 
+    // Like the Python backend, carries the path of the project file that was written.
     signal projectSaved(string path)
     signal projectSaveError(string message)
+    function projectFilePath() { return `${location}/${name}/project.json` }
 
     property string name: 'Super duper project'
     function setName(value) { name = value; hasUnsavedChanges = true }
@@ -25,14 +27,14 @@ QtObject {
         created = true
         lastSaved = new Date().toISOString()
         hasUnsavedChanges = false
-        projectSaved(location)
+        projectSaved(projectFilePath())
     }
 
     function save() {
         console.debug(`Saving project ${name}`)
         lastSaved = new Date().toISOString()
         hasUnsavedChanges = false
-        projectSaved(location)
+        projectSaved(projectFilePath())
     }
 
     function reset() {

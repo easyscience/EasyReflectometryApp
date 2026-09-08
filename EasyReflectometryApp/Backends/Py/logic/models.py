@@ -117,13 +117,25 @@ class Models:
     def add_new(self) -> None:
         self._models.add_model()
         self.default_model_content(self._models[-1])
+        self._attach_calculator(self._models[-1])
         # Update index to point to the new model
         self.index = len(self._models) - 1
 
     def duplicate_selected_model(self) -> None:
         self._models.duplicate_model(self.index)
+        self._attach_calculator(self._models[-1])
         # Update index to point to the duplicated model
         self.index = len(self._models) - 1
+
+    def _attach_calculator(self, model: Model) -> None:
+        """Bind a model added through the collection to the project's calculator.
+
+        The collection's `add_model`/`duplicate_model` do not know the project's calculator, so
+        a model added through them has no interface. The project's fitter is built lazily for
+        the current model, and `Project.as_dict` (hence every save) touches it, so saving with
+        such a model selected failed with an internal error instead of writing the file.
+        """
+        model.interface = self._project_lib._calculator
 
     def move_selected_up(self) -> None:
         if self.index > 0:
