@@ -250,3 +250,74 @@ def test_reset_and_load_clear_the_last_saved_stamp(monkeypatch, qcore_applicatio
     assert project.lastSaved != ''
     project.load('other.json')
     assert project.lastSaved == ''
+
+
+def test_lifecycle_leaves_the_project_clean(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+    # Stand in for the relays that run while a project is created, loaded or reset: they emit the
+    # very signals dirty tracking listens to, and must not leave the project looking edited.
+    project.externalCreatedChanged.connect(project.markDirty)
+    project.externalProjectLoaded.connect(project.markDirty)
+    project.externalProjectReset.connect(project.markDirty)
+
+    project.create()
+    assert project.hasUnsavedChanges is False
+
+    project.setName('Edited')
+    assert project.hasUnsavedChanges is True
+    project.save()
+    assert project.hasUnsavedChanges is False
+
+    project.setName('Edited again')
+    project.load('other.json')
+    assert project.hasUnsavedChanges is False
+
+    project.setName('Edited once more')
+    project.reset()
+    assert project.hasUnsavedChanges is False
+
+
+def test_failed_save_keeps_the_project_dirty(monkeypatch, qcore_application):
+    """The edits are still only in memory, so the close prompt must keep firing."""
+    project = _build_project(monkeypatch)
+
+    def _raise_permission_error():
+        raise PermissionError('locked')
+
+    monkeypatch.setattr(project._logic, 'save', _raise_permission_error)
+    project.setName('Edited')
+    assert project.hasUnsavedChanges is True
+
+    project.save()
+
+    assert project.hasUnsavedChanges is True
+
+
+def test_failed_create_does_not_report_a_clean_project(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    project.setName('Edited')
+
+    def _raise_file_exists():
+        raise FileExistsError('collision')
+
+    monkeypatch.setattr(project._logic, 'create', _raise_file_exists)
+
+    project.create()
+
+    # create() failed, so nothing reached disk; the name edit is still unsaved.
+    assert project.hasUnsavedChanges is True
+
+
+def test_unsaved_changes_notifies_only_on_transitions(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    changes = []
+    project.hasUnsavedChangesChanged.connect(lambda: changes.append(project.hasUnsavedChanges))
+
+    project.setName('One')
+    project.setDescription('Two')
+    project.setLocation('D:/three')
+    assert changes == [True]
+
+    project.save()
+    assert changes == [True, False]

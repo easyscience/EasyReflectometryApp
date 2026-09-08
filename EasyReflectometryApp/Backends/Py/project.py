@@ -1,4 +1,5 @@
 import warnings
+from contextlib import contextmanager
 from datetime import datetime
 
 from easyreflectometry import Project as ProjectLib
@@ -19,6 +20,7 @@ class Project(QObject):
     descriptionChanged = Signal()
     locationChanged = Signal()
     lastSavedChanged = Signal()
+    hasUnsavedChangesChanged = Signal()
 
     externalCreatedChanged = Signal()
     externalNameChanged = Signal()
@@ -33,6 +35,8 @@ class Project(QObject):
         super().__init__(parent)
         self._logic = ProjectLogic(project_lib)
         self._last_saved = ''
+        self._has_unsaved_changes = False
+        self._dirty_suspended = 0
 
     # Properties
 
@@ -58,6 +62,16 @@ class Project(QObject):
         """
         return self._last_saved
 
+    @Property(bool, notify=hasUnsavedChangesChanged)
+    def hasUnsavedChanges(self) -> bool:
+        """Whether the project holds edits that `save()` would write to disk.
+
+        Set from every backend signal that changes what the project file would contain (the
+        inventory lives in `py_backend.DIRTYING_SIGNALS`) and from this object's own setters;
+        cleared by create, save, load and reset.
+        """
+        return self._has_unsaved_changes
+
     # Properties with setters
 
     @Property(str, notify=nameChanged)
@@ -68,6 +82,7 @@ class Project(QObject):
     def setName(self, new_value: str) -> None:
         if self._logic.name != new_value:
             self._logic.name = new_value
+            self.markDirty()
             self.nameChanged.emit()
             self.externalNameChanged.emit()
 
@@ -79,6 +94,7 @@ class Project(QObject):
     def setDescription(self, new_value: str) -> None:
         if self._logic.description != new_value:
             self._logic.description = new_value
+            self.markDirty()
             self.descriptionChanged.emit()
 
     @Property(str, notify=locationChanged)
@@ -89,9 +105,47 @@ class Project(QObject):
     def setLocation(self, new_value: str) -> None:
         if self._logic.root_path != new_value:
             self._logic.root_path = new_value
+            self.markDirty()
             self.locationChanged.emit()
 
     # Methods
+
+    @Slot()
+    def markDirty(self) -> None:
+        """Record that the project differs from the file on disk.
+
+        Connected to every dirtying backend signal by `py_backend._connect_dirty_tracking`, and
+        called directly by this object's setters. Ignored while a create/load/reset is fanning
+        out its own signals, since those end in a clean project.
+        """
+        if self._dirty_suspended or self._has_unsaved_changes:
+            return
+        self._has_unsaved_changes = True
+        self.hasUnsavedChangesChanged.emit()
+
+    def _clear_dirty(self) -> None:
+        if not self._has_unsaved_changes:
+            return
+        self._has_unsaved_changes = False
+        self.hasUnsavedChangesChanged.emit()
+
+    @contextmanager
+    def _suspended_dirty_tracking(self):
+        """Run a create/load/reset without its own relays marking the project dirty.
+
+        Those relays run through the sample, experiment and analysis parts, which emit the very
+        signals dirty tracking listens to. Suppressing them during the fan-out is what keeps a
+        freshly created or loaded project clean, without depending on the order in which the
+        slots happen to emit.
+
+        Suspending is all this does; clearing the flag is left to the callers, because only they
+        know whether the change actually reached disk. A failed create must stay dirty.
+        """
+        self._dirty_suspended += 1
+        try:
+            yield
+        finally:
+            self._dirty_suspended -= 1
 
     def _clear_last_saved(self) -> None:
         """Drop the save stamp when the project it referred to is gone (reset or load)."""
@@ -100,6 +154,7 @@ class Project(QObject):
             self.lastSavedChanged.emit()
 
     def _mark_saved(self) -> None:
+        self._clear_dirty()
         self._last_saved = datetime.now().isoformat(timespec='seconds')
         self.lastSavedChanged.emit()
         self.projectSaved.emit(self._logic.path_json)
@@ -131,14 +186,15 @@ class Project(QObject):
         # signals. It can fail on a colliding path, which the library now raises instead of
         # printing.
         error = None
-        try:
-            self._logic.create()
-        except Exception as ex:
-            error = self._save_error_message(ex)
-        # Emitted either way, so that the UI reflects the real `created` state even when the
-        # directories were made but the file was not written.
-        self.createdChanged.emit()
-        self.externalCreatedChanged.emit()
+        with self._suspended_dirty_tracking():
+            try:
+                self._logic.create()
+            except Exception as ex:
+                error = self._save_error_message(ex)
+            # Emitted either way, so that the UI reflects the real `created` state even when the
+            # directories were made but the file was not written.
+            self.createdChanged.emit()
+            self.externalCreatedChanged.emit()
         if error is not None:
             self.projectSaveError.emit(error)
         else:
@@ -163,11 +219,13 @@ class Project(QObject):
             self.projectLoadError.emit(message)
             return
         self._clear_last_saved()
-        self.createdChanged.emit()
-        self.nameChanged.emit()
-        self.descriptionChanged.emit()
-        self.locationChanged.emit()
-        self.externalProjectLoaded.emit()
+        with self._suspended_dirty_tracking():
+            self.createdChanged.emit()
+            self.nameChanged.emit()
+            self.descriptionChanged.emit()
+            self.locationChanged.emit()
+            self.externalProjectLoaded.emit()
+        self._clear_dirty()
 
     @Slot()
     def save(self) -> None:
@@ -184,13 +242,15 @@ class Project(QObject):
     def reset(self) -> None:
         self._logic.reset()
         self._clear_last_saved()
-        self.createdChanged.emit()
-        self.nameChanged.emit()
-        self.descriptionChanged.emit()
-        self.locationChanged.emit()
-        self.externalCreatedChanged.emit()
-        self.externalNameChanged.emit()
-        self.externalProjectReset.emit()
+        with self._suspended_dirty_tracking():
+            self.createdChanged.emit()
+            self.nameChanged.emit()
+            self.descriptionChanged.emit()
+            self.locationChanged.emit()
+            self.externalCreatedChanged.emit()
+            self.externalNameChanged.emit()
+            self.externalProjectReset.emit()
+        self._clear_dirty()
 
     @Slot(str, bool)
     def sampleLoad(self, url: str, append: bool = True) -> None:

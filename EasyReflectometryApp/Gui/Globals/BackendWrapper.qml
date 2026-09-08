@@ -102,6 +102,7 @@ QtObject {
 
     // Project save signals - forwarded from backend
     readonly property string projectLastSaved: activeBackend.project.lastSaved ?? ''
+    readonly property bool projectHasUnsavedChanges: activeBackend.project.hasUnsavedChanges ?? false
 
     signal projectSaved(string path)
 

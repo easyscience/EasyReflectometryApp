@@ -15,6 +15,56 @@ from .sample import Sample
 from .status import Status
 from .summary import Summary
 
+# Signals whose emission changes what `Project.save()` would write to disk. Every one of them
+# marks the project dirty (see `_connect_dirty_tracking`). The inventory is explicit rather than
+# derived from a naming convention because the `external*` relays do not cover every mutation:
+# a material rename emits only `materialsTableChanged`, reordering layers or editing a repeated
+# assembly's repetitions emits only `externalRefreshPlot`, and the free/fixed checkbox emits only
+# `parametersChanged`. Missing one of those means the close prompt does not fire and the user
+# loses work, so anything doubtful belongs in this list rather than out of it.
+#
+# `Project`'s own signals are absent on purpose: its setters call `markDirty` directly, because
+# create, load and reset fan out through those same signal names and must end up clean.
+DIRTYING_SIGNALS = {
+    '_sample': (
+        'externalSampleChanged',
+        'externalRefreshPlot',
+        'materialsTableChanged',
+        'modelsTableChanged',
+        'constraintsChanged',
+        'calculationEngineChanged',  # stored as 'calculator' in the project file
+        'qRangeChanged',
+    ),
+    '_experiment': (
+        'externalExperimentChanged',
+        'experimentLoaded',
+        'qRangeUpdated',
+    ),
+    '_analysis': (
+        'externalCalculatorChanged',
+        'externalExperimentChanged',
+        'externalFittingChanged',  # a finished fit rewrites parameter values
+        'externalMinimizerChanged',  # stored as 'fitter_minimizer' in the project file
+        'externalParametersChanged',
+        'parametersChanged',
+    ),
+}
+
+# `external*` signals deliberately left out of dirty tracking, with the reason. Together with
+# DIRTYING_SIGNALS this must account for every `external*` signal on every backend part;
+# tests/test_py_backend.py fails if a new one appears in neither, so it cannot silently skip
+# dirty tracking.
+NON_DIRTYING_EXTERNAL_SIGNALS = {
+    '_project': (
+        # Project lifecycle, not project content: create/load/reset end in a clean project and
+        # the setters mark dirty themselves.
+        'externalCreatedChanged',
+        'externalNameChanged',
+        'externalProjectLoaded',
+        'externalProjectReset',
+    ),
+}
+
 
 class PyBackend(QObject):
     # Signal for multi-experiment selection changes
@@ -220,6 +270,14 @@ class PyBackend(QObject):
         self._connect_sample_page()
         self._connect_experiment_page()
         self._connect_analysis_page()
+        self._connect_dirty_tracking()
+
+    def _connect_dirty_tracking(self) -> None:
+        """Route every content-changing signal to the project's unsaved-changes flag."""
+        for part_name, signal_names in DIRTYING_SIGNALS.items():
+            part = getattr(self, part_name)
+            for signal_name in signal_names:
+                getattr(part, signal_name).connect(self._project.markDirty)
 
     ######### Forming connections between the backend parts
     def _connect_project_page(self) -> None:

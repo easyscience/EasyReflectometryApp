@@ -31,14 +31,24 @@ EaComponents.ApplicationWindow {
 
         EaElements.ToolButton {
             id: saveButton
-            // Saving serializes the same model state the fitter thread is writing to, so it is
-            // blocked while a fit runs rather than silently storing half-updated parameters.
-            enabled: Globals.BackendWrapper.projectCreated && !Globals.BackendWrapper.analysisFittingRunning
+            // Disabled when the project is already on disk unchanged, so that an enabled button
+            // is itself the signal that there is something to save. Saving also serializes the
+            // same model state the fitter thread is writing to, so it is blocked during a fit
+            // rather than silently storing half-updated parameters.
+            enabled: Globals.BackendWrapper.projectCreated
+                     && Globals.BackendWrapper.projectHasUnsavedChanges
+                     && !Globals.BackendWrapper.analysisFittingRunning
             highlighted: true
             fontIcon: saveFlashTimer.running ? "check-circle" : "save"
-            ToolTip.text: Globals.BackendWrapper.analysisFittingRunning
-                          ? qsTr("Saving is disabled while a fit is running")
-                          : qsTr("Save current state of the project")
+            ToolTip.text: {
+                if (Globals.BackendWrapper.analysisFittingRunning) {
+                    return qsTr("Saving is disabled while a fit is running")
+                }
+                if (Globals.BackendWrapper.projectCreated && !Globals.BackendWrapper.projectHasUnsavedChanges) {
+                    return qsTr("No changes to save")
+                }
+                return qsTr("Save current state of the project")
+            }
             onClicked: Globals.BackendWrapper.projectSave()
 
             // Success feedback in place, where the user just clicked. A save during the flash
@@ -177,7 +187,57 @@ EaComponents.ApplicationWindow {
     // MISC
     ///////
 
-    onClosing: Qt.quit()
+    // Closing with unsaved work asks first. Qt5 had this (Components/CloseDialog.qml) and the
+    // Qt6 migration left `onClosing: Qt.quit()` as a no-op, so this restores the behaviour —
+    // with the Cancel button the Qt5 dialog was missing.
+    onClosing: function(close) {
+        if (Globals.BackendWrapper.projectHasUnsavedChanges) {
+            close.accepted = false
+            closeDialog.open()
+        }
+    }
+
+    // Set while the close dialog's "Save and exit" is in flight. Unlike Qt5, which quit
+    // unconditionally, the app only exits once the save has actually reported success — a failed
+    // save leaves the window open with its error dialog rather than discarding the work.
+    property bool quitAfterSave: false
+
+    EaElements.Dialog {
+        id: closeDialog
+        title: qsTr('Unsaved Changes')
+        closePolicy: Popup.CloseOnEscape
+
+        EaElements.Label {
+            text: qsTr('The project has unsaved changes.\nDo you want to save them before exiting?')
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.sideBarContentWidth
+        }
+
+        footer: EaElements.DialogButtonBox {
+            EaElements.Button {
+                text: qsTr('Cancel')
+                onClicked: closeDialog.close()
+            }
+
+            EaElements.Button {
+                text: qsTr('Exit without saving')
+                onClicked: {
+                    closeDialog.close()
+                    Qt.quit()
+                }
+            }
+
+            EaElements.Button {
+                text: qsTr('Save and exit')
+                enabled: !Globals.BackendWrapper.analysisFittingRunning
+                onClicked: {
+                    closeDialog.close()
+                    applicationWindow.quitAfterSave = true
+                    Globals.BackendWrapper.projectSave()
+                }
+            }
+        }
+    }
 
     Shortcut {
         sequences: [StandardKey.Save]
@@ -192,9 +252,15 @@ EaComponents.ApplicationWindow {
 
         function onProjectSaved(path) {
             saveFlashTimer.restart()
+            if (applicationWindow.quitAfterSave) {
+                applicationWindow.quitAfterSave = false
+                Qt.quit()
+            }
         }
 
         function onProjectSaveError(message) {
+            // A failed "Save and exit" must not exit: the work is still only in memory.
+            applicationWindow.quitAfterSave = false
             projectSaveErrorDialog.errorMessage = message
             projectSaveErrorDialog.open()
         }
@@ -222,7 +288,15 @@ EaComponents.ApplicationWindow {
 
         EaElements.Label {
             horizontalAlignment: Text.AlignHCenter
-            text: qsTr("Are you sure you want to reset the application to its\noriginal state without project, sample and data?\n\nThis operation cannot be undone.")
+            // Now that unsaved changes are tracked, the dialog can say what is actually at risk
+            // instead of warning about loss that may not exist.
+            text: {
+                const question = qsTr("Are you sure you want to reset the application to its\noriginal state without project, sample and data?")
+                if (Globals.BackendWrapper.projectHasUnsavedChanges) {
+                    return question + '\n\n' + qsTr("The project has unsaved changes that will be lost.")
+                }
+                return question + '\n\n' + qsTr("This operation cannot be undone.")
+            }
         }
 
         footer: EaElements.DialogButtonBox {
