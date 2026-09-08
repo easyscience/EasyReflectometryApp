@@ -7,7 +7,8 @@ class StubProjectLogic:
     def __init__(self, _project_lib):
         self.created = False
         self.creation_date = '2026-03-22'
-        self.path = 'project.json'
+        self.path = 'C:/tmp/demo-project'
+        self.path_json = 'project.json'
         self.name = 'Demo'
         self.description = 'Desc'
         self.root_path = 'C:/work'
@@ -143,3 +144,109 @@ def test_load_emits_error_on_outdated_file_format(monkeypatch, qcore_application
         'Please re-create the project from its underlying data and save it again.'
     ]
     assert loaded['count'] == 0
+
+
+def _spy_save_signals(project):
+    saved = []
+    errors = []
+    stamps = []
+    project.projectSaved.connect(lambda path: saved.append(path))
+    project.projectSaveError.connect(lambda msg: errors.append(msg))
+    project.lastSavedChanged.connect(lambda: stamps.append(project.lastSaved))
+    return saved, errors, stamps
+
+
+def test_save_emits_projectSaved_and_stamps_last_saved(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    saved, errors, stamps = _spy_save_signals(project)
+
+    assert project.lastSaved == ''
+
+    project.save()
+
+    assert saved == ['project.json']
+    assert errors == []
+    assert len(stamps) == 1
+    assert project.lastSaved != ''
+
+
+def test_save_emits_error_and_leaves_last_saved_untouched(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+
+    def _raise_permission_error():
+        raise PermissionError('project.json is open in another program')
+
+    monkeypatch.setattr(project._logic, 'save', _raise_permission_error)
+    saved, errors, stamps = _spy_save_signals(project)
+
+    project.save()
+
+    assert saved == []
+    assert stamps == []
+    assert project.lastSaved == ''
+    assert len(errors) == 1
+    assert 'No permission to write "project.json"' in errors[0]
+    assert 'open in another program' in errors[0]
+
+
+def test_save_reports_serialization_failure(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+
+    def _raise_value_error():
+        raise ValueError('constraint depends on an unreachable parameter')
+
+    monkeypatch.setattr(project._logic, 'save', _raise_value_error)
+    _saved, errors, _stamps = _spy_save_signals(project)
+
+    project.save()
+
+    assert len(errors) == 1
+    assert 'cannot be serialized' in errors[0]
+    assert 'unreachable parameter' in errors[0]
+
+
+def test_create_reports_save_through_the_same_signals(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    saved, errors, _stamps = _spy_save_signals(project)
+
+    project.create()
+
+    assert saved == ['project.json']
+    assert errors == []
+    assert project.lastSaved != ''
+
+
+def test_create_emits_error_when_the_project_file_already_exists(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+
+    def _raise_file_exists():
+        raise FileExistsError('File already exists project.json')
+
+    monkeypatch.setattr(project._logic, 'create', _raise_file_exists)
+    saved, errors, _stamps = _spy_save_signals(project)
+    created_counts = {'created': 0}
+    project.createdChanged.connect(lambda: created_counts.__setitem__('created', created_counts['created'] + 1))
+
+    project.create()
+
+    assert saved == []
+    assert project.lastSaved == ''
+    assert len(errors) == 1
+    assert 'A project already exists at "project.json"' in errors[0]
+    # The UI is still told to re-read `created`, so it reflects the real state after a failure.
+    assert created_counts['created'] == 1
+
+
+def test_reset_and_load_clear_the_last_saved_stamp(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+
+    project.save()
+    assert project.lastSaved != ''
+    project.reset()
+    assert project.lastSaved == ''
+
+    project.save()
+    assert project.lastSaved != ''
+    project.load('other.json')
+    assert project.lastSaved == ''

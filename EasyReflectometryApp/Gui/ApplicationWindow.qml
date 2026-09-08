@@ -30,11 +30,24 @@ EaComponents.ApplicationWindow {
     appBarLeftButtons: [
 
         EaElements.ToolButton {
-            enabled: Globals.BackendWrapper.projectCreated
+            id: saveButton
+            // Saving serializes the same model state the fitter thread is writing to, so it is
+            // blocked while a fit runs rather than silently storing half-updated parameters.
+            enabled: Globals.BackendWrapper.projectCreated && !Globals.BackendWrapper.analysisFittingRunning
             highlighted: true
-            fontIcon: "save"
-            ToolTip.text: qsTr("Save current state of the project")
+            fontIcon: saveFlashTimer.running ? "check-circle" : "save"
+            ToolTip.text: Globals.BackendWrapper.analysisFittingRunning
+                          ? qsTr("Saving is disabled while a fit is running")
+                          : qsTr("Save current state of the project")
             onClicked: Globals.BackendWrapper.projectSave()
+
+            // Success feedback in place, where the user just clicked. A save during the flash
+            // restarts it rather than cutting it short.
+            Timer {
+                id: saveFlashTimer
+                interval: 2000
+                repeat: false
+            }
         },
 
         EaElements.ToolButton {
@@ -165,6 +178,42 @@ EaComponents.ApplicationWindow {
     ///////
 
     onClosing: Qt.quit()
+
+    Shortcut {
+        sequences: [StandardKey.Save]
+        enabled: saveButton.enabled
+        onActivated: Globals.BackendWrapper.projectSave()
+    }
+
+    // Save feedback is asymmetric: a failure must not be missable, so it is modal, while a
+    // successful save flashes the tool button and updates the status bar instead of interrupting.
+    Connections {
+        target: Globals.BackendWrapper
+
+        function onProjectSaved(path) {
+            saveFlashTimer.restart()
+        }
+
+        function onProjectSaveError(message) {
+            projectSaveErrorDialog.errorMessage = message
+            projectSaveErrorDialog.open()
+        }
+    }
+
+    EaElements.Dialog {
+        id: projectSaveErrorDialog
+        title: qsTr('Project Save Error')
+        standardButtons: Dialog.Ok
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        property string errorMessage: ''
+
+        EaElements.Label {
+            text: projectSaveErrorDialog.errorMessage
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.sideBarContentWidth
+        }
+    }
 
     EaElements.Dialog {
         id: resetStateDialog

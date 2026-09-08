@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from EasyReflectometryApp.Backends.Py.logic.project import Project
 from tests.factories import make_assembly
 from tests.factories import make_layer
@@ -111,3 +113,19 @@ def test_project_reset_calls_reset_and_default_model():
 
     assert project_lib.calls == [('reset',), ('default_model',)]
 
+
+
+def test_save_and_create_propagate_library_failures():
+    """The logic layer must not swallow save failures; the backend turns them into a dialog."""
+    project_lib = make_project_with_sample()
+    logic = Project(project_lib)
+
+    def _raise(overwrite=False):
+        raise OSError('disk full')
+
+    project_lib.save_as_json = _raise
+
+    with pytest.raises(OSError):
+        logic.save()
+    with pytest.raises(OSError):
+        logic.create()

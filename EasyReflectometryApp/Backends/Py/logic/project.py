@@ -21,6 +21,11 @@ class Project:
         return str(self._project_lib.path)
 
     @property
+    def path_json(self) -> str:
+        """Path of the project file itself, as named in save feedback and error messages."""
+        return str(self._project_lib.path_json)
+
+    @property
     def root_path(self) -> str:
         return str(self._project_lib.path.parent)
 

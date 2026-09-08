@@ -1,4 +1,5 @@
 import warnings
+from datetime import datetime
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.orso_utils import load_orso_model
@@ -17,6 +18,7 @@ class Project(QObject):
     nameChanged = Signal()
     descriptionChanged = Signal()
     locationChanged = Signal()
+    lastSavedChanged = Signal()
 
     externalCreatedChanged = Signal()
     externalNameChanged = Signal()
@@ -24,10 +26,13 @@ class Project(QObject):
     externalProjectReset = Signal()
     sampleLoadWarning = Signal(str)
     projectLoadError = Signal(str)
+    projectSaved = Signal(str)
+    projectSaveError = Signal(str)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
         self._logic = ProjectLogic(project_lib)
+        self._last_saved = ''
 
     # Properties
 
@@ -42,6 +47,16 @@ class Project(QObject):
     @Property(str)
     def currentProjectPath(self) -> str:
         return self._logic.path
+
+    @Property(str, notify=lastSavedChanged)
+    def lastSaved(self) -> str:
+        """ISO-8601 wall-clock time of the last successful save, or '' if never saved.
+
+        This is the time of the last save made from this session, which is deliberately not
+        the same as `creationDate` (the project's stored modification stamp). The value is
+        left unformatted so that QML can render it with a locale-aware `Qt.formatTime`.
+        """
+        return self._last_saved
 
     # Properties with setters
 
@@ -78,11 +93,56 @@ class Project(QObject):
 
     # Methods
 
+    def _clear_last_saved(self) -> None:
+        """Drop the save stamp when the project it referred to is gone (reset or load)."""
+        if self._last_saved:
+            self._last_saved = ''
+            self.lastSavedChanged.emit()
+
+    def _mark_saved(self) -> None:
+        self._last_saved = datetime.now().isoformat(timespec='seconds')
+        self.lastSavedChanged.emit()
+        self.projectSaved.emit(self._logic.path_json)
+
+    def _save_error_message(self, exception: Exception) -> str:
+        """Turn a save failure into a sentence a user can act on, keeping the raw text as detail.
+
+        The library raises rather than prints since the atomic-save change, so these are the
+        failures that actually reach the GUI. The previously saved file is always intact.
+        """
+        path = self._logic.path_json
+        if isinstance(exception, FileExistsError):
+            explanation = f'A project already exists at "{path}".\nChoose a different name or location.'
+        elif isinstance(exception, PermissionError):
+            explanation = f'No permission to write "{path}".\nThe file may be read-only or open in another program.'
+        elif isinstance(exception, ValueError):
+            # Raised while serializing, e.g. a constraint that depends on a parameter which is
+            # not reachable from the models.
+            explanation = f'The project could not be saved to "{path}" because it cannot be serialized.'
+        elif isinstance(exception, OSError):
+            explanation = f'The project could not be written to "{path}".'
+        else:
+            return f'Failed to save the project to "{path}".\n\n{exception}'
+        return f'{explanation}\n\nDetails: {exception}'
+
     @Slot()
     def create(self) -> None:
-        self._logic.create()
+        # create() writes the project file, so it is a first save and reports through the same
+        # signals. It can fail on a colliding path, which the library now raises instead of
+        # printing.
+        error = None
+        try:
+            self._logic.create()
+        except Exception as ex:
+            error = self._save_error_message(ex)
+        # Emitted either way, so that the UI reflects the real `created` state even when the
+        # directories were made but the file was not written.
         self.createdChanged.emit()
         self.externalCreatedChanged.emit()
+        if error is not None:
+            self.projectSaveError.emit(error)
+        else:
+            self._mark_saved()
 
     @Slot(str)
     def load(self, path: str) -> None:
@@ -102,6 +162,7 @@ class Project(QObject):
                 message = str(ex)
             self.projectLoadError.emit(message)
             return
+        self._clear_last_saved()
         self.createdChanged.emit()
         self.nameChanged.emit()
         self.descriptionChanged.emit()
@@ -110,11 +171,19 @@ class Project(QObject):
 
     @Slot()
     def save(self) -> None:
-        self._logic.save()
+        # The whole call is guarded: the library's unlink-free atomic save raises, and a locked
+        # destination raises out of os.replace, so nothing may escape into this slot uncaught.
+        try:
+            self._logic.save()
+        except Exception as ex:
+            self.projectSaveError.emit(self._save_error_message(ex))
+            return
+        self._mark_saved()
 
     @Slot()
     def reset(self) -> None:
         self._logic.reset()
+        self._clear_last_saved()
         self.createdChanged.emit()
         self.nameChanged.emit()
         self.descriptionChanged.emit()
