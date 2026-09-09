@@ -3,6 +3,7 @@ from typing import Union
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import MaterialCollection
+from easyreflectometry.sample import MaterialDensity
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,14 @@ class Material:
         self._materials.pop(int(value))
 
     def add_new(self) -> None:
-        self._materials.add_material()
+        # A material added from the GUI is a density material, so that the Material editor's
+        # detail panel (formula, density, SLD coupling) applies to it: that panel is shown only
+        # for `kind == 'density'`, and before this the GUI could not produce such a material at
+        # all — they arrived only through an ORSO sample load. Nothing is lost by the default:
+        # unchecking the coupling hands the SLD back for direct entry and fitting, which is what
+        # a plain `Material` offers. The library's defaults (Si at 2.33 g/cm3) also start the
+        # material at a physical SLD rather than the zero a plain `Material` would carry.
+        self._materials.add_material(MaterialDensity(name='Material added'))
 
     def duplicate_selected(self) -> None:
         self._materials.duplicate_material(self.index)

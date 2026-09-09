@@ -321,6 +321,37 @@ def test_create_emits_error_when_the_project_directory_already_exists(monkeypatc
     assert 'Choose a different name or location' in errors[0]
     # The UI is still told to re-read `created`, so it reflects the real state after a failure.
     assert created_counts['created'] == 1
+    # Nothing was created, so there is still nothing on disk for edits to differ from.
+    assert project.hasUnsavedChanges is False
+
+
+def test_create_that_fails_after_the_directories_are_made_stays_saveable(monkeypatch, qcore_application):
+    """`ProjectLogic.create()` makes the directories and then writes the file. When only the
+    write fails, the library has already flipped `created`, so the UI shows a project whose file
+    was never written. That state must be dirty: the Save button, Ctrl+S and the close prompt are
+    all gated on the flag, so without it the write cannot be retried without making an unrelated
+    edit first, and closing the window discards the work without asking."""
+    project = _build_project(monkeypatch)
+    saved, errors, _stamps = _spy_save_signals(project)
+
+    def _create_then_fail_to_write():
+        project._logic.created = True
+        raise PermissionError('project.json is read-only')
+
+    monkeypatch.setattr(project._logic, 'create', _create_then_fail_to_write)
+
+    project.create()
+
+    assert project.created is True
+    assert saved == []
+    assert len(errors) == 1
+    assert project.hasUnsavedChanges is True
+
+    # And the retry is what clears it, not an unrelated edit.
+    project.save()
+
+    assert saved == ['project.json']
+    assert project.hasUnsavedChanges is False
 
 
 def test_reset_and_load_clear_the_last_saved_stamp(monkeypatch, qcore_application):

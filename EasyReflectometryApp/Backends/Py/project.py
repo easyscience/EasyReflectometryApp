@@ -139,8 +139,7 @@ class Project(QObject):
             return
         if self._content_unchanged_since_clean():
             return
-        self._has_unsaved_changes = True
-        self.hasUnsavedChangesChanged.emit()
+        self._set_dirty()
 
     def _content_unchanged_since_clean(self) -> bool:
         if self._clean_fingerprint is None:
@@ -161,6 +160,12 @@ class Project(QObject):
             logger.debug('Could not fingerprint the project after a clean point', exc_info=True)
             self._clean_fingerprint = None
         self._clear_dirty()
+
+    def _set_dirty(self) -> None:
+        if self._has_unsaved_changes:
+            return
+        self._has_unsaved_changes = True
+        self.hasUnsavedChangesChanged.emit()
 
     def _clear_dirty(self) -> None:
         if not self._has_unsaved_changes:
@@ -236,6 +241,15 @@ class Project(QObject):
             self.createdChanged.emit()
             self.externalCreatedChanged.emit()
         if error is not None:
+            if self._logic.created:
+                # The library makes the directories before writing the file, so a failure of the
+                # write alone leaves a project the UI considers created with nothing of it on
+                # disk. That state has to be dirty: the Save button, Ctrl+S and the close prompt
+                # are all gated on the flag, and without it the only way to retry the write is to
+                # make an unrelated edit first — while closing the window discards the work
+                # without asking.
+                self._clean_fingerprint = None
+                self._set_dirty()
             self.projectSaveError.emit(error)
         else:
             self._mark_saved()
