@@ -75,3 +75,36 @@ def test_structure_cache_cleared_and_signal_emitted_on_invalidation(qcore_applic
     assert emitted == [True]
     assert len(backend.structure) == 4
     assert backend.structureTotalThickness == 40.0
+
+
+def test_set_current_model_index_refreshes_layers_and_selection(qcore_application):
+    materials = make_material_collection(make_material('Air'), make_material('D2O'), make_material('Si'))
+    first = make_sample(
+        make_assembly(name='Superphase', layers=[make_layer(name='Air Layer', material=materials[0])]),
+        make_assembly(name='Substrate', layers=[make_layer(name='Si Layer', material=materials[2])]),
+    )
+    second = make_sample(
+        make_assembly(name='Superphase', layers=[make_layer(name='D2O Layer', material=materials[1])]),
+        make_assembly(name='Substrate', layers=[make_layer(name='Si Layer', material=materials[2])]),
+    )
+    project = make_project(
+        materials=materials,
+        models=make_model_collection(make_model(name='M1', sample=first), make_model(name='M2', sample=second)),
+    )
+    project.current_model_index = 0
+    project.current_assembly_index = 1
+
+    backend = Sample(project)
+    assert [layer['material'] for layer in backend.layers] == ['Si']
+
+    fired = []
+    for name in ('assembliesIndexChanged', 'layersIndexChanged', 'layersChange'):
+        getattr(backend, name).connect(lambda name=name: fired.append(name))
+
+    backend.setCurrentModelIndex(1)
+
+    assert backend.currentModelName == 'M2'
+    assert backend.currentAssemblyIndex == 0
+    assert backend.currentLayerIndex == 0
+    assert [layer['material'] for layer in backend.layers] == ['D2O']
+    assert set(fired) == {'assembliesIndexChanged', 'layersIndexChanged', 'layersChange'}
