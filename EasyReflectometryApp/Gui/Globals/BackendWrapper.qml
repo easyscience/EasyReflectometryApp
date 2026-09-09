@@ -100,6 +100,28 @@ QtObject {
         return null
     }
 
+    // Project save signals - forwarded from backend
+    readonly property string projectLastSaved: activeBackend.project.lastSaved ?? ''
+    readonly property bool projectHasUnsavedChanges: activeBackend.project.hasUnsavedChanges ?? false
+
+    signal projectSaved(string path)
+
+    property var _projectSavedConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectSaved) {
+            activeBackend.project.projectSaved.connect(projectSaved)
+        }
+        return null
+    }
+
+    signal projectSaveError(string message)
+
+    property var _projectSaveErrorConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectSaveError) {
+            activeBackend.project.projectSaveError.connect(projectSaveError)
+        }
+        return null
+    }
+
 
     ///////////////
     // Sample page

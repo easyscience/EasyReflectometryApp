@@ -533,15 +533,20 @@ class Sample(QObject):
         self._project_lib.current_layer_index = new_value
         self.layersIndexChanged.emit()
 
+    # A rename is project content and shows up in the Analysis parameter names, so it emits
+    # externalSampleChanged like the assembly rename does; layersChange alone would only reach
+    # dirty tracking through the deferred constraintsChanged relay, by accident.
     @Slot(str)
     def setCurrentLayerName(self, new_value: str) -> None:
         if self._layers_logic.set_name_at_current_index(new_value):
             self._clearCacheAndEmitLayersChanged()
+            self.externalSampleChanged.emit()
 
     @Slot(int, str)
     def setLayerNameAtIndex(self, index: int, new_value: str) -> None:
         if self._layers_logic.set_name_at_index(index, new_value):
             self._clearCacheAndEmitLayersChanged()
+            self.externalSampleChanged.emit()
 
     @Slot(int)
     def setCurrentLayerMaterial(self, new_value: int) -> None:

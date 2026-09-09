@@ -378,6 +378,7 @@ class FakeProject:
         self._info = {'name': 'Demo Project', 'short_description': 'Demo Description', 'modified': '2026-03-19'}
         self.created = False
         self.path = Path('C:/tmp/demo-project')
+        self.path_json = self.path / 'project.json'
         self.q_min = 0.01
         self.q_max = 0.5
         self.q_resolution = 200

@@ -24,6 +24,10 @@ class StubProject(QObject):
 
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)
+        self.dirty_calls = 0
+
+    def markDirty(self):
+        self.dirty_calls += 1
 
 
 class StubSample(QObject):

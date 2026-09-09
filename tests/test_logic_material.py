@@ -113,6 +113,29 @@ def test_set_density_at_index_clamps_below_the_min_bound():
     assert materials[0].density.value == pytest.approx(0.0)
 
 
+def test_material_logic_add_new_creates_a_density_material():
+    """A material added from the GUI must be a density material.
+
+    The Material editor shows its formula/density/SLD-coupling panel only for
+    `kind == 'density'`, so a plain `Material` (what the collection appends by default)
+    gives the user a row with no way to reach any of that.
+    """
+    materials = make_material_collection(make_material('Air', sld=0.0))
+    project = make_project(materials=materials)
+    logic = Material(project)
+
+    logic.add_new()
+
+    added = logic.materials[-1]
+    assert added['label'] == 'Material added'
+    assert added['kind'] == 'density'
+    # The library's defaults, so the material starts at a physical SLD rather than zero.
+    assert added['formula'] == 'Si'
+    assert float(added['density']) == pytest.approx(2.33)
+    assert float(added['sld']) == pytest.approx(2.0737, abs=1e-4)
+    assert added['sld_coupled'] is True
+
+
 def test_material_logic_add_duplicate_move_and_remove():
     materials = make_material_collection(
         make_material('Air', sld=0.0),

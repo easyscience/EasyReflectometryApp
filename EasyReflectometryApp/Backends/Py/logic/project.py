@@ -1,3 +1,5 @@
+import hashlib
+import json
 from copy import copy
 from pathlib import Path
 
@@ -19,6 +21,11 @@ class Project:
     @property
     def path(self) -> str:
         return str(self._project_lib.path)
+
+    @property
+    def path_json(self) -> str:
+        """Path of the project file itself, as named in save feedback and error messages."""
+        return str(self._project_lib.path_json)
 
     @property
     def root_path(self) -> str:
@@ -117,6 +124,20 @@ class Project:
         info = copy(self._project_lib._info)
         info['location'] = self._project_lib.path
         return info
+
+    def content_fingerprint(self) -> str:
+        """A digest of exactly what `save()` would write.
+
+        Used to tell a real edit from a signal that merely looks like one: selecting another
+        model or assembly emits the same signals as editing them, but does not change this.
+        Costs one serialization (under 10 ms with an experiment loaded), so callers keep it to
+        the moment a project might turn from clean to edited, not to every signal.
+
+        :raises Exception: whatever `as_dict` raises; a caller that cannot fingerprint the
+            project must treat it as changed.
+        """
+        content = self._project_lib.as_dict(include_materials_not_in_model=True)
+        return hashlib.sha256(json.dumps(content, sort_keys=True).encode('utf-8')).hexdigest()
 
     def create(self) -> None:
         self._project_lib.create()
