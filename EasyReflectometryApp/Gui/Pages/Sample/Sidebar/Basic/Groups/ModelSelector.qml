@@ -54,6 +54,9 @@ EaElements.GroupBox {
                 EaComponents.TableViewTextInput {
                     horizontalAlignment: Text.AlignLeft
                     text: Globals.BackendWrapper.sampleModels[index].label
+                    // Commit while typing so "Model editor: <name>" follows the edit
+                    // instead of waiting for Enter or focus loss (#407).
+                    onTextEdited: Globals.BackendWrapper.sampleSetModelNameAtIndex(index, text)
                     onEditingFinished: Globals.BackendWrapper.sampleSetModelNameAtIndex(index, text)
                 }
 

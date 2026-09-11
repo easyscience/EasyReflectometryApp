@@ -305,6 +305,13 @@ class Sample(QObject):
         if self._project_lib.current_model_index != new_value:
             self._project_lib.current_model_index = new_value
             self.modelsIndexChanged.emit()
+            # A model switch starts from the first assembly and layer of the new model
+            # (the lib does the same). The layer table is cached, so the assembly/layer
+            # side has to be refreshed too, or the layer editor keeps showing the
+            # previous model's layers (#407).
+            self._project_lib.current_assembly_index = 0
+            self._project_lib.current_layer_index = 0
+            self._refreshCurrentAssemblySelectionState()
             self.assembliesTableChanged.emit()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()

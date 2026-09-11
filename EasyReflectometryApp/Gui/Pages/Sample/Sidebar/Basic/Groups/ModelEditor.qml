@@ -73,12 +73,18 @@ EaElements.GroupBox {
                     property var fullModel: ["Multi-layer", "Repeating Multi-layer", "Surfactant Layer"]
                     property var limitedModel: ["Multi-layer", "Repeating Multi-layer"]
                     model: index === 0 || index === assembliesView.model - 1 ? limitedModel : fullModel
+                    // Track the row's own type so the combo re-syncs when the assemblies
+                    // list is refreshed (e.g. a model switch reusing the same rows).
+                    readonly property string assemblyType: {
+                        const assembly = Globals.BackendWrapper.sampleAssemblies[index]
+                        return assembly ? String(assembly.type) : ""
+                    }
                     onActivated: function(comboIndex) {
                         Globals.BackendWrapper.sampleSetAssemblyTypeAtIndex(rowIndex, model[comboIndex])
                     }
-                    Component.onCompleted: {
-                        currentIndex = indexOfValue(Globals.BackendWrapper.sampleAssemblies[index].type)
-                    }
+                    onModelChanged: currentIndex = indexOfValue(assemblyType)
+                    onAssemblyTypeChanged: currentIndex = indexOfValue(assemblyType)
+                    Component.onCompleted: currentIndex = indexOfValue(assemblyType)
                 }
 
                 EaComponents.TableViewButton {
