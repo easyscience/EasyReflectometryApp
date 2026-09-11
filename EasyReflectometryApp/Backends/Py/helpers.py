@@ -3,6 +3,7 @@ import sys
 from urllib.parse import urlparse
 
 import numpy as np
+from PySide6.QtCore import Qt
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import QApplication
 from uncertainties import ufloat
@@ -94,3 +95,12 @@ class Application(QApplication):  # QGuiApplication crashes when using in combin
         self.setApplicationName('EasyReflectometry')
         self.setOrganizationName('EasyScience')
         self.setOrganizationDomain('easyscience.software')
+        # On Linux, render file/folder dialogs with Qt itself instead of the
+        # desktop's native ones. On desktops that Qt maps to the gtk3 platform
+        # theme (GNOME, XFCE, MATE, ...) the native dialog is a GTK window running
+        # inside our process, along with the GTK/GLib libraries PyInstaller copied
+        # from the build machine; browsing folders then loads the *system's* GVfs,
+        # pixbuf and GSettings modules into them and occasionally crashes.
+        # The attribute covers both QtQuick.Dialogs and QtWidgets.QFileDialog.
+        if sys.platform.startswith('linux'):
+            self.setAttribute(Qt.AA_DontUseNativeDialogs)
