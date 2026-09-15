@@ -805,9 +805,21 @@ class Sample(QObject):
         if self._layers_logic.set_theta_m_at_index(index, new_value):
             self._emitMagnetismChanged()
 
+    @Slot(int, float)
+    def setLayerPhiAtIndex(self, index: int, new_value: float) -> None:
+        """Point a layer's moment at `new_value` degrees from the guide field."""
+        if self._layers_logic.set_phi_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
     def _emitMagnetismChanged(self) -> None:
         """Magnetism edits change the model, its parameters and every curve."""
         self._clearCacheAndEmitLayersChanged()
+        # The structure boxes carry the moment direction, so a theta_m or rho_m
+        # edit changes them without changing their number: without dropping the
+        # cache the Structure arrows keep pointing the old way until an
+        # unrelated layer edit happens to rebuild it. `externalRefreshPlot` is
+        # no substitute - it refreshes the charts, not the structure model.
+        self._clearStructureCacheAndEmit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 

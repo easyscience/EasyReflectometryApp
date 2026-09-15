@@ -2,6 +2,9 @@ module Gui
 
 ApplicationWindow ApplicationWindow.qml
 CalculationEngineControl CalculationEngineControl.qml
+GuideFieldLegend GuideFieldLegend.qml
+MagnetizationArrow MagnetizationArrow.qml
+MagnetizationCompass MagnetizationCompass.qml
 MagneticProfileControl MagneticProfileControl.qml
 PlotControlRefLines PlotControlRefLines.qml
 SpinAsymmetryChart SpinAsymmetryChart.qml

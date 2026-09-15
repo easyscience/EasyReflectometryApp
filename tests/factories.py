@@ -10,9 +10,11 @@ class ValueHolder:
 
 
 class FlaggedValueHolder(ValueHolder):
-    def __init__(self, value, enabled=True):
+    def __init__(self, value, enabled=True, independent=True):
         super().__init__(value)
         self.enabled = enabled
+        # As on a real Parameter: False once the value follows a constraint.
+        self.independent = independent
 
 
 class FakeMaterial:
@@ -20,6 +22,14 @@ class FakeMaterial:
         self.name = name
         self.sld = ValueHolder(sld)
         self.isld = ValueHolder(isld)
+
+
+class FakeLayerMagnetism:
+    """Mirrors LayerMagnetism: rho_m/theta_m as fittable value holders."""
+
+    def __init__(self, rho_m=0.0, theta_m=270.0):
+        self.rho_m = FlaggedValueHolder(rho_m)
+        self.theta_m = FlaggedValueHolder(theta_m)
 
 
 class FakeLayer:
@@ -33,8 +43,10 @@ class FakeLayer:
         area_per_molecule=0.1,
         solvent_fraction=0.2,
         molecular_formula='formula',
+        magnetism=None,
     ):
         self.name = name
+        self.magnetism = magnetism
         self.material = material or FakeMaterial('Air')
         self.solvent = solvent or FakeMaterial('D2O')
         self._thickness = FlaggedValueHolder(thickness)
@@ -372,6 +384,7 @@ class FakeProject:
             name for name in (calculator_interfaces or ['refnx', 'refl1d']) if name == 'refl1d'
         ]
         self.models_have_magnetism = False
+        self.calculator_supports_magnetism = calculator_name == 'refl1d'
         self.minimizer = FakeMinimizerValue(minimizer_name)
         self._fitter = None
         self.fitter = None
@@ -386,6 +399,9 @@ class FakeProject:
         # Inequality-constraint API of the real Project (BUMPS fit penalties).
         self.inequality_constraints = []
         self.calls = []
+
+    def _sync_parameter_states(self):
+        self.calls.append(('_sync_parameter_states',))
 
     def violated_inequality_constraints(self):
         return [spec for spec in self.inequality_constraints if getattr(spec, 'violated', False)]

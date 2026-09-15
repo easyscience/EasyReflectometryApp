@@ -10,6 +10,7 @@ import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
@@ -75,6 +76,45 @@ Rectangle {
         return {dash: Qt.SolidLine, width: 1.0, label: curve}
     }
 
+    // Moment arrow band (opt-in): where each magnetic layer sits in depth and
+    // which way its moment points, as a ribbon of compasses over the z axis.
+    readonly property real arrowGlyphSize: EaStyle.Sizes.fontPixelSize * 1.2
+    readonly property real arrowBandHeight: EaStyle.Sizes.fontPixelSize * 1.8
+    // Two bands at most: four magnetic models would otherwise eat a short
+    // Analysis tab. The rest are reported as a "+N models" note.
+    readonly property int maxArrowBands: 2
+
+    // One entry per drawn band, {modelIndex, label, color, markers}. Always
+    // assigned as a new array - mutating an array held by a `property var`
+    // does not notify its bindings (the CR2 legend bug).
+    property var arrowBands: []
+    property int hiddenArrowBands: 0
+
+    function rebuildArrowBands() {
+        let bands = []
+        let hidden = 0
+        if (Globals.BackendWrapper.plottingSldArrowsVisible && anyModelMagnetic) {
+            const models = Globals.BackendWrapper.sampleModels
+            for (let i = 0; i < models.length; i++) {
+                // Only a model whose nuclear SLD line is on the chart gets a band.
+                if (!sldSeries[i] || !sldSeries[i].visible) {
+                    continue
+                }
+                const markers = Globals.BackendWrapper.plottingGetMagneticLayerMarkers(i)
+                if (markers.length === 0) {
+                    continue
+                }
+                if (bands.length >= maxArrowBands) {
+                    hidden += 1
+                    continue
+                }
+                bands.push({modelIndex: i, label: models[i].label, color: models[i].color, markers: markers})
+            }
+        }
+        arrowBands = bands
+        hiddenArrowBands = hidden
+    }
+
     // Slight shade variations of the model colour, one per magnetic curve: the
     // hue still says "which model", the shade helps tell the curves apart.
     function magneticCurveColor(curve, baseColor) {
@@ -87,11 +127,159 @@ Rectangle {
         return baseColor
     }
 
+    // The arrow band is a sibling ABOVE the ChartView, never a chart margin:
+    // growing the chart's own top margin would shrink plotArea, move the toolbar
+    // row and risk clipping it in the tight Sample split view. Its height is 0
+    // unless the user asked for arrows and a magnetic model has markers, so a
+    // non-magnetic project's chart geometry is untouched by construction.
+    Item {
+        id: arrowOverlay
+
+        readonly property real headerHeight: root.arrowBands.length > 0 ? EaStyle.Sizes.fontPixelSize * 1.4 : 0
+
+        z: 1
+        anchors.top: parent.top
+        x: chartView.x + chartView.plotArea.x
+        width: chartView.plotArea.width
+        height: headerHeight + root.arrowBands.length * root.arrowBandHeight
+
+        // The reference the arrows are measured from, on its own row so it can
+        // collide with neither an arrow nor the chart toolbar.
+        Gui.GuideFieldLegend {
+            anchors.right: parent.right
+            height: arrowOverlay.headerHeight
+            visible: root.arrowBands.length > 0
+        }
+
+        EaElements.Label {
+            anchors.left: parent.left
+            height: arrowOverlay.headerHeight
+            verticalAlignment: Text.AlignVCenter
+            visible: root.hiddenArrowBands > 0
+            color: EaStyle.Colors.themeForegroundMinor
+            text: qsTr("+%1 models").arg(root.hiddenArrowBands)
+            ToolTip.text: qsTr("Only the first %1 magnetic models get an arrow band.").arg(root.maxArrowBands)
+        }
+
+        Repeater {
+            model: root.arrowBands
+
+            Item {
+                id: band
+
+                readonly property var bandData: modelData
+                // Every quantity that moves an arrow: zoom, pan, resetAxes, the
+                // theta_m axis appearing and legend changes all move plotArea.
+                readonly property string geometry: [chartView.plotArea.x, chartView.plotArea.width,
+                                                    root.chartAxisX.min, root.chartAxisX.max,
+                                                    root.chartAxisX.reverse].join(',')
+                property var placed: []
+                property var skipped: []
+
+                y: arrowOverlay.headerHeight + index * root.arrowBandHeight
+                width: arrowOverlay.width
+                height: root.arrowBandHeight
+                clip: true
+
+                onGeometryChanged: Qt.callLater(place)
+                Component.onCompleted: place()
+
+                // Map each marker's z centre to a pixel and thin the result:
+                // in a dense stack adjacent arrows collide, so an arrow closer
+                // than one glyph to the previous one is skipped and counted.
+                // Zooming in recovers it. `mapToPosition` follows
+                // `axisX.reverse`, so reverse-z needs no mirroring here.
+                function place() {
+                    let drawn = []
+                    let missed = []
+                    let lastX = -Infinity
+                    for (let i = 0; i < bandData.markers.length; i++) {
+                        const marker = bandData.markers[i]
+                        const mapped = chartView.mapToPosition(Qt.point(marker.z_center, root.chartAxisY.min))
+                        const x = mapped.x - chartView.plotArea.x
+                        if (x < 0 || x > width) {
+                            continue
+                        }
+                        if (x - lastX < root.arrowGlyphSize) {
+                            missed.push(marker.label)
+                            continue
+                        }
+                        lastX = x
+                        drawn.push({x: x, marker: marker})
+                    }
+                    placed = drawn
+                    skipped = missed
+                }
+
+                // Band identity: two Fe layers in two models must not look alike.
+                EaElements.Label {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: band.bandData.label
+                    color: band.bandData.color
+                }
+
+                Repeater {
+                    model: band.placed
+
+                    Item {
+                        id: glyph
+
+                        readonly property var marker: modelData.marker
+
+                        x: modelData.x - width / 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: root.arrowGlyphSize
+                        height: root.arrowGlyphSize
+
+                        Gui.MagnetizationArrow {
+                            anchors.fill: parent
+                            phi: glyph.marker.phi
+                            hasMoment: glyph.marker.has_moment
+                            color: band.bandData.color
+                        }
+
+                        HoverHandler {
+                            id: arrowHover
+                        }
+
+                        ToolTip.visible: arrowHover.hovered
+                        ToolTip.text: marker === undefined ? '' :
+                            [`${marker.label} — ${band.bandData.label}`,
+                             marker.has_moment
+                                ? qsTr("Moment: %1° from H (θM %2°, ρM %3)")
+                                  .arg(marker.phi.toFixed(1)).arg(marker.theta_m.toFixed(1)).arg(marker.rho_m.toFixed(3))
+                                : qsTr("Magnetic, no moment (ρM %1)").arg(marker.rho_m.toFixed(3)),
+                             qsTr("M∥ %1 (no spin flip), M⊥ %2 (spin flip)")
+                                  .arg(marker.m_par.toFixed(3)).arg(marker.m_perp.toFixed(3)),
+                             qsTr("z %1 to %2 Å").arg(marker.z_min.toFixed(1)).arg(marker.z_max.toFixed(1))
+                            ].join('\n')
+                    }
+                }
+
+                EaElements.Label {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: band.skipped.length > 0
+                    color: EaStyle.Colors.themeForegroundMinor
+                    text: qsTr("+%1").arg(band.skipped.length)
+
+                    HoverHandler {
+                        id: skippedHover
+                    }
+
+                    ToolTip.visible: skippedHover.hovered
+                    ToolTip.text: qsTr("Too close to draw at this zoom: %1").arg(band.skipped.join(', '))
+                }
+            }
+        }
+    }
+
     ChartView {
         id: chartView
 
         anchors.fill: parent
-        anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
+        anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1 + arrowOverlay.height
         anchors.margins: -12
 
         antialiasing: true
@@ -611,6 +799,11 @@ Rectangle {
                 entry.series.append(magneticPoints[q].x, magneticPoints[q].y)
             }
         }
+
+        // The band carries values, not just a count: a theta_m edit changes
+        // where the arrows point without changing how many there are, so it is
+        // rebuilt from the markers on every refresh rather than compared.
+        rebuildArrowBands()
     }
 
     function showMainTooltip(point, state) {

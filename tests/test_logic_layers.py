@@ -1,5 +1,6 @@
 from EasyReflectometryApp.Backends.Py.logic import layers as layers_module
 from tests.factories import FakeLayerAreaPerMolecule
+from tests.factories import FakeLayerMagnetism
 from tests.factories import make_assembly
 from tests.factories import make_layer
 from tests.factories import make_layer_collection
@@ -187,3 +188,69 @@ def test_layers_index_based_setters_ignore_invalid_indices(monkeypatch):
 
     assert logic._layers[0].material.name == 'Air'
     assert logic._layers[0].thickness.value == 10.0
+
+
+# The moment compass (spin-direction design A5/A6): phi is reported per row and
+# set back through the guide-field convention, which never appears in QML.
+
+
+def _magnetism_logic(rho_m=3.0, theta_m=40.0, independent=True):
+    magnetism = FakeLayerMagnetism(rho_m=rho_m, theta_m=theta_m)
+    magnetism.theta_m.independent = independent
+    materials = make_material_collection(make_material('Air'), make_material('Fe'))
+    sample = make_sample(
+        make_assembly(
+            name='Fe',
+            layers=[
+                make_layer(name='Plain Layer', material=materials[0]),
+                make_layer(name='Fe Layer', material=materials[1], magnetism=magnetism),
+            ],
+        )
+    )
+    project = make_project(materials=materials, models=make_model_collection(make_model(sample=sample)))
+    return layers_module.Layers(project), magnetism
+
+
+def test_magnetism_rows_report_the_drawn_direction():
+    logic, _ = _magnetism_logic(theta_m=40.0)
+
+    plain, magnetic = logic.magnetism
+
+    assert magnetic['phi'] == '130.0'  # 40 deg is 130 deg from the guide field
+    assert magnetic['editable'] == 'True'
+    # A non-magnetic layer has no direction and nothing to drag.
+    assert (plain['phi'], plain['editable']) == ('', '')
+
+
+def test_setting_phi_writes_theta_m_through_the_guide_field_convention():
+    logic, magnetism = _magnetism_logic(theta_m=40.0)
+
+    assert logic.set_phi_at_index(1, 0.0) is True
+
+    assert magnetism.theta_m.value == 270.0  # phi = 0 is along the guide field
+
+
+def test_setting_phi_on_a_negative_moment_flips_the_parameter_back():
+    logic, magnetism = _magnetism_logic(rho_m=-3.0, theta_m=40.0)
+
+    logic.set_phi_at_index(1, 0.0)
+
+    # The moment points along H, so the parameter points the opposite way.
+    assert magnetism.theta_m.value == 90.0
+    assert logic.magnetism[1]['phi'] == '0.0'
+
+
+def test_a_constrained_theta_m_refuses_the_drag():
+    logic, magnetism = _magnetism_logic(theta_m=40.0, independent=False)
+
+    assert logic.set_phi_at_index(1, 0.0) is False
+
+    assert magnetism.theta_m.value == 40.0
+    assert logic.magnetism[1]['editable'] == 'False'
+
+
+def test_setting_phi_on_a_non_magnetic_layer_is_a_no_op():
+    logic, _ = _magnetism_logic()
+
+    assert logic.set_phi_at_index(0, 90.0) is False
+    assert logic.set_phi_at_index(7, 90.0) is False

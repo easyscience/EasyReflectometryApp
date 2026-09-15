@@ -243,6 +243,16 @@ class PyBackend(QObject):
         """Points of one piece of a magnetic profile curve."""
         return self._plotting_1d.getMagneticSldSegment(model_index, curve, segment)
 
+    @Slot(int, result='QVariantList')
+    def plottingGetMagneticLayerMarkers(self, model_index: int) -> list:
+        """Per-layer moment markers of one model ([] when there are none)."""
+        return self._plotting_1d.getMagneticLayerMarkers(model_index)
+
+    @Slot(bool)
+    def plottingSetSldArrowsVisible(self, visible: bool) -> None:
+        """Show or hide the moment arrow band on both SLD tabs."""
+        self._plotting_1d.setSldArrowsVisible(visible)
+
     @Slot(str, result=bool)
     def plottingSldCurveVisible(self, curve: str) -> bool:
         """Whether one magnetic profile curve is shown."""

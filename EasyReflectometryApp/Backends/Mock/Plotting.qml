@@ -46,6 +46,7 @@ QtObject {
     // Magnetic depth profiles (no magnetic model in the mock)
     property bool anyModelHasMagnetism: false
     property var visibleSldCurves: ['spin_up', 'spin_down']
+    property bool sldArrowsVisible: false
     property double sldThetaMinY: 0
     property double sldThetaMaxY: 360
     signal magneticProfileChanged()
@@ -66,6 +67,12 @@ QtObject {
     }
     function setSldCurveVisible(curve, visible) {
         console.debug(`setSldCurveVisible ${curve} ${visible}`)
+    }
+    function getMagneticLayerMarkers(index) {
+        return []
+    }
+    function setSldArrowsVisible(visible) {
+        console.debug(`setSldArrowsVisible ${visible}`)
     }
 
     // Spin asymmetry (no polarized experiment in the mock)

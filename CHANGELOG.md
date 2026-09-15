@@ -1,5 +1,29 @@
 # Unreleased
 
+- Moment direction is now drawn, not just numbered. One convention, defined once
+  in the library: arrows are a top view along the surface normal, screen right is
+  the guide field H, and the angle drawn is φ = θM − 270° (a negative ρM points
+  the other way, with the signed parameter in the tooltip). A magnetic layer with
+  a negligible moment gets a hollow dot; a non-magnetic layer gets nothing, and a
+  gradient assembly - which has no single moment - gets nothing either.
+  - **Structure tab**: an arrow in every magnetic layer's box, between the name
+    and the thickness annotation, with no switch to find - attaching magnetism is
+    the request. Tooltips lead with φ, then θM and signed ρM, then the M∥/M⊥ split.
+    A magnetism edit now refreshes the boxes; previously a θM change updated the
+    chart while the boxes kept the old value.
+  - **SLD chart**: a new "Show moment arrows" switch in the Magnetic profile group
+    (off by default) adds a band above the chart with one arrow per magnetic layer
+    at its depth. The band never moves the chart's axes, follows zoom, pan and a
+    reversed z axis, is coloured and labelled per model (two bands at most, the
+    rest reported as "+N models"), and thins colliding arrows in a dense stack
+    with a "+n" whose tooltip lists what is hidden.
+  - **Magnetism group**: the selected magnetic layer's angle as a compass, with H
+    fixed to the right and the θM values on the rim. Dragging it sets θM in 5°
+    steps; it is read-only while a fit runs or θM follows a constraint.
+  - An "H →" reference is on screen wherever an arrow is.
+  - A project with no magnetic layer is unchanged: no arrows, no band, no compass,
+    and the same Structure and SLD layout as before.
+
 - Added a **Structure** tab on the Model page: a schematic view of the layer stack with one
   colored box per layer (colors per material, heights following thickness, "× N" badges for
   collapsed repeating multilayers, legend and total-thickness caption). Boxes show tooltips

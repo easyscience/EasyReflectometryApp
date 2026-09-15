@@ -306,9 +306,9 @@ QtObject {
     // Layer magnetism (polarized analysis)
     readonly property bool magnetismSupported: true
     readonly property var layersMagnetism: [
-        { 'label': 'label 1', 'magnetic': 'True', 'rho_m': '5.0', 'theta_m': '40.0' },
-        { 'label': 'label 2', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0' },
-        { 'label': 'label 3', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0' },
+        { 'label': 'label 1', 'magnetic': 'True', 'rho_m': '5.0', 'theta_m': '40.0', 'phi': '130.0', 'editable': 'True' },
+        { 'label': 'label 2', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
+        { 'label': 'label 3', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
     ]
     function setLayerMagneticAtIndex(index, value) {
         console.debug(`setLayerMagneticAtIndex ${index} ${value}`)
@@ -318,6 +318,9 @@ QtObject {
     }
     function setLayerThetaMAtIndex(index, value) {
         console.debug(`setLayerThetaMAtIndex ${index} ${value}`)
+    }
+    function setLayerPhiAtIndex(index, value) {
+        console.debug(`setLayerPhiAtIndex ${index} ${value}`)
     }
 
     // Table functions

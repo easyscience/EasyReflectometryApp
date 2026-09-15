@@ -1,6 +1,9 @@
+import pytest
+
 from EasyReflectometryApp.Backends.Py.logic.structure import COLORS
 from EasyReflectometryApp.Backends.Py.logic.structure import flatten
 from tests.factories import FakeGradientLayer
+from tests.factories import FakeLayerMagnetism
 from tests.factories import FakeRepeatingMultilayer
 from tests.factories import FakeSolvatedMaterial
 from tests.factories import make_assembly
@@ -200,3 +203,98 @@ def test_legend_lists_only_used_materials_once():
         {'label': 'Air', 'color': COLORS[0]},
         {'label': 'Si', 'color': COLORS[1]},
     ]
+
+
+# Moment arrows (spin-direction design A3): a magnetic layer's box carries the
+# in-plane direction, every other box is untouched.
+
+
+def _magnetic_sample(materials, rho_m=3.0, theta_m=40.0):
+    return make_sample(
+        make_assembly(name='Top', layers=[make_layer(name='Air Layer', material=materials[0], thickness=0.0)]),
+        make_assembly(
+            name='Fe',
+            layers=[
+                make_layer(
+                    name='Fe Layer',
+                    material=materials[1],
+                    thickness=40.0,
+                    magnetism=FakeLayerMagnetism(rho_m=rho_m, theta_m=theta_m),
+                )
+            ],
+        ),
+        make_assembly(name='Bottom', layers=[make_layer(name='Si Layer', material=materials[2], thickness=0.0)]),
+    )
+
+
+def test_a_magnetic_layer_box_carries_the_moment_direction():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    boxes, _, _ = flatten(_project(_magnetic_sample(materials), materials))
+
+    magnetic = boxes[1]
+    assert magnetic['magnetic'] is True
+    assert magnetic['has_moment'] is True
+    assert magnetic['phi'] == pytest.approx(130.0)  # theta_m 40 is 130 deg from the guide field
+    assert magnetic['theta_m'] == pytest.approx(40.0)
+    assert magnetic['rho_m'] == pytest.approx(3.0)
+
+
+def test_non_magnetic_boxes_omit_the_arrow_keys_entirely():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    boxes, _, _ = flatten(_project(_magnetic_sample(materials), materials))
+
+    for box in (boxes[0], boxes[2]):
+        assert 'magnetic' not in box
+        assert 'phi' not in box
+
+
+def test_a_negative_rho_m_flips_the_drawn_direction():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    positive, _, _ = flatten(_project(_magnetic_sample(materials, rho_m=3.0), materials))
+    negative, _, _ = flatten(_project(_magnetic_sample(materials, rho_m=-3.0), materials))
+
+    assert negative[1]['phi'] == pytest.approx((positive[1]['phi'] + 180.0) % 360.0)
+    assert negative[1]['m'] == pytest.approx(3.0)
+
+
+def test_a_negligible_moment_is_flagged_as_having_none():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(material=materials[0], thickness=0.0)]),
+        make_assembly(
+            name='Strong',
+            layers=[make_layer(material=materials[1], thickness=40.0, magnetism=FakeLayerMagnetism(rho_m=4.0))],
+        ),
+        make_assembly(
+            name='Faint',
+            layers=[make_layer(material=materials[1], thickness=40.0, magnetism=FakeLayerMagnetism(rho_m=0.01))],
+        ),
+        make_assembly(name='Bottom', layers=[make_layer(material=materials[2], thickness=0.0)]),
+    )
+
+    boxes, _, _ = flatten(_project(sample, materials))
+
+    assert boxes[1]['has_moment'] is True
+    assert boxes[2]['has_moment'] is False  # below 1 % of the largest moment
+
+
+def test_gradient_boxes_stay_arrow_free():
+    materials = make_material_collection(make_material('Air'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(material=materials[0], thickness=0.0)]),
+        FakeGradientLayer(name='Grad', front_material=materials[0], back_material=materials[1], thickness=2.0),
+        make_assembly(
+            name='Fe',
+            layers=[make_layer(material=materials[1], thickness=40.0, magnetism=FakeLayerMagnetism(rho_m=3.0))],
+        ),
+        make_assembly(name='Bottom', layers=[make_layer(material=materials[1], thickness=0.0)]),
+    )
+
+    boxes, _, _ = flatten(_project(sample, materials))
+
+    # A gradient has no assembly-level moment vector to draw; the curves are the truth.
+    assert 'magnetic' not in boxes[1]
+    assert boxes[2]['magnetic'] is True

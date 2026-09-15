@@ -41,6 +41,14 @@ Column {
         onToggled: Globals.BackendWrapper.plottingSetSldCurveVisible('theta_m', checked)
     }
 
+    EaElements.CheckBox {
+        topPadding: 0
+        checked: Globals.BackendWrapper.plottingSldArrowsVisible
+        text: qsTr("Show moment arrows")
+        ToolTip.text: qsTr("One arrow per magnetic layer, above the chart, pointing the way its moment does")
+        onToggled: Globals.BackendWrapper.plottingSetSldArrowsVisible(checked)
+    }
+
     EaElements.Label {
         color: EaStyle.Colors.themeForegroundMinor
         wrapMode: Text.WordWrap

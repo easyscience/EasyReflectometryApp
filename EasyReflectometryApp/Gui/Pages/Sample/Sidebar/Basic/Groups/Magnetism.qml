@@ -9,6 +9,7 @@ import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
@@ -29,6 +30,10 @@ EaElements.GroupBox {
         return engines.length > 0 ? engines[0] : ''
     }
     property string errorMessage: ''
+
+    // The row the table has selected; null while the selection outruns the list.
+    readonly property var currentRow:
+        Globals.BackendWrapper.sampleLayersMagnetism[Globals.BackendWrapper.sampleCurrentLayerIndex] ?? null
 
     EaElements.GroupColumn {
 
@@ -141,6 +146,24 @@ EaElements.GroupBox {
                     }
                 }
             }
+        }
+
+        // The selected row's angle as a dial: the number in the θM column, and
+        // the arrow the Structure view and SLD band draw, side by side. Follows
+        // the selection the table already writes - no second "focused row".
+        Gui.MagnetizationCompass {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: magnetismGroup.currentRow !== null && magnetismGroup.currentRow.magnetic === "True"
+            height: visible ? implicitHeight : 0
+            phi: visible ? Number(magnetismGroup.currentRow.phi) : 0
+            thetaM: visible ? Number(magnetismGroup.currentRow.theta_m) : 0
+            hasMoment: visible && Number(magnetismGroup.currentRow.rho_m) !== 0
+            // A constrained θM follows its expression, and a running fit owns
+            // every parameter: in both cases the dial is read-only.
+            editable: visible && magnetismGroup.currentRow.editable === "True"
+                      && !Globals.BackendWrapper.analysisFittingRunning
+            onPhiRequested: (phi) => Globals.BackendWrapper.sampleSetLayerPhiAtIndex(
+                                         Globals.BackendWrapper.sampleCurrentLayerIndex, phi)
         }
 
         EaElements.Label {

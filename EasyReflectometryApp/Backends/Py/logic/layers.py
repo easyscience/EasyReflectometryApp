@@ -3,6 +3,8 @@ from typing import Optional
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.project import GUIDE_FIELD_ANGLE
+from easyreflectometry.project import magnetic_vector_for_layer
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
 from easyreflectometry.sample import LayerMagnetism
@@ -224,7 +226,11 @@ class Layers:
 
         ``magnetic`` is 'True'/'False'; ``rho_m``/``theta_m`` carry the defaults
         of a fresh :class:`LayerMagnetism` for non-magnetic layers so the fields
-        show what attaching magnetism would start from.
+        show what attaching magnetism would start from. ``phi`` is the direction
+        the moment points, in degrees from the guide field - what the compass
+        draws - and ``editable`` whether that direction can be set by dragging
+        it (a constrained ``theta_m`` follows its expression, not the pointer).
+        Both are empty for a non-magnetic layer, which has no direction.
         """
         rows = []
         for layer in self._layers:
@@ -235,6 +241,8 @@ class Layers:
                     'magnetic': str(magnetism is not None),
                     'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
+                    'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
+                    'editable': '' if magnetism is None else str(magnetism.theta_m.independent),
                 }
             )
         return rows
@@ -286,6 +294,25 @@ class Layers:
 
     def set_theta_m_at_index(self, index: int, new_value: float) -> bool:
         return self._set_magnetism_value_at_index(index, 'theta_m', new_value)
+
+    def set_phi_at_index(self, index: int, new_value: float) -> bool:
+        """Set theta_m from a direction measured from the guide field.
+
+        The inverse of `magnetic_vector_for_layer`, kept here so the convention
+        is never spelled out in QML: a negative rho_m means the parameter points
+        opposite to the moment the compass was dragged to. A constrained
+        theta_m follows its expression and is left alone.
+        """
+        magnetism = self.magnetism_at_index(index)
+        if magnetism is None or not magnetism.theta_m.independent:
+            return False
+        try:
+            phi = float(new_value) % 360.0
+        except (TypeError, ValueError):
+            return False
+        if magnetism.rho_m.value < 0:
+            phi = (phi + 180.0) % 360.0
+        return self.set_theta_m_at_index(index, (phi + GUIDE_FIELD_ANGLE) % 360.0)
 
     def _set_magnetism_value_at_index(self, index: int, attribute: str, new_value: float) -> bool:
         """Set one magnetic parameter, ignoring edits to a non-magnetic layer."""
