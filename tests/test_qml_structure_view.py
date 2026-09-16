@@ -37,3 +37,34 @@ def test_backend_wrapper_and_mock_expose_structure_properties():
         assert name in mock_qml
     # Mock must keep the numeric thickness convention (not the all-string layers style)
     assert "'thickness': 2.5" in mock_qml
+
+
+def test_structure_view_draws_moment_arrows_only_for_magnetic_layers():
+    view_qml = (GUI / 'Pages' / 'Sample' / 'MainContent' / 'StructureView.qml').read_text(encoding='utf-8')
+
+    # The arrow zone (and therefore the three-column layout) exists only where
+    # the backend marked the box magnetic; every other box is laid out as before.
+    assert "modelData.magnetic === true ? Math.min(height, root.maxGlyphPx) : 0" in view_qml
+    assert 'Gui.MagnetizationArrow {' in view_qml
+    assert 'visible: box.showArrow' in view_qml
+    assert 'phi: modelData.phi ?? 0' in view_qml
+    assert 'hasMoment: modelData.has_moment === true' in view_qml
+    # The name column yields to the arrow; the thickness column is untouched.
+    assert 'x: box.showArrow ? box.gap : (box.width - width) / 2' in view_qml
+    assert 'width: Math.min(implicitWidth, box.nameWidthLimit)' in view_qml
+
+
+def test_guide_field_legend_is_gated_on_a_magnetic_box():
+    view_qml = (GUI / 'Pages' / 'Sample' / 'MainContent' / 'StructureView.qml').read_text(encoding='utf-8')
+
+    assert 'Gui.GuideFieldLegend {' in view_qml
+    assert 'visible: root.anyBoxMagnetic' in view_qml
+    assert 'boxes.some(box => box.magnetic === true)' in view_qml
+
+
+def test_magnetic_tooltip_leads_with_the_angle_the_arrow_draws():
+    view_qml = (GUI / 'Pages' / 'Sample' / 'MainContent' / 'StructureView.qml').read_text(encoding='utf-8')
+
+    assert "qsTr('Moment: %1° from H (θM %2°, ρM %3)')" in view_qml
+    assert "qsTr('Magnetic, no moment (ρM %1)')" in view_qml
+    assert 'M∥ %1 (no spin flip), M⊥ %2 (spin flip)' in view_qml

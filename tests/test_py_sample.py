@@ -1,4 +1,5 @@
 from EasyReflectometryApp.Backends.Py.sample import Sample
+from tests.factories import FakeLayerMagnetism
 from tests.factories import make_assembly
 from tests.factories import make_layer
 from tests.factories import make_material
@@ -108,3 +109,68 @@ def test_set_current_model_index_refreshes_layers_and_selection(qcore_applicatio
     assert backend.currentLayerIndex == 0
     assert [layer['material'] for layer in backend.layers] == ['D2O']
     assert set(fired) == {'assembliesIndexChanged', 'layersIndexChanged', 'layersChange'}
+
+
+def test_magnetism_edits_invalidate_the_structure_cache(qcore_application):
+    """The Structure boxes carry the moment direction, so a theta_m/rho_m edit
+    changes them without changing their number - the CR-Mo1 failure mode."""
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(material=materials[0], thickness=0.0)]),
+        make_assembly(
+            name='Fe',
+            layers=[
+                make_layer(
+                    name='Fe Layer',
+                    material=materials[1],
+                    thickness=40.0,
+                    magnetism=FakeLayerMagnetism(rho_m=3.0, theta_m=270.0),
+                )
+            ],
+        ),
+        make_assembly(name='Bottom', layers=[make_layer(material=materials[2], thickness=0.0)]),
+    )
+    project = make_project(materials=materials, models=make_model_collection(make_model(sample=sample)))
+    project.current_assembly_index = 1
+    backend = Sample(project)
+    emitted = []
+    backend.structureChanged.connect(lambda: emitted.append(True))
+
+    assert backend.structure[1]['phi'] == 0.0  # theta_m 270 points along the guide field
+
+    backend.setLayerThetaMAtIndex(0, 40.0)
+    assert emitted == [True]
+    assert backend.structure[1]['phi'] == 130.0
+
+    backend.setLayerRhoMAtIndex(0, -3.0)
+    assert emitted == [True, True]
+    assert backend.structure[1]['phi'] == 310.0  # a negative moment points the other way
+    assert backend.structure[1]['m'] == 3.0
+
+
+def test_attaching_and_detaching_magnetism_rebuilds_the_structure(qcore_application):
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(material=materials[0], thickness=0.0)]),
+        make_assembly(name='Fe', layers=[make_layer(name='Fe Layer', material=materials[1], thickness=40.0)]),
+        make_assembly(name='Bottom', layers=[make_layer(material=materials[2], thickness=0.0)]),
+    )
+    project = make_project(
+        materials=materials,
+        models=make_model_collection(make_model(sample=sample)),
+        calculator_name='refl1d',
+    )
+    project.current_assembly_index = 1
+    backend = Sample(project)
+    emitted = []
+    backend.structureChanged.connect(lambda: emitted.append(True))
+
+    assert 'magnetic' not in backend.structure[1]
+
+    backend.setLayerMagneticAtIndex(0, True)
+    assert emitted == [True]
+    assert backend.structure[1]['magnetic'] is True
+
+    backend.setLayerMagneticAtIndex(0, False)
+    assert emitted == [True, True]
+    assert 'magnetic' not in backend.structure[1]

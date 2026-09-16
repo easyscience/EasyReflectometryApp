@@ -3,6 +3,7 @@ from typing import Optional
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.project import magnetic_vector_for_layer
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
 from easyreflectometry.sample import LayerMagnetism
@@ -224,7 +225,11 @@ class Layers:
 
         ``magnetic`` is 'True'/'False'; ``rho_m``/``theta_m`` carry the defaults
         of a fresh :class:`LayerMagnetism` for non-magnetic layers so the fields
-        show what attaching magnetism would start from.
+        show what attaching magnetism would start from. ``phi`` is the direction
+        the moment points, in degrees from the guide field - what the compass
+        draws - and ``editable`` whether that direction can be set by dragging
+        it (a constrained ``theta_m`` follows its expression, not the pointer).
+        Both are empty for a non-magnetic layer, which has no direction.
         """
         rows = []
         for layer in self._layers:
@@ -235,6 +240,8 @@ class Layers:
                     'magnetic': str(magnetism is not None),
                     'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
+                    'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
+                    'editable': '' if magnetism is None else str(magnetism.theta_m.independent),
                 }
             )
         return rows

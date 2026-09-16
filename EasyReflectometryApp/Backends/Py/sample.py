@@ -808,6 +808,12 @@ class Sample(QObject):
     def _emitMagnetismChanged(self) -> None:
         """Magnetism edits change the model, its parameters and every curve."""
         self._clearCacheAndEmitLayersChanged()
+        # The structure boxes carry the moment direction, so a theta_m or rho_m
+        # edit changes them without changing their number: without dropping the
+        # cache the Structure arrows keep pointing the old way until an
+        # unrelated layer edit happens to rebuild it. `externalRefreshPlot` is
+        # no substitute - it refreshes the charts, not the structure model.
+        self._clearStructureCacheAndEmit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
 
