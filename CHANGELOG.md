@@ -11,11 +11,12 @@
     the request. Tooltips lead with φ, then θM and signed ρM, then the M∥/M⊥ split.
     A magnetism edit now refreshes the boxes; previously a θM change updated the
     chart while the boxes kept the old value.
-  - **Magnetism group**: the selected magnetic layer's angle as a compass, with H
-    fixed to the right and the θM values on the rim. Dragging it sets θM in 5°
-    steps; it is read-only while a fit runs or θM follows a constraint.
+  - **Magnetism group**: the selected magnetic layer's angle as a 0-360° slider,
+    with the H reference and the resulting arrow beside it. Dragging it sets θM
+    in 5° steps - the same write the θM column makes - and it is read-only while
+    a fit runs or θM follows a constraint.
   - An "H →" reference is on screen wherever an arrow is.
-  - A project with no magnetic layer is unchanged: no arrows, no compass, and the
+  - A project with no magnetic layer is unchanged: no arrows, no slider, and the
     same Structure and SLD layout as before.
 
 - Added a **Structure** tab on the Model page: a schematic view of the layer stack with one

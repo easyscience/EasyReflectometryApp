@@ -33,17 +33,21 @@ example `Magnetism: Multi-layer`, and shows one row per layer of that assembly.
 scattering. This is the value to start from for a simple saturated film.
 ```
 
-### The moment compass
+### The moment angle slider
 
-Selecting a magnetic row shows a compass below the table: the same arrow the
-[Structure tab](#moment-arrows-on-the-structure-tab) draws, with the guide field **H**
-fixed pointing right and the `θM` values of the four cardinal directions on the rim, so
-the convention is visible instead of remembered. Its tooltip gives the angle both ways -
-`φ` from **H**, and the `θM` the table edits.
+Selecting a magnetic row shows a slider below the table, spanning the whole `0-360°`
+range of `θM`, with the guide field reference **H →** and the resulting arrow beside it -
+the same arrow the [Structure tab](#moment-arrows-on-the-structure-tab) draws. Its
+tooltip gives the angle both ways: `φ` from **H**, and the `θM` the table edits.
 
-Dragging inside the circle sets `θM`, snapped to 5°; the text field remains the precise
-input. The compass is read-only - and says so in its tooltip - while a fit is running, or
-when `θM` follows a constraint, because then the parameter is not the user's to set.
+Dragging the slider sets `θM`, snapped to 5°; the text field remains the precise input.
+The slider is read-only - and says so in its tooltip - while a fit is running, or when
+`θM` follows a constraint, because then the parameter is not the user's to set.
+
+The slider edits `θM` itself, exactly as the table column does. The arrow beside it shows
+`φ`, the direction the moment physically points, so with a **negative `ρM`** the arrow
+points opposite the angle on the slider - the moment is reversed while the parameter
+stays where it was put.
 
 ### Switching the calculation engine
 

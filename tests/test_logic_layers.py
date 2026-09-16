@@ -222,35 +222,15 @@ def test_magnetism_rows_report_the_drawn_direction():
     assert (plain['phi'], plain['editable']) == ('', '')
 
 
-def test_setting_phi_writes_theta_m_through_the_guide_field_convention():
-    logic, magnetism = _magnetism_logic(theta_m=40.0)
+def test_a_constrained_theta_m_is_reported_as_not_editable():
+    logic, _ = _magnetism_logic(theta_m=40.0, independent=False)
 
-    assert logic.set_phi_at_index(1, 0.0) is True
-
-    assert magnetism.theta_m.value == 270.0  # phi = 0 is along the guide field
-
-
-def test_setting_phi_on_a_negative_moment_flips_the_parameter_back():
-    logic, magnetism = _magnetism_logic(rho_m=-3.0, theta_m=40.0)
-
-    logic.set_phi_at_index(1, 0.0)
-
-    # The moment points along H, so the parameter points the opposite way.
-    assert magnetism.theta_m.value == 90.0
-    assert logic.magnetism[1]['phi'] == '0.0'
-
-
-def test_a_constrained_theta_m_refuses_the_drag():
-    logic, magnetism = _magnetism_logic(theta_m=40.0, independent=False)
-
-    assert logic.set_phi_at_index(1, 0.0) is False
-
-    assert magnetism.theta_m.value == 40.0
+    # The slider reads this to go read-only rather than to write a refused value.
     assert logic.magnetism[1]['editable'] == 'False'
 
 
-def test_setting_phi_on_a_non_magnetic_layer_is_a_no_op():
-    logic, _ = _magnetism_logic()
+def test_a_negative_moment_points_the_arrow_the_other_way():
+    logic, _ = _magnetism_logic(rho_m=-3.0, theta_m=270.0)
 
-    assert logic.set_phi_at_index(0, 90.0) is False
-    assert logic.set_phi_at_index(7, 90.0) is False
+    # theta_m is along the guide field, so the moment itself points against it.
+    assert logic.magnetism[1]['phi'] == '180.0'

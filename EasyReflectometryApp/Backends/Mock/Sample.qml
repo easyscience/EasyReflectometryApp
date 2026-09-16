@@ -319,9 +319,6 @@ QtObject {
     function setLayerThetaMAtIndex(index, value) {
         console.debug(`setLayerThetaMAtIndex ${index} ${value}`)
     }
-    function setLayerPhiAtIndex(index, value) {
-        console.debug(`setLayerPhiAtIndex ${index} ${value}`)
-    }
 
     // Table functions
     function removeLayer(value) {

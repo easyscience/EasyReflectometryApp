@@ -148,22 +148,21 @@ EaElements.GroupBox {
             }
         }
 
-        // The selected row's angle as a dial: the number in the θM column, and
-        // the arrow the Structure view and SLD band draw, side by side. Follows
+        // The selected row's angle as a slider: the same number the θM column
+        // holds, and the arrow the Structure view draws, side by side. Follows
         // the selection the table already writes - no second "focused row".
-        Gui.MagnetizationCompass {
-            anchors.horizontalCenter: parent.horizontalCenter
+        Gui.MagnetizationAngleSlider {
             visible: magnetismGroup.currentRow !== null && magnetismGroup.currentRow.magnetic === "True"
             height: visible ? implicitHeight : 0
             phi: visible ? Number(magnetismGroup.currentRow.phi) : 0
             thetaM: visible ? Number(magnetismGroup.currentRow.theta_m) : 0
             hasMoment: visible && Number(magnetismGroup.currentRow.rho_m) !== 0
             // A constrained θM follows its expression, and a running fit owns
-            // every parameter: in both cases the dial is read-only.
+            // every parameter: in both cases the slider is read-only.
             editable: visible && magnetismGroup.currentRow.editable === "True"
                       && !Globals.BackendWrapper.analysisFittingRunning
-            onPhiRequested: (phi) => Globals.BackendWrapper.sampleSetLayerPhiAtIndex(
-                                         Globals.BackendWrapper.sampleCurrentLayerIndex, phi)
+            onThetaMRequested: (thetaM) => Globals.BackendWrapper.sampleSetLayerThetaMAtIndex(
+                                               Globals.BackendWrapper.sampleCurrentLayerIndex, thetaM)
         }
 
         EaElements.Label {

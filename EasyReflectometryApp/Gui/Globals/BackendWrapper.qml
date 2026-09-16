@@ -279,7 +279,6 @@ QtObject {
     function sampleSetLayerMagneticAtIndex(index, value) { activeBackend.sample.setLayerMagneticAtIndex(index, value) }
     function sampleSetLayerRhoMAtIndex(index, value) { activeBackend.sample.setLayerRhoMAtIndex(index, value) }
     function sampleSetLayerThetaMAtIndex(index, value) { activeBackend.sample.setLayerThetaMAtIndex(index, value) }
-    function sampleSetLayerPhiAtIndex(index, value) { activeBackend.sample.setLayerPhiAtIndex(index, value) }
 
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
