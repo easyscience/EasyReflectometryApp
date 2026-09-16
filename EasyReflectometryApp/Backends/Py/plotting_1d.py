@@ -68,12 +68,6 @@ class Plotting1d(QObject):
     # collapse onto the nuclear curve, so a weakly magnetic sample still looks
     # like the familiar chart. rho_m/theta_m are parameter views and are opt-in.
     _visible_sld_curves: frozenset = frozenset({'spin_up', 'spin_down'})
-    # Whether the SLD chart draws the per-layer moment arrows. A separate flag
-    # rather than a member of MAGNETIC_SLD_CURVES: the curve set feeds
-    # profile-segment lookup, series construction and the y-range, and an
-    # overlay with no profile dataset has no business in that pipeline.
-    # Class-level default for instances built without __init__ (test stubs).
-    _sld_arrows_visible: bool = False
     # Why the magnetic profiles of a magnetic model could not be computed
     # ('' = no failure). Class-level default for test stubs without __init__.
     _magnetic_profile_error: str = ''
@@ -107,13 +101,11 @@ class Plotting1d(QObject):
         self._visible_channels = frozenset({'pp', 'pm', 'mp', 'mm'})
         # Magnetic profile curves shown on the SLD chart (both pages share it).
         self._visible_sld_curves = frozenset({'spin_up', 'spin_down'})
-        self._sld_arrows_visible = False
         # Spin asymmetry per experiment index; cleared with the other plot data.
         self._spin_asymmetry_cache: dict = {}
         # Magnetic depth profiles per model index; a refl1d evaluation each, and
         # every chart refresh reads them several times.
         self._magnetic_profile_cache: dict = {}
-        self._magnetic_layer_marker_cache: dict = {}
         self._magnetic_profile_error = ''
         # Model cross-sections on the sample chart, and their cache (keyed by
         # model index and channel; cleared with the other plot data).
@@ -157,7 +149,6 @@ class Plotting1d(QObject):
         self._residual_range_cache = None
         self._spin_asymmetry_cache = {}
         self._magnetic_profile_cache = {}
-        self._magnetic_layer_marker_cache = {}
         self._model_channel_cache = {}
         console.debug(IO.formatMsg('sub', 'Sample and SLD data cleared'))
 
@@ -969,44 +960,6 @@ class Plotting1d(QObject):
             return segments[segment]
         return []
 
-    @Slot(int, result='QVariantList')
-    def getMagneticLayerMarkers(self, model_index: int) -> list:
-        """Where each magnetic layer of a model sits in the profile, and which way it points.
-
-        One dict per magnetic layer (see
-        `Project.magnetic_layer_markers_for_model_at_index`), cached alongside
-        the profiles. Any lookup failure - a non-magnetic model, a stale index,
-        a calculator that cannot build the profile - is "nothing to draw": a
-        Python exception raised into a QML read aborts the process on Windows.
-        """
-        cache = getattr(self, '_magnetic_layer_marker_cache', None)
-        if cache is None:
-            cache = self._magnetic_layer_marker_cache = {}
-        if model_index not in cache:
-            try:
-                cache[model_index] = self._project_lib.magnetic_layer_markers_for_model_at_index(model_index)
-            except (IndexError, KeyError, ValueError, NotImplementedError, AttributeError) as e:
-                console.debug(f'No magnetic layer markers for model {model_index}: {e}')
-                cache[model_index] = []
-        return cache[model_index]
-
-    @Property(bool, notify=magneticProfileChanged)
-    def sldArrowsVisible(self) -> bool:
-        """Whether the SLD chart draws the per-layer moment arrow band."""
-        return bool(self._sld_arrows_visible)
-
-    @Slot(bool)
-    def setSldArrowsVisible(self, visible: bool) -> None:
-        """Show or hide the moment arrow band on both SLD tabs.
-
-        Deliberately does not emit `sldChartRangesChanged`: the band is an
-        overlay above the chart, and arrows must never move the SLD y-range.
-        """
-        if bool(visible) == bool(self._sld_arrows_visible):
-            return
-        self._sld_arrows_visible = bool(visible)
-        self.magneticProfileChanged.emit()
-
     @Property('QVariantList', notify=magneticProfileChanged)
     def visibleSldCurves(self) -> list:
         """Magnetic profile curves the user asked to see."""
@@ -1279,7 +1232,6 @@ class Plotting1d(QObject):
         y-range, and moving rho_m/theta_m changes the curves themselves.
         """
         self._magnetic_profile_cache = {}
-        self._magnetic_layer_marker_cache = {}
         # Magnetism appearing, disappearing or moving changes the model spin
         # cross-sections too, and they are drawn from the same notification.
         self._model_channel_cache = {}

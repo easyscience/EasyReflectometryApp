@@ -82,8 +82,6 @@ controls, below **Magnetism**. The same switches are repeated in `Analysis` ›
 - **Show θM** - the in-plane moment angle, on its own right-hand axis. `θM` is only defined
   where there is a moment, so the curve is drawn in pieces rather than joined across the
   gaps.
-- **Show moment arrows** - see [arrows on the SLD chart](#moment-arrows-on-the-sld-chart)
-  below. Off by default.
 - **Show R↑↑ and R↓↓** - splits each magnetic model's reflectivity into its two
   non-spin-flip cross-sections on the **Model** page reflectivity chart, dashed in the
   model's colour with their own legend rows. Off by default.
@@ -91,6 +89,12 @@ controls, below **Magnetism**. The same switches are repeated in `Analysis` ›
 The y-range of the SLD chart covers every visible curve and grows when a curve is switched
 on, so `ρ + ρM` is never clipped. If no model is magnetic, the chart, its legend and the
 sidebar are unchanged.
+
+```{note}
+The `refl1d` calculator cannot repeat slabs that carry magnetism, so a magnetic model with
+a repeating multilayer has no magnetic depth profile at all - and therefore none of these
+curves. The **Magnetic profile** group reports the reason.
+```
 
 ```{note}
 For a magnetic sample the plain model curve is **not** an unpolarised average - the
@@ -146,25 +150,3 @@ Gradient layers get no arrow. A gradient has no single moment of its own, and on
 "representative" arrow would be actively misleading when its slices oppose; the `ρM(z)`
 and `θM(z)` curves remain the truth for graded structures.
 
-(moment-arrows-on-the-sld-chart)=
-### On the SLD chart
-
-**Show moment arrows** adds a band above the chart, one arrow per magnetic layer at its
-depth - a ribbon of compasses over the `z` axis. It is off by default because that chart
-is already dense.
-
-- The band sits *above* the plot, so it never overlaps the curves and never changes the
-  SLD y-range.
-- Arrows follow zoom, pan and a reversed `z` axis.
-- Each band is coloured and labelled with its model, so two `Fe` layers in two models are
-  told apart. At most two bands are drawn; further magnetic models are reported as
-  `+N models`.
-- In a dense stack, an arrow that would collide with the previous one is skipped and
-  counted as `+n` at the end of the band, whose tooltip lists which layers are hidden.
-  Zooming in recovers them.
-
-```{note}
-The `refl1d` calculator cannot repeat slabs that carry magnetism, so a magnetic model with
-a repeating multilayer has no magnetic depth profile at all - and therefore no arrow band.
-The **Magnetic profile** group reports the reason.
-```

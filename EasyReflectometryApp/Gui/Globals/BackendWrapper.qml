@@ -873,13 +873,6 @@ QtObject {
             return []
         }
     }
-    readonly property bool plottingSldArrowsVisible: {
-        try {
-            return activeBackend.plotting.sldArrowsVisible || false
-        } catch (e) {
-            return false
-        }
-    }
     readonly property string plottingMagneticProfileError: {
         try {
             return activeBackend.plotting.magneticProfileError || ''
@@ -937,21 +930,6 @@ QtObject {
             return activeBackend.plottingSldCurveVisible(curve)
         } catch (e) {
             return false
-        }
-    }
-    function plottingGetMagneticLayerMarkers(index) {
-        try {
-            return activeBackend.plottingGetMagneticLayerMarkers(index)
-        } catch (e) {
-            console.warn("plottingGetMagneticLayerMarkers failed:", e)
-            return []
-        }
-    }
-    function plottingSetSldArrowsVisible(visible) {
-        try {
-            activeBackend.plottingSetSldArrowsVisible(visible)
-        } catch (e) {
-            console.warn("plottingSetSldArrowsVisible failed:", e)
         }
     }
     function plottingSetSldCurveVisible(curve, visible) {

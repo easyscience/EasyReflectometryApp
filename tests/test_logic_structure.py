@@ -240,6 +240,23 @@ def test_a_magnetic_layer_box_carries_the_moment_direction():
     assert magnetic['rho_m'] == pytest.approx(3.0)
 
 
+def test_box_values_are_types_qml_can_read():
+    """Every box value must be a builtin, never a numpy scalar.
+
+    PySide6 hands a numpy.float64 in a QVariantList to QML as an opaque
+    PyObjectWrapper: `.toFixed()` on it throws, and the exception takes down
+    the whole binding that touched it - the layer tooltip renders empty rather
+    than reporting an error.
+    """
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    boxes, _, _ = flatten(_project(_magnetic_sample(materials), materials))
+
+    for box in boxes:
+        for key, value in box.items():
+            assert type(value) in (str, int, float, bool), f'{key} is {type(value).__name__}'
+
+
 def test_non_magnetic_boxes_omit_the_arrow_keys_entirely():
     materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
 
