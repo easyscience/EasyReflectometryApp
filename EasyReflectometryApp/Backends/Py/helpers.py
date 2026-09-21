@@ -5,6 +5,10 @@ from urllib.parse import urlparse
 import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtCore import QUrl
+from PySide6.QtGui import QOffscreenSurface
+from PySide6.QtGui import QOpenGLContext
+from PySide6.QtQuick import QQuickWindow
+from PySide6.QtQuick import QSGRendererInterface
 from PySide6.QtWidgets import QApplication
 from uncertainties import ufloat
 
@@ -104,3 +108,76 @@ class Application(QApplication):  # QGuiApplication crashes when using in combin
         # The attribute covers both QtQuick.Dialogs and QtWidgets.QFileDialog.
         if sys.platform.startswith('linux'):
             self.setAttribute(Qt.AA_DontUseNativeDialogs)
+
+
+class Rendering:
+    """
+    Chooses the Qt Quick scene graph backend on Linux.
+
+    In remote-desktop sessions (VISA, xrdp, VNC, X2Go, ...) OpenGL is provided by
+    Mesa's software rasteriser and frames are presented through GLX. When the
+    remote client disconnects, the X server may stop completing buffer swaps, so
+    the next frame blocks the GUI thread inside glXSwapBuffers and the window
+    stays frozen ("not responding") after reconnecting. The software scene graph
+    backend paints through plain X11 image uploads and never waits on a swap.
+    """
+
+    ENV_VAR = 'EASYREFLECTOMETRY_SOFTWARE_RENDERING'  # '1' forces it on, '0' forces it off
+    QT_BACKEND_ENV_VARS = ('QT_QUICK_BACKEND', 'QSG_RHI_BACKEND')
+    REMOTE_SESSION_ENV_VARS = ('XRDP_SESSION', 'VNCDESKTOP', 'X2GO_SESSION')
+    SOFTWARE_GL_RENDERERS = ('llvmpipe', 'softpipe', 'swrast', 'software rasterizer')
+    GL_RENDERER = 0x1F01
+
+    @staticmethod
+    def softwareRequested(environ, platform: str):
+        """
+        Decide from the environment alone.
+        :return: True/False when decided, None when the OpenGL renderer has to be probed
+        """
+        override = environ.get(Rendering.ENV_VAR, '').strip().lower()
+        if override in ('1', 'true', 'yes', 'on'):
+            return True
+        if override in ('0', 'false', 'no', 'off'):
+            return False
+        if not platform.startswith('linux'):
+            return False
+        if any(environ.get(name) for name in Rendering.QT_BACKEND_ENV_VARS):
+            return False  # the user already picked a backend; leave it alone
+        if any(environ.get(name) for name in Rendering.REMOTE_SESSION_ENV_VARS):
+            return True
+        return None
+
+    @staticmethod
+    def isSoftwareGlRenderer(rendererName: str) -> bool:
+        rendererName = rendererName.lower()
+        return any(name in rendererName for name in Rendering.SOFTWARE_GL_RENDERERS)
+
+    @staticmethod
+    def openGlRendererName() -> str:
+        """Name of the OpenGL renderer Qt would use, or '' if it cannot be queried."""
+        context = QOpenGLContext()
+        if not context.create():
+            return ''
+        surface = QOffscreenSurface()
+        surface.setFormat(context.format())
+        surface.create()
+        if not context.makeCurrent(surface):
+            return ''
+        try:
+            return context.functions().glGetString(Rendering.GL_RENDERER) or ''
+        finally:
+            context.doneCurrent()
+
+    @staticmethod
+    def configure(forceSoftware: bool = False) -> bool:
+        """
+        Must be called after the QApplication is created and before the first
+        QQuickWindow (i.e. before the QML engine loads the main component).
+        :return: True if the software backend was selected
+        """
+        useSoftware = True if forceSoftware else Rendering.softwareRequested(os.environ, sys.platform)
+        if useSoftware is None:
+            useSoftware = Rendering.isSoftwareGlRenderer(Rendering.openGlRendererName())
+        if useSoftware:
+            QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Software)
+        return useSoftware
