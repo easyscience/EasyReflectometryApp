@@ -51,7 +51,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--software-rendering',
         action='store_true',
-        help='render the GUI without OpenGL (use in remote desktop sessions if the window freezes)',
+        help='render the whole GUI without OpenGL (Qt Quick software backend). By default only the '
+        'WebEngine views are kept off the GPU when a software OpenGL renderer is detected.',
     )
     args = parser.parse_args()
 
@@ -65,8 +66,8 @@ if __name__ == '__main__':
     console.debug(f'Qt Application created {app}')
 
     # Has to happen before the QML engine creates the first window
-    if Rendering.configure(forceSoftware=args.software_rendering):
-        console.debug('Qt Quick software rendering backend selected')
+    rendering = Rendering.configure(forceSoftware=args.software_rendering)
+    console.debug(f'Rendering mode: {rendering}')
 
     engine = QQmlApplicationEngine()
     console.debug(f'QML application engine created {engine}')

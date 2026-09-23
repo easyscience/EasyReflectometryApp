@@ -32,6 +32,10 @@ EaComponents.ContentPage {
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             },
             Loader {
+                // The Bayesian views are WebEngine (Chromium) based. Only start it once
+                // there is a result to show; on software OpenGL (remote desktops) an idle
+                // Chromium GPU thread is enough to freeze the window.
+                active: Globals.BackendWrapper.bayesianResultAvailable
                 source: `MainContent/BayesianPosteriorView.qml`
                 onStatusChanged: if (status === Loader.Ready) console.debug(`${source} loaded`)
             }
