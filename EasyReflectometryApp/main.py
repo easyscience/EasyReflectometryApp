@@ -29,11 +29,13 @@ _logging.getLogger('matplotlib.font_manager').setLevel(_logging.WARNING)
 try:  # Running locally
     from Backends.Py import PyBackend
     from Backends.Py.helpers import Application
+    from Backends.Py.helpers import Rendering
 
     INSTALLER = False
 except ImportError:  # Running from installer
     from EasyReflectometryApp.Backends.Py import PyBackend
     from EasyReflectometryApp.Backends.Py.helpers import Application
+    from EasyReflectometryApp.Backends.Py.helpers import Rendering
 
     INSTALLER = True
 
@@ -46,6 +48,12 @@ EASYAPP_IMPORT_DIR = Path(EasyApplication.__path__[0]).parent
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--testmode', action='store_true', help='run the application in test mode')
+    parser.add_argument(
+        '--software-rendering',
+        action='store_true',
+        help='render the whole GUI without OpenGL (Qt Quick software backend). By default only the '
+        'WebEngine views are kept off the GPU when a software OpenGL renderer is detected.',
+    )
     args = parser.parse_args()
 
     qInstallMessageHandler(console.qmlMessageHandler)
@@ -56,6 +64,10 @@ if __name__ == '__main__':
 
     app = Application(sys.argv)  # Create the QApplication (Not QGuiApplication)
     console.debug(f'Qt Application created {app}')
+
+    # Has to happen before the QML engine creates the first window
+    rendering = Rendering.configure(forceSoftware=args.software_rendering)
+    console.debug(f'Rendering mode: {rendering}')
 
     engine = QQmlApplicationEngine()
     console.debug(f'QML application engine created {engine}')
