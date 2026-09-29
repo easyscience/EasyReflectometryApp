@@ -18,7 +18,12 @@ class IO:
         :param URI rcfPath: URI to the file
         :return URI filename: platform specific URI
         """
-        filename = urlparse(fpath).path
+        parsed = urlparse(fpath)
+        if len(parsed.scheme) == 1:
+            # A Windows drive letter (C:\...), not a URL scheme: already a local path. Parsing it
+            # would drop the drive and resolve the rest against the current drive.
+            return fpath
+        filename = parsed.path
         if not sys.platform.startswith('win'):
             return filename
         if filename[0] == '/':

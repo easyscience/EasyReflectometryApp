@@ -20,6 +20,13 @@ def test_generalize_path_windows_strips_leading_slash_and_normalizes(monkeypatch
     assert result == 'C:/demo/folder/file.dat'.replace('/', helpers_module.os.path.sep)
 
 
+def test_generalize_path_keeps_the_drive_of_a_plain_windows_path(monkeypatch):
+    monkeypatch.setattr(helpers_module.sys, 'platform', 'win32')
+
+    assert helpers_module.IO.generalizePath('C:\\demo\\folder\\file.dat') == 'C:\\demo\\folder\\file.dat'
+    assert helpers_module.IO.generalizePath('D:/demo/folder/file.dat') == 'D:/demo/folder/file.dat'
+
+
 def test_local_file_to_url_windows_branch(monkeypatch):
     monkeypatch.setattr(helpers_module.sys, 'platform', 'win32')
 
