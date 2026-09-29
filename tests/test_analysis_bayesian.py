@@ -970,6 +970,30 @@ class TestOnSampleFinished:
         assert emissions['fitting'] >= 1
         assert emissions['external'] >= 1
 
+    @pytest.mark.parametrize('results', [[], [None], [{'param_names': ['thickness']}]])
+    def test_malformed_result_is_reported_as_failure(self, analysis, results):
+        analysis._fitter_thread = 'some-worker'
+        received = []
+        analysis.fitFailed.connect(received.append)
+
+        analysis._on_sample_finished(results)
+
+        assert received == ['Bayesian sampling returned no posterior']
+        assert analysis._fitting_logic.fit_error_message == 'Bayesian sampling returned no posterior'
+        assert analysis._bayesian_logic.posterior is None
+        assert analysis._fitter_thread is None
+
+    def test_failing_step_does_not_skip_the_others(self, analysis):
+        with patch.object(analysis, '_compute_and_publish_posterior_predictive', side_effect=RuntimeError('boom')):
+            with patch.object(analysis, '_compute_diagnostics') as mock_diag:
+                with patch.object(analysis, '_render_corner_plot') as mock_corner:
+                    with patch.object(analysis, '_render_trace_plot') as mock_trace:
+                        analysis._on_sample_finished([SAMPLE_POSTERIOR_2D])
+                        mock_diag.assert_called_once()
+                        mock_corner.assert_called_once()
+                        mock_trace.assert_called_once()
+        assert analysis._bayesian_logic.posterior is SAMPLE_POSTERIOR_2D
+
 
 # ===================================================================
 # Bayesian param names

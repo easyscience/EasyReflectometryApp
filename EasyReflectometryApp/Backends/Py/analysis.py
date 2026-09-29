@@ -662,35 +662,29 @@ class Analysis(QObject):
         """Handle successful completion of Bayesian sampling."""
         if self._is_stale_worker_signal():
             return
-        if not results:
-            logger.error('Bayesian sampling finished with empty results list')
-            self._fitting_logic.on_sample_finished()
-            self._fitter_thread = None
-            self.fittingChanged.emit()
-            self.externalFittingChanged.emit()
+        # {'draws', 'param_names', 'internal_bumps_object', 'logp'}
+        posterior = results[0] if results else None
+        if not isinstance(posterior, dict) or 'draws' not in posterior:
+            # A malformed worker result is a failed run, not a finished one with no posterior.
+            logger.error('Bayesian sampling returned no usable posterior: %r', results)
+            self._on_fit_failed('Bayesian sampling returned no posterior')
             return
-        try:
-            posterior = results[0]  # {'draws', 'param_names', 'internal_bumps_object', 'logp'}
-            self._bayesian_logic.posterior = posterior
-            self._fitting_logic.on_sample_finished()
-            self._fitter_thread = None
-        except Exception:
-            logger.exception('Error storing Bayesian posterior result')
-            self._fitter_thread = None
-            self.fittingChanged.emit()
-            self.externalFittingChanged.emit()
-            return
-        # Phase 2: compute posterior predictive, diagnostics, and rendered plots
-        try:
-            self._compute_and_publish_posterior_predictive()
-            self._compute_diagnostics()
-            self._render_corner_plot()
-            self._render_trace_plot()
-        except Exception:
-            logger.exception('Error during posterior computation / rendering')
-        finally:
-            self.fittingChanged.emit()
-            self.externalFittingChanged.emit()
+        self._bayesian_logic.posterior = posterior
+        self._fitting_logic.on_sample_finished()
+        self._fitter_thread = None
+        # Each post-processing step runs on its own, so one failing does not skip the others.
+        for step in (
+            self._compute_and_publish_posterior_predictive,
+            self._compute_diagnostics,
+            self._render_corner_plot,
+            self._render_trace_plot,
+        ):
+            try:
+                step()
+            except Exception:
+                logger.exception('Bayesian post-processing step %s failed', getattr(step, '__name__', step))
+        self.fittingChanged.emit()
+        self.externalFittingChanged.emit()
 
     def _compute_and_publish_posterior_predictive(self) -> None:
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
