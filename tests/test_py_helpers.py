@@ -16,7 +16,8 @@ def test_generalize_path_windows_strips_leading_slash_and_normalizes(monkeypatch
 
     result = helpers_module.IO.generalizePath('/C:/demo/folder/file.dat')
 
-    assert result == 'C:\\demo\\folder\\file.dat'
+    # generalizePath joins with os.path.sep, which follows the host OS, not sys.platform
+    assert result == 'C:/demo/folder/file.dat'.replace('/', helpers_module.os.path.sep)
 
 
 def test_local_file_to_url_windows_branch(monkeypatch):

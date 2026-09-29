@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 from typing import List
 from typing import Optional
@@ -8,6 +7,7 @@ from easyreflectometry import Project as ProjectLib
 from PySide6 import QtWidgets
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
@@ -1524,11 +1524,8 @@ class Analysis(QObject):
 
         # Strip query string (e.g. ?t=<timestamp> used for cache-busting)
         clean_url = source_url.split('?')[0]
-        source_path = Path(clean_url.replace('file:///', '', 1) if clean_url.startswith('file:///')
-                           else clean_url.replace('file://', '', 1))
-        # Handle Windows paths: file:///C:/... → C:/...
-        if os.name == 'nt' and str(source_path).startswith('/'):
-            source_path = Path(str(source_path)[1:])
+        # QUrl handles both file:///C:/... (Windows) and file:///tmp/... (POSIX)
+        source_path = Path(QUrl(clean_url).toLocalFile())
 
         if not source_path.exists():
             logger.warning('Bayesian plot file not found: %s', source_path)
