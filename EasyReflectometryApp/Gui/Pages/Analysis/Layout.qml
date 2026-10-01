@@ -17,6 +17,10 @@ EaComponents.ContentPage {
         source: 'Sidebar/Basic/Popups/FitStatusDialog.qml'
     }
 
+    Loader {
+        source: 'Sidebar/Basic/Popups/PrefitCheckDialog.qml'
+    }
+
     mainView: EaComponents.MainContent {
         tabs: [
             EaElements.TabButton { text: qsTr('Reflectivity') },

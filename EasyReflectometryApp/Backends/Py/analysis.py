@@ -1,10 +1,10 @@
 import logging
 import time
+from pathlib import Path
 from typing import List
 from typing import Optional
 
 from easyreflectometry import Project as ProjectLib
-from PySide6 import QtWidgets
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import QUrl
@@ -44,6 +44,7 @@ class Analysis(QObject):
     parametersIndexChanged = Signal()
     fittingChanged = Signal()
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
+    prefitCheckFailed = Signal(str, str)  # Emitted with (title, message) when a fit is refused before starting
     stopFit = Signal()  # Signal to request fitting stop
 
     externalMinimizerChanged = Signal()
@@ -449,8 +450,10 @@ class Analysis(QObject):
             self.stopFit.emit()
             return
 
-        # Make sure we can run the fitting
-        if not self.prefitCheck():
+        # Make sure we can run the fitting; QML shows the reason to the user
+        errors = self._prefit_errors()
+        if errors:
+            self.prefitCheckFailed.emit('Invalid Parameter Bounds', '\n\n'.join(errors))
             return
 
         # Use threaded fitting for non-blocking UI
@@ -857,7 +860,6 @@ class Analysis(QObject):
     def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""
         import tempfile
-        from pathlib import Path
 
         out_dir = Path(tempfile.gettempdir()) / 'EasyReflectometryApp' / 'bayesian'
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1014,44 +1016,34 @@ class Analysis(QObject):
             self._bayesian_logic.heatmap_plot_url = ''
             logger.exception('Failed to render Bayesian heatmap')
 
-    def prefitCheck(self) -> bool:
+    def _prefit_errors(self) -> List[str]:
         """
-        Perform a pre-fit check to ensure that all parameters are set correctly.
-        Returns True if the check passes, False otherwise.
+        Check that the free parameters can be fitted with the current minimizer.
+        Returns one message per problem found; an empty list means the fit can start.
         """
+        errors = []
+        fit_params = [param for param in self.fitableParameters if param['fit']]
+
         # 1. wrong bounds on parameters
-        for param in self.fitableParameters:
-            if not param['fit']:
-                continue
+        for param in fit_params:
             if param['min'] >= param['max']:
-                QtWidgets.QMessageBox.warning(
-                    None,
-                    'Invalid Parameter Bounds',
+                errors.append(
                     f"Parameter '{param['name']}' has invalid bounds: "
-                    f'min ({param["min"]}) must be less than max ({param["max"]}).',
+                    f'min ({param["min"]}) must be less than max ({param["max"]}).'
                 )
-                return False
 
         # 2. differential evolution needs finite bounds on all parameters
         if 'differential_evolution' in self.minimizersAvailable[self.minimizerCurrentIndex]:
-            bad_params = []
-            for param in self.fitableParameters:
-                if not param['fit']:
-                    continue
-                if param['min'] == float('-inf') or param['max'] == float('inf'):
-                    bad_params.append(param['name'])
+            bad_params = [
+                param['name'] for param in fit_params if param['min'] == float('-inf') or param['max'] == float('inf')
+            ]
             if bad_params:
                 joined = '\n' + ',\n'.join(bad_params) + '\n'
-                # Show a warning in a message box
-                QtWidgets.QMessageBox.warning(
-                    None,
-                    'Invalid Parameter Bounds',
-                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.',
+                errors.append(
+                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.'
                 )
 
-                return False
-
-        return True
+        return errors
 
     ########################
     ## Calculators
@@ -1500,44 +1492,47 @@ class Analysis(QObject):
     # Bayesian plot saving
     # ------------------------------------------------------------------
 
-    @Slot(str, result=bool)
-    def saveBayesianPlot(self, source_url: str) -> bool:
-        """Open a native save dialog to save a rendered Bayesian plot PNG.
+    @staticmethod
+    def _local_path_from_url(url: str) -> Optional[Path]:
+        """Return the local path of a ``file://`` URL, ignoring any query string."""
+        if not url or not url.startswith('file://'):
+            return None
+        # Strip query string (e.g. ?t=<timestamp> used for cache-busting)
+        # QUrl handles both file:///C:/... (Windows) and file:///tmp/... (POSIX)
+        local_file = QUrl(url.split('?')[0]).toLocalFile()
+        return Path(local_file) if local_file else None
+
+    @Slot(str, result=str)
+    def bayesianPlotSuggestedFileUrl(self, source_url: str) -> str:
+        """Suggested ``file://`` URL in the home folder for saving a rendered Bayesian plot."""
+        source_path = self._local_path_from_url(source_url)
+        suggested = source_path.name if source_path is not None and source_path.name else 'bayesian_plot.png'
+        return QUrl.fromLocalFile(str(Path.home() / suggested)).toString()
+
+    @Slot(str, str, result=bool)
+    def saveBayesianPlot(self, source_url: str, destination_url: str) -> bool:
+        """Copy a rendered Bayesian plot to a destination chosen by the user in QML.
 
         :param source_url: ``file://`` URL of the rendered plot (e.g. from
             ``bayesianCornerPlotUrl``, ``bayesianTracePlotUrl``,
             ``bayesianHeatmapPlotUrl``).
+        :param destination_url: ``file://`` URL to save the plot to.
         :returns: ``True`` if the file was saved successfully.
         """
         import shutil
-        from pathlib import Path
 
-        if not source_url or not source_url.startswith('file://'):
+        source_path = self._local_path_from_url(source_url)
+        if source_path is None:
             logger.warning('Invalid Bayesian plot URL for saving: %s', source_url)
             return False
-
-        # Strip query string (e.g. ?t=<timestamp> used for cache-busting)
-        clean_url = source_url.split('?')[0]
-        # QUrl handles both file:///C:/... (Windows) and file:///tmp/... (POSIX)
-        source_path = Path(QUrl(clean_url).toLocalFile())
 
         if not source_path.exists():
             logger.warning('Bayesian plot file not found: %s', source_path)
             return False
 
-        suggested = source_path.name or 'bayesian_plot.png'
-        if source_path.suffix.lower() == '.html':
-            file_filter = 'HTML Files (*.html)'
-        else:
-            file_filter = 'PNG Images (*.png)'
-        dialog = QtWidgets.QFileDialog()
-        save_path, _ = dialog.getSaveFileName(
-            None,
-            'Save Bayesian plot',
-            str(Path.home() / suggested),
-            file_filter,
-        )
-        if not save_path:
+        save_path = self._local_path_from_url(destination_url)
+        if save_path is None:
+            logger.warning('Invalid destination URL for saving Bayesian plot: %s', destination_url)
             return False
 
         try:

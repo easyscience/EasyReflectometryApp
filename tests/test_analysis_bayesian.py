@@ -11,6 +11,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
@@ -1020,61 +1021,55 @@ class TestBayesianParamNames:
 # Save Bayesian plot
 # ===================================================================
 
-class MockQFileDialog:
-    """Stand-in for QtWidgets.QFileDialog that doesn't need a QApplication."""
-    def __init__(self, *args, **kwargs):
-        pass
-
-    @staticmethod
-    def getSaveFileName(*args, **kwargs):
-        return '', ''
-
-
 class TestSaveBayesianPlot:
-    @pytest.fixture(autouse=True)
-    def _patch_qfiledialog(self, monkeypatch):
-        monkeypatch.setattr(analysis_module.QtWidgets, 'QFileDialog', MockQFileDialog)
-
-    def test_returns_false_for_invalid_url(self, analysis):
-        assert analysis.saveBayesianPlot('') is False
-        assert analysis.saveBayesianPlot('not-a-url') is False
-
-    def test_returns_false_for_nonexistent_file(self, analysis):
-        url = 'file:///nonexistent/path/plot.png'
-        assert analysis.saveBayesianPlot(url) is False
-
-    def test_saves_file_successfully(self, analysis, tmp_path):
+    @pytest.fixture
+    def source_file(self, tmp_path):
         # Create a source PNG inside tmp_path (avoids polluting system temp dir)
         src_dir = tmp_path / 'bayesian'
         src_dir.mkdir(parents=True, exist_ok=True)
         src_file = src_dir / 'test_save.png'
         src_file.write_text('fake-png-content')
+        return src_file
 
-        url = src_file.resolve().as_uri()
-        save_dest = str(tmp_path / 'saved_plot.png')
-        # Patch getSaveFileName to return a real path
-        original_get = MockQFileDialog.getSaveFileName
-        MockQFileDialog.getSaveFileName = lambda *a, **kw: (save_dest, 'PNG (*.png)')
-        try:
-            result = analysis.saveBayesianPlot(url)
-            assert result is True
-            saved = Path(save_dest)
-            assert saved.exists()
-            assert saved.read_text() == 'fake-png-content'
-            saved.unlink()
-        finally:
-            MockQFileDialog.getSaveFileName = original_get
+    def test_returns_false_for_invalid_source_url(self, analysis, tmp_path):
+        dest_url = (tmp_path / 'out.png').resolve().as_uri()
+        assert analysis.saveBayesianPlot('', dest_url) is False
+        assert analysis.saveBayesianPlot('not-a-url', dest_url) is False
 
-    def test_returns_false_when_dialog_cancelled(self, analysis, tmp_path):
-        src_dir = tmp_path / 'bayesian'
-        src_dir.mkdir(parents=True, exist_ok=True)
-        src_file = src_dir / 'cancelled_test.png'
-        src_file.write_text('content')
+    def test_returns_false_for_nonexistent_source(self, analysis, tmp_path):
+        dest_url = (tmp_path / 'out.png').resolve().as_uri()
+        assert analysis.saveBayesianPlot('file:///nonexistent/path/plot.png', dest_url) is False
 
-        url = src_file.resolve().as_uri()
-        # MockQFileDialog.getSaveFileName returns ('', '') by default → cancelled
-        result = analysis.saveBayesianPlot(url)
-        assert result is False
+    def test_returns_false_for_invalid_destination_url(self, analysis, source_file):
+        url = source_file.resolve().as_uri()
+        assert analysis.saveBayesianPlot(url, '') is False
+        assert analysis.saveBayesianPlot(url, 'not-a-url') is False
+
+    def test_saves_file_successfully(self, analysis, source_file, tmp_path):
+        # Cache-busting query string on the source must be ignored
+        url = source_file.resolve().as_uri() + '?t=123'
+        save_dest = tmp_path / 'saved_plot.png'
+
+        assert analysis.saveBayesianPlot(url, save_dest.resolve().as_uri()) is True
+        assert save_dest.read_text() == 'fake-png-content'
+
+    def test_returns_false_when_copy_fails(self, analysis, source_file, tmp_path):
+        url = source_file.resolve().as_uri()
+        dest_url = (tmp_path / 'missing_dir' / 'out.png').resolve().as_uri()
+
+        assert analysis.saveBayesianPlot(url, dest_url) is False
+
+    def test_suggested_file_url_uses_source_name_in_home(self, analysis, source_file):
+        url = source_file.resolve().as_uri() + '?t=123'
+
+        suggested = analysis.bayesianPlotSuggestedFileUrl(url)
+
+        assert Path(QUrl(suggested).toLocalFile()) == Path.home() / 'test_save.png'
+
+    def test_suggested_file_url_falls_back_for_invalid_source(self, analysis):
+        suggested = analysis.bayesianPlotSuggestedFileUrl('')
+
+        assert Path(QUrl(suggested).toLocalFile()) == Path.home() / 'bayesian_plot.png'
 
 
 # ===================================================================

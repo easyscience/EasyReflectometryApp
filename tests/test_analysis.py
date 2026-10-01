@@ -193,6 +193,65 @@ def test_fitting_start_stop_emits_stop_signal_when_fit_is_running(monkeypatch, q
     assert received['count'] == 1
 
 
+def _param(name, min_value, max_value, fit=True):
+    return {'name': name, 'min': min_value, 'max': max_value, 'fit': fit}
+
+
+def _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_leastsq'):
+    analysis = _make_analysis(monkeypatch)
+    analysis._chached_parameters = parameters
+    analysis._minimizers_logic.minimizers_available = lambda: [minimizer]
+    analysis._minimizers_logic.minimizer_current_index = lambda: 0
+    return analysis
+
+
+def test_prefit_errors_empty_for_valid_parameters(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 0.0, 1.0), _param('b', 5.0, 5.0, fit=False)])
+
+    assert analysis._prefit_errors() == []
+
+
+def test_prefit_errors_reports_every_parameter_with_invalid_bounds(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 1.0, 1.0), _param('b', 2.0, 0.0)])
+
+    errors = analysis._prefit_errors()
+
+    assert len(errors) == 2
+    assert "'a'" in errors[0]
+    assert "'b'" in errors[1]
+
+
+def test_prefit_errors_rejects_infinite_bounds_for_differential_evolution(monkeypatch, qcore_application):
+    parameters = [_param('a', float('-inf'), 1.0), _param('b', 0.0, float('inf')), _param('c', 0.0, 1.0)]
+    analysis = _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_differential_evolution')
+
+    errors = analysis._prefit_errors()
+
+    assert len(errors) == 1
+    assert '\na,\nb\n' in errors[0]
+
+
+def test_prefit_errors_allows_infinite_bounds_for_other_minimizers(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', float('-inf'), float('inf'))])
+
+    assert analysis._prefit_errors() == []
+
+
+def test_fitting_start_stop_emits_prefit_check_failed_and_does_not_start(monkeypatch, qcore_application):
+    StubWorker.instances = []
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 1.0, 0.0)])
+    analysis._start_threaded_fit = MagicMock()
+    received = []
+    analysis.prefitCheckFailed.connect(lambda title, message: received.append((title, message)))
+
+    analysis.fittingStartStop()
+
+    assert len(received) == 1
+    assert received[0][0] == 'Invalid Parameter Bounds'
+    assert "'a'" in received[0][1]
+    analysis._start_threaded_fit.assert_not_called()
+
+
 def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_application):
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
@@ -341,8 +400,8 @@ def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcor
         return_value=('multi-fitter', 'data-group')
     )
 
-    # Mock prefitCheck to avoid complex real checks
-    analysis.prefitCheck = MagicMock(return_value=True)
+    # Mock the pre-fit check to avoid complex real checks
+    analysis._prefit_errors = MagicMock(return_value=[])
 
     # fittingStartStop should detect Bayesian mode and dispatch to sample
     analysis.fittingStartStop()
