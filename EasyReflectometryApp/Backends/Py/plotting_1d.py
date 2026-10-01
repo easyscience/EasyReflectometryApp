@@ -1447,15 +1447,33 @@ class Plotting1d(QObject):
             self.experimentChannelsChanged.emit()
             self.experimentDataChanged.emit()
 
-    def _get_experiment_model_index(self, experiment_index: int, exp_data=None) -> int:
-        """Resolve the model index used by a given experiment."""
-        if exp_data is not None and hasattr(exp_data, 'model') and exp_data.model is not None:
-            for idx, model in enumerate(self._project_lib.models):
-                if model is exp_data.model:
+    def _get_experiment_model_index(self, experiment_index: int, experiment) -> int | None:
+        """Index of the model `experiment` is paired with, or None when it is paired with none.
+
+        Pairing is by the experiment's own `model`, the same one the fit uses. There is no
+        fallback to "the model at the experiment's index" or to model 0: a curve from another
+        model would look like a valid (if poor) fit of this experiment.
+        """
+        model = getattr(experiment, 'model', None)
+        if model is not None:
+            for idx, candidate in enumerate(self._project_lib.models):
+                if candidate is model:
                     return idx
-        if experiment_index < len(self._project_lib.models):
-            return experiment_index
-        return 0
+        self._warn_once(
+            ('unpaired', experiment_index, id(model)),
+            f'Experiment {experiment_index} is not paired with any model of the project; '
+            'its calculated curve and residuals are not shown.',
+        )
+        return None
+
+    def _warn_once(self, key, message: str) -> None:
+        """Log `message` once per `key`: plots are recomputed on every refresh."""
+        warned = getattr(self, '_warned_keys', None)
+        if warned is None:
+            warned = self._warned_keys = set()
+        if key not in warned:
+            warned.add(key)
+            console.error(message)
 
     def _get_aligned_analysis_values(self, experiment_index: int, channel: str = '') -> list[dict]:
         """Return measured, calculated and sigma values aligned on experiment q points.
@@ -1486,8 +1504,11 @@ class Plotting1d(QObject):
         # every consumer of 'sigma' (residuals, report error bars) agrees.
         sigma_filtered = np.sqrt(np.clip(variance_filtered, 0.0, None))
 
-        model_index = self._get_experiment_model_index(experiment_index, exp_data)
-        if channel:
+        # The stored experiment carries the pairing (a polarized one shares it across channels).
+        model_index = self._get_experiment_model_index(experiment_index, experiment)
+        if model_index is None:
+            calc_data = None
+        elif channel:
             # A channel curve must be that channel's own cross-section: if it
             # cannot be computed (e.g. spin-flip on a non-magnetic model), show
             # the measured points alone rather than another channel's curve.
@@ -1504,18 +1525,24 @@ class Plotting1d(QObject):
 
         calc_values = np.asarray(getattr(calc_data, 'y', np.empty(0)), dtype=float)
         calc_q_values = np.asarray(getattr(calc_data, 'x', np.empty(0)), dtype=float)
-        has_calculated = calc_values.size > 0
-
-        if calc_values.size == q_filtered.size:
+        has_calculated = True
+        if calc_values.size == q_filtered.size and calc_values.size > 0:
             calculated_filtered = calc_values
-        elif calc_values.size == 0:
-            calculated_filtered = measured_filtered.copy()
         elif calc_q_values.size == calc_values.size and calc_values.size > 1:
+            # Calculated on its own q grid: interpolate onto the measured q.
             calculated_filtered = np.interp(q_filtered, calc_q_values, calc_values)
-        elif calc_values.size == 1:
-            calculated_filtered = np.full_like(measured_filtered, calc_values[0], dtype=float)
         else:
-            calculated_filtered = np.resize(calc_values, q_filtered.size)
+            # Nothing calculated, or values that cannot be placed on the measured q. No guessing
+            # (repeating or stretching values would draw a curve that was never calculated):
+            # report "no curve" so plots and residuals leave it out.
+            if calc_values.size:
+                self._warn_once(
+                    ('misaligned', experiment_index, channel, calc_values.size, q_filtered.size),
+                    f'Calculated curve for experiment {experiment_index} has {calc_values.size} values '
+                    f'for {q_filtered.size} measured points and no q to align them; it is not shown.',
+                )
+            has_calculated = False
+            calculated_filtered = np.full(q_filtered.size, np.nan)
 
         measured_filtered = self._apply_rq4(q_filtered, measured_filtered)
         calculated_filtered = self._apply_rq4(q_filtered, calculated_filtered)
@@ -1534,8 +1561,8 @@ class Plotting1d(QObject):
                     'measured': float(measured_value),
                     'calculated': float(calculated_value),
                     'sigma': float(sigma_value),
-                    # False when there is no cross-section to show (see above);
-                    # 'calculated' then mirrors 'measured' and must not be drawn.
+                    # False when there is no curve to show (see above); 'calculated'
+                    # is then NaN and must not be drawn or used in a residual.
                     'has_calculated': has_calculated,
                 }
             )
