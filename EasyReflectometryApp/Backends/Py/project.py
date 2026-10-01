@@ -2,6 +2,7 @@ import logging
 import warnings
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Callable
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.orso_utils import load_orso_model
@@ -44,6 +45,14 @@ class Project(QObject):
         # create, save, load and reset). None means "unknown", in which case a dirtying signal
         # is trusted as is.
         self._clean_fingerprint = None
+
+    def add_pre_save_hook(self, hook: Callable[[], None]) -> None:
+        """Run `hook` before the project is serialized (save, create and dirty checks)."""
+        self._logic.add_pre_save_hook(hook)
+
+    def add_post_load_hook(self, hook: Callable[[], None]) -> None:
+        """Run `hook` right after a project is loaded or reset, before it is fingerprinted."""
+        self._logic.add_post_load_hook(hook)
 
     # Properties
 

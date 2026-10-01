@@ -25,9 +25,17 @@ class StubProject(QObject):
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)
         self.dirty_calls = 0
+        self.pre_save_hooks = []
+        self.post_load_hooks = []
 
     def markDirty(self):
         self.dirty_calls += 1
+
+    def add_pre_save_hook(self, hook):
+        self.pre_save_hooks.append(hook)
+
+    def add_post_load_hook(self, hook):
+        self.post_load_hooks.append(hook)
 
 
 class StubSample(QObject):
@@ -52,6 +60,12 @@ class StubSample(QObject):
 
     def _clearCacheAndEmitLayersChanged(self):
         self.clear_calls += 1
+
+    def store_constraint_metadata(self):
+        pass
+
+    def reload_constraint_states(self):
+        pass
 
     def _clearStructureCacheAndEmit(self):
         self.structure_clear_calls += 1
@@ -216,6 +230,14 @@ def test_backend_constructor_wires_minimizers_logic(monkeypatch, qcore_applicati
     backend = _make_backend(monkeypatch)
 
     assert backend._status._status_logic.minimizers_logic is backend._analysis._minimizers_logic
+
+
+def test_backend_constructor_hooks_constraint_state_into_save_and_load(monkeypatch, qcore_application):
+    """The Sample backend's constraint rows must reach the project file and come back on load."""
+    backend = _make_backend(monkeypatch)
+
+    assert backend._project.pre_save_hooks == [backend._sample.store_constraint_metadata]
+    assert backend._project.post_load_hooks == [backend._sample.reload_constraint_states]
 
 
 def test_analysis_selection_bridge_updates_analysis_and_emits_signal(monkeypatch, qcore_application):

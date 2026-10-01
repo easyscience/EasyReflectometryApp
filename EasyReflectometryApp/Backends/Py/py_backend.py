@@ -281,6 +281,10 @@ class PyBackend(QObject):
 
     ######### Forming connections between the backend parts
     def _connect_project_page(self) -> None:
+        # The GUI's constraint rows live in the Sample backend; they are written into the project
+        # before every save and rebuilt after every load/reset (see Sample.store_constraint_metadata).
+        self._project.add_pre_save_hook(self._sample.store_constraint_metadata)
+        self._project.add_post_load_hook(self._sample.reload_constraint_states)
         self._project.externalNameChanged.connect(self._relay_project_page_name)
         self._project.externalCreatedChanged.connect(self._relay_project_page_created)
         self._project.externalProjectLoaded.connect(self._relay_project_page_project_changed)

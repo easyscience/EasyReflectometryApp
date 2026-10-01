@@ -129,3 +129,42 @@ def test_save_and_create_propagate_library_failures():
         logic.save()
     with pytest.raises(OSError):
         logic.create()
+
+
+def test_pre_save_hooks_run_before_every_write_and_fingerprint():
+    project_lib = make_project_with_sample()
+    project_lib.as_dict = lambda include_materials_not_in_model=False: {'calls': len(project_lib.calls)}
+    logic = Project(project_lib)
+    logic.add_pre_save_hook(lambda: project_lib.calls.append(('hook',)))
+    project_lib.calls.clear()
+
+    logic.create()
+    logic.save()
+    logic.content_fingerprint()
+
+    assert project_lib.calls == [
+        ('create',),
+        ('hook',),
+        ('save_as_json', False),
+        ('hook',),
+        ('save_as_json', True),
+        ('hook',),
+    ]
+
+
+def test_post_load_hooks_run_after_load_and_reset():
+    project_lib = make_project_with_sample()
+    logic = Project(project_lib)
+    logic.add_post_load_hook(lambda: project_lib.calls.append(('hook',)))
+    project_lib.calls.clear()
+
+    logic.load('demo.json')
+    logic.reset()
+
+    assert project_lib.calls == [
+        ('load_from_json', 'demo.json'),
+        ('hook',),
+        ('reset',),
+        ('default_model',),
+        ('hook',),
+    ]

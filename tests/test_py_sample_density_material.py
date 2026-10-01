@@ -4,9 +4,15 @@ These exercise the real reflectometry library because the sld_coupled
 toggle lives in the parameter dependency graph.
 """
 
+import json
+
 import pytest
 from easyreflectometry import Project
+from easyreflectometry.constraints import USER_CONSTRAINT_FLAG
+from easyreflectometry.constraints import constrain
+from easyreflectometry.sample import Layer
 from easyreflectometry.sample import MaterialDensity
+from easyreflectometry.sample import Multilayer
 from easyscience import global_object
 
 from EasyReflectometryApp.Backends.Py.sample import Sample
@@ -131,3 +137,54 @@ def test_molecular_weight_is_a_descriptor_not_a_parameter(backend_with_density_m
     # The formula setter still refreshes it through the descriptor.
     backend.setMaterialFormulaAtIndex(index, 'B')
     assert material.molecular_weight.value == pytest.approx(10.81)
+
+
+
+def test_recoupling_drops_the_user_constraint_mark(backend_with_density_material):
+    """Re-coupling replaces a user constraint on isld with the density tie. The library must not
+    then save that tie as the user's constraint (for a material outside the models, that save
+    would even fail, as the density parameters cannot be addressed)."""
+    project, backend, index = backend_with_density_material
+    material = project._materials[index]
+    backend.setMaterialSldCoupledAtIndex(index, False)
+    constrain(material.isld, 'a', a=project._materials[0].isld)
+    assert material.sld_coupled is False  # derived from sld alone
+    assert getattr(material.isld, USER_CONSTRAINT_FLAG, False)
+
+    backend.setMaterialSldCoupledAtIndex(index, True)
+
+    assert material.isld.independent is False  # follows the density again
+    assert not hasattr(material.isld, USER_CONSTRAINT_FLAG)
+    assert 'parameter_constraints' not in project.as_dict(include_materials_not_in_model=True)
+
+
+def test_project_with_a_decoupled_density_material_reloads_with_its_constraint(qcore_application):
+    """A density material inside a model must load (it used to fail on 'sld_coupled'), keep its
+    decoupled manual SLD, and keep a user constraint that depends on it."""
+    project = Project()
+    backend = Sample(project)
+    model = project.models[0]
+    material = MaterialDensity(chemical_structure='Ni', density=8.9, name='m1')
+    model.add_assemblies(Multilayer(Layer(material, thickness=50.0, roughness=4.0, name='m1'), name='Ni film'))
+    material.sld_coupled = False
+    material.sld.value = 9.4
+    substrate_isld = model.sample[0].layers[0].material.isld
+    constrain(substrate_isld, 'm1_sld', m1_sld=material.sld)
+    backend.store_constraint_metadata()
+    project_dict = json.loads(json.dumps(project.as_dict()))
+
+    global_object.map._clear()
+    reloaded = Project()
+    reloaded_backend = Sample(reloaded)
+    reloaded.from_dict(project_dict)
+    reloaded_backend.reload_constraint_states()
+
+    reloaded_model = reloaded.models[0]
+    reloaded_material = reloaded_model.sample[-1].layers[0].material
+    assert isinstance(reloaded_material, MaterialDensity)
+    assert reloaded_material.sld_coupled is False
+    assert reloaded_material.sld.value == pytest.approx(9.4)
+    reloaded_isld = reloaded_model.sample[0].layers[0].material.isld
+    assert reloaded_isld.independent is False
+    reloaded_material.sld.value = 8.0
+    assert reloaded_isld.value == pytest.approx(8.0)

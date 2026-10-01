@@ -2,6 +2,7 @@ import hashlib
 import json
 from copy import copy
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 from easyreflectometry import Project as ProjectLib
@@ -11,6 +12,12 @@ class Project:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         self._last_q_range_changed = False
+        # Called before the project is serialized, so state kept outside the library (e.g. the
+        # GUI's constraint rows) can be written into it first.
+        self._pre_save_hooks: list[Callable[[], None]] = []
+        # Called once a project has been loaded or reset, before anything reads or fingerprints
+        # it, so such state can be rebuilt from the new project.
+        self._post_load_hooks: list[Callable[[], None]] = []
         self._project_lib.default_model()
         self._update_enablement_of_fixed_layers_for_model(0)
 
@@ -125,6 +132,20 @@ class Project:
         info['location'] = self._project_lib.path
         return info
 
+    def add_pre_save_hook(self, hook: Callable[[], None]) -> None:
+        self._pre_save_hooks.append(hook)
+
+    def _run_pre_save_hooks(self) -> None:
+        for hook in self._pre_save_hooks:
+            hook()
+
+    def add_post_load_hook(self, hook: Callable[[], None]) -> None:
+        self._post_load_hooks.append(hook)
+
+    def _run_post_load_hooks(self) -> None:
+        for hook in self._post_load_hooks:
+            hook()
+
     def content_fingerprint(self) -> str:
         """A digest of exactly what `save()` would write.
 
@@ -136,18 +157,22 @@ class Project:
         :raises Exception: whatever `as_dict` raises; a caller that cannot fingerprint the
             project must treat it as changed.
         """
+        self._run_pre_save_hooks()
         content = self._project_lib.as_dict(include_materials_not_in_model=True)
         return hashlib.sha256(json.dumps(content, sort_keys=True).encode('utf-8')).hexdigest()
 
     def create(self) -> None:
         self._project_lib.create()
+        self._run_pre_save_hooks()
         self._project_lib.save_as_json()
 
     def save(self) -> None:
+        self._run_pre_save_hooks()
         self._project_lib.save_as_json(overwrite=True)
 
     def load(self, path: str) -> None:
         self._project_lib.load_from_json(path)
+        self._run_post_load_hooks()
 
     def load_experiment(self, path: str) -> bool:
         self._project_lib.load_experiment_for_model_at_index(path, self._project_lib._current_model_index)
@@ -257,3 +282,4 @@ class Project:
     def reset(self) -> None:
         self._project_lib.reset()
         self._project_lib.default_model()
+        self._run_post_load_hooks()
