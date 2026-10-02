@@ -216,7 +216,13 @@ def analysis(monkeypatch):
     project = make_project()
     analysis_inst = analysis_module.Analysis(project)
     analysis_inst._clearCacheAndEmitParametersChanged = MagicMock()
-    analysis_inst._plotting = StubPlotting()
+    # Connected the way PyBackend connects the real Plotting1d.
+    plotting = StubPlotting()
+    analysis_inst.posteriorPredictiveReady.connect(plotting.set_posterior_predictive)
+    analysis_inst.posteriorPredictiveSldReady.connect(plotting.set_posterior_predictive_sld)
+    analysis_inst.posteriorPredictiveCleared.connect(plotting.clear_posterior_predictive)
+    analysis_inst.posteriorPredictiveCleared.connect(plotting.clear_posterior_predictive_sld)
+    analysis_inst.plotting_stub = plotting
     return analysis_inst
 
 
@@ -806,8 +812,9 @@ class TestBayesianDiagnostics:
 # ===================================================================
 
 class TestPosteriorPredictive:
-    def test_noop_when_plotting_none(self, analysis_with_posterior):
-        analysis_with_posterior._plotting = None
+    def test_runs_with_no_plotting_connected(self, analysis_with_posterior):
+        analysis_with_posterior.posteriorPredictiveReady.disconnect()
+        analysis_with_posterior.posteriorPredictiveSldReady.disconnect()
         # Should not raise
         analysis_with_posterior._compute_and_publish_posterior_predictive()
 
@@ -822,7 +829,7 @@ class TestPosteriorPredictive:
     def test_noop_when_posterior_cleared(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.clear()
         analysis_with_posterior._compute_and_publish_posterior_predictive()
-        assert analysis_with_posterior._plotting.posterior_q is None
+        assert analysis_with_posterior.plotting_stub.posterior_q is None
 
 
 # ===================================================================
@@ -834,8 +841,8 @@ class TestBayesianStateClearing:
         analysis._bayesian_logic._posterior = dict(SAMPLE_POSTERIOR_2D)
         analysis._bayesian_logic.corner_plot_url = 'file:///corner.html'
         analysis._bayesian_logic.diagnostics = {'nDraws': 4}
-        analysis._plotting.set_posterior_predictive([1.0], [2.0], [1.5], [2.5])
-        analysis._plotting.set_posterior_predictive_sld([0.0], [1.0], [0.5], [1.5])
+        analysis.plotting_stub.set_posterior_predictive([1.0], [2.0], [1.5], [2.5])
+        analysis.plotting_stub.set_posterior_predictive_sld([0.0], [1.0], [0.5], [1.5])
 
     def test_clear_bayesian_results_discards_posterior_and_overlays(self, analysis):
         self._set_full_result(analysis)
@@ -848,8 +855,8 @@ class TestBayesianStateClearing:
         assert analysis._bayesian_logic.has_result is False
         assert analysis._bayesian_logic.corner_plot_url == ''
         assert analysis._bayesian_logic.diagnostics == {}
-        assert analysis._plotting.posterior_q is None
-        assert analysis._plotting.sld_z is None
+        assert analysis.plotting_stub.posterior_q is None
+        assert analysis.plotting_stub.sld_z is None
         assert emissions['fitting'] >= 1
         assert emissions['heatmap'] >= 1
 
@@ -870,7 +877,7 @@ class TestBayesianStateClearing:
         analysis._start_threaded_fit()
 
         assert analysis._bayesian_logic.has_result is False
-        assert analysis._plotting.posterior_q is None
+        assert analysis.plotting_stub.posterior_q is None
 
     def test_sampling_start_clears_previous_posterior(self, analysis):
         StubWorker.instances = []
@@ -883,7 +890,7 @@ class TestBayesianStateClearing:
         # finished (a failed run must not resurrect stale results).
         assert analysis._bayesian_logic.has_result is False
         assert analysis._bayesian_logic.corner_plot_url == ''
-        assert analysis._plotting.posterior_q is None
+        assert analysis.plotting_stub.posterior_q is None
 
 
 # ===================================================================

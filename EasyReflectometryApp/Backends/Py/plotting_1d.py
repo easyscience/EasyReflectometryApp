@@ -16,8 +16,12 @@ from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
 from .helpers import IO
+from .logic.experiment_data import concatenated_experiment_data
+from .logic.experiment_data import individual_experiment_data_list
+from .logic.experiment_selection import ExperimentSelection
 from .logic.experiments import CHANNEL_COLORS
 from .logic.experiments import CHANNEL_LABELS
+from .logic.experiments import Experiments as ExperimentsLogic
 from .logic.experiments import experiment_channel_values
 from .logic.experiments import flatten_polarized
 
@@ -60,9 +64,6 @@ class Plotting1d(QObject):
     # Spin asymmetry (Phase 5b/5c): availability or content of the SA charts.
     spinAsymmetryChanged = Signal()
 
-    # Class-level default so instances constructed without __init__ (test stubs)
-    # still have a channel selection; setChannelVisible replaces it per instance.
-    _visible_channels: frozenset = frozenset({'pp', 'pm', 'mp', 'mm'})
     # Magnetic SLD curves drawn on top of the nuclear profile. The spin-up and
     # spin-down potentials are on by default: where a layer is non-magnetic they
     # collapse onto the nuclear curve, so a weakly magnetic sample still looks
@@ -80,10 +81,13 @@ class Plotting1d(QObject):
     # Cached result of the library channel-API check (None = not checked yet).
     _channel_api_error = None
 
-    def __init__(self, project_lib: ProjectLib, parent=None):
+    def __init__(self, project_lib: ProjectLib, parent=None, selection: ExperimentSelection | None = None):
         super().__init__(parent)
         self._project_lib = project_lib
-        self._proxy = parent
+        # Selected experiments and visible spin channels, shared with Analysis (PyBackend
+        # passes the same instance). Analysis changes the selection, this class the channels.
+        self._selection = selection if selection is not None else ExperimentSelection()
+        self._experiments_logic = ExperimentsLogic(project_lib)
         self._currentLib1d = 'QtCharts'
         self._sample_data = {}
         self._model_data = {}
@@ -97,8 +101,6 @@ class Plotting1d(QObject):
         self._bkg_shown = False
         self._residual_range_cache = None
 
-        # Spin channels shown for polarized experiments (channel-value strings).
-        self._visible_channels = frozenset({'pp', 'pm', 'mp', 'mm'})
         # Magnetic profile curves shown on the SLD chart (both pages share it).
         self._visible_sld_curves = frozenset({'spin_up', 'spin_down'})
         # Spin asymmetry per experiment index; cleared with the other plot data.
@@ -141,6 +143,15 @@ class Plotting1d(QObject):
                 },
             }
         }
+
+    @property
+    def _visible_channels(self) -> frozenset:
+        """Spin channels shown for polarized experiments (channel-value strings)."""
+        return self._selection.visible_channels
+
+    @_visible_channels.setter
+    def _visible_channels(self, channels) -> None:
+        self._selection.visible_channels = channels
 
     def reset_data(self):
         self._sample_data = {}
@@ -373,12 +384,11 @@ class Plotting1d(QObject):
     @property
     def experiment_data(self) -> DataSet1D:
         try:
-            # Check if multi-experiment selection is enabled
-            if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
-                selected_indices = self._proxy._analysis._selected_experiment_indices
-                if len(selected_indices) > 1:
-                    # Return concatenated data for multiple experiments (legacy support)
-                    return self._proxy._analysis.get_concatenated_experiment_data()
+            if self._selection.is_multi:
+                # Return concatenated data for multiple experiments (legacy support)
+                return concatenated_experiment_data(
+                    self._project_lib, self._experiments_logic.available(), self._selection.indices, self._visible_channels
+                )
             # Default single experiment behavior. Polarized experiments are
             # flattened to the first visible channel here; the experiment page
             # uses the channel-aware slots for full per-channel display.
@@ -399,12 +409,7 @@ class Plotting1d(QObject):
     @property
     def is_multi_experiment_mode(self) -> bool:
         """Check if multiple experiments are selected."""
-        try:
-            if hasattr(self._proxy, '_analysis') and hasattr(self._proxy._analysis, '_selected_experiment_indices'):
-                return len(self._proxy._analysis._selected_experiment_indices) > 1
-        except Exception:  # noqa: S110
-            pass
-        return False
+        return self._selection.is_multi
 
     @property
     def individual_experiment_data_list(self) -> list:
@@ -418,8 +423,13 @@ class Plotting1d(QObject):
 
     def _individual_experiment_data_list(self, expand_channels: bool) -> list:
         try:
-            if hasattr(self._proxy, '_analysis'):
-                return self._proxy._analysis.get_individual_experiment_data_list(expand_channels=expand_channels)
+            return individual_experiment_data_list(
+                self._project_lib,
+                self._experiments_logic.available(),
+                self._selection.indices,
+                self._visible_channels,
+                expand_channels=expand_channels,
+            )
         except Exception as e:
             console.debug(f'Error getting individual experiment data: {e}')
         return []
@@ -659,9 +669,8 @@ class Plotting1d(QObject):
             console.debug(f'Error getting analysis x range for residuals: {e}')
 
         try:
-            indices = []
             if self.is_multi_experiment_mode:
-                indices = list(self._proxy._analysis._selected_experiment_indices)
+                indices = self._selection.indices
             else:
                 indices = [self._project_lib.current_experiment_index]
 
@@ -763,8 +772,7 @@ class Plotting1d(QObject):
         calculated pair of the ordinary path cannot represent it.
         """
         try:
-            selected = getattr(self._proxy._analysis, '_selected_experiment_indices', None) or []
-            return any(self._project_lib.experiment_is_polarized_at_index(index) for index in selected)
+            return any(self._project_lib.experiment_is_polarized_at_index(index) for index in self._selection.indices)
         except Exception as exception:  # noqa: BLE001 - a chart flag must never raise into QML
             console.debug(f'Error resolving analysis channel mode: {exception}')
             return False

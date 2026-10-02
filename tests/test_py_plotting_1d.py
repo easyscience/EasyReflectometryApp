@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QObject
 
 from EasyReflectometryApp.Backends.Py import plotting_1d as plotting_module
+from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.plotting_1d import Plotting1d
 
 
@@ -45,7 +45,7 @@ class FakeProject:
             SimpleNamespace(color='#111111', scale=SimpleNamespace(value=0.0), background=SimpleNamespace(value=0.0)),
             SimpleNamespace(color='#222222', scale=SimpleNamespace(value=2.0), background=SimpleNamespace(value=1e-6)),
         ]
-        self._experiments = {0: object(), 1: object()}
+        self._experiments = {0: SimpleNamespace(name='E0'), 1: SimpleNamespace(name='E1')}
         self._sample = {
             0: FakeData(x=[0.1, 0.2], y=[1.0, 2.0]),
             1: FakeData(x=[0.05, 0.4], y=[3.0, 4.0]),
@@ -74,30 +74,10 @@ class FakeProject:
         return self._exp[index]
 
 
-class FakeAnalysisProxy:
-    def __init__(self, selected):
-        self._selected_experiment_indices = selected
-
-    def get_concatenated_experiment_data(self):
-        return FakeData(x=[0.1, 0.2, 0.3], y=[1e-6, 2e-6, 3e-6], ye=[1e-8, 1e-8, 1e-8])
-
-    def get_individual_experiment_data_list(self, expand_channels=False):
-        return [
-            {'name': 'E0', 'color': '#111111', 'index': 0, 'data': FakeData(x=[0.1], y=[1e-6], ye=[1e-8])},
-            {'name': 'E1', 'color': '#222222', 'index': 1, 'data': FakeData(x=[0.2], y=[2e-6], ye=[1e-8])},
-        ]
-
-
-class FakeBackendParent(QObject):
-    def __init__(self, selected):
-        super().__init__()
-        self._analysis = FakeAnalysisProxy(selected)
-
-
 def _make_plotting(selected=None):
     project = FakeProject()
-    proxy = FakeBackendParent([0] if selected is None else selected)
-    plotting = Plotting1d(project, parent=proxy)
+    selection = ExperimentSelection([0] if selected is None else selected)
+    plotting = Plotting1d(project, selection=selection)
     plotting._chartRefs['QtCharts']['experimentPage']['measuredSerie'] = FakeSeries()
     plotting._chartRefs['QtCharts']['experimentPage']['errorUpperSerie'] = FakeSeries()
     plotting._chartRefs['QtCharts']['experimentPage']['errorLowerSerie'] = FakeSeries()
@@ -250,11 +230,9 @@ def _make_project_stub(q, r_exp, r_calc, q_min=0.0, q_max=1.0, ye=None):
 
 
 def _make_plotting_stub(project, rq4=False):
-    proxy = MagicMock()
-    proxy._analysis._selected_experiment_indices = [0]
     p = Plotting1d.__new__(Plotting1d)
     p._project_lib = project
-    p._proxy = proxy
+    p._selection = ExperimentSelection([0])
     p._plot_rq4 = rq4
     p._x_axis_log = False
     p._sld_x_reversed = False

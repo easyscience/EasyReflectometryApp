@@ -5,6 +5,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
+from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
 from tests.factories import make_project
 
@@ -460,3 +461,74 @@ def test_model_index_for_experiment_paired_with_a_removed_model(monkeypatch, qco
 
     assert analysis.modelIndexForExperiment == -1
 
+
+
+def _make_analysis_with_experiments(monkeypatch, count):
+    """An Analysis with the real experiment logic over `count` named experiments."""
+    project = make_project(experiments={i: SimpleNamespace(name=f'E{i}') for i in range(count)})
+    monkeypatch.setattr(analysis_module, 'ParametersLogic', StubParametersLogic)
+    monkeypatch.setattr(analysis_module, 'CalculatorsLogic', StubCalculatorsLogic)
+    monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubMinimizersLogic)
+    monkeypatch.setattr(analysis_module, 'FitterWorker', StubWorker)
+    analysis = analysis_module.Analysis(project, selection=ExperimentSelection())
+    analysis._clearCacheAndEmitParametersChanged = MagicMock()
+    return analysis, project
+
+
+def test_selection_starts_with_the_first_experiment(monkeypatch, qcore_application):
+    analysis, _project = _make_analysis_with_experiments(monkeypatch, 3)
+
+    assert analysis.selectedExperimentIndices == [0]
+
+
+def test_set_selected_experiments_makes_the_first_one_current(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    emitted = []
+    analysis.experimentsChanged.connect(lambda: emitted.append('experiments'))
+
+    analysis.setSelectedExperimentIndices([2, 1, 9])
+
+    assert analysis.selectedExperimentIndices == [2, 1]
+    assert project._current_experiment_index == 2
+    assert emitted == ['experiments']
+
+    analysis.setSelectedExperimentIndices([2, 1])  # unchanged
+    assert emitted == ['experiments']
+
+
+def test_removing_an_experiment_shifts_the_selection(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 4)
+    analysis.setSelectedExperimentIndices([1, 3])
+
+    analysis.removeExperiment(0)
+
+    assert analysis.selectedExperimentIndices == [0, 2]
+    assert project._current_experiment_index == 0
+
+
+def test_removing_the_selected_experiment_drops_it(monkeypatch, qcore_application):
+    analysis, _project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([0, 2])
+
+    analysis.removeExperiment(2)
+
+    assert analysis.selectedExperimentIndices == [0]
+
+
+def test_prune_drops_experiments_removed_elsewhere(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([1, 2])
+    del project._experiments[2]  # e.g. removed with its model
+
+    assert analysis.prune_selected_experiments() is True
+    assert analysis.selectedExperimentIndices == [1]
+    assert project._current_experiment_index == 1
+
+
+def test_reset_selects_only_the_current_experiment(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([0, 1, 2])
+    project._current_experiment_index = 1
+
+    assert analysis.reset_selected_experiments() is True
+    assert analysis.selectedExperimentIndices == [1]

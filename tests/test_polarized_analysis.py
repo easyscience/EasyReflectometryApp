@@ -10,6 +10,7 @@ import pytest
 from easyreflectometry import Project as RealProject
 from easyreflectometry.sample import LayerMagnetism
 
+from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting as FittingLogic
 from EasyReflectometryApp.Backends.Py.logic.layers import Layers as LayersLogic
 from EasyReflectometryApp.Backends.Py.logic.parameters import Parameters as ParametersLogic
@@ -357,16 +358,14 @@ class TestAnalysisChartChannels:
 
     def test_analysis_switches_to_channel_series_for_a_polarized_experiment(self, qcore_application, tmp_path):
         project = self._project_with_channels(tmp_path)
-        plotting = Plotting1d(project_lib=project, parent=None)
-        plotting._proxy = type('P', (), {'_analysis': type('A', (), {'_selected_experiment_indices': [0]})()})()
+        plotting = Plotting1d(project_lib=project, parent=None, selection=ExperimentSelection([0]))
 
         assert plotting.analysisUsesChannelSeries is True
 
     def test_ordinary_experiment_keeps_the_single_series_path(self, qcore_application, tmp_path):
         project = _project()
         project.load_new_experiment(_write_channels(tmp_path, names=('plain.dat',))[0])
-        plotting = Plotting1d(project_lib=project, parent=None)
-        plotting._proxy = type('P', (), {'_analysis': type('A', (), {'_selected_experiment_indices': [0]})()})()
+        plotting = Plotting1d(project_lib=project, parent=None, selection=ExperimentSelection([0]))
 
         assert plotting.analysisUsesChannelSeries is False
 
