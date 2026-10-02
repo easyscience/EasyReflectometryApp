@@ -160,6 +160,31 @@ def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_result
     assert logic.fit_n_pars == 3
 
 
+def test_pooled_reduced_chi2_uses_the_global_free_parameter_count(monkeypatch):
+    # With shared parameters, each result's n_pars counts them again; the pooled degrees of
+    # freedom must use the global count, as fit_n_pars does.
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 2)
+
+    logic.prepare_for_threaded_fit()
+    logic.on_fit_finished([
+        make_fit_result(success=True, chi2=4.0, n_pars=4, x=[1, 2, 3], reduced_chi2=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=4, x=[1, 2, 3, 4], reduced_chi2=1.2),
+    ])
+
+    assert logic.fit_chi2 == 2.0  # 10 / (7 - 2)
+
+
+def test_ordered_experiments_sorts_by_key_only():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+    first, second = object(), object()
+    project._experiments.update({1: second, 0: first})
+
+    assert logic._ordered_experiments() == [first, second]
+
+
 def test_fit_progress_updates_transient_state_and_message():
     project = make_project()
     logic = fitting_module.Fitting(project)

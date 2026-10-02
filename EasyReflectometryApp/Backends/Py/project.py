@@ -341,7 +341,11 @@ class Project(QObject):
         # Load the sample model
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter('always')
-            sample = load_orso_model(orso_data)
+            try:
+                sample = load_orso_model(orso_data)
+            except Exception as ex:
+                self.projectLoadError.emit(f'Failed to read the sample model from the ORSO file: {ex}')
+                return
         if sample is None:
             warning_msg = 'The ORSO file does not contain a valid sample model definition. No sample was loaded.'
             for w in caught_warnings:

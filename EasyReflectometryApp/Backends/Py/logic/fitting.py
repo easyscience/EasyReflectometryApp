@@ -233,7 +233,7 @@ class Fitting:
         if hasattr(experiments, 'items'):
             items = list(experiments.items())
             try:
-                items = sorted(items)
+                items.sort(key=lambda item: item[0])
             except TypeError:
                 pass
             return [experiment for _, experiment in items]
@@ -579,8 +579,7 @@ class Fitting:
                     return float(self._results[0].reduced_chi2)
                 total_chi2 = float(sum(result.chi2 for result in self._results))
                 total_points = sum(len(result.x) for result in self._results)
-                n_params = self._results[0].n_pars
-                total_dof = total_points - n_params
+                total_dof = total_points - self.fit_n_pars
                 if total_dof <= 0:
                     return 0.0
                 return total_chi2 / total_dof

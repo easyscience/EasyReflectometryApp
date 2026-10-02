@@ -788,14 +788,21 @@ class Analysis(QObject):
         # 'internal_bumps_object' (easyscience core); fall back to the legacy
         # 'state' key for robustness against future core renames.
         state = posterior.get('internal_bumps_object') or posterior.get('state')
-        if state is not None:
+        acceptance_rate = getattr(state, 'acceptance_rate', None)
+        if acceptance_rate is not None:
             try:
-                diagnostics['acceptanceRate'] = float(getattr(state, 'acceptance_rate', None) or 0.0)
-            except (AttributeError, TypeError, ValueError):
+                if callable(acceptance_rate):
+                    import numpy as np
+
+                    # BUMPS MCMCDraw.acceptance_rate() returns (generation ids, rate in percent)
+                    # for the kept portion of the run.
+                    _generations, rates = acceptance_rate()
+                    acceptance_rate = float(np.mean(rates)) / 100.0
+                diagnostics['acceptanceRate'] = float(acceptance_rate)
+            except (TypeError, ValueError):
                 pass
 
         draws = posterior['draws']
-        state = posterior.get('internal_bumps_object') or posterior.get('state')
 
         # Try to obtain 3D draws (chains × draws × params) needed by arviz R-hat.
         # The BUMPS MCMCDraw.chains() returns (n_generations, n_chains, n_params).
@@ -1121,10 +1128,13 @@ class Analysis(QObject):
         experiments = self._ordered_experiments()
         index = self.experimentCurrentIndex
         current_experiment = experiments[index] if 0 <= index < len(experiments) else None
-        if current_experiment is not None:
-            t = models.index(current_experiment.model)
-            return t
-        return -1
+        if current_experiment is None:
+            return -1
+        try:
+            return models.index(current_experiment.model)
+        except ValueError:
+            # The experiment is unpaired or paired with a model no longer in the project.
+            return -1
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelNamesForExperiment(self) -> list:

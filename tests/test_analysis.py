@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from PySide6.QtCore import QObject
@@ -447,3 +448,15 @@ def test_bayesian_initializer_property_round_trip(monkeypatch, qcore_application
 
     analysis.setBayesianInitializer('cov')
     assert analysis.bayesianInitializer == 'cov'
+
+def test_model_index_for_experiment_paired_with_a_removed_model(monkeypatch, qcore_application):
+    analysis = _make_analysis(monkeypatch)
+    project = analysis._experiments_logic._project_lib
+    project._models.add_model()
+    project._experiments[0] = SimpleNamespace(model=project._models[-1])
+    assert analysis.modelIndexForExperiment == len(project._models) - 1
+
+    project._experiments[0] = SimpleNamespace(model=object())
+
+    assert analysis.modelIndexForExperiment == -1
+

@@ -24,7 +24,7 @@ class IO:
             # would drop the drive and resolve the rest against the current drive.
             return fpath
         filename = parsed.path
-        if not sys.platform.startswith('win'):
+        if not filename or not sys.platform.startswith('win'):
             return filename
         if filename[0] == '/':
             filename = filename[1:].replace('/', os.path.sep)
@@ -35,20 +35,26 @@ class IO:
         return QUrl.fromLocalFile(fpath).toString()
 
     @staticmethod
-    def formatMsg(type, *args):
-        types = {'main': '*', 'sub': '  -'}
-        mark = types[type]
+    def formatMsg(kind, *args):
+        marks = {'main': '*', 'sub': '  -'}
+        mark = marks[kind]
         widths = [22, 21, 20, 10]
         widths[0] -= len(mark)
         msgs = []
         for idx, arg in enumerate(args):
-            msgs.append(f'{arg:<{widths[idx]}}')
+            # Columns past the last width are not padded.
+            width = widths[idx] if idx < len(widths) else 0
+            msgs.append(f'{arg:<{width}}')
         msg = ' ▌ '.join(msgs)
         msg = f'{mark} {msg}'
         return msg
 
     @staticmethod
     def toStdDevSmalestPrecision(value, std_dev):
+        if not std_dev > 0:
+            # No usable uncertainty (zero, negative or NaN): its precision cannot be derived.
+            value_str = f'{value}'
+            return value_str, f'{std_dev}', value_str
         if std_dev > 1:
             value_str = f'{round(value)}'
             std_dev_str = f'{round(std_dev)}'

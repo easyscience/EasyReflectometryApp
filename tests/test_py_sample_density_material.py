@@ -13,6 +13,7 @@ from easyreflectometry.constraints import constrain
 from easyreflectometry.sample import Layer
 from easyreflectometry.sample import MaterialDensity
 from easyreflectometry.sample import Multilayer
+from easyreflectometry.sample import SurfactantLayer
 from easyscience import global_object
 
 from EasyReflectometryApp.Backends.Py.sample import Sample
@@ -148,7 +149,7 @@ def test_recoupling_drops_the_user_constraint_mark(backend_with_density_material
     material = project._materials[index]
     backend.setMaterialSldCoupledAtIndex(index, False)
     constrain(material.isld, 'a', a=project._materials[0].isld)
-    assert material.sld_coupled is False  # derived from sld alone
+    assert material.sld_coupled is False
     assert getattr(material.isld, USER_CONSTRAINT_FLAG, False)
 
     backend.setMaterialSldCoupledAtIndex(index, True)
@@ -156,6 +157,40 @@ def test_recoupling_drops_the_user_constraint_mark(backend_with_density_material
     assert material.isld.independent is False  # follows the density again
     assert not hasattr(material.isld, USER_CONSTRAINT_FLAG)
     assert 'parameter_constraints' not in project.as_dict(include_materials_not_in_model=True)
+
+
+def test_constraint_on_decoupled_sld_keeps_material_decoupled_and_recoupling_works(backend_with_density_material):
+    """A user constraint on a decoupled material's sld used to make the material read as coupled
+    again, so re-coupling it from the GUI was a no-op that kept the user constraint."""
+    project, backend, index = backend_with_density_material
+    material = project._materials[index]
+    coupled_sld = material.sld.value
+    backend.setMaterialSldCoupledAtIndex(index, False)
+    constrain(material.sld, 'a', a=project._materials[0].sld)
+    assert material.sld_coupled is False
+
+    backend.setMaterialSldCoupledAtIndex(index, True)
+
+    assert material.sld_coupled is True
+    assert material.sld.value == pytest.approx(coupled_sld)
+    assert not hasattr(material.sld, USER_CONSTRAINT_FLAG)
+
+
+def test_library_ties_are_not_listed_as_constraints(backend_with_density_material):
+    """The library's own ties (a coupled density material's sld/isld, an area-per-molecule
+    layer's sld/isld) are not user constraints."""
+    project, backend, index = backend_with_density_material
+    material = project._materials[index]
+    project.models[0].add_assemblies(Multilayer(Layer(material, thickness=10.0, roughness=1.0, name='d'), name='Density film'))
+    project.models[0].add_assemblies(SurfactantLayer())
+    assert material.sld.independent is False
+
+    assert backend.constraintsList == []
+
+    # A user constraint replacing the tie is listed.
+    constrain(material.sld, 'a', a=project.models[0].sample[0].layers[0].material.sld)
+    rows = backend.constraintsList
+    assert [row['uniqueName'] for row in rows] == [material.sld.unique_name]
 
 
 def test_project_with_a_decoupled_density_material_reloads_with_its_constraint(qcore_application):

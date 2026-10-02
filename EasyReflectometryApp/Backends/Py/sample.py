@@ -882,8 +882,7 @@ class Sample(QObject):
         interpreter = Interpreter(config=_ASTEVAL_CONFIG)
         for name, value in _GLOBAL_SYMBOLS.items():
             interpreter.symtable[name] = value
-            if isinstance(value, numbers.Number):
-                interpreter.readonly_symbols.add(name)
+            interpreter.readonly_symbols.add(name)
         for alias, dependency in aliases.items():
             interpreter.symtable[alias] = float(dependency.value) if numeric else dependency
             interpreter.readonly_symbols.add(alias)
@@ -906,8 +905,11 @@ class Sample(QObject):
         except Exception as e:
             # Provide helpful error message showing available aliases
             if 'not defined' in str(e):
-                available = ', '.join(sorted(aliases_to_add.keys())[:10])  # Show first 10
-                raise NameError(f'{str(e)}\nAvailable aliases: {available}...') from None
+                aliases = sorted(aliases_to_add.keys())
+                available = ', '.join(aliases[:10])  # Show first 10
+                if len(aliases) > 10:
+                    available += ', ...'
+                raise NameError(f'{str(e)}\nAvailable aliases: {available}') from None
             raise
         return result
 
@@ -1198,8 +1200,12 @@ class Sample(QObject):
         Used when the GUI holds no state for it, notably after a project is loaded. Dependencies
         are named by object identity where possible, since aliases in a saved expression need
         not match the aliases the current project would generate.
+
+        Only the user's constraints are described. The library ties parameters internally too
+        (a density material's or an area-per-molecule layer's sld, an assembly's conformal
+        roughness), and it marks only the user's with `USER_CONSTRAINT_FLAG`.
         """
-        if getattr(parameter_obj, 'independent', True):
+        if getattr(parameter_obj, 'independent', True) or not getattr(parameter_obj, USER_CONSTRAINT_FLAG, False):
             return None
 
         try:
@@ -1473,7 +1479,7 @@ class Sample(QObject):
                 return
 
         constraints_list = self.constraintsList
-        if index >= len(constraints_list):
+        if not 0 <= index < len(constraints_list):
             return
 
         row = constraints_list[index]

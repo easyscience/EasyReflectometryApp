@@ -116,6 +116,24 @@ class TestInequalityConstraints:
         result = backend.validateConstraintExpression(idx, '<', f'{alias_a} * 2')
         assert not result['valid']
 
+    def test_remove_by_negative_index_is_ignored(self, project_and_backend):
+        _, backend = project_and_backend
+        idx = _dependent_index(backend, 'Film A thickness')
+        alias_b = _alias(backend, 'Film B thickness')
+        assert backend.addConstraint(idx, '<', f'{alias_b} * 2')['success']
+        assert len(backend.constraintsList) == 1
+
+        backend.removeConstraintByIndex(-1)
+
+        assert len(backend.constraintsList) == 1
+
+    def test_global_symbols_are_read_only(self):
+        interpreter = Sample._make_interpreter({})
+        assert {'np', 'numpy', 'math', 'pi', 'e'} <= interpreter.readonly_symbols
+        with pytest.raises(Exception):
+            interpreter.eval('np = 1', raise_errors=True)
+        assert interpreter.symtable['np'] is sample_module.np
+
     def test_add_list_remove_and_persist(self, project_and_backend):
         project, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
