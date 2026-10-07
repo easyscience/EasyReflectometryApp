@@ -176,6 +176,32 @@ def test_pooled_reduced_chi2_uses_the_global_free_parameter_count(monkeypatch):
     assert logic.fit_chi2 == 2.0  # 10 / (7 - 2)
 
 
+def test_pooled_statistics_describe_the_fit_not_the_edited_project(monkeypatch):
+    # The parameter count is taken when the fit starts; fixing a parameter afterwards
+    # must not change the reduced chi-squared of the results already on screen.
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+    live_count = {'value': 2}
+    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: live_count['value'])
+
+    logic.prepare_for_threaded_fit()
+    logic.on_fit_finished([
+        make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi2=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi2=1.2),
+    ])
+    assert (logic.fit_n_pars, logic.fit_chi2) == (2, 2.0)
+
+    live_count['value'] = 1  # the user fixed a parameter after the fit
+    assert (logic.fit_n_pars, logic.fit_chi2) == (2, 2.0)
+
+    logic.prepare_for_threaded_fit()  # the next fit takes the new count
+    logic.on_fit_finished([
+        make_fit_result(success=True, chi2=4.0, n_pars=1, x=[1, 2, 3], reduced_chi2=1.1),
+        make_fit_result(success=True, chi2=6.0, n_pars=1, x=[1, 2, 3, 4], reduced_chi2=1.2),
+    ])
+    assert (logic.fit_n_pars, logic.fit_chi2) == (1, 10.0 / 6.0)
+
+
 def test_ordered_experiments_sorts_by_key_only():
     project = make_project()
     logic = fitting_module.Fitting(project)

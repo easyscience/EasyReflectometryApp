@@ -14,6 +14,7 @@ from easyreflectometry.constraints import constrain
 from easyreflectometry.inequality_constraints import InequalitySpec
 from easyreflectometry.inequality_constraints import check_units
 from easyreflectometry.inequality_constraints import evaluate_spec
+from easyscience.variable import Parameter
 from easyscience.variable.descriptor_number import DescriptorNumber
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -263,6 +264,7 @@ class Sample(QObject):
     @Slot(str)
     def removeMaterial(self, value: str) -> None:
         self._material_logic.remove_at_index(value)
+        self._detach_unreachable_constraints()
         self.materialsTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -343,6 +345,9 @@ class Sample(QObject):
     @Slot(str)
     def removeModel(self, value: str) -> None:
         self._models_logic.remove_at_index(value)
+        # Constraints that tied this model's parameters to another model's (or the
+        # reverse) have lost one end; see _detach_unreachable_constraints.
+        self._detach_unreachable_constraints()
         self.modelsTableChanged.emit()
 
     @Slot()
@@ -481,6 +486,7 @@ class Sample(QObject):
         self._assemblies_logic.remove_at_index(value)
         self._refreshCurrentAssemblySelectionState()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
+        self._detach_unreachable_constraints()
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -567,6 +573,8 @@ class Sample(QObject):
     @Slot(int)
     def setCurrentLayerMaterial(self, new_value: int) -> None:
         if self._layers_logic.set_material_at_current_index(new_value):
+            # The previous material may now be used by no model (see _detach_unreachable_constraints).
+            self._detach_unreachable_constraints()
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -574,6 +582,7 @@ class Sample(QObject):
     @Slot(int, int)
     def setLayerMaterialAtIndex(self, index: int, new_value: int) -> None:
         if self._layers_logic.set_material_at_index(index, new_value):
+            self._detach_unreachable_constraints()
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -666,6 +675,7 @@ class Sample(QObject):
     @Slot(str)
     def removeLayer(self, value: str) -> None:
         self._layers_logic.remove_at_index(value)
+        self._detach_unreachable_constraints()
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -1050,6 +1060,17 @@ class Sample(QObject):
                     'relation': relation,
                 }
             numeric_value = self._to_float(evaluation_result)
+            # The value setter clamps to the bounds: "= 100" on a parameter with max 50 would
+            # report success and pin the parameter at 50, with a row that does not describe it.
+            dependent_obj = independent_entries[dependent_index]['object']
+            lower = getattr(dependent_obj, 'min', None)
+            upper = getattr(dependent_obj, 'max', None)
+            if lower is not None and upper is not None and not float(lower) <= numeric_value <= float(upper):
+                raise ValueError(
+                    f'The value {self._format_numeric(numeric_value)} is outside the parameter bounds '
+                    f'[{self._format_numeric(float(lower))}, {self._format_numeric(float(upper))}]. '
+                    'Widen the bounds first, or choose a value within them.'
+                )
             return {
                 'mode': 'static',
                 'value': numeric_value,
@@ -1537,6 +1558,67 @@ class Sample(QObject):
         'previous',
     )
 
+    def _constraint_candidates(self) -> list:
+        """Every parameter the library would try to persist a constraint of: the models'
+        parameters plus those of materials no model uses (``Project._constraint_candidates``).
+        Empty when the project does not expose them (test fakes)."""
+        try:
+            candidates = list(self._project_lib.parameters)
+        except AttributeError:
+            return []
+        seen = {id(parameter) for parameter in candidates}
+        materials = getattr(self._project_lib, '_materials', None)
+        get_all_parameters = getattr(materials, 'get_all_parameters', None)
+        if callable(get_all_parameters):
+            for parameter in get_all_parameters():
+                if id(parameter) not in seen:
+                    seen.add(id(parameter))
+                    candidates.append(parameter)
+        return candidates
+
+    def _detach_unreachable_constraints(self) -> int:
+        """Detach the user constraints a structural edit has cut off from the models.
+
+        Policy: an assembly, layer, model or material can always be removed, and a layer's
+        material swapped. A constraint whose target, or one of whose dependencies, is no
+        longer reachable from the models afterwards is detached, as the library refuses to
+        save it (``ValueError`` from ``Project.as_dict``) and the project would otherwise be
+        unsavable after an ordinary edit - with, for a material no model uses any more, not
+        even a row left to remove it by. The parameter becomes independent and keeps its
+        current value; its pre-constraint ``free`` state is restored when known. Returns the
+        number of detached constraints; the constraints list is refreshed when any.
+        """
+        parameter_path = getattr(self._project_lib, 'parameter_path', None)
+        if not callable(parameter_path):
+            return 0
+        detached = 0
+        for parameter in self._constraint_candidates():
+            if getattr(parameter, 'independent', True) or not getattr(parameter, USER_CONSTRAINT_FLAG, False):
+                continue
+            unreachable = parameter_path(parameter) is None
+            for dependency in (getattr(parameter, 'dependency_map', {}) or {}).values():
+                if unreachable:
+                    break
+                # A constant built for the expression is embedded by value; only parameters need a path.
+                if isinstance(dependency, Parameter) and parameter_path(dependency) is None:
+                    unreachable = True
+            if not unreachable:
+                continue
+            unique_name = getattr(parameter, 'unique_name', None)
+            state = self._constraint_states.pop(unique_name, None) if unique_name else None
+            self._ensure_parameter_independent(parameter)
+            previous_free = ((state or {}).get('previous') or {}).get('free')
+            if previous_free is not None:
+                parameter.free = bool(previous_free)
+            logger.warning(
+                'The constraint on %s was removed: it, or a parameter it depends on, is no longer part of a model.',
+                getattr(parameter, 'name', '?'),
+            )
+            detached += 1
+        if detached:
+            self._scheduleConstraintsChanged()
+        return detached
+
     def _dependency_paths(self, parameter) -> Dict[str, str] | None:
         """``{alias: structural path}`` of `parameter`'s live dependencies; None if one has no path."""
         paths = {}
@@ -1592,6 +1674,9 @@ class Sample(QObject):
         record also keeps the paths of its dependencies, so that a different tie written with
         the same expression is not mistaken for it on load.
         """
+        # Every structural edit detaches what it cuts off; this is the safety net, so that a
+        # save never fails on a constraint the edits above missed.
+        self._detach_unreachable_constraints()
         # All parameters, not the filtered table list: disabled ones keep their constraints.
         objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
         records = []

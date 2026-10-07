@@ -670,3 +670,156 @@ class TestEqualityConstraintPersistence:
         reloaded_backend.reload_constraint_states()
 
         assert _equality_rows(reloaded_backend) == before
+
+
+class TestStaticConstraintBounds:
+    """"= value" must not report success for a value the bounds would clamp."""
+
+    @pytest.mark.parametrize(('bound', 'value'), [('max', '100'), ('min', '10')], ids=['above-max', 'below-min'])
+    def test_value_outside_the_bounds_is_rejected(self, project_and_backend, bound, value):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        setattr(thickness, bound, 50.0 if bound == 'max' else 20.0)
+        idx = _dependent_index(backend, 'Film A thickness')
+
+        was_free = thickness.free
+
+        validation = backend.validateConstraintExpression(idx, '=', value)
+        result = backend.addConstraint(idx, '=', value)
+
+        assert not validation['valid'] and 'outside the parameter bounds' in validation['message']
+        assert not result['success'] and 'outside the parameter bounds' in result['message']
+        assert (thickness.value, thickness.independent, thickness.free) == (40.0, True, was_free)
+        assert _equality_rows(backend) == []
+        assert 'app_constraints' not in _save_and_reload(project, backend)[2]['info']
+
+    def test_value_within_the_bounds_is_pinned_and_listed(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        thickness.max = 50.0
+
+        assert backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', '45')['success']
+
+        assert (thickness.value, thickness.independent, thickness.free) == (45.0, False, False)
+        assert _equality_rows(backend) == [('static', 'Model Film A thickness', '=', '45')]
+
+
+class TestStructuralEditsDetachCutOffConstraints:
+    """A structural edit can cut a constraint off from the models; the library refuses to
+    save such a constraint, so the edit detaches it rather than leave the project unsavable."""
+
+    def _save(self, project, backend):
+        backend.store_constraint_metadata()
+        return project.as_dict(include_materials_not_in_model=True)
+
+    @staticmethod
+    def _alias_of(backend, parameter):
+        return next(entry['alias'] for entry in backend._parameters_logic.constraint_context() if entry['object'] is parameter)
+
+    @staticmethod
+    def _dependent_index_of(backend, parameter):
+        return next(i for i, entry in enumerate(backend._get_independent_parameter_entries()) if entry['object'] is parameter)
+
+    @staticmethod
+    def _constrain_film_a_sld_to_substrate(project, backend):
+        """Film A's material is standalone in the fixture; in the GUI every material is in the
+        project's collection, which is what keeps it (and its constraint) alive once no
+        model uses it."""
+        material = project.models[0].sample[1].layers[0].material
+        project.add_material(material)
+        substrate_sld = project.models[0].sample[-1].layers[0].material.sld
+        idx = TestStructuralEditsDetachCutOffConstraints._dependent_index_of(backend, material.sld)
+        alias = TestStructuralEditsDetachCutOffConstraints._alias_of(backend, substrate_sld)
+        assert backend.addConstraint(idx, '=', alias)['success']
+        assert material.sld.independent is False
+        return material.sld
+
+    def test_removing_the_source_assembly(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        thickness.free = False
+        film_a_thickness = _dependent_index(backend, 'Film A thickness')
+        assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
+        assert thickness.value == pytest.approx(60.0)
+
+        backend.removeAssembly('2')  # Film B
+
+        assert thickness.independent is True
+        assert thickness.value == pytest.approx(60.0)  # keeps the value the constraint gave it
+        assert thickness.free is False  # back to its pre-constraint fit state
+        assert _equality_rows(backend) == []
+        assert 'parameter_constraints' not in self._save(project, backend)
+        _, reloaded_backend, _ = _save_and_reload(project, backend)
+        assert _equality_rows(reloaded_backend) == []
+
+    def test_removing_the_target_assembly_with_a_material_no_model_uses(self, project_and_backend):
+        # The material stays in the project's collection, so the library would still try to
+        # save its constraint, and there would be no row to remove it by.
+        project, backend = project_and_backend
+        sld = self._constrain_film_a_sld_to_substrate(project, backend)
+
+        backend.removeAssembly('1')  # Film A
+
+        assert sld.independent is True
+        assert not hasattr(sld, sample_module.USER_CONSTRAINT_FLAG)
+        assert 'parameter_constraints' not in self._save(project, backend)
+
+    def test_removing_the_source_layer(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        b2_thickness = project.models[0].sample[2].layers[1].thickness
+        film_a_thickness = _dependent_index(backend, 'Film A thickness')
+        assert backend.addConstraint(film_a_thickness, '=', self._alias_of(backend, b2_thickness))['success']
+        assert any(dependency is b2_thickness for dependency in thickness.dependency_map.values())
+
+        backend.setCurrentAssemblyIndex(2)
+        backend.removeLayer('1')  # B2
+
+        assert thickness.independent is True
+        assert _equality_rows(backend) == []
+        assert 'parameter_constraints' not in self._save(project, backend)
+
+    def test_swapping_a_layer_material_out_of_every_model(self, project_and_backend):
+        project, backend = project_and_backend
+        sld = self._constrain_film_a_sld_to_substrate(project, backend)
+        substrate_material = project.models[0].sample[-1].layers[0].material
+
+        backend.setCurrentAssemblyIndex(1)
+        backend.setCurrentLayerMaterial(list(project._materials).index(substrate_material))
+
+        assert project.models[0].sample[1].layers[0].material is substrate_material
+        assert sld.independent is True
+        assert 'parameter_constraints' not in self._save(project, backend)
+
+    def test_removing_the_reference_model_of_linked_models(self, project_and_backend):
+        project, backend = project_and_backend
+        project.models.duplicate_model(0)
+        backend.constrainModelsParameters([0, 1])
+        linked = [
+            p
+            for p in project.models[1].sample.get_all_parameters()
+            if not p.independent and getattr(p, sample_module.USER_CONSTRAINT_FLAG, False)
+        ]
+        assert linked
+
+        backend.removeModel('0')
+
+        assert all(p.independent for p in linked)
+        assert backend._constraint_states == {}
+        assert 'parameter_constraints' not in self._save(project, backend)
+        _, reloaded_backend, _ = _save_and_reload(project, backend)
+        assert reloaded_backend.constraintsList == [
+            row for row in reloaded_backend.constraintsList if row['type'] not in ('dynamic', 'static')
+        ]
+
+    def test_an_unaffected_constraint_is_kept(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        film_a_thickness = _dependent_index(backend, 'Film A thickness')
+        assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
+
+        backend.removeAssembly('3')  # Surf: neither end of the constraint
+
+        assert thickness.independent is False
+        assert _equality_rows(backend) == [('dynamic', 'Model Film A thickness', '=', 'Model Film B thickness * 2')]
+        assert len(self._save(project, backend)['parameter_constraints']) == 1
