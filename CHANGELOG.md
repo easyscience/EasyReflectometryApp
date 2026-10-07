@@ -1,5 +1,20 @@
 # Unreleased
 
+- Variable resolution: every dataset is now fitted and displayed with the
+  resolution it was measured with (requires the matching reflectometry-lib
+  change).
+  - Each spin channel of a polarized experiment keeps its own measured
+    resolution; previously the first channel's resolution was used for all
+    of them. The import dialog note about this has gone.
+  - Two models with different measured resolutions no longer share one
+    resolution in the calculator (the last-loaded dataset's used to win).
+  - The Analysis chart, the residuals, the report figures and the Bayesian
+    credible band are computed with each dataset's own resolution, so they
+    match what the fit used.
+  - New `Add curve(s) to current experiment` button on the Experiment page:
+    a contrast measured as several curves (one per angle or wavelength band)
+    is merged into one experiment, each point keeping its own resolution.
+    Polarized experiments and multi-dataset files are refused with a message.
 - Added a **Structure** tab on the Model page: a schematic view of the layer stack with one
   colored box per layer (colors per material, heights following thickness, "× N" badges for
   collapsed repeating multilayers, legend and total-thickness caption). Boxes show tooltips
@@ -63,9 +78,9 @@
   - Report figures plot each channel's spin cross-section in its channel
     colour. A channel that cannot be calculated (for example spin-flip on a
     non-magnetic model) is shown as measured data only.
-  - **Limitations:** one resolution function per polarized experiment (taken
-    from the first assigned channel; the import dialog says so); Bayesian
-    sampling of polarized experiments is not supported yet.
+  - **Limitations:** Bayesian sampling of polarized experiments is not
+    supported yet. (One resolution function per polarized experiment was a
+    limitation at the time; each channel now keeps its own, see above.)
   - Project save/load now fully supports polarized experiments.
 - Magnetism editing and polarized fitting:
   - New "Magnetism" group on the Sample page: one row per layer of the current

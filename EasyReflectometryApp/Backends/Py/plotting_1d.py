@@ -1514,6 +1514,15 @@ class Plotting1d(QObject):
 
         # The stored experiment carries the pairing (a polarized one shares it across channels).
         model_index = self._get_experiment_model_index(experiment_index, experiment)
+        # The curve must be smeared the way the fit smears this dataset: with
+        # the resolution it was measured with (its own `Pointwise`), not with
+        # whatever resolution the shared model currently holds. Datasets
+        # without one fall back to the model's, so the keyword is only passed
+        # when there is something to pass.
+        resolution_kwargs = {}
+        dataset_resolution = getattr(exp_data, 'resolution_function', None)
+        if dataset_resolution is not None:
+            resolution_kwargs['resolution_function'] = dataset_resolution
         if model_index is None:
             calc_data = None
         elif channel:
@@ -1521,13 +1530,15 @@ class Plotting1d(QObject):
             # cannot be computed (e.g. spin-flip on a non-magnetic model), show
             # the measured points alone rather than another channel's curve.
             try:
-                calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered, channel=channel)
+                calc_data = self._project_lib.model_data_for_model_at_index(
+                    model_index, q_filtered, channel=channel, **resolution_kwargs
+                )
             except Exception as exception:  # noqa: BLE001 - any backend refusal means "no curve"
                 console.debug(f'No calculated curve for channel {channel}: {exception}')
                 calc_data = None
         else:
             try:
-                calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered)
+                calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered, **resolution_kwargs)
             except TypeError:
                 calc_data = self._project_lib.model_data_for_model_at_index(model_index)
 

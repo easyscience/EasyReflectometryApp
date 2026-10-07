@@ -124,12 +124,6 @@ EaElements.Dialog {
                   .arg(Globals.BackendWrapper.sampleCalculationEnginesSupportingMagnetism.join(', '))
         }
 
-        EaElements.Label {
-            // Model.resolution_function is per experiment.
-            color: EaStyle.Colors.themeForegroundMinor
-            text: qsTr("Note: one resolution function is used for the whole experiment,\ntaken from the first assigned channel. Differing per-channel\nresolution metadata in the other files is ignored.")
-        }
-
         Repeater {
             model: dialog.assignmentRows.length
 

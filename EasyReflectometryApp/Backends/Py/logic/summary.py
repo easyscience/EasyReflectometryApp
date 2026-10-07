@@ -129,18 +129,23 @@ class Summary:
         return gridspec
 
     @staticmethod
-    def _calculated_curve(model, x, channel=None):
+    def _calculated_curve(model, x, channel=None, resolution_function=None):
         """Calculated reflectivity for one model, per spin channel when given.
+
+        `resolution_function` is the measured resolution of the dataset the
+        curve is drawn over (`DataSet1D.resolution_function`), so the report
+        shows the curve the fit compared that dataset to; None uses the model's.
 
         Returns None when the channel cannot be calculated (a spin-flip channel
         of a non-magnetic model, or a calculator without magnetism support): no
         overlay is better than the wrong one.
         """
         calculator = model.interface()
+        kwargs = {} if resolution_function is None else {'resolution_function': resolution_function}
         if channel is None:
-            return np.asarray(calculator.reflectity_profile(x, model.unique_name))
+            return np.asarray(calculator.reflectity_profile(x, model.unique_name, **kwargs))
         try:
-            return np.asarray(calculator.reflectivity_profile_channel(x, model.unique_name, channel))
+            return np.asarray(calculator.reflectivity_profile_channel(x, model.unique_name, channel, **kwargs))
         except (ValueError, NotImplementedError, AttributeError) as exception:
             logger.warning('No calculated curve for channel %s: %s', channel.value, exception)
             return None
@@ -186,7 +191,9 @@ class Summary:
                     # channel labels. None means "cannot be calculated" (e.g. a
                     # spin-flip channel of a non-magnetic model) — then the
                     # measured data is shown without a calculated overlay.
-                    y_calc = self._calculated_curve(model, x, channel)
+                    y_calc = self._calculated_curve(
+                        model, x, channel, resolution_function=getattr(dataset, 'resolution_function', None)
+                    )
                     scale_factor = 10**offset
 
                     color = CHANNEL_COLORS[channel.value] if channel is not None else (

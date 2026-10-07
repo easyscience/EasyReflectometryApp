@@ -423,6 +423,9 @@ class FakeProject:
         self.calls.append(('load_all_experiments_from_file', path))
         return 2
 
+    def append_to_experiment_at_index(self, index, path):
+        self.calls.append(('append_to_experiment_at_index', index, path))
+
     def set_sample_from_orso(self, sample):
         self.calls.append(('set_sample_from_orso', sample))
 

@@ -23,6 +23,10 @@ QtObject {
         console.debug(`Loading experiment from ${path}`)
     }
 
+    function appendToCurrent(paths) {
+        console.debug(`Adding curve(s) ${paths} to the current experiment`)
+    }
+
     // Filename-token suggestion, so the assignment dialog can be exercised
     // against the mock backend as well.
     function suggestPolarizedChannels(paths) {

@@ -31,6 +31,25 @@ EaElements.GroupBox {
             }
         }
 
+        // A contrast measured as several curves (one per angle or wavelength
+        // band) is one experiment: the files are merged, each point keeping
+        // the resolution it was measured with.
+        EaElements.SideBarButton {
+            enabled: Globals.BackendWrapper.experimentExperimentalData
+            wide: true
+            fontIcon: "plus-circle"
+            text: qsTr("Add curve(s) to current experiment")
+
+            onClicked: {
+                console.debug(`Clicking '${text}' button ::: ${this}`)
+                Globals.References.pages.experiment.sidebar.basic.popups.appendExperimentFilesDialog.open()
+            }
+
+            Loader {
+                source: '../Popups/OpenExperimentFilesToAppend.qml'
+            }
+        }
+
         EaElements.SideBarButton {
             enabled: true
             wide: true

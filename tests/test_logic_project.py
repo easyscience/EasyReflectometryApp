@@ -168,3 +168,13 @@ def test_post_load_hooks_run_after_load_and_reset():
         ('default_model',),
         ('hook',),
     ]
+
+
+def test_append_to_current_experiment_delegates_to_the_current_experiment():
+    project_lib = make_project_with_sample()
+    project_lib._current_experiment_index = 2
+    logic = Project(project_lib)
+
+    logic.append_to_current_experiment('more.ort')
+
+    assert ('append_to_experiment_at_index', 2, 'more.ort') in project_lib.calls

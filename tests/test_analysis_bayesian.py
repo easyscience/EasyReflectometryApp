@@ -1095,3 +1095,48 @@ class TestSamplingProgress:
         analysis.fittingChanged.connect(lambda: emissions.append('emitted'))
         analysis._on_fit_progress({'sampling': True, 'iteration': 1, 'total_steps': 100})
         assert 'emitted' in emissions
+
+
+# ===================================================================
+# Posterior predictive band: smeared with each experiment's own resolution
+# ===================================================================
+
+class TestPosteriorPredictiveResolution:
+    @staticmethod
+    def _experiment(resolution):
+        experiment = MagicMock()
+        experiment.x = np.array([0.1, 0.2, 0.3])
+        experiment.model = MagicMock()
+        experiment.resolution_function = resolution
+        return experiment
+
+    def _run(self, analysis_with_posterior, monkeypatch, experiments):
+        import easyreflectometry.analysis.bayesian as bayesian_module
+
+        analysis_with_posterior._ordered_experiments = lambda: experiments
+        calls = []
+
+        def fake_band(draws, param_names, model, q_values, n_samples, resolution_function=None):
+            calls.append(resolution_function)
+            return np.ones_like(q_values), np.zeros_like(q_values), np.full_like(q_values, 2.0)
+
+        monkeypatch.setattr(bayesian_module, 'posterior_predictive_reflectivity', fake_band)
+        monkeypatch.setattr(
+            bayesian_module,
+            'posterior_predictive_sld_profile',
+            lambda *args, **kwargs: (np.array([0.0]), np.array([1.0]), np.array([0.5]), np.array([1.5])),
+        )
+        analysis_with_posterior._compute_and_publish_posterior_predictive()
+        return calls
+
+    def test_each_experiment_passes_its_own_resolution(self, analysis_with_posterior, monkeypatch):
+        sharp, broad = object(), object()
+        calls = self._run(analysis_with_posterior, monkeypatch, [self._experiment(sharp), self._experiment(broad)])
+
+        assert calls == [sharp, broad]
+        assert len(analysis_with_posterior._plotting.posterior_q) == 6
+
+    def test_experiment_without_resolution_passes_none(self, analysis_with_posterior, monkeypatch):
+        calls = self._run(analysis_with_posterior, monkeypatch, [self._experiment(None)])
+
+        assert calls == [None]

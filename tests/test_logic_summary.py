@@ -384,3 +384,42 @@ def test_summary_omits_the_overlay_when_a_channel_cannot_be_calculated(tmp_path,
     # Both channels still appear in the legend, as measured-only series.
     assert [call[1]['label'] for call in labelled] == ['Polarized <1> (pp)', 'Polarized <1> (mm)']
     assert all(call[1].get('ls') == '' for call in labelled)
+
+
+class FakeResolutionAwareRuntime(FakeCalculatorRuntime):
+    """Records the resolution each curve was asked to be smeared with."""
+
+    received = []
+
+    def reflectity_profile(self, x, unique_name, resolution_function=None):
+        self.received.append(resolution_function)
+        return np.asarray(x) * 0 + 0.25
+
+
+class FakeResolutionAwareFactory:
+    def __call__(self):
+        return FakeResolutionAwareRuntime()
+
+
+def test_summary_curve_is_smeared_with_the_datasets_own_resolution(tmp_path, monkeypatch):
+    """The report shows the curve the fit compared the dataset to."""
+    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
+    FakeResolutionAwareRuntime.received = []
+    models = make_model_collection(make_model(name='Model <1>', unique_name='m1', color='#123456'))
+    project = make_project(models=models)
+    project.path = tmp_path / 'resolution-report'
+    project._calculator = FakeResolutionAwareFactory()
+    with_resolution = make_experiment('measured', model=models[0], x=np.array([0.1, 0.2]), y=np.array([1.0, 2.0]))
+    with_resolution.resolution_function = object()
+    without = make_experiment('bare', model=models[0], x=np.array([0.1, 0.2]), y=np.array([1.0, 2.0]))
+    project.experiments = {0: with_resolution, 1: without}
+    project._experiments = project.experiments
+    project.sample_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([0.1]), y=np.array([1.0]))
+    project.sld_data_for_model_at_index = lambda index: SimpleNamespace(x=np.array([1.0, 2.0]), y=np.array([3.0, 4.0]))
+    logic = summary_module.Summary(project)
+    monkeypatch.setattr(logic, '_plt', lambda: FakePyplot())
+    monkeypatch.setattr(logic, '_gridspec', lambda: FakeGridSpecModule)
+
+    logic.make_plot(10.0, 8.0)
+
+    assert FakeResolutionAwareRuntime.received == [with_resolution.resolution_function, None]

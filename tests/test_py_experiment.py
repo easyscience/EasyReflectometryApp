@@ -208,3 +208,32 @@ def test_load_polarized_rejects_invalid_assignments(monkeypatch, qcore_applicati
 
     assert experiment._project_logic.loaded_polarized == []
     assert len(failures) == 1 and message.lower() in failures[0].lower()
+
+
+def test_append_to_current_merges_each_file_and_emits(monkeypatch, qcore_application):
+    experiment = _build_experiment(monkeypatch)
+    appended = []
+    experiment._project_logic.append_to_current_experiment = lambda path: appended.append(path) or (path == 'B')
+    monkeypatch.setattr(experiment_module.IO, 'generalizePath', lambda path: path)
+    changed = {'experiment': 0, 'external': 0, 'q_range': 0}
+    experiment.experimentChanged.connect(lambda: changed.__setitem__('experiment', changed['experiment'] + 1))
+    experiment.externalExperimentChanged.connect(lambda: changed.__setitem__('external', changed['external'] + 1))
+    experiment.qRangeUpdated.connect(lambda: changed.__setitem__('q_range', changed['q_range'] + 1))
+
+    experiment.appendToCurrent('A,B,')
+
+    assert appended == ['A', 'B']
+    assert changed == {'experiment': 1, 'external': 1, 'q_range': 1}
+
+
+def test_append_to_current_propagates_the_backend_refusal(monkeypatch, qcore_application):
+    experiment = _build_experiment(monkeypatch)
+
+    def refuse(_path):
+        raise ValueError('Cannot append a file to a polarized experiment')
+
+    experiment._project_logic.append_to_current_experiment = refuse
+    monkeypatch.setattr(experiment_module.IO, 'generalizePath', lambda path: path)
+
+    with pytest.raises(ValueError, match='polarized'):
+        experiment.appendToCurrent(['A'])

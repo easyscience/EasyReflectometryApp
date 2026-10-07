@@ -99,6 +99,37 @@ class Experiment(QObject):
         if q_range_changed:
             self.qRangeUpdated.emit()
 
+    @Slot('QVariant')
+    def appendToCurrent(self, paths) -> None:
+        """Add more measured curves of the same contrast to the current experiment.
+
+        Each file is merged into the current experiment (one dataset per
+        file), every point keeping the resolution it was measured with. The
+        experiment keeps its name and model.
+
+        Raises
+        ------
+        ValueError
+            The current experiment is polarized, or a file holds several
+            datasets.
+        IndexError
+            There is no current experiment.
+        """
+        paths = _from_qml(paths)
+        if isinstance(paths, str):
+            paths = paths.split(',')
+
+        q_range_changed = False
+        for path in paths:
+            if not path:
+                continue
+            if self._project_logic.append_to_current_experiment(IO.generalizePath(path)):
+                q_range_changed = True
+        self.experimentChanged.emit()
+        self.externalExperimentChanged.emit()
+        if q_range_changed:
+            self.qRangeUpdated.emit()
+
     @Slot('QVariant', result='QVariantList')
     def suggestPolarizedChannels(self, paths) -> list:
         """Suggested spin-channel assignment for the selected files.

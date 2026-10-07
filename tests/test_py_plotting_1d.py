@@ -560,3 +560,49 @@ class TestGetResidualRange:
         rng_rq4 = p_rq4._get_residual_range()
         assert pytest.approx(rng_linear, rel=1e-6) == rng_rq4
 
+
+
+# ---------------------------------------------------------------------------
+# Per-dataset resolution: the curve is smeared like the fit smears the dataset
+# ---------------------------------------------------------------------------
+
+class TestAlignedValuesUseDatasetResolution:
+    Q = np.array([0.05, 0.10, 0.15])
+    R = np.array([1e-1, 1e-2, 1e-3])
+
+    def _setup(self):
+        proj = _make_project_stub(self.Q, self.R, self.R, q_min=0.0, q_max=1.0)
+        return proj, _make_plotting_stub(proj)
+
+    def test_dataset_resolution_is_passed_to_the_model_curve(self):
+        proj, p = self._setup()
+        resolution = object()
+        proj.experimental_data_for_model_at_index.return_value.resolution_function = resolution
+
+        p._get_aligned_analysis_values(0)
+
+        assert proj.model_data_for_model_at_index.call_args.kwargs['resolution_function'] is resolution
+
+    def test_dataset_without_resolution_leaves_the_models_in_charge(self):
+        proj, p = self._setup()
+        proj.experimental_data_for_model_at_index.return_value.resolution_function = None
+
+        p._get_aligned_analysis_values(0)
+
+        assert 'resolution_function' not in proj.model_data_for_model_at_index.call_args.kwargs
+
+    def test_channel_curve_uses_the_channels_own_resolution(self):
+        proj, p = self._setup()
+        resolution = object()
+        channel_data = _make_exp_data_stub(self.Q, self.R)
+        channel_data.resolution_function = resolution
+        experiment = MagicMock()
+        experiment.model = proj.models[0]
+        experiment.__getitem__ = lambda _self, channel: channel_data
+        proj.experimental_data_for_model_at_index.return_value = experiment
+
+        p._get_aligned_analysis_values(0, channel='mm')
+
+        kwargs = proj.model_data_for_model_at_index.call_args.kwargs
+        assert kwargs['channel'] == 'mm'
+        assert kwargs['resolution_function'] is resolution

@@ -324,6 +324,18 @@ QtObject {
     readonly property var experimentResolution: activeBackend.experiment.resolution
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
     function experimentLoad(value) { activeBackend.experiment.load(value) }
+    // Add more measured curves of the same contrast to the current experiment.
+    // Returns '' on success, or the reason the files were rejected (a
+    // polarized experiment, a multi-dataset file).
+    function experimentAppendToCurrent(value) {
+        try {
+            activeBackend.experiment.appendToCurrent(value)
+        } catch (e) {
+            console.warn("experimentAppendToCurrent failed:", e)
+            return (e && e.message) ? e.message : qsTr("The curves could not be added to the experiment.")
+        }
+        return ''
+    }
     // Polarized experiment import (one file per spin channel)
     function experimentSuggestPolarizedChannels(value) { return activeBackend.experiment.suggestPolarizedChannels(value) }
     // Returns '' on success, or the reason the import was rejected. The backend

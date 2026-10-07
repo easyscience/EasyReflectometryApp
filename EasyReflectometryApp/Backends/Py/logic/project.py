@@ -185,6 +185,20 @@ class Project:
     def count_datasets_in_file(self, path: str) -> int:
         return self._project_lib.count_datasets_in_file(path)
 
+    def append_to_current_experiment(self, path: str) -> bool:
+        """Add another measured curve of the same contrast to the current experiment.
+
+        The file's points are merged into the experiment, each keeping its own
+        measured resolution, so a contrast measured at several angles is fitted
+        as one dataset. The library rejects a polarized experiment and a
+        multi-dataset file with a ``ValueError``, and a missing experiment with
+        an ``IndexError``; both propagate to the caller.
+
+        :return: whether q_max changed.
+        """
+        self._project_lib.append_to_experiment_at_index(self._project_lib._current_experiment_index, path)
+        return self._sync_q_max_with_loaded_experiments()
+
     def load_all_experiments_from_file(self, path: str) -> tuple[int, bool]:
         loaded_count = self._project_lib.load_all_experiments_from_file(path)
         q_max_changed = self._sync_q_max_with_loaded_experiments()

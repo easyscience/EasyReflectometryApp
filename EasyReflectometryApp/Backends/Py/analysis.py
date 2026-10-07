@@ -710,12 +710,16 @@ class Analysis(QObject):
                 q_i = np.asarray(experiment.x)
                 model_i = experiment.model
 
+                # Smear the band the way the fit smeared this experiment (its
+                # own measured resolution when it has one), so the band sits
+                # on the fitted curve.
                 median_i, lo_i, hi_i = posterior_predictive_reflectivity(
                     posterior['draws'],
                     posterior['param_names'],
                     model=model_i,
                     q_values=q_i,
                     n_samples=200,
+                    resolution_function=getattr(experiment, 'resolution_function', None),
                 )
                 logger.info(
                     'Posterior predictive for experiment %d: q=%d, median shape=%s',
