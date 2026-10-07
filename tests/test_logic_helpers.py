@@ -19,6 +19,12 @@ def test_format_msg_sub_prefix():
     assert message.startswith('  - ')
 
 
+def test_format_msg_accepts_more_columns_than_widths():
+    message = IO.formatMsg('main', 'a', 'b', 'c', 'd', 'e')
+
+    assert message.endswith(' ▌ e')
+
+
 def test_get_original_name_uses_user_data_value():
     obj = SimpleNamespace(name='Current Name', user_data={'original_name': 'Original Name'})
 

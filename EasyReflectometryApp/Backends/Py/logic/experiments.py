@@ -159,8 +159,14 @@ class Experiments:
         pass
 
     def remove_experiment(self, index: int) -> None:
-        """
-        Remove the experiment at the given index.
+        """Remove the experiment at the given (ordered) index.
+
+        The remaining experiments are re-keyed 0..n-1 in order. Everything else addresses
+        experiments by position - the selection, the current index, and the library's own
+        ``experimental_data_for_model_at_index``, which looks the position up as a key - and
+        the library hands out ``len(experiments)`` as the next key, which would collide with
+        a surviving key if a gap were left. Keeping the keys contiguous is what makes a
+        position and a key the same thing.
         """
         total = len(self.available())
         if not (0 <= index < total):
@@ -175,6 +181,9 @@ class Experiments:
 
         if hasattr(experiments, 'items'):
             del experiments[exp_key]
+            remaining = [experiment for _, experiment in self._ordered_experiment_items()]
+            experiments.clear()
+            experiments.update(enumerate(remaining))
         else:
             experiments.pop(index)
 

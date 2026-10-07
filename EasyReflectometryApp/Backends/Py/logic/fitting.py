@@ -25,6 +25,9 @@ class Fitting:
         self._finished = True
         self._result: Optional[FitResults] = None
         self._results: List[FitResults] = []  # For multi-experiment fits
+        # The number of distinct free parameters the running/last fit refined, taken when
+        # the fit starts: the result's statistics must not follow later project edits.
+        self._fit_n_pars: Optional[int] = None
         self._show_results_dialog = False
         self._fit_error_message: Optional[str] = None
         self._fit_cancelled = False
@@ -218,6 +221,7 @@ class Fitting:
         self._fit_error_message = None
         self._result = None
         self._results = []
+        self._fit_n_pars = count_free_parameters(self._project_lib)
         self.clear_fit_progress()
         self._fit_running_message = 'Fitting...'
 
@@ -233,7 +237,7 @@ class Fitting:
         if hasattr(experiments, 'items'):
             items = list(experiments.items())
             try:
-                items = sorted(items)
+                items.sort(key=lambda item: item[0])
             except TypeError:
                 pass
             return [experiment for _, experiment in items]
@@ -544,6 +548,10 @@ class Fitting:
         self._show_results_dialog = True
         self._fit_error_message = None
         self.clear_fit_progress()
+        if self._fit_n_pars is None:
+            # Results adopted without prepare_for_threaded_fit: the project is still in the
+            # state they were produced in, so this is the count the fit refined.
+            self._fit_n_pars = count_free_parameters(self._project_lib)
 
         # Store result(s) - handle both single and multiple results
         if isinstance(results, list) and len(results) > 0:
@@ -563,9 +571,17 @@ class Fitting:
 
     @property
     def fit_n_pars(self) -> int:
-        """Return the global number of refined parameters for the fit."""
+        """The number of distinct parameters the last fit refined.
+
+        With several results (one per experiment or spin channel) every result's ``n_pars``
+        counts the shared parameters again, so the count taken when the fit started is used
+        instead; that snapshot, not the live project, keeps the statistic that of the fit
+        that produced the results.
+        """
         if len(self._results) > 1:
-            return count_free_parameters(self._project_lib)
+            if self._fit_n_pars is None:
+                self._fit_n_pars = count_free_parameters(self._project_lib)
+            return self._fit_n_pars
         if self._result is None:
             return 0
         return self._result.n_pars
@@ -579,8 +595,7 @@ class Fitting:
                     return float(self._results[0].reduced_chi2)
                 total_chi2 = float(sum(result.chi2 for result in self._results))
                 total_points = sum(len(result.x) for result in self._results)
-                n_params = self._results[0].n_pars
-                total_dof = total_points - n_params
+                total_dof = total_points - self.fit_n_pars
                 if total_dof <= 0:
                     return 0.0
                 return total_chi2 / total_dof
@@ -603,6 +618,7 @@ class Fitting:
             self._finished = False
             self._show_results_dialog = False
             self._fit_error_message = None
+            self._fit_n_pars = count_free_parameters(self._project_lib)
             try:
                 # This needs extension to support multiple data sets
                 exp_data = self._project_lib.experimental_data_for_model_at_index(0)

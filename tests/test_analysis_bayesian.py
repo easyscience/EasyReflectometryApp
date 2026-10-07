@@ -11,6 +11,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
@@ -215,7 +216,13 @@ def analysis(monkeypatch):
     project = make_project()
     analysis_inst = analysis_module.Analysis(project)
     analysis_inst._clearCacheAndEmitParametersChanged = MagicMock()
-    analysis_inst._plotting = StubPlotting()
+    # Connected the way PyBackend connects the real Plotting1d.
+    plotting = StubPlotting()
+    analysis_inst.posteriorPredictiveReady.connect(plotting.set_posterior_predictive)
+    analysis_inst.posteriorPredictiveSldReady.connect(plotting.set_posterior_predictive_sld)
+    analysis_inst.posteriorPredictiveCleared.connect(plotting.clear_posterior_predictive)
+    analysis_inst.posteriorPredictiveCleared.connect(plotting.clear_posterior_predictive_sld)
+    analysis_inst.plotting_stub = plotting
     return analysis_inst
 
 
@@ -805,8 +812,9 @@ class TestBayesianDiagnostics:
 # ===================================================================
 
 class TestPosteriorPredictive:
-    def test_noop_when_plotting_none(self, analysis_with_posterior):
-        analysis_with_posterior._plotting = None
+    def test_runs_with_no_plotting_connected(self, analysis_with_posterior):
+        analysis_with_posterior.posteriorPredictiveReady.disconnect()
+        analysis_with_posterior.posteriorPredictiveSldReady.disconnect()
         # Should not raise
         analysis_with_posterior._compute_and_publish_posterior_predictive()
 
@@ -821,7 +829,7 @@ class TestPosteriorPredictive:
     def test_noop_when_posterior_cleared(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.clear()
         analysis_with_posterior._compute_and_publish_posterior_predictive()
-        assert analysis_with_posterior._plotting.posterior_q is None
+        assert analysis_with_posterior.plotting_stub.posterior_q is None
 
 
 # ===================================================================
@@ -833,8 +841,8 @@ class TestBayesianStateClearing:
         analysis._bayesian_logic._posterior = dict(SAMPLE_POSTERIOR_2D)
         analysis._bayesian_logic.corner_plot_url = 'file:///corner.html'
         analysis._bayesian_logic.diagnostics = {'nDraws': 4}
-        analysis._plotting.set_posterior_predictive([1.0], [2.0], [1.5], [2.5])
-        analysis._plotting.set_posterior_predictive_sld([0.0], [1.0], [0.5], [1.5])
+        analysis.plotting_stub.set_posterior_predictive([1.0], [2.0], [1.5], [2.5])
+        analysis.plotting_stub.set_posterior_predictive_sld([0.0], [1.0], [0.5], [1.5])
 
     def test_clear_bayesian_results_discards_posterior_and_overlays(self, analysis):
         self._set_full_result(analysis)
@@ -847,8 +855,8 @@ class TestBayesianStateClearing:
         assert analysis._bayesian_logic.has_result is False
         assert analysis._bayesian_logic.corner_plot_url == ''
         assert analysis._bayesian_logic.diagnostics == {}
-        assert analysis._plotting.posterior_q is None
-        assert analysis._plotting.sld_z is None
+        assert analysis.plotting_stub.posterior_q is None
+        assert analysis.plotting_stub.sld_z is None
         assert emissions['fitting'] >= 1
         assert emissions['heatmap'] >= 1
 
@@ -869,7 +877,7 @@ class TestBayesianStateClearing:
         analysis._start_threaded_fit()
 
         assert analysis._bayesian_logic.has_result is False
-        assert analysis._plotting.posterior_q is None
+        assert analysis.plotting_stub.posterior_q is None
 
     def test_sampling_start_clears_previous_posterior(self, analysis):
         StubWorker.instances = []
@@ -882,7 +890,7 @@ class TestBayesianStateClearing:
         # finished (a failed run must not resurrect stale results).
         assert analysis._bayesian_logic.has_result is False
         assert analysis._bayesian_logic.corner_plot_url == ''
-        assert analysis._plotting.posterior_q is None
+        assert analysis.plotting_stub.posterior_q is None
 
 
 # ===================================================================
@@ -970,6 +978,30 @@ class TestOnSampleFinished:
         assert emissions['fitting'] >= 1
         assert emissions['external'] >= 1
 
+    @pytest.mark.parametrize('results', [[], [None], [{'param_names': ['thickness']}]])
+    def test_malformed_result_is_reported_as_failure(self, analysis, results):
+        analysis._fitter_thread = 'some-worker'
+        received = []
+        analysis.fitFailed.connect(received.append)
+
+        analysis._on_sample_finished(results)
+
+        assert received == ['Bayesian sampling returned no posterior']
+        assert analysis._fitting_logic.fit_error_message == 'Bayesian sampling returned no posterior'
+        assert analysis._bayesian_logic.posterior is None
+        assert analysis._fitter_thread is None
+
+    def test_failing_step_does_not_skip_the_others(self, analysis):
+        with patch.object(analysis, '_compute_and_publish_posterior_predictive', side_effect=RuntimeError('boom')):
+            with patch.object(analysis, '_compute_diagnostics') as mock_diag:
+                with patch.object(analysis, '_render_corner_plot') as mock_corner:
+                    with patch.object(analysis, '_render_trace_plot') as mock_trace:
+                        analysis._on_sample_finished([SAMPLE_POSTERIOR_2D])
+                        mock_diag.assert_called_once()
+                        mock_corner.assert_called_once()
+                        mock_trace.assert_called_once()
+        assert analysis._bayesian_logic.posterior is SAMPLE_POSTERIOR_2D
+
 
 # ===================================================================
 # Bayesian param names
@@ -996,61 +1028,55 @@ class TestBayesianParamNames:
 # Save Bayesian plot
 # ===================================================================
 
-class MockQFileDialog:
-    """Stand-in for QtWidgets.QFileDialog that doesn't need a QApplication."""
-    def __init__(self, *args, **kwargs):
-        pass
-
-    @staticmethod
-    def getSaveFileName(*args, **kwargs):
-        return '', ''
-
-
 class TestSaveBayesianPlot:
-    @pytest.fixture(autouse=True)
-    def _patch_qfiledialog(self, monkeypatch):
-        monkeypatch.setattr(analysis_module.QtWidgets, 'QFileDialog', MockQFileDialog)
-
-    def test_returns_false_for_invalid_url(self, analysis):
-        assert analysis.saveBayesianPlot('') is False
-        assert analysis.saveBayesianPlot('not-a-url') is False
-
-    def test_returns_false_for_nonexistent_file(self, analysis):
-        url = 'file:///nonexistent/path/plot.png'
-        assert analysis.saveBayesianPlot(url) is False
-
-    def test_saves_file_successfully(self, analysis, tmp_path):
+    @pytest.fixture
+    def source_file(self, tmp_path):
         # Create a source PNG inside tmp_path (avoids polluting system temp dir)
         src_dir = tmp_path / 'bayesian'
         src_dir.mkdir(parents=True, exist_ok=True)
         src_file = src_dir / 'test_save.png'
         src_file.write_text('fake-png-content')
+        return src_file
 
-        url = src_file.resolve().as_uri()
-        save_dest = str(tmp_path / 'saved_plot.png')
-        # Patch getSaveFileName to return a real path
-        original_get = MockQFileDialog.getSaveFileName
-        MockQFileDialog.getSaveFileName = lambda *a, **kw: (save_dest, 'PNG (*.png)')
-        try:
-            result = analysis.saveBayesianPlot(url)
-            assert result is True
-            saved = Path(save_dest)
-            assert saved.exists()
-            assert saved.read_text() == 'fake-png-content'
-            saved.unlink()
-        finally:
-            MockQFileDialog.getSaveFileName = original_get
+    def test_returns_false_for_invalid_source_url(self, analysis, tmp_path):
+        dest_url = (tmp_path / 'out.png').resolve().as_uri()
+        assert analysis.saveBayesianPlot('', dest_url) is False
+        assert analysis.saveBayesianPlot('not-a-url', dest_url) is False
 
-    def test_returns_false_when_dialog_cancelled(self, analysis, tmp_path):
-        src_dir = tmp_path / 'bayesian'
-        src_dir.mkdir(parents=True, exist_ok=True)
-        src_file = src_dir / 'cancelled_test.png'
-        src_file.write_text('content')
+    def test_returns_false_for_nonexistent_source(self, analysis, tmp_path):
+        dest_url = (tmp_path / 'out.png').resolve().as_uri()
+        assert analysis.saveBayesianPlot('file:///nonexistent/path/plot.png', dest_url) is False
 
-        url = src_file.resolve().as_uri()
-        # MockQFileDialog.getSaveFileName returns ('', '') by default → cancelled
-        result = analysis.saveBayesianPlot(url)
-        assert result is False
+    def test_returns_false_for_invalid_destination_url(self, analysis, source_file):
+        url = source_file.resolve().as_uri()
+        assert analysis.saveBayesianPlot(url, '') is False
+        assert analysis.saveBayesianPlot(url, 'not-a-url') is False
+
+    def test_saves_file_successfully(self, analysis, source_file, tmp_path):
+        # Cache-busting query string on the source must be ignored
+        url = source_file.resolve().as_uri() + '?t=123'
+        save_dest = tmp_path / 'saved_plot.png'
+
+        assert analysis.saveBayesianPlot(url, save_dest.resolve().as_uri()) is True
+        assert save_dest.read_text() == 'fake-png-content'
+
+    def test_returns_false_when_copy_fails(self, analysis, source_file, tmp_path):
+        url = source_file.resolve().as_uri()
+        dest_url = (tmp_path / 'missing_dir' / 'out.png').resolve().as_uri()
+
+        assert analysis.saveBayesianPlot(url, dest_url) is False
+
+    def test_suggested_file_url_uses_source_name_in_home(self, analysis, source_file):
+        url = source_file.resolve().as_uri() + '?t=123'
+
+        suggested = analysis.bayesianPlotSuggestedFileUrl(url)
+
+        assert Path(QUrl(suggested).toLocalFile()) == Path.home() / 'test_save.png'
+
+    def test_suggested_file_url_falls_back_for_invalid_source(self, analysis):
+        suggested = analysis.bayesianPlotSuggestedFileUrl('')
+
+        assert Path(QUrl(suggested).toLocalFile()) == Path.home() / 'bayesian_plot.png'
 
 
 # ===================================================================

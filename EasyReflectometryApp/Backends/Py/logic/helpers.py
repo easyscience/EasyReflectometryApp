@@ -5,14 +5,16 @@
 
 class IO:
     @staticmethod
-    def formatMsg(type, *args):
-        types = {'main': '*', 'sub': '  -'}
-        mark = types[type]
+    def formatMsg(kind, *args):
+        marks = {'main': '*', 'sub': '  -'}
+        mark = marks[kind]
         widths = [22, 21, 20, 10]
         widths[0] -= len(mark)
         msgs = []
         for idx, arg in enumerate(args):
-            msgs.append(f'{arg:<{widths[idx]}}')
+            # Columns past the last width are not padded.
+            width = widths[idx] if idx < len(widths) else 0
+            msgs.append(f'{arg:<{width}}')
         msg = ' ▌ '.join(msgs)
         msg = f'{mark} {msg}'
         return msg

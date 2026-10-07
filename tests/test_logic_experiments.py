@@ -63,14 +63,33 @@ def test_remove_experiment_updates_current_index_for_mapping_storage():
         20: make_experiment('Second'),
         30: make_experiment('Third'),
     }
+    third = experiments[30]
     project = make_project(experiments=experiments)
     project._current_experiment_index = 2
     logic = Experiments(project)
 
     logic.remove_experiment(1)
 
-    assert list(project._experiments.keys()) == [10, 30]
+    # Re-keyed by position: positions, selection indices and the library's lookups
+    # (which use the position as the key) stay the same thing.
+    assert list(project._experiments.keys()) == [0, 1]
+    assert logic.available() == ['First', 'Third']
     assert project._current_experiment_index == 1
+    assert project._experiments[1] is third
+
+
+def test_remove_first_experiment_keeps_the_others_addressable_by_position():
+    experiments = {i: make_experiment(f'E{i}') for i in range(3)}
+    first, second, third = (experiments[i] for i in range(3))
+    project = make_project(experiments=experiments)
+    logic = Experiments(project)
+
+    logic.remove_experiment(0)
+
+    assert logic.available() == ['E1', 'E2']
+    assert project._experiments[0] is second
+    assert project._experiments[1] is third
+    assert first not in project._experiments.values()
 
 
 def test_remove_last_remaining_experiment_resets_index_to_zero():

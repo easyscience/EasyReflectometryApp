@@ -470,7 +470,8 @@ QtObject {
     readonly property var bayesianHeatmapData: activeBackend.analysis.bayesianHeatmapData
     readonly property string bayesianHeatmapPlotUrl: activeBackend.analysis.bayesianHeatmapPlotUrl
     function bayesianComputeHeatmap(x, y) { activeBackend.analysis.computeBayesianHeatmap(x, y) }
-    function bayesianSavePlot(sourceUrl)  { activeBackend.analysis.saveBayesianPlot(sourceUrl) }
+    function bayesianSavePlot(sourceUrl, destinationUrl) { return activeBackend.analysis.saveBayesianPlot(sourceUrl, destinationUrl) }
+    function bayesianPlotSuggestedFileUrl(sourceUrl) { return activeBackend.analysis.bayesianPlotSuggestedFileUrl(sourceUrl) }
 
     // Phase 2: SLD posterior predictive
     readonly property var posteriorPredictiveSldZ: activeBackend.plotting.posteriorPredictiveSldZ
@@ -485,6 +486,16 @@ QtObject {
     property var _fitFailedConnection: {
         if (activeBackend && activeBackend.analysis && activeBackend.analysis.fitFailed) {
             activeBackend.analysis.fitFailed.connect(analysisFitFailed)
+        }
+        return null
+    }
+
+    // Pre-fit check failure signal - forwarded from backend (fit was refused before starting)
+    signal analysisPrefitCheckFailed(string title, string message)
+
+    property var _prefitCheckFailedConnection: {
+        if (activeBackend && activeBackend.analysis && activeBackend.analysis.prefitCheckFailed) {
+            activeBackend.analysis.prefitCheckFailed.connect(analysisPrefitCheckFailed)
         }
         return null
     }

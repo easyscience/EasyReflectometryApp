@@ -1,23 +1,20 @@
 import logging
-import os
 import time
+from pathlib import Path
 from typing import List
 from typing import Optional
 
 from easyreflectometry import Project as ProjectLib
-from PySide6 import QtWidgets
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
 from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
-from .logic.experiments import CHANNEL_LABELS
+from .logic.experiment_selection import ExperimentSelection
 from .logic.experiments import Experiments as ExperimentLogic
-from .logic.experiments import channel_shade
-from .logic.experiments import experiment_channel_values
-from .logic.experiments import flatten_polarized
 from .logic.fitting import Fitting as FittingLogic
 from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
@@ -44,7 +41,13 @@ class Analysis(QObject):
     parametersIndexChanged = Signal()
     fittingChanged = Signal()
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
+    prefitCheckFailed = Signal(str, str)  # Emitted with (title, message) when a fit is refused before starting
     stopFit = Signal()  # Signal to request fitting stop
+    # Posterior predictive curves for the charts, as numpy arrays: (q, median, lower, upper) and
+    # (z, median, lower, upper). PyBackend connects them to Plotting1d.
+    posteriorPredictiveReady = Signal(object, object, object, object)
+    posteriorPredictiveSldReady = Signal(object, object, object, object)
+    posteriorPredictiveCleared = Signal()
 
     externalMinimizerChanged = Signal()
     externalParametersChanged = Signal()
@@ -52,7 +55,7 @@ class Analysis(QObject):
     externalFittingChanged = Signal()
     externalExperimentChanged = Signal()
 
-    def __init__(self, project_lib: ProjectLib, parent=None):
+    def __init__(self, project_lib: ProjectLib, parent=None, selection: ExperimentSelection | None = None):
         super().__init__(parent)
         self._project_lib = project_lib
         self._parameters_logic = ParametersLogic(project_lib)
@@ -61,7 +64,6 @@ class Analysis(QObject):
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
         self._bayesian_logic = BayesianLogic()
-        self._plotting = None  # Set by PyBackend after construction
         self._chached_parameters = None
         self._chached_enabled_parameters = None
         # Thread management for background fitting
@@ -70,25 +72,9 @@ class Analysis(QObject):
         self.stopFit.connect(self._onStopFit)
         # A minimizer switch changes the inequality-constraint notices too.
         self.minimizerChanged.connect(self.inequalityContextChanged)
-        # Add support for multiple selected experiments - initialize to empty first to avoid binding loops
-        self._selected_experiment_indices = []
-        # Initialize selected experiments after construction to avoid binding loops
-        self._initialize_selected_experiments()
-
-    def _initialize_selected_experiments(self) -> None:
-        """Initialize selected experiment indices after object construction to avoid binding loops."""
-        available_experiments = self._experiments_logic.available()
-        if len(available_experiments) > 0:
-            self._selected_experiment_indices = [0]
-        else:
-            self._selected_experiment_indices = []
-
-    def set_plotting(self, plotting) -> None:
-        """Store a reference to the Plotting1d instance for posterior predictive publishing.
-
-        Called by PyBackend after construction.
-        """
-        self._plotting = plotting
+        # The selected experiments, shared with Plotting1d (PyBackend passes the same instance).
+        self._selection = selection if selection is not None else ExperimentSelection()
+        self._selection.set_indices([0], len(self._experiments_logic.available()))
 
     def _ordered_experiments(self) -> list:
         """Return experiments as an ordered list of experiment objects.
@@ -449,8 +435,10 @@ class Analysis(QObject):
             self.stopFit.emit()
             return
 
-        # Make sure we can run the fitting
-        if not self.prefitCheck():
+        # Make sure we can run the fitting; QML shows the reason to the user
+        errors = self._prefit_errors()
+        if errors:
+            self.prefitCheckFailed.emit('Invalid Parameter Bounds', '\n\n'.join(errors))
             return
 
         # Use threaded fitting for non-blocking UI
@@ -595,9 +583,7 @@ class Analysis(QObject):
         """
         had_result = self._bayesian_logic.has_result
         self._bayesian_logic.clear()
-        if self._plotting is not None:
-            self._plotting.clear_posterior_predictive()
-            self._plotting.clear_posterior_predictive_sld()
+        self.posteriorPredictiveCleared.emit()
         if had_result:
             self.fittingChanged.emit()
             self.heatmapChanged.emit()
@@ -662,40 +648,32 @@ class Analysis(QObject):
         """Handle successful completion of Bayesian sampling."""
         if self._is_stale_worker_signal():
             return
-        if not results:
-            logger.error('Bayesian sampling finished with empty results list')
-            self._fitting_logic.on_sample_finished()
-            self._fitter_thread = None
-            self.fittingChanged.emit()
-            self.externalFittingChanged.emit()
+        # {'draws', 'param_names', 'internal_bumps_object', 'logp'}
+        posterior = results[0] if results else None
+        if not isinstance(posterior, dict) or 'draws' not in posterior:
+            # A malformed worker result is a failed run, not a finished one with no posterior.
+            logger.error('Bayesian sampling returned no usable posterior: %r', results)
+            self._on_fit_failed('Bayesian sampling returned no posterior')
             return
-        try:
-            posterior = results[0]  # {'draws', 'param_names', 'internal_bumps_object', 'logp'}
-            self._bayesian_logic.posterior = posterior
-            self._fitting_logic.on_sample_finished()
-            self._fitter_thread = None
-        except Exception:
-            logger.exception('Error storing Bayesian posterior result')
-            self._fitter_thread = None
-            self.fittingChanged.emit()
-            self.externalFittingChanged.emit()
-            return
-        # Phase 2: compute posterior predictive, diagnostics, and rendered plots
-        try:
-            self._compute_and_publish_posterior_predictive()
-            self._compute_diagnostics()
-            self._render_corner_plot()
-            self._render_trace_plot()
-        except Exception:
-            logger.exception('Error during posterior computation / rendering')
-        finally:
-            self.fittingChanged.emit()
-            self.externalFittingChanged.emit()
+        self._bayesian_logic.posterior = posterior
+        self._fitting_logic.on_sample_finished()
+        self._fitter_thread = None
+        # Each post-processing step runs on its own, so one failing does not skip the others.
+        for step in (
+            self._compute_and_publish_posterior_predictive,
+            self._compute_diagnostics,
+            self._render_corner_plot,
+            self._render_trace_plot,
+        ):
+            try:
+                step()
+            except Exception:
+                logger.exception('Bayesian post-processing step %s failed', getattr(step, '__name__', step))
+        self.fittingChanged.emit()
+        self.externalFittingChanged.emit()
 
     def _compute_and_publish_posterior_predictive(self) -> None:
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
-        if self._plotting is None:
-            return
         import numpy as np
         from easyreflectometry.analysis.bayesian import posterior_predictive_reflectivity
         from easyreflectometry.analysis.bayesian import posterior_predictive_sld_profile
@@ -753,7 +731,7 @@ class Analysis(QObject):
             median_concat = np.concatenate(median_all)
             lo_concat = np.concatenate(lo_all)
             hi_concat = np.concatenate(hi_all)
-            self._plotting.set_posterior_predictive(q_concat, median_concat, lo_concat, hi_concat)
+            self.posteriorPredictiveReady.emit(q_concat, median_concat, lo_concat, hi_concat)
         except Exception:
             logger.exception('Failed to compute or publish posterior predictive reflectivity')
             return
@@ -766,7 +744,7 @@ class Analysis(QObject):
                 model=experiments[0].model,
                 n_samples=200,
             )
-            self._plotting.set_posterior_predictive_sld(z, sld_median, sld_lo, sld_hi)
+            self.posteriorPredictiveSldReady.emit(z, sld_median, sld_lo, sld_hi)
         except Exception:
             logger.exception('Failed to compute or publish posterior predictive SLD profile')
 
@@ -791,14 +769,21 @@ class Analysis(QObject):
         # 'internal_bumps_object' (easyscience core); fall back to the legacy
         # 'state' key for robustness against future core renames.
         state = posterior.get('internal_bumps_object') or posterior.get('state')
-        if state is not None:
+        acceptance_rate = getattr(state, 'acceptance_rate', None)
+        if acceptance_rate is not None:
             try:
-                diagnostics['acceptanceRate'] = float(getattr(state, 'acceptance_rate', None) or 0.0)
-            except (AttributeError, TypeError, ValueError):
+                if callable(acceptance_rate):
+                    import numpy as np
+
+                    # BUMPS MCMCDraw.acceptance_rate() returns (generation ids, rate in percent)
+                    # for the kept portion of the run.
+                    _generations, rates = acceptance_rate()
+                    acceptance_rate = float(np.mean(rates)) / 100.0
+                diagnostics['acceptanceRate'] = float(acceptance_rate)
+            except (TypeError, ValueError):
                 pass
 
         draws = posterior['draws']
-        state = posterior.get('internal_bumps_object') or posterior.get('state')
 
         # Try to obtain 3D draws (chains × draws × params) needed by arviz R-hat.
         # The BUMPS MCMCDraw.chains() returns (n_generations, n_chains, n_params).
@@ -863,7 +848,6 @@ class Analysis(QObject):
     def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""
         import tempfile
-        from pathlib import Path
 
         out_dir = Path(tempfile.gettempdir()) / 'EasyReflectometryApp' / 'bayesian'
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1020,44 +1004,34 @@ class Analysis(QObject):
             self._bayesian_logic.heatmap_plot_url = ''
             logger.exception('Failed to render Bayesian heatmap')
 
-    def prefitCheck(self) -> bool:
+    def _prefit_errors(self) -> List[str]:
         """
-        Perform a pre-fit check to ensure that all parameters are set correctly.
-        Returns True if the check passes, False otherwise.
+        Check that the free parameters can be fitted with the current minimizer.
+        Returns one message per problem found; an empty list means the fit can start.
         """
+        errors = []
+        fit_params = [param for param in self.fitableParameters if param['fit']]
+
         # 1. wrong bounds on parameters
-        for param in self.fitableParameters:
-            if not param['fit']:
-                continue
+        for param in fit_params:
             if param['min'] >= param['max']:
-                QtWidgets.QMessageBox.warning(
-                    None,
-                    'Invalid Parameter Bounds',
+                errors.append(
                     f"Parameter '{param['name']}' has invalid bounds: "
-                    f'min ({param["min"]}) must be less than max ({param["max"]}).',
+                    f'min ({param["min"]}) must be less than max ({param["max"]}).'
                 )
-                return False
 
         # 2. differential evolution needs finite bounds on all parameters
         if 'differential_evolution' in self.minimizersAvailable[self.minimizerCurrentIndex]:
-            bad_params = []
-            for param in self.fitableParameters:
-                if not param['fit']:
-                    continue
-                if param['min'] == float('-inf') or param['max'] == float('inf'):
-                    bad_params.append(param['name'])
+            bad_params = [
+                param['name'] for param in fit_params if param['min'] == float('-inf') or param['max'] == float('inf')
+            ]
             if bad_params:
                 joined = '\n' + ',\n'.join(bad_params) + '\n'
-                # Show a warning in a message box
-                QtWidgets.QMessageBox.warning(
-                    None,
-                    'Invalid Parameter Bounds',
-                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.',
+                errors.append(
+                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.'
                 )
 
-                return False
-
-        return True
+        return errors
 
     ########################
     ## Calculators
@@ -1135,10 +1109,13 @@ class Analysis(QObject):
         experiments = self._ordered_experiments()
         index = self.experimentCurrentIndex
         current_experiment = experiments[index] if 0 <= index < len(experiments) else None
-        if current_experiment is not None:
-            t = models.index(current_experiment.model)
-            return t
-        return -1
+        if current_experiment is None:
+            return -1
+        try:
+            return models.index(current_experiment.model)
+        except ValueError:
+            # The experiment is unpaired or paired with a model no longer in the project.
+            return -1
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelNamesForExperiment(self) -> list:
@@ -1166,6 +1143,9 @@ class Analysis(QObject):
         """
         if 0 <= index < len(self._experiments_logic.available()):
             self._experiments_logic.remove_experiment(index)
+            # The selection follows: the removed experiment leaves it, later ones shift down.
+            if self._selection.remove_index(index, len(self._experiments_logic.available())):
+                self._sync_current_experiment_to_selection()
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
         else:
@@ -1173,17 +1153,20 @@ class Analysis(QObject):
 
     ########################
     ## Multi-experiment selection support
-    # (Initialize selected experiments in the existing __init__ method)
+
+    @property
+    def selection(self) -> ExperimentSelection:
+        return self._selection
 
     @Property(int, notify=experimentsChanged)
     def experimentsSelectedCount(self) -> int:
         """Return the count of currently selected experiments."""
-        return len(self._selected_experiment_indices)
+        return len(self._selection.indices)
 
     @Property('QVariantList', notify=experimentsChanged)
     def selectedExperimentIndices(self) -> List[int]:
         """Return the list of selected experiment indices."""
-        return self._selected_experiment_indices
+        return self._selection.indices
 
     @Slot(int)
     def selectExperimentAtIndex(self, index: int) -> None:
@@ -1197,170 +1180,30 @@ class Analysis(QObject):
     @Slot('QVariantList')
     def setSelectedExperimentIndices(self, indices: List[int]) -> None:
         """Set multiple selected experiment indices."""
-        # Validate indices
-        available_count = len(self._experiments_logic.available())
-        valid_indices = [i for i in indices if 0 <= i < available_count]
-
-        if valid_indices != self._selected_experiment_indices:
-            # previous_selection = self._selected_experiment_indices.copy()
-            self._selected_experiment_indices = valid_indices
-            # Update current experiment index to first selected (or 0 if no selection)
-            if valid_indices:
-                self._experiments_logic.set_current_index(valid_indices[0])
-                self._project_lib.current_experiment_index = valid_indices[0]
-            elif len(self._experiments_logic.available()) > 0:
-                # If no selection but experiments available, default to first experiment
-                self._experiments_logic.set_current_index(0)
-                self._selected_experiment_indices = [0]  # Auto-select first experiment
-
-            # Always trigger plotting refresh when selection changes
-            self._refresh_plotting_system()
-
+        if self._selection.set_indices(list(indices), len(self._experiments_logic.available())):
+            self._sync_current_experiment_to_selection()
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
 
-    def get_concatenated_experiment_data(self):
-        """
-        Concatenate data from all selected experiments.
-        Returns a combined DataSet1D object.
-        """
-        import numpy as np
-        from easyreflectometry.data import DataSet1D
+    def prune_selected_experiments(self) -> bool:
+        """Drop selected experiments that no longer exist, e.g. after a model and its
+        experiment were removed. Returns whether the selection changed; the caller notifies."""
+        changed = self._selection.prune(len(self._experiments_logic.available()))
+        if changed:
+            self._sync_current_experiment_to_selection()
+        return changed
 
-        if not self._selected_experiment_indices:
-            return DataSet1D(name='No experiments selected', x=np.empty(0), y=np.empty(0), ye=np.empty(0), xe=np.empty(0))
+    def reset_selected_experiments(self) -> bool:
+        """Select only the current experiment, after a project was loaded, created or reset.
+        Returns whether the selection changed; the caller notifies."""
+        return self._selection.reset(self._experiments_logic.current_index(), len(self._experiments_logic.available()))
 
-        all_x, all_y, all_ye, all_xe = [], [], [], []
-        visible_channels = self._visible_channels()
-
-        for exp_idx in self._selected_experiment_indices:
-            try:
-                data = flatten_polarized(
-                    self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx),
-                    visible_channels,
-                )
-                if data.x.size > 0:  # Only include non-empty datasets
-                    all_x.extend(data.x)
-                    all_y.extend(data.y)
-                    all_ye.extend(data.ye if hasattr(data, 'ye') and data.ye.size > 0 else np.zeros_like(data.y))
-                    all_xe.extend(data.xe if hasattr(data, 'xe') and data.xe.size > 0 else np.zeros_like(data.x))
-            except (IndexError, AttributeError) as e:
-                logger.warning('Error accessing experiment %s: %s', exp_idx, e)
-                continue
-
-        if not all_x:
-            return DataSet1D(name='No valid experiment data', x=np.empty(0), y=np.empty(0), ye=np.empty(0), xe=np.empty(0))
-
-        # Sort by x values to maintain proper order
-        combined_data = list(zip(all_x, all_y, all_ye, all_xe))
-        combined_data.sort(key=lambda item: item[0])
-
-        x_sorted, y_sorted, ye_sorted, xe_sorted = zip(*combined_data) if combined_data else ([], [], [], [])
-
-        exp_names = [
-            self._experiments_logic.available()[i]
-            for i in self._selected_experiment_indices
-            if i < len(self._experiments_logic.available())
-        ]
-        combined_name = f'Combined: {", ".join(exp_names)}'
-
-        return DataSet1D(
-            name=combined_name, x=np.array(x_sorted), y=np.array(y_sorted), ye=np.array(ye_sorted), xe=np.array(xe_sorted)
-        )
-
-    def get_individual_experiment_data_list(self, expand_channels: bool = False):
-        """
-        Get individual experiment data for each selected experiment.
-        Returns a list of dictionaries with data, name, and color for each experiment.
-
-        With `expand_channels`, a polarized experiment contributes one entry per
-        visible measured channel (each carrying its `channel` and a channel
-        shade of the experiment color) instead of being flattened to a single
-        one — used by the experiment chart, which draws per-channel series.
-        Consumers that are not channel aware yet (analysis, residuals) keep the
-        flat one-entry-per-experiment list.
-        """
-
-        if not self._selected_experiment_indices:
-            return []
-
-        experiment_data_list = []
-
-        # Define a muted/pastel color palette for experiments
-        color_palette = [
-            '#7BA6C4',  # Soft Blue
-            '#E8B889',  # Soft Orange
-            '#8DBF8D',  # Soft Green
-            '#D48787',  # Soft Red
-            '#B296B8',  # Soft Purple
-            '#A68F7F',  # Soft Brown
-            '#D4A8BC',  # Soft Pink
-            '#A5A5A5',  # Soft Gray
-            '#B8B87D',  # Soft Olive
-            '#7BB8B8',  # Soft Cyan
-        ]
-
-        visible_channels = self._visible_channels()
-
-        for idx, exp_idx in enumerate(self._selected_experiment_indices):
-            try:
-                experiment = self._experiments_logic._project_lib.experimental_data_for_model_at_index(exp_idx)
-                exp_name = (
-                    self._experiments_logic.available()[exp_idx]
-                    if exp_idx < len(self._experiments_logic.available())
-                    else f'Experiment {exp_idx + 1}'
-                )
-                color = color_palette[exp_idx % len(color_palette)]
-
-                # A polarized experiment contributes one entry per visible
-                # measured channel, so nothing the user selected is dropped.
-                channels = (
-                    [channel for channel in experiment_channel_values(experiment) if channel in visible_channels]
-                    if expand_channels
-                    else []
-                )
-                if not channels:
-                    data = flatten_polarized(experiment, visible_channels)
-                    if data.x.size > 0:  # Only include non-empty datasets
-                        experiment_data_list.append(
-                            {'data': data, 'name': exp_name, 'color': color, 'index': exp_idx, 'channel': ''}
-                        )
-                    continue
-
-                for channel in channels:
-                    data = experiment[channel]
-                    if data.x.size == 0:
-                        continue
-                    experiment_data_list.append(
-                        {
-                            'data': data,
-                            'name': f'{exp_name} ({CHANNEL_LABELS[channel]} {channel})',
-                            'color': channel_shade(color, channel),
-                            'index': exp_idx,
-                            'channel': channel,
-                        }
-                    )
-            except (IndexError, AttributeError, KeyError) as e:
-                logger.warning('Error accessing experiment %s: %s', exp_idx, e)
-                continue
-
-        return experiment_data_list
-
-    def _visible_channels(self) -> set:
-        """Channels the user kept visible (all of them when plotting is unavailable)."""
-        visible = getattr(self._plotting, '_visible_channels', None)
-        return set(visible) if visible else set(CHANNEL_LABELS)
-
-    @Property('QVariantList', notify=experimentsChanged)
-    def selectedExperimentDataList(self) -> List[dict]:
-        """Return individual experiment data for plotting separate lines."""
-        return self.get_individual_experiment_data_list()
-
-    def _refresh_plotting_system(self) -> None:
-        """Refresh the plotting system when experiment selection changes."""
-        # Emit signal to notify parent/listeners that experiment selection changed
-        # Parent (PyBackend) connects this signal to plotting refresh
-        self.experimentsChanged.emit()
+    def _sync_current_experiment_to_selection(self) -> None:
+        """The current experiment is the first selected one."""
+        indices = self._selection.indices
+        if indices:
+            self._experiments_logic.set_current_index(indices[0])
+            self._project_lib.current_experiment_index = indices[0]
 
     ########################
     ## Minimizers
@@ -1506,47 +1349,47 @@ class Analysis(QObject):
     # Bayesian plot saving
     # ------------------------------------------------------------------
 
-    @Slot(str, result=bool)
-    def saveBayesianPlot(self, source_url: str) -> bool:
-        """Open a native save dialog to save a rendered Bayesian plot PNG.
+    @staticmethod
+    def _local_path_from_url(url: str) -> Optional[Path]:
+        """Return the local path of a ``file://`` URL, ignoring any query string."""
+        if not url or not url.startswith('file://'):
+            return None
+        # Strip query string (e.g. ?t=<timestamp> used for cache-busting)
+        # QUrl handles both file:///C:/... (Windows) and file:///tmp/... (POSIX)
+        local_file = QUrl(url.split('?')[0]).toLocalFile()
+        return Path(local_file) if local_file else None
+
+    @Slot(str, result=str)
+    def bayesianPlotSuggestedFileUrl(self, source_url: str) -> str:
+        """Suggested ``file://`` URL in the home folder for saving a rendered Bayesian plot."""
+        source_path = self._local_path_from_url(source_url)
+        suggested = source_path.name if source_path is not None and source_path.name else 'bayesian_plot.png'
+        return QUrl.fromLocalFile(str(Path.home() / suggested)).toString()
+
+    @Slot(str, str, result=bool)
+    def saveBayesianPlot(self, source_url: str, destination_url: str) -> bool:
+        """Copy a rendered Bayesian plot to a destination chosen by the user in QML.
 
         :param source_url: ``file://`` URL of the rendered plot (e.g. from
             ``bayesianCornerPlotUrl``, ``bayesianTracePlotUrl``,
             ``bayesianHeatmapPlotUrl``).
+        :param destination_url: ``file://`` URL to save the plot to.
         :returns: ``True`` if the file was saved successfully.
         """
         import shutil
-        from pathlib import Path
 
-        if not source_url or not source_url.startswith('file://'):
+        source_path = self._local_path_from_url(source_url)
+        if source_path is None:
             logger.warning('Invalid Bayesian plot URL for saving: %s', source_url)
             return False
-
-        # Strip query string (e.g. ?t=<timestamp> used for cache-busting)
-        clean_url = source_url.split('?')[0]
-        source_path = Path(clean_url.replace('file:///', '', 1) if clean_url.startswith('file:///')
-                           else clean_url.replace('file://', '', 1))
-        # Handle Windows paths: file:///C:/... → C:/...
-        if os.name == 'nt' and str(source_path).startswith('/'):
-            source_path = Path(str(source_path)[1:])
 
         if not source_path.exists():
             logger.warning('Bayesian plot file not found: %s', source_path)
             return False
 
-        suggested = source_path.name or 'bayesian_plot.png'
-        if source_path.suffix.lower() == '.html':
-            file_filter = 'HTML Files (*.html)'
-        else:
-            file_filter = 'PNG Images (*.png)'
-        dialog = QtWidgets.QFileDialog()
-        save_path, _ = dialog.getSaveFileName(
-            None,
-            'Save Bayesian plot',
-            str(Path.home() / suggested),
-            file_filter,
-        )
-        if not save_path:
+        save_path = self._local_path_from_url(destination_url)
+        if save_path is None:
+            logger.warning('Invalid destination URL for saving Bayesian plot: %s', destination_url)
             return False
 
         try:

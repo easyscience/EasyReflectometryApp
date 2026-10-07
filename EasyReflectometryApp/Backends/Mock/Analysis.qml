@@ -61,9 +61,20 @@ QtObject {
     function bayesianComputeHeatmap(x, y) {
         console.debug(`bayesianComputeHeatmap ${x}, ${y}`)
     }
+    function saveBayesianPlot(sourceUrl, destinationUrl) {
+        console.debug(`saveBayesianPlot ${sourceUrl} -> ${destinationUrl}`)
+        return true
+    }
+    function bayesianPlotSuggestedFileUrl(sourceUrl) {
+        console.debug(`bayesianPlotSuggestedFileUrl ${sourceUrl}`)
+        return ''
+    }
 
     // Fit failure signal (mirrors Python backend)
     signal fitFailed(string message)
+
+    // Pre-fit check failure signal (mirrors Python backend)
+    signal prefitCheckFailed(string title, string message)
 
     // Stop fit signal (mirrors Python backend)
     signal stopFit()

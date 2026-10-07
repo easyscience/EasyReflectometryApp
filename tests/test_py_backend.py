@@ -25,9 +25,17 @@ class StubProject(QObject):
     def __init__(self, _project_lib, parent=None):
         super().__init__(parent)
         self.dirty_calls = 0
+        self.pre_save_hooks = []
+        self.post_load_hooks = []
 
     def markDirty(self):
         self.dirty_calls += 1
+
+    def add_pre_save_hook(self, hook):
+        self.pre_save_hooks.append(hook)
+
+    def add_post_load_hook(self, hook):
+        self.post_load_hooks.append(hook)
 
 
 class StubSample(QObject):
@@ -52,6 +60,12 @@ class StubSample(QObject):
 
     def _clearCacheAndEmitLayersChanged(self):
         self.clear_calls += 1
+
+    def store_constraint_metadata(self):
+        pass
+
+    def reload_constraint_states(self):
+        pass
 
     def _clearStructureCacheAndEmit(self):
         self.structure_clear_calls += 1
@@ -78,18 +92,28 @@ class StubAnalysis(QObject):
     experimentsChanged = Signal()
     parametersChanged = Signal()
     inequalityContextChanged = Signal()
+    posteriorPredictiveReady = Signal(object, object, object, object)
+    posteriorPredictiveSldReady = Signal(object, object, object, object)
+    posteriorPredictiveCleared = Signal()
 
-    def __init__(self, _project_lib, parent=None):
+    def __init__(self, _project_lib, parent=None, selection=None):
         super().__init__(parent)
+        self.selection = selection
         self._minimizers_logic = object()
         self._selected = [0]
         self.received_indices = None
         self.clear_calls = 0
-        self._plotting_accepted = None
         self.bayesian_clear_calls = 0
+        self.prune_calls = 0
+        self.reset_selection_calls = 0
 
-    def set_plotting(self, plotting):
-        self._plotting_accepted = plotting
+    def prune_selected_experiments(self):
+        self.prune_calls += 1
+        return False
+
+    def reset_selected_experiments(self):
+        self.reset_selection_calls += 1
+        return False
 
     def clearBayesianResults(self):
         self.bayesian_clear_calls += 1
@@ -149,8 +173,11 @@ class StubPlotting(QObject):
     magneticProfileChanged = Signal()
     spinAsymmetryChanged = Signal()
 
-    def __init__(self, _project_lib, parent=None):
+    def __init__(self, _project_lib, parent=None, selection=None):
         super().__init__(parent)
+        self.selection = selection
+        self.posterior = None
+        self.posterior_sld = None
         self.reset_calls = 0
         self.channel_notifications = 0
         self.magnetic_notifications = 0
@@ -188,6 +215,18 @@ class StubPlotting(QObject):
     def reset_data(self):
         self.reset_calls += 1
 
+    def set_posterior_predictive(self, q, median, lower, upper):
+        self.posterior = (q, median, lower, upper)
+
+    def set_posterior_predictive_sld(self, z, median, lower, upper):
+        self.posterior_sld = (z, median, lower, upper)
+
+    def clear_posterior_predictive(self):
+        self.posterior = None
+
+    def clear_posterior_predictive_sld(self):
+        self.posterior_sld = None
+
     def refreshSamplePage(self):
         self.refresh_calls['sample'] += 1
 
@@ -216,6 +255,48 @@ def test_backend_constructor_wires_minimizers_logic(monkeypatch, qcore_applicati
     backend = _make_backend(monkeypatch)
 
     assert backend._status._status_logic.minimizers_logic is backend._analysis._minimizers_logic
+
+
+def test_backend_constructor_hooks_constraint_state_into_save_and_load(monkeypatch, qcore_application):
+    """The Sample backend's constraint rows must reach the project file and come back on load."""
+    backend = _make_backend(monkeypatch)
+
+    assert backend._project.pre_save_hooks == [backend._sample.store_constraint_metadata]
+    assert backend._project.post_load_hooks == [
+        backend._sample.reload_constraint_states,
+        # A loaded or reset project starts with only its current experiment selected.
+        backend._analysis.reset_selected_experiments,
+    ]
+
+
+def test_analysis_and_plotting_share_one_experiment_selection(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+
+    assert backend._analysis.selection is not None
+    assert backend._analysis.selection is backend._plotting_1d.selection
+
+
+def test_posterior_predictive_reaches_plotting_through_signals(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+
+    backend._analysis.posteriorPredictiveReady.emit([1.0], [2.0], [1.5], [2.5])
+    backend._analysis.posteriorPredictiveSldReady.emit([0.0], [1.0], [0.5], [1.5])
+    assert backend._plotting_1d.posterior == ([1.0], [2.0], [1.5], [2.5])
+    assert backend._plotting_1d.posterior_sld == ([0.0], [1.0], [0.5], [1.5])
+
+    backend._analysis.posteriorPredictiveCleared.emit()
+    assert backend._plotting_1d.posterior is None
+    assert backend._plotting_1d.posterior_sld is None
+
+
+def test_selection_is_pruned_after_model_removal_and_project_changes(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+
+    backend._sample.modelsTableChanged.emit()
+    assert backend._analysis.prune_calls == 1
+
+    backend._project.externalProjectLoaded.emit()  # also an ORSO sample import
+    assert backend._analysis.prune_calls > 1  # the relay re-emits modelsTableChanged too; pruning is idempotent
 
 
 def test_analysis_selection_bridge_updates_analysis_and_emits_signal(monkeypatch, qcore_application):

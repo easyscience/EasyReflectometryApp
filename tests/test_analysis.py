@@ -1,9 +1,11 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
+from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
 from tests.factories import make_project
 
@@ -193,6 +195,65 @@ def test_fitting_start_stop_emits_stop_signal_when_fit_is_running(monkeypatch, q
     assert received['count'] == 1
 
 
+def _param(name, min_value, max_value, fit=True):
+    return {'name': name, 'min': min_value, 'max': max_value, 'fit': fit}
+
+
+def _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_leastsq'):
+    analysis = _make_analysis(monkeypatch)
+    analysis._chached_parameters = parameters
+    analysis._minimizers_logic.minimizers_available = lambda: [minimizer]
+    analysis._minimizers_logic.minimizer_current_index = lambda: 0
+    return analysis
+
+
+def test_prefit_errors_empty_for_valid_parameters(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 0.0, 1.0), _param('b', 5.0, 5.0, fit=False)])
+
+    assert analysis._prefit_errors() == []
+
+
+def test_prefit_errors_reports_every_parameter_with_invalid_bounds(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 1.0, 1.0), _param('b', 2.0, 0.0)])
+
+    errors = analysis._prefit_errors()
+
+    assert len(errors) == 2
+    assert "'a'" in errors[0]
+    assert "'b'" in errors[1]
+
+
+def test_prefit_errors_rejects_infinite_bounds_for_differential_evolution(monkeypatch, qcore_application):
+    parameters = [_param('a', float('-inf'), 1.0), _param('b', 0.0, float('inf')), _param('c', 0.0, 1.0)]
+    analysis = _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_differential_evolution')
+
+    errors = analysis._prefit_errors()
+
+    assert len(errors) == 1
+    assert '\na,\nb\n' in errors[0]
+
+
+def test_prefit_errors_allows_infinite_bounds_for_other_minimizers(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', float('-inf'), float('inf'))])
+
+    assert analysis._prefit_errors() == []
+
+
+def test_fitting_start_stop_emits_prefit_check_failed_and_does_not_start(monkeypatch, qcore_application):
+    StubWorker.instances = []
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 1.0, 0.0)])
+    analysis._start_threaded_fit = MagicMock()
+    received = []
+    analysis.prefitCheckFailed.connect(lambda title, message: received.append((title, message)))
+
+    analysis.fittingStartStop()
+
+    assert len(received) == 1
+    assert received[0][0] == 'Invalid Parameter Bounds'
+    assert "'a'" in received[0][1]
+    analysis._start_threaded_fit.assert_not_called()
+
+
 def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_application):
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
@@ -341,8 +402,8 @@ def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcor
         return_value=('multi-fitter', 'data-group')
     )
 
-    # Mock prefitCheck to avoid complex real checks
-    analysis.prefitCheck = MagicMock(return_value=True)
+    # Mock the pre-fit check to avoid complex real checks
+    analysis._prefit_errors = MagicMock(return_value=[])
 
     # fittingStartStop should detect Bayesian mode and dispatch to sample
     analysis.fittingStartStop()
@@ -388,3 +449,86 @@ def test_bayesian_initializer_property_round_trip(monkeypatch, qcore_application
 
     analysis.setBayesianInitializer('cov')
     assert analysis.bayesianInitializer == 'cov'
+
+def test_model_index_for_experiment_paired_with_a_removed_model(monkeypatch, qcore_application):
+    analysis = _make_analysis(monkeypatch)
+    project = analysis._experiments_logic._project_lib
+    project._models.add_model()
+    project._experiments[0] = SimpleNamespace(model=project._models[-1])
+    assert analysis.modelIndexForExperiment == len(project._models) - 1
+
+    project._experiments[0] = SimpleNamespace(model=object())
+
+    assert analysis.modelIndexForExperiment == -1
+
+
+
+def _make_analysis_with_experiments(monkeypatch, count):
+    """An Analysis with the real experiment logic over `count` named experiments."""
+    project = make_project(experiments={i: SimpleNamespace(name=f'E{i}') for i in range(count)})
+    monkeypatch.setattr(analysis_module, 'ParametersLogic', StubParametersLogic)
+    monkeypatch.setattr(analysis_module, 'CalculatorsLogic', StubCalculatorsLogic)
+    monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubMinimizersLogic)
+    monkeypatch.setattr(analysis_module, 'FitterWorker', StubWorker)
+    analysis = analysis_module.Analysis(project, selection=ExperimentSelection())
+    analysis._clearCacheAndEmitParametersChanged = MagicMock()
+    return analysis, project
+
+
+def test_selection_starts_with_the_first_experiment(monkeypatch, qcore_application):
+    analysis, _project = _make_analysis_with_experiments(monkeypatch, 3)
+
+    assert analysis.selectedExperimentIndices == [0]
+
+
+def test_set_selected_experiments_makes_the_first_one_current(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    emitted = []
+    analysis.experimentsChanged.connect(lambda: emitted.append('experiments'))
+
+    analysis.setSelectedExperimentIndices([2, 1, 9])
+
+    assert analysis.selectedExperimentIndices == [2, 1]
+    assert project._current_experiment_index == 2
+    assert emitted == ['experiments']
+
+    analysis.setSelectedExperimentIndices([2, 1])  # unchanged
+    assert emitted == ['experiments']
+
+
+def test_removing_an_experiment_shifts_the_selection(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 4)
+    analysis.setSelectedExperimentIndices([1, 3])
+
+    analysis.removeExperiment(0)
+
+    assert analysis.selectedExperimentIndices == [0, 2]
+    assert project._current_experiment_index == 0
+
+
+def test_removing_the_selected_experiment_drops_it(monkeypatch, qcore_application):
+    analysis, _project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([0, 2])
+
+    analysis.removeExperiment(2)
+
+    assert analysis.selectedExperimentIndices == [0]
+
+
+def test_prune_drops_experiments_removed_elsewhere(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([1, 2])
+    del project._experiments[2]  # e.g. removed with its model
+
+    assert analysis.prune_selected_experiments() is True
+    assert analysis.selectedExperimentIndices == [1]
+    assert project._current_experiment_index == 1
+
+
+def test_reset_selects_only_the_current_experiment(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([0, 1, 2])
+    project._current_experiment_index = 1
+
+    assert analysis.reset_selected_experiments() is True
+    assert analysis.selectedExperimentIndices == [1]
