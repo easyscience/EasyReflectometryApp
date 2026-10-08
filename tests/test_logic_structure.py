@@ -1,6 +1,12 @@
+import numpy as np
+import pytest
+from easyreflectometry.project import GUIDE_FIELD_ANGLE
+
 from EasyReflectometryApp.Backends.Py.logic.structure import COLORS
 from EasyReflectometryApp.Backends.Py.logic.structure import flatten
+from EasyReflectometryApp.Backends.Py.logic.structure import magnetic_vector_for_layer
 from tests.factories import FakeGradientLayer
+from tests.factories import FakeLayerMagnetism
 from tests.factories import FakeRepeatingMultilayer
 from tests.factories import FakeSolvatedMaterial
 from tests.factories import make_assembly
@@ -200,3 +206,172 @@ def test_legend_lists_only_used_materials_once():
         {'label': 'Air', 'color': COLORS[0]},
         {'label': 'Si', 'color': COLORS[1]},
     ]
+
+
+# Moment arrows (spin-direction design A3): a magnetic layer's box carries the
+# in-plane direction, every other box is untouched.
+
+
+def _magnetic_sample(materials, rho_m=3.0, theta_m=40.0):
+    return make_sample(
+        make_assembly(name='Top', layers=[make_layer(name='Air Layer', material=materials[0], thickness=0.0)]),
+        make_assembly(
+            name='Fe',
+            layers=[
+                make_layer(
+                    name='Fe Layer',
+                    material=materials[1],
+                    thickness=40.0,
+                    magnetism=FakeLayerMagnetism(rho_m=rho_m, theta_m=theta_m),
+                )
+            ],
+        ),
+        make_assembly(name='Bottom', layers=[make_layer(name='Si Layer', material=materials[2], thickness=0.0)]),
+    )
+
+
+def test_a_magnetic_layer_box_carries_the_moment_direction():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    boxes, _, _ = flatten(_project(_magnetic_sample(materials), materials))
+
+    magnetic = boxes[1]
+    assert magnetic['magnetic'] is True
+    assert magnetic['has_moment'] is True
+    assert magnetic['phi'] == pytest.approx(130.0)  # theta_m 40 is 130 deg from the guide field
+    assert magnetic['theta_m'] == pytest.approx(40.0)
+    assert magnetic['rho_m'] == pytest.approx(3.0)
+
+
+def test_box_values_are_types_qml_can_read():
+    """Every box value must be a builtin, never a numpy scalar.
+
+    PySide6 hands a numpy.float64 in a QVariantList to QML as an opaque
+    PyObjectWrapper: `.toFixed()` on it throws, and the exception takes down
+    the whole binding that touched it - the layer tooltip renders empty rather
+    than reporting an error.
+    """
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    boxes, _, _ = flatten(_project(_magnetic_sample(materials), materials))
+
+    for box in boxes:
+        for key, value in box.items():
+            assert type(value) in (str, int, float, bool), f'{key} is {type(value).__name__}'
+
+
+def test_non_magnetic_boxes_omit_the_arrow_keys_entirely():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    boxes, _, _ = flatten(_project(_magnetic_sample(materials), materials))
+
+    for box in (boxes[0], boxes[2]):
+        assert 'magnetic' not in box
+        assert 'phi' not in box
+
+
+def test_a_negative_rho_m_flips_the_drawn_direction():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+
+    positive, _, _ = flatten(_project(_magnetic_sample(materials, rho_m=3.0), materials))
+    negative, _, _ = flatten(_project(_magnetic_sample(materials, rho_m=-3.0), materials))
+
+    assert negative[1]['phi'] == pytest.approx((positive[1]['phi'] + 180.0) % 360.0)
+    assert negative[1]['m'] == pytest.approx(3.0)
+
+
+def test_a_negligible_moment_is_flagged_as_having_none():
+    materials = make_material_collection(make_material('Air'), make_material('Fe'), make_material('Si'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(material=materials[0], thickness=0.0)]),
+        make_assembly(
+            name='Strong',
+            layers=[make_layer(material=materials[1], thickness=40.0, magnetism=FakeLayerMagnetism(rho_m=4.0))],
+        ),
+        make_assembly(
+            name='Faint',
+            layers=[make_layer(material=materials[1], thickness=40.0, magnetism=FakeLayerMagnetism(rho_m=0.01))],
+        ),
+        make_assembly(name='Bottom', layers=[make_layer(material=materials[2], thickness=0.0)]),
+    )
+
+    boxes, _, _ = flatten(_project(sample, materials))
+
+    assert boxes[1]['has_moment'] is True
+    assert boxes[2]['has_moment'] is False  # below 1 % of the largest moment
+
+
+def test_gradient_boxes_stay_arrow_free():
+    materials = make_material_collection(make_material('Air'), make_material('D2O'))
+    sample = make_sample(
+        make_assembly(name='Top', layers=[make_layer(material=materials[0], thickness=0.0)]),
+        FakeGradientLayer(name='Grad', front_material=materials[0], back_material=materials[1], thickness=2.0),
+        make_assembly(
+            name='Fe',
+            layers=[make_layer(material=materials[1], thickness=40.0, magnetism=FakeLayerMagnetism(rho_m=3.0))],
+        ),
+        make_assembly(name='Bottom', layers=[make_layer(material=materials[1], thickness=0.0)]),
+    )
+
+    boxes, _, _ = flatten(_project(sample, materials))
+
+    # A gradient has no assembly-level moment vector to draw; the curves are the truth.
+    assert 'magnetic' not in boxes[1]
+    assert boxes[2]['magnetic'] is True
+
+
+# The in-plane moment vector contract: the numbers every arrow view draws, so the
+# convention is pinned here rather than in the rendering.
+
+
+@pytest.mark.parametrize(
+    ('theta_m', 'phi'),
+    [
+        (270.0, 0.0),  # along H: collinear, no spin flip
+        (90.0, 180.0),  # against H
+        (0.0, 90.0),  # fully transverse
+        (180.0, 270.0),  # fully transverse, the other way
+        (40.0, 130.0),  # the canted example of the demo notebook
+    ],
+)
+def test_vector_phi_is_measured_from_the_guide_field(theta_m, phi):
+    vector = magnetic_vector_for_layer(FakeLayerMagnetism(rho_m=2.0, theta_m=theta_m))
+
+    assert vector['phi'] == pytest.approx(phi)
+    assert vector['phi_param'] == pytest.approx(phi)
+    assert vector['m'] == pytest.approx(2.0)
+
+
+def test_vector_negative_rho_m_flips_the_drawn_direction_by_180_degrees():
+    positive = magnetic_vector_for_layer(FakeLayerMagnetism(rho_m=2.0, theta_m=40.0))
+    negative = magnetic_vector_for_layer(FakeLayerMagnetism(rho_m=-2.0, theta_m=40.0))
+
+    # The parameter angle is a property of theta_m alone ...
+    assert negative['phi_param'] == pytest.approx(positive['phi_param'])
+    # ... the physical direction flips, with a positive magnitude.
+    assert negative['phi'] == pytest.approx((positive['phi'] + 180.0) % 360.0)
+    assert negative['m'] == pytest.approx(2.0)
+    assert negative['rho_m'] == pytest.approx(-2.0)
+
+
+def test_vector_sign_crossing_is_exactly_180_degrees():
+    below = magnetic_vector_for_layer(FakeLayerMagnetism(rho_m=-1e-9, theta_m=200.0))
+    above = magnetic_vector_for_layer(FakeLayerMagnetism(rho_m=+1e-9, theta_m=200.0))
+
+    assert (below['phi'] - above['phi']) % 360.0 == pytest.approx(180.0)
+
+
+def test_vector_zero_moment_keeps_the_parameter_angle_and_no_magnitude():
+    vector = magnetic_vector_for_layer(FakeLayerMagnetism(rho_m=0.0, theta_m=40.0))
+
+    assert vector['m'] == 0.0
+    assert vector['phi'] == pytest.approx(130.0)
+
+
+def test_vector_components_split_the_moment_between_the_channel_types():
+    vector = magnetic_vector_for_layer(FakeLayerMagnetism(rho_m=2.0, theta_m=GUIDE_FIELD_ANGLE - 60.0))
+
+    # 60 degrees off H: cos(60) along it, sin(60) across it.
+    assert vector['m_par'] == pytest.approx(2.0 * 0.5)
+    assert abs(vector['m_perp']) == pytest.approx(2.0 * np.sqrt(3) / 2)
+    assert np.hypot(vector['m_par'], vector['m_perp']) == pytest.approx(vector['m'])

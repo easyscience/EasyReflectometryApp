@@ -1,5 +1,8 @@
+import numpy as np
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.model.model import COLORS
+from easyreflectometry.project import GUIDE_FIELD_ANGLE
+from easyreflectometry.project import MAGNETIC_MOMENT_FLOOR_FRACTION
 
 # An assembly whose expanded box count would exceed this collapses to its repeat unit
 MAX_EXPANDED_BOXES_PER_ASSEMBLY = 12
@@ -19,6 +22,11 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
         assembly         assembly name, and assembly_index/layer_index to address the layer
         kind             'layer' | 'gradient' | 'superphase' | 'subphase'
         repetitions      n for a collapsed repeating multilayer, else 1
+      A magnetic layer carries, in addition, `magnetic` (True), `has_moment` and the
+      keys of `magnetic_vector_for_layer` (rho_m, theta_m, phi_param, phi, m, m_par,
+      m_perp). Every other box omits them entirely, so the view gates on
+      `magnetic === true` and a non-magnetic project's boxes are exactly as before.
+      Gradient boxes never carry them: a gradient has no assembly-level moment.
     - legend: distinct {label, color} pairs in stack order
     - total_thickness: physical total in Angstrom (collapsed repeats counted n times, caps excluded)
     """
@@ -28,6 +36,7 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
     sample = project_lib._models[model_index].sample
 
     colors = _ColorMap(project_lib._materials)
+    moment_floor = _moment_floor(sample)
     boxes = []
     total_thickness = 0.0
 
@@ -45,7 +54,7 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
 
         for _ in range(1 if collapsed else repetitions):
             for layer_index, layer in enumerate(assembly.layers):
-                boxes.append(_layer_box(layer, assembly, assembly_index, layer_index, colors))
+                boxes.append(_layer_box(layer, assembly, assembly_index, layer_index, colors, moment_floor))
         if collapsed:
             boxes[-len(assembly.layers)]['repetitions'] = repetitions
 
@@ -68,14 +77,66 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
     return boxes, legend, total_thickness
 
 
+def magnetic_vector_for_layer(magnetism) -> dict[str, float]:
+    """The in-plane moment of a :class:`LayerMagnetism`.
+
+    refl1d measures ``theta_m`` from the beam direction, with
+    ``GUIDE_FIELD_ANGLE`` pointing along the guide field H; publications
+    quote the angle *from H*, and that is what an arrow draws. refl1d also
+    allows a negative ``rho_m``, which is the same physical moment reversed, so
+    the parameter angle and the direction the moment actually points are two
+    different things and both are reported:
+
+    - ``phi_param``: angle from H of the parameter as written, sign ignored;
+    - ``phi``: direction the moment physically points (``phi_param`` turned by
+      180 degrees when ``rho_m`` is negative) - what every arrow draws;
+    - ``m``: ``abs(rho_m)``, the physical magnitude;
+    - ``m_par`` / ``m_perp``: the components the non-spin-flip and spin-flip
+      channels see.
+
+    ``rho_m`` and ``theta_m`` are passed through so a tooltip can show the
+    signed parameters the user edits next to the direction drawn.
+
+    All angles are in degrees.
+    """
+    rho_m = float(magnetism.rho_m.value)
+    theta_m = float(magnetism.theta_m.value)
+    phi_param = (theta_m - GUIDE_FIELD_ANGLE) % 360.0
+    phi = phi_param if rho_m >= 0 else (phi_param + 180.0) % 360.0
+    return {
+        'rho_m': rho_m,
+        'theta_m': theta_m,
+        'phi_param': phi_param,
+        'phi': phi,
+        'm': abs(rho_m),
+        'm_par': float(rho_m * np.cos(np.radians(phi_param))),
+        'm_perp': float(rho_m * np.sin(np.radians(phi_param))),
+    }
+
+
 def _value(quantity) -> float:
     # Material.sld is a Parameter, but MaterialSolvated.sld is a computed plain float
     return float(getattr(quantity, 'value', quantity))
 
 
-def _layer_box(layer, assembly, assembly_index: int, layer_index: int, colors: '_ColorMap') -> dict:
+def _moment_floor(sample) -> float:
+    """Below this |rho_m| a layer's moment has no direction worth drawing.
+
+    The same relative floor that masks the theta_m depth curve, so a box never
+    shows an arrow while the angle curve beside it is hidden.
+    """
+    moments = [
+        abs(float(layer.magnetism.rho_m.value))
+        for assembly in sample
+        for layer in assembly.layers
+        if getattr(layer, 'magnetism', None) is not None
+    ]
+    return MAGNETIC_MOMENT_FLOOR_FRACTION * max(moments, default=0.0)
+
+
+def _layer_box(layer, assembly, assembly_index: int, layer_index: int, colors: '_ColorMap', moment_floor: float) -> dict:
     material = layer.material
-    return {
+    box = {
         'label': layer.name,
         'material': material.name,
         'color': colors.get(material),
@@ -90,6 +151,13 @@ def _layer_box(layer, assembly, assembly_index: int, layer_index: int, colors: '
         'kind': 'layer',
         'repetitions': 1,
     }
+    magnetism = getattr(layer, 'magnetism', None)
+    if magnetism is not None:
+        vector = magnetic_vector_for_layer(magnetism)
+        box.update(vector)
+        box['magnetic'] = True
+        box['has_moment'] = vector['m'] > moment_floor
+    return box
 
 
 def _gradient_box(assembly, assembly_index: int, colors: '_ColorMap') -> dict:

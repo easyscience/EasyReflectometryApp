@@ -4,6 +4,7 @@ import QtQuick.Controls
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
@@ -18,6 +19,12 @@ Rectangle {
     readonly property real capPx: 28
     readonly property real minBoxPx: 22
     readonly property real maxBoxPx: 120
+    // Moment arrows: below the floor the glyph is unreadable and is dropped
+    // (the tooltip still carries the direction); the cap keeps it a marker
+    // rather than a picture.
+    readonly property real minGlyphPx: 12
+    readonly property real maxGlyphPx: 32
+    readonly property bool anyBoxMagnetic: boxes.some(box => box.magnetic === true)
     readonly property real stackWidth: Math.min(600, Math.max(Math.min(300, width - 4 * EaStyle.Sizes.fontPixelSize), 0.4 * width))
     // Sum of proportional (non-cap) thicknesses
     readonly property real totalT: boxes.reduce((sum, box) => sum + (isCap(box) ? 0 : box.thickness), 0)
@@ -60,6 +67,16 @@ Rectangle {
         color: EaStyle.Colors.themeForegroundMinor
     }
 
+    // The reference the arrows are measured from, on screen rather than in the
+    // user's memory. Only where there is an arrow to reference.
+    Gui.GuideFieldLegend {
+        z: 1
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: EaStyle.Sizes.fontPixelSize
+        visible: root.anyBoxMagnetic
+    }
+
     Flickable {
         id: flickable
         anchors.top: parent.top
@@ -80,8 +97,20 @@ Rectangle {
                 model: root.boxes
 
                 Rectangle {
+                    id: box
+
                     readonly property bool selected: modelData.assembly_index === Globals.BackendWrapper.sampleCurrentAssemblyIndex
                                                      && modelData.layer_index === Globals.BackendWrapper.sampleCurrentLayerIndex
+
+                    // Arrow zone: a square in the middle of the box, as tall as
+                    // the box allows. It exists only for a magnetic layer, so a
+                    // non-magnetic project keeps the two-column layout (centred
+                    // name, right-pinned thickness) it has always had.
+                    readonly property real gap: EaStyle.Sizes.fontPixelSize * 0.5
+                    readonly property real glyphPx: modelData.magnetic === true ? Math.min(height, root.maxGlyphPx) : 0
+                    readonly property bool showArrow: glyphPx >= root.minGlyphPx
+                    readonly property real nameWidthLimit: showArrow ? Math.max(0, (width - glyphPx) / 2 - 2 * gap)
+                                                                     : width - EaStyle.Sizes.fontPixelSize
 
                     width: stack.width
                     height: root.pixelHeight(modelData)
@@ -97,11 +126,26 @@ Rectangle {
                     }
 
                     EaElements.Label {
-                        anchors.centerIn: parent
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: box.showArrow ? box.gap : (box.width - width) / 2
                         visible: parent.height >= root.minBoxPx
                         text: `${index}  ${modelData.label}`
                         elide: Text.ElideRight
-                        width: Math.min(implicitWidth, parent.width - EaStyle.Sizes.fontPixelSize)
+                        width: Math.min(implicitWidth, box.nameWidthLimit)
+                    }
+
+                    // The layer's in-plane moment, in the middle column between
+                    // the name and the thickness annotation.
+                    Gui.MagnetizationArrow {
+                        anchors.centerIn: parent
+                        visible: box.showArrow
+                        width: box.glyphPx
+                        height: box.glyphPx
+                        phi: modelData.phi ?? 0
+                        hasMoment: modelData.has_moment === true
+                        // Not `channel_shade`: that only knows the spin channels.
+                        // Against the box fill, a darker shade of the box colour.
+                        color: Qt.darker(Qt.color(String(modelData.color)), 1.6)
                     }
 
                     // Thickness annotation
@@ -144,6 +188,21 @@ Rectangle {
                         ]
                         if (modelData.repetitions > 1)
                             lines.push(qsTr('Repeated × %1').arg(modelData.repetitions))
+                        if (modelData.magnetic === true) {
+                            // Lead with the arrow's own quantity, then the
+                            // parameters the sidebar table edits.
+                            lines.push(modelData.has_moment
+                                       ? qsTr('Moment: %1° from H (θM %2°, ρM %3)')
+                                         .arg(modelData.phi.toFixed(1))
+                                         .arg(modelData.theta_m.toFixed(1))
+                                         .arg(modelData.rho_m.toFixed(3))
+                                       : qsTr('Magnetic, no moment (ρM %1)').arg(modelData.rho_m.toFixed(3)))
+                            lines.push(qsTr('M∥ %1 (no spin flip), M⊥ %2 (spin flip)')
+                                       .arg(modelData.m_par.toFixed(3))
+                                       .arg(modelData.m_perp.toFixed(3)))
+                            if (modelData.repetitions > 1)
+                                lines.push(qsTr('The arrow is the repeat unit: every repeat shares these parameters.'))
+                        }
                         return lines.join('\n')
                     }
                 }
