@@ -1,7 +1,8 @@
+import numpy as np
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.model.model import COLORS
+from easyreflectometry.project import GUIDE_FIELD_ANGLE
 from easyreflectometry.project import MAGNETIC_MOMENT_FLOOR_FRACTION
-from easyreflectometry.project import magnetic_vector_for_layer
 
 # An assembly whose expanded box count would exceed this collapses to its repeat unit
 MAX_EXPANDED_BOXES_PER_ASSEMBLY = 12
@@ -74,6 +75,43 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
             legend.append({'label': box['material'], 'color': box['color']})
 
     return boxes, legend, total_thickness
+
+
+def magnetic_vector_for_layer(magnetism) -> dict[str, float]:
+    """The in-plane moment of a :class:`LayerMagnetism`.
+
+    refl1d measures ``theta_m`` from the beam direction, with
+    ``GUIDE_FIELD_ANGLE`` pointing along the guide field H; publications
+    quote the angle *from H*, and that is what an arrow draws. refl1d also
+    allows a negative ``rho_m``, which is the same physical moment reversed, so
+    the parameter angle and the direction the moment actually points are two
+    different things and both are reported:
+
+    - ``phi_param``: angle from H of the parameter as written, sign ignored;
+    - ``phi``: direction the moment physically points (``phi_param`` turned by
+      180 degrees when ``rho_m`` is negative) - what every arrow draws;
+    - ``m``: ``abs(rho_m)``, the physical magnitude;
+    - ``m_par`` / ``m_perp``: the components the non-spin-flip and spin-flip
+      channels see.
+
+    ``rho_m`` and ``theta_m`` are passed through so a tooltip can show the
+    signed parameters the user edits next to the direction drawn.
+
+    All angles are in degrees.
+    """
+    rho_m = float(magnetism.rho_m.value)
+    theta_m = float(magnetism.theta_m.value)
+    phi_param = (theta_m - GUIDE_FIELD_ANGLE) % 360.0
+    phi = phi_param if rho_m >= 0 else (phi_param + 180.0) % 360.0
+    return {
+        'rho_m': rho_m,
+        'theta_m': theta_m,
+        'phi_param': phi_param,
+        'phi': phi,
+        'm': abs(rho_m),
+        'm_par': float(rho_m * np.cos(np.radians(phi_param))),
+        'm_perp': float(rho_m * np.sin(np.radians(phi_param))),
+    }
 
 
 def _value(quantity) -> float:

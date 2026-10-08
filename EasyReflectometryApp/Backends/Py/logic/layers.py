@@ -3,13 +3,14 @@ from typing import Optional
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
-from easyreflectometry.project import magnetic_vector_for_layer
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
 from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.sample import Material
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
+
+from .structure import magnetic_vector_for_layer
 
 logger = logging.getLogger(__name__)
 

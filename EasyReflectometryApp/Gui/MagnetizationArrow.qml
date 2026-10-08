@@ -7,7 +7,8 @@ import QtQuick
 // One layer's in-plane magnetic moment, drawn as a compass arrow seen along the
 // surface normal: screen +x is the guide field H, and `phi` is the physical
 // moment direction in degrees counterclockwise from it (see
-// `magnetic_vector_for_layer` in the library, which is where phi is defined).
+// `magnetic_vector_for_layer` in Backends/Py/logic/structure.py, which is where
+// phi is defined).
 //
 // The screen mapping is here and NOWHERE else. phi is counterclockwise in a
 // y-up frame; `Item.rotation` is clockwise, so it takes exactly one negation.
