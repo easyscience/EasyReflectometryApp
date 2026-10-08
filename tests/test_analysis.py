@@ -46,6 +46,21 @@ class StubMinimizersLogic:
     def is_bayesian_selected(self):
         return False
 
+    def requires_finite_bounds(self):
+        return False
+
+
+def _prepared(core_fitter='fake-fitter'):
+    """A prepared-run stand-in, as `Project.prepare_fit` returns it."""
+    return SimpleNamespace(
+        core_fitter=core_fitter,
+        x=['x'],
+        y=['y'],
+        weights=['w'],
+        call_kwargs=lambda **kwargs: dict(kwargs),
+        finalize=lambda results: [{'classical_chi2': 1.0}] * len(results),
+    )
+
 
 class StubWorker(QObject):
     finished = Signal(list)
@@ -95,9 +110,7 @@ def _make_analysis(monkeypatch):
 def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore_application):
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
     fitting_changed = {'count': 0}
     analysis.fittingChanged.connect(
         lambda: fitting_changed.__setitem__('count', fitting_changed['count'] + 1)
@@ -118,7 +131,8 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     )
 
     assert worker.method_name == 'fit'
-    assert worker.kwargs == {'weights': ['w'], 'method': None}
+    assert worker.fitter == 'fake-fitter'
+    assert worker.kwargs == {'weights': ['w']}
     assert worker.start_calls == 1
     assert analysis.fittingRunning is True
     assert analysis.fitIteration == 9
@@ -137,9 +151,7 @@ def test_on_stop_fit_requests_worker_stop_and_keeps_ui_locked_until_thread_exits
     non-abortable minimizer is still mutating the shared parameters."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     worker = StubWorker.instances[-1]
@@ -164,9 +176,7 @@ def test_stale_worker_signals_are_ignored_after_new_fit_starts(monkeypatch, qcor
     """Late signals from a superseded worker must not clobber the current run."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     stale_worker = StubWorker.instances[-1]
@@ -204,6 +214,9 @@ def _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_leastsq'
     analysis._chached_parameters = parameters
     analysis._minimizers_logic.minimizers_available = lambda: [minimizer]
     analysis._minimizers_logic.minimizer_current_index = lambda: 0
+    # The engine decides, not the combo label (see logic/minimizers.py)
+    analysis._minimizers_logic.requires_finite_bounds = lambda: minimizer == 'LMFit_differential_evolution'
+    analysis._minimizers_logic.selected_minimizer_enum = lambda: SimpleNamespace(name=minimizer)
     return analysis
 
 
@@ -282,18 +295,22 @@ def test_on_fit_finished_records_results_on_project_fitter(monkeypatch, qcore_ap
     from tests.factories import FakeFitResult
 
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic = Fitting(make_project())
+    project = make_project()
+    analysis._fitting_logic = Fitting(project)
     analysis._clearCacheAndEmitParametersChanged = MagicMock()
 
     fitter = MagicMock()
-    analysis._project_lib.fitter = fitter
+    project.fitter = fitter
+    # The run the worker executed supplies the classical metrics
+    analysis._fitting_logic._prepared = _prepared()
 
     results = [FakeFitResult(chi2=20.0, n_pars=4, x=list(range(14)))]
     analysis._on_fit_finished(results)
 
     fitter.record_fit_results.assert_called_once()
-    (recorded,) = fitter.record_fit_results.call_args.args
+    recorded, metrics = fitter.record_fit_results.call_args.args
     assert recorded == results
+    assert metrics == [{'classical_chi2': 1.0}]
 
 
 # ---------------------------------------------------------------------------

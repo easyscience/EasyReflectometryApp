@@ -1,39 +1,58 @@
+from typing import Any
+
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.fit_settings import OBJECTIVES
+from easyreflectometry.fit_settings import FitSettings
+from easyreflectometry.fit_settings import option_schema
+from easyreflectometry.fit_settings import requires_finite_bounds
 from easyscience import AvailableMinimizers
 
 BAYESIAN_LABEL = 'BUMPS-DREAM (Bayesian)'
+#: The minimizer the app gives a new project (#319: a classical default, and
+#: BUMPS is the engine that honours inequality constraints). The library's
+#: own default stays LMFit for notebooks; a loaded project keeps its own.
+APP_DEFAULT_MINIMIZER = AvailableMinimizers.Bumps_simplex
+
+
+def apply_app_defaults(project_lib: ProjectLib) -> None:
+    """Give a new or reset project the app's minimizer."""
+    project_lib.fit_settings.minimizer = APP_DEFAULT_MINIMIZER
+    project_lib.fit_settings.mode = 'minimize'
 
 
 class Minimizers:
+    """The GUI view of ``project_lib.fit_settings``; it stores no state of its own."""
+
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
-        # Default to the first classical minimizer (index 1); index 0 is the
-        # Bayesian sentinel (None) which requires an explicit user choice.
-        self._minimizer_current_index = 1
-        self._list_available_minimizers = list(AvailableMinimizers)
-        try:
-            self._list_available_minimizers.remove(AvailableMinimizers.LMFit)
-        except ValueError:
-            pass
-        try:
-            self._list_available_minimizers.remove(AvailableMinimizers.Bumps)
-        except ValueError:
-            pass
-        try:
-            self._list_available_minimizers.remove(AvailableMinimizers.DFO)
-        except ValueError:
-            pass
-        # Prepend Bayesian sentinel (None) as first entry
-        self._list_available_minimizers = [None] + self._list_available_minimizers
+        # Aliases of a listed member (same engine and method) are not offered.
+        aliases = [AvailableMinimizers.__members__.get(name) for name in ('LMFit', 'Bumps', 'DFO')]
+        # Index 0 is the Bayesian sentinel (None), which requires an explicit user choice.
+        self._list_available_minimizers = [None] + [m for m in AvailableMinimizers if not any(m is alias for alias in aliases)]
+
+    @property
+    def _settings(self) -> FitSettings:
+        # Read each time: a reset or a load replaces the project's settings object.
+        return self._project_lib.fit_settings
 
     def minimizers_available(self) -> list[str]:
         return [BAYESIAN_LABEL if m is None else m.name for m in self._list_available_minimizers]
 
     def minimizer_current_index(self) -> int:
-        return self._minimizer_current_index
+        if self._settings.mode == 'sample':
+            return 0
+        selected = self._settings.minimizer
+        for index, entry in enumerate(self._list_available_minimizers):
+            if entry is selected:
+                return index
+        # An alias set directly on the project: the listed member with the same engine and method.
+        for index, entry in enumerate(self._list_available_minimizers):
+            if entry is not None and (entry.package, entry.method) == (selected.package, selected.method):
+                return index
+        return 1
 
     def is_bayesian_selected(self) -> bool:
-        return self._list_available_minimizers[self._minimizer_current_index] is None
+        return self._settings.mode == 'sample'
 
     def _selected_package(self) -> str:
         return getattr(self.selected_minimizer_enum(), 'package', '')
@@ -56,60 +75,90 @@ class Minimizers:
         return self._selected_package() == 'bumps' and getattr(self.selected_minimizer_enum(), 'method', '') == 'lm'
 
     def selected_minimizer_enum(self):
-        """Return the AvailableMinimizers enum for the currently selected minimizer.
+        """The ``AvailableMinimizers`` member that will run (``Bumps_simplex`` when sampling)."""
+        return self._settings.minimizer
 
-        Falls back to ``Bumps_simplex`` when the Bayesian sentinel (``None``)
-        is selected, so callers that do not check ``is_bayesian_selected()``
-        still receive a valid engine.
-        """
-        entry = self._list_available_minimizers[self._minimizer_current_index]
-        return entry if entry is not None else AvailableMinimizers.Bumps_simplex
+    def requires_finite_bounds(self) -> bool:
+        return not self.is_bayesian_selected() and requires_finite_bounds(self._settings.minimizer)
 
     def set_minimizer_current_index(self, new_value: int) -> bool:
-        if not 0 <= new_value < len(self._list_available_minimizers):
+        if not 0 <= new_value < len(self._list_available_minimizers) or new_value == self.minimizer_current_index():
             return False
-        if new_value != self._minimizer_current_index:
-            self._minimizer_current_index = new_value
-            entry = self._list_available_minimizers[new_value]
-            if entry is None:
-                # Bayesian mode: ensure underlying engine is Bumps for sample()
-                self._project_lib.minimizer = AvailableMinimizers.Bumps_simplex
-            else:
-                self._project_lib.minimizer = entry
-            return True
-        return False
+        entry = self._list_available_minimizers[new_value]
+        if entry is None:
+            # Bayesian mode: the sampler needs a BUMPS engine.
+            self._settings.minimizer = AvailableMinimizers.Bumps_simplex
+            self._settings.mode = 'sample'
+        else:
+            self._settings.minimizer = entry
+            self._settings.mode = 'minimize'
+        return True
+
+    # Generic settings: None means "engine default".
 
     @property
-    def _multi_fitter(self):
-        """Get the multi fitter, or None if not available."""
-        if self._project_lib._fitter is None:
-            return None
-        return self._project_lib._fitter.easy_science_multi_fitter
+    def tolerance(self) -> float | None:
+        return self._settings.tolerance
 
     @property
-    def tolerance(self) -> float:
-        if self._multi_fitter is None:
-            return 1e-6  # Default tolerance
-        return self._multi_fitter.tolerance
+    def max_iterations(self) -> int | None:
+        return self._settings.max_evaluations
+
+    def set_tolerance(self, new_value: float | None) -> bool:
+        """Set (None: reset) the tolerance. Raises ValueError, changing nothing, if it is invalid."""
+        return self._set('tolerance', new_value)
+
+    def set_max_iterations(self, new_value: int | None) -> bool:
+        """Set (None: reset) the budget. Raises ValueError, changing nothing, if it is invalid."""
+        if isinstance(new_value, float) and new_value.is_integer():
+            new_value = int(new_value)
+        return self._set('max_evaluations', new_value)
 
     @property
-    def max_iterations(self) -> int:
-        if self._multi_fitter is None:
-            return 5000  # Default max iterations
-        return self._multi_fitter.max_evaluations
+    def objective(self) -> str:
+        return self._settings.objective
 
-    def set_tolerance(self, new_value: float) -> bool:
-        if self._multi_fitter is None:
-            return False
-        if new_value != self._multi_fitter.tolerance:
-            self._multi_fitter.tolerance = new_value
-            return True
-        return False
+    @property
+    def objectives(self) -> list[str]:
+        return list(OBJECTIVES)
 
-    def set_max_iterations(self, new_value: float) -> bool:
-        if self._multi_fitter is None:
+    def set_objective(self, new_value: str) -> bool:
+        return self._set('objective', new_value)
+
+    def _set(self, field: str, new_value: Any) -> bool:
+        old_value = getattr(self._settings, field)
+        if new_value == old_value:
             return False
-        if new_value != self._multi_fitter.max_evaluations:
-            self._multi_fitter.max_evaluations = new_value
-            return True
-        return False
+        setattr(self._settings, field, new_value)
+        try:
+            self._settings.validate()
+        except ValueError:
+            setattr(self._settings, field, old_value)
+            raise
+        return True
+
+    # Method-specific options of the selected minimizer.
+
+    def options(self) -> list[dict]:
+        """One entry per option the selected minimizer declares; empty on an older easyscience."""
+        if self.is_bayesian_selected():
+            return []
+        values = self._settings.active_options()
+        return [
+            {
+                'name': option.name,
+                'kind': option.kind,
+                'doc': option.doc,
+                'choices': list(option.choices),
+                'isSet': option.name in values,
+                'value': values.get(option.name, ''),
+            }
+            for option in option_schema(self._settings.minimizer)
+        ]
+
+    def set_option(self, name: str, value: Any) -> bool:
+        """Set (None: clear) an option. Raises ValueError, changing nothing, if it is invalid."""
+        if self._settings.active_options().get(name) == value:
+            return False
+        self._settings.set_option(name, value)
+        return True

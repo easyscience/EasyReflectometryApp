@@ -22,10 +22,25 @@ EaElements.Dialog {
 
     property string message: ''
 
-    EaElements.Label {
-        text: dialog.message
-        wrapMode: Text.WordWrap
-        width: EaStyle.Sizes.sideBarContentWidth * 1.5
+    Column {
+        spacing: EaStyle.Sizes.fontPixelSize
+
+        EaElements.Label {
+            text: dialog.message
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.sideBarContentWidth * 1.5
+        }
+
+        // Bounds are edited in the parameter table: filter it to the free
+        // parameters, where the missing bounds are highlighted.
+        EaElements.Button {
+            visible: dialog.title === qsTr('Invalid Parameter Bounds')
+            text: qsTr('Show free parameters')
+            onClicked: {
+                Globals.BackendWrapper.analysisShowFreeParameters()
+                dialog.close()
+            }
+        }
     }
 
     Connections {

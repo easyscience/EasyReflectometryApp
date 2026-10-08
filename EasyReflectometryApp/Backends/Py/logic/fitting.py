@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import TYPE_CHECKING
 from typing import List
 from typing import Optional
@@ -11,6 +12,7 @@ from easyscience.fitting.minimizers.utils import FitError
 
 if TYPE_CHECKING:
     import scipp as sc
+    from easyreflectometry.fitting import PreparedFit
 
     from .minimizers import Minimizers
 
@@ -44,6 +46,9 @@ class Fitting:
         self._sample_total_steps = 0
         self._sample_running_message = ''
         self._sample_has_update = False
+        # The run the worker executes, kept for its measured arrays at completion.
+        self._prepared: 'PreparedFit | None' = None
+        self._fit_notes: list[str] = []
 
     @property
     def status(self) -> str:
@@ -306,97 +311,88 @@ class Fitting:
         """
         return self._project_lib.build_constraints_factory()
 
-    def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> tuple:
-        """Prepare data for threaded fitting.
+    def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> 'PreparedFit | None':
+        """Prepare a fit of all experiments for a worker thread.
 
-        :param minimizers_logic: The minimizers logic instance to get the current method.
-        :return: Tuple of (fitter, x_data, y_data, weights, method) or (None, None, None, None, None) on error.
+        The library prepares the run from a snapshot of the project's fit
+        settings: minimizer, tolerance, budget, zero-variance objective and
+        method options, each dataset smeared with its own resolution. Its
+        warnings (masked points, a parameter starting on a bound, ...) are
+        logged and shown with the results.
+
+        :param minimizers_logic: The minimizers logic instance.
+        :return: The prepared run, or None when the fit cannot start (the reason is set).
         """
+        self._prepared = None
+        self._fit_notes = []
         try:
-            from easyreflectometry.fitting import MultiFitter
-
             experiments = self._ordered_experiments()
             if not experiments:
-                self._fit_error_message = 'No experiments to fit'
-                self._running = False
-                self._finished = True
-                self._show_results_dialog = True
-                return None, None, None, None, None
+                self._fail_before_start('No experiments to fit')
+                return None
 
             constraints_error = self.inequality_constraints_error(minimizers_logic)
             if constraints_error:
                 logger.warning('Fit refused: %s', constraints_error)
-                self._fit_error_message = constraints_error
-                self._running = False
-                self._finished = True
-                self._show_results_dialog = True
-                return None, None, None, None, None
+                self._fail_before_start(constraints_error)
+                return None
             constraints_warning = self.inequality_constraints_warning(minimizers_logic)
             if constraints_warning:
                 logger.warning(constraints_warning)
 
-            # One fit function per dataset. Polarized experiment contains
-            # one per measured spin channel. All are sharing a single model, so
-            # structural parameters stay common and the magnetic params are
-            # constrained by every channel at once.
-            multi_fitter = MultiFitter.for_experiments(experiments)
-
-            # Apply the user-selected minimizer to the new fitter
-            selected_minimizer = minimizers_logic.selected_minimizer_enum()
-            if selected_minimizer is not None:
-                multi_fitter.easy_science_multi_fitter.switch_minimizer(selected_minimizer)
-                logger.info(
-                    'Fitting: applied minimizer %s to MultiFitter (engine: %s, method: %s)',
-                    selected_minimizer.name,
-                    multi_fitter.easy_science_multi_fitter.minimizer.package,
-                    multi_fitter.easy_science_multi_fitter.minimizer._method,
-                )
-            if minimizers_logic.tolerance is not None:
-                multi_fitter.easy_science_multi_fitter.tolerance = minimizers_logic.tolerance
-            if minimizers_logic.max_iterations is not None:
-                multi_fitter.easy_science_multi_fitter.max_evaluations = minimizers_logic.max_iterations
-
-            # Prepare data arrays for all experiments, masking out zero-variance points
-            import numpy as np
-
-            x_data = []
-            y_data = []
-            weights = []
-            # `fit_datasets` is the simple, per-channel dataset list matching the
-            # fit functions; for unpolarized data it is just the experiments.
-            for idx, dataset in enumerate(multi_fitter.fit_datasets):
-                x_vals = np.asarray(dataset.x)
-                y_vals = np.asarray(dataset.y)
-                ye_vals = np.asarray(dataset.ye)
-
-                # Mask out points with zero variance (same as MultiFitter.fit in EasyReflectometryLib)
-                valid = ye_vals > 0
-                num_masked = int(np.sum(~valid))
-                if num_masked > 0:
-                    exp_name = dataset.name if hasattr(dataset, 'name') else f'index {idx}'
-                    logger.warning(
-                        'Masked %d data point(s) in experiment %s due to zero variance.',
-                        num_masked,
-                        exp_name,
-                    )
-
-                x_data.append(x_vals[valid])
-                y_data.append(y_vals[valid])
-                # ye contains variances (sigma²); weights = 1/sigma = 1/sqrt(variance)
-                weights.append(1.0 / np.sqrt(ye_vals[valid]))
-
-            # Method is optional in fit() - pass None to use minimizer's default
-            method = None
-
-            return multi_fitter.easy_science_multi_fitter, x_data, y_data, weights, method
-
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter('always')
+                prepared = self._project_lib.prepare_fit(experiments)
+            self._fit_notes = list(dict.fromkeys(str(warning.message) for warning in caught))
+            for note in self._fit_notes:
+                logger.warning(note)
+            logger.info('Fitting: prepared %s with objective %s', prepared.core_fitter.minimizer.name, prepared.objective)
+            self._prepared = prepared
+            return prepared
         except Exception as e:
-            self._fit_error_message = f'Error preparing fit: {e}'
-            self._running = False
-            self._finished = True
-            self._show_results_dialog = True
+            self._fail_before_start(f'Error preparing fit: {e}')
             logger.exception('Error preparing threaded fit')
-            return None, None, None, None, None
+            return None
+
+    def _fail_before_start(self, message: str) -> None:
+        self._fit_error_message = message
+        self._running = False
+        self._finished = True
+        self._show_results_dialog = True
+
+    def record_on_project(self, results: list) -> None:
+        """Hand a finished worker run's results and metrics to the project's fitter.
+
+        The worker executes a prepared run, so the project's fitter (which the
+        summary reads) never saw it; the metrics come from the same run's
+        measured arrays, so the classical ones are available too.
+        """
+        metrics = self._prepared.finalize(results) if self._prepared is not None else None
+        fitter = self._project_lib.fitter
+        if fitter is not None:
+            fitter.record_fit_results(results, metrics)
+
+    @property
+    def fit_notes(self) -> str:
+        """Warnings raised while preparing the last fit, one per paragraph."""
+        return '\n\n'.join(self._fit_notes)
+
+    @property
+    def fit_message(self) -> str:
+        """The minimizer's termination message for the last fit."""
+        return str(getattr(self._result, 'message', '') or '') if self._result is not None else ''
+
+    @property
+    def fit_evaluations(self) -> int:
+        value = getattr(self._result, 'n_evaluations', None) if self._result is not None else None
+        return int(value) if isinstance(value, (int, float)) else 0
+
+    @property
+    def fit_classical_reduced_chi2(self) -> float | None:
+        """Reduced chi2 over the measured points with positive variance, when available."""
+        fitter = self._project_lib.fitter
+        value = getattr(fitter, 'classical_reduced_chi', None) if fitter is not None else None
+        return float(value) if isinstance(value, (int, float)) else None
 
     # ------------------------------------------------------------------
     # Bayesian sampling helpers
@@ -474,11 +470,9 @@ class Fitting:
 
             models = [experiment.model for experiment in experiments]
             multi_fitter = MultiFitter(*models)
-
-            # Ensure underlying engine is BUMPS for the sample() call
-            selected = minimizers_logic.selected_minimizer_enum()
-            if selected is not None:
-                multi_fitter.easy_science_multi_fitter.switch_minimizer(selected)
+            # Sampled with a snapshot of the project's settings (a BUMPS minimizer
+            # in sampling mode, and the zero-variance objective).
+            multi_fitter.settings = self._project_lib.fit_settings
 
             data_group = self.collect_all_experiments_datagroup()
             return multi_fitter, data_group

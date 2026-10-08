@@ -50,6 +50,9 @@ class Analysis(QObject):
     posteriorPredictiveCleared = Signal()
 
     externalMinimizerChanged = Signal()
+    # Tolerance, budget, objective or a method option edited by the user; all
+    # are saved with the project.
+    externalFitSettingsChanged = Signal()
     externalParametersChanged = Signal()
     externalCalculatorChanged = Signal()
     externalFittingChanged = Signal()
@@ -169,6 +172,10 @@ class Analysis(QObject):
             'success': self._fitting_logic.fit_success,
             'nvarys': self._fitting_logic.fit_n_pars,
             'chi2': self._fitting_logic.fit_chi2,
+            'classicalChi2': self._fitting_logic.fit_classical_reduced_chi2,
+            'evaluations': self._fitting_logic.fit_evaluations,
+            'message': self._fitting_logic.fit_message,
+            'notes': self._fitting_logic.fit_notes,
         }
 
     # ------------------------------------------------------------------
@@ -461,10 +468,10 @@ class Analysis(QObject):
 
         # TODO: Thread-safety: prevent model/parameter edits during fitting or snapshot state before starting the worker.
 
-        # Prepare fit data for all experiments
-        fitter, x_data, y_data, weights, method = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
+        # Prepare the run over all experiments, from a snapshot of the fit settings
+        prepared = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
 
-        if fitter is None:
+        if prepared is None:
             # Error already set in fitting logic
             self.fittingChanged.emit()
             if self._fitting_logic.fit_error_message:
@@ -473,13 +480,11 @@ class Analysis(QObject):
 
         # Create and configure worker. The inequality constraints are snapshotted
         # here so edits made while the fit runs cannot change what it enforces.
-        fit_kwargs = {'weights': weights, 'method': method}
-        fit_kwargs.update(self._constraints_kwargs())
         self._fitter_thread = FitterWorker(
-            fitter=fitter,
+            fitter=prepared.core_fitter,
             method_name='fit',
-            args=(x_data, y_data),
-            kwargs=fit_kwargs,
+            args=(prepared.x, prepared.y),
+            kwargs={'weights': prepared.weights, **prepared.call_kwargs(**self._constraints_kwargs())},
             parent=self,
         )
         self._fitter_thread.finished.connect(self._on_fit_finished)
@@ -530,14 +535,10 @@ class Analysis(QObject):
             return
         self._fitting_logic.on_fit_finished(results)
         self._project_lib._last_fit_results = self._fitting_logic.last_fit_results
-        # The threaded fit runs on a throwaway fitter's easy_science_multi_fitter,
-        # so the project's canonical MultiFitter never learns the results. Record
-        # them explicitly so the HTML summary's goodness-of-fit (project.fitter
-        # .reduced_chi) reflects the fit instead of showing 'N/A'.
+        # The worker executed a prepared run, so the project's fitter (which the
+        # HTML summary reads) never saw it: hand it the results and metrics.
         try:
-            fitter = self._project_lib.fitter
-            if fitter is not None:
-                fitter.record_fit_results(self._fitting_logic.last_fit_results)
+            self._fitting_logic.record_on_project(self._fitting_logic.last_fit_results)
         except Exception:
             logger.exception('Failed to record fit results on project fitter')
         self._fitter_thread = None
@@ -1020,15 +1021,16 @@ class Analysis(QObject):
                     f'min ({param["min"]}) must be less than max ({param["max"]}).'
                 )
 
-        # 2. differential evolution needs finite bounds on all parameters
-        if 'differential_evolution' in self.minimizersAvailable[self.minimizerCurrentIndex]:
+        # 2. some minimizers (differential evolution) need finite bounds on all parameters
+        if self._minimizers_logic.requires_finite_bounds():
             bad_params = [
                 param['name'] for param in fit_params if param['min'] == float('-inf') or param['max'] == float('inf')
             ]
             if bad_params:
                 joined = '\n' + ',\n'.join(bad_params) + '\n'
                 errors.append(
-                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.'
+                    f'Parameters {joined} have infinite bounds, which '
+                    f'{self._minimizers_logic.selected_minimizer_enum().name} does not allow.'
                 )
 
         return errors
@@ -1223,21 +1225,103 @@ class Analysis(QObject):
 
     @Property('QVariant', notify=minimizerChanged)
     def minimizerTolerance(self) -> Optional[float]:
+        """The tolerance, or None (QML: undefined) for the engine default."""
         return self._minimizers_logic.tolerance
 
     @Property('QVariant', notify=minimizerChanged)
     def minimizerMaxIterations(self) -> Optional[int]:
+        """The budget, or None (QML: undefined) for the engine default."""
         return self._minimizers_logic.max_iterations
+
+    def _apply_fit_setting(self, setter, *args) -> None:
+        """Apply a fit-settings edit; an invalid one is reported and the field reverts."""
+        try:
+            changed = setter(*args)
+        except ValueError as error:
+            logger.warning('Rejected fit setting: %s', error)
+            self.prefitCheckFailed.emit('Invalid Minimizer Setting', str(error))
+            changed = False
+        # Always re-read: a rejected or unchanged edit must show the stored value again.
+        self.minimizerChanged.emit()
+        if changed:
+            self.externalFitSettingsChanged.emit()
 
     @Slot(float)
     def setMinimizerTolerance(self, new_value: float) -> None:
-        if self._minimizers_logic.set_tolerance(new_value):
-            self.minimizerChanged.emit()
+        self._apply_fit_setting(self._minimizers_logic.set_tolerance, new_value)
 
-    @Slot(int)
-    def setMinimizerMaxIterations(self, new_value: int) -> None:
-        if self._minimizers_logic.set_max_iterations(new_value):
-            self.minimizerChanged.emit()
+    @Slot()
+    def resetMinimizerTolerance(self) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_tolerance, None)
+
+    @Slot(float)
+    def setMinimizerMaxIterations(self, new_value: float) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_max_iterations, new_value)
+
+    @Slot()
+    def resetMinimizerMaxIterations(self) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_max_iterations, None)
+
+    @Property('QVariantList', notify=minimizerChanged)
+    def fitObjectives(self) -> List[str]:
+        return self._minimizers_logic.objectives
+
+    @Property(str, notify=minimizerChanged)
+    def fitObjective(self) -> str:
+        return self._minimizers_logic.objective
+
+    @Slot(str)
+    def setFitObjective(self, new_value: str) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_objective, new_value)
+
+    @Property('QVariantList', notify=minimizerChanged)
+    def minimizerOptions(self) -> list:
+        """Method-specific options of the selected minimizer, for a generic editor."""
+        return self._minimizers_logic.options()
+
+    @Slot(str, str)
+    def setMinimizerOption(self, name: str, text: str) -> None:
+        """Set an option from its text; empty text clears it (engine default)."""
+        self._apply_fit_setting(self._set_option_from_text, name, text)
+
+    def _set_option_from_text(self, name: str, text: str) -> bool:
+        kind = next((option['kind'] for option in self._minimizers_logic.options() if option['name'] == name), None)
+        text = text.strip()
+        if text == '':
+            value = None
+        elif kind in ('int', 'float'):
+            try:
+                value = int(text) if kind == 'int' else float(text)
+            except ValueError:
+                raise ValueError(f'{name} must be a number, got {text!r}.') from None
+        else:
+            value = text
+        return self._minimizers_logic.set_option(name, value)
+
+    @Property(bool, notify=minimizerChanged)
+    def minimizerRequiresFiniteBounds(self) -> bool:
+        return self._minimizers_logic.requires_finite_bounds()
+
+    @Property(int, notify=parametersChanged)
+    def unboundedFreeParametersCount(self) -> int:
+        """Free parameters lacking a finite min or max (relevant when the minimizer needs them)."""
+        return sum(
+            1
+            for param in self.fitableParameters
+            if param['fit'] and (param['min'] == float('-inf') or param['max'] == float('inf'))
+        )
+
+    @Slot()
+    def showFreeParameters(self) -> None:
+        """Show only the free parameters, e.g. to correct the bounds a fit was refused for."""
+        self._parameters_logic.set_name_filter_criteria('')
+        self._parameters_logic.set_variability_filter_criteria('free')
+        self._clearCacheAndEmitParametersChanged()
+
+    @Slot()
+    def onProjectLoaded(self) -> None:
+        """A loaded or reset project brings its own fit settings: re-read every bound control."""
+        self.minimizerChanged.emit()
 
     #############
     ## Parameters
