@@ -73,6 +73,36 @@ EaElements.Dialog {
             text: "Reduced Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
         }
 
+        // Over the measured points only, when the zero-variance handling makes it differ.
+        EaElements.Label {
+            readonly property var classical: Globals.BackendWrapper.analysisFitResults.classicalChi2
+            visible: !Globals.BackendWrapper.bayesianResultAvailable && Globals.BackendWrapper.analysisFitSuccess &&
+                     classical !== undefined && classical !== null &&
+                     Math.abs(classical - Globals.BackendWrapper.analysisFitChi2) > 1e-6 * Math.abs(classical)
+            text: "Classical reduced Chi2: " + Number(classical).toFixed(4)
+        }
+
+        EaElements.Label {
+            visible: !Globals.BackendWrapper.bayesianResultAvailable && Globals.BackendWrapper.analysisFitResults.evaluations > 0
+            text: "Function evaluations: " + Globals.BackendWrapper.analysisFitResults.evaluations
+        }
+
+        // The minimizer's own termination message, e.g. a budget that ran out.
+        EaElements.Label {
+            visible: !Globals.BackendWrapper.bayesianResultAvailable && (Globals.BackendWrapper.analysisFitResults.message ?? '') !== ''
+            text: "Minimizer: " + Globals.BackendWrapper.analysisFitResults.message
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.sideBarContentWidth
+        }
+
+        // Warnings raised while preparing the fit (masked points, a parameter on a bound, ...).
+        EaElements.Label {
+            visible: !Globals.BackendWrapper.bayesianResultAvailable && (Globals.BackendWrapper.analysisFitResults.notes ?? '') !== ''
+            text: "Notes: " + Globals.BackendWrapper.analysisFitResults.notes
+            wrapMode: Text.WordWrap
+            width: EaStyle.Sizes.sideBarContentWidth
+        }
+
         EaElements.Label {
             visible: !Globals.BackendWrapper.bayesianResultAvailable && !Globals.BackendWrapper.analysisFitSuccess && Globals.BackendWrapper.analysisFitErrorMessage !== ""
             text: "Error: " + Globals.BackendWrapper.analysisFitErrorMessage

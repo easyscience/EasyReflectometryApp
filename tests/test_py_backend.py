@@ -85,6 +85,7 @@ class StubExperiment(QObject):
 class StubAnalysis(QObject):
     calculatorChanged = Signal()
     externalMinimizerChanged = Signal()
+    externalFitSettingsChanged = Signal()
     externalCalculatorChanged = Signal()
     externalParametersChanged = Signal()
     externalFittingChanged = Signal()
@@ -117,6 +118,9 @@ class StubAnalysis(QObject):
 
     def clearBayesianResults(self):
         self.bayesian_clear_calls += 1
+
+    def onProjectLoaded(self):
+        self.project_loaded_calls = getattr(self, 'project_loaded_calls', 0) + 1
 
     @property
     def experimentsSelectedCount(self):
@@ -338,6 +342,16 @@ def test_backend_project_lifecycle_clears_bayesian_results(monkeypatch, qcore_ap
     backend._project.externalProjectReset.emit()
 
     assert backend._analysis.bayesian_clear_calls == 3
+
+
+def test_backend_load_and_reset_refresh_the_minimizer_controls(monkeypatch, qcore_application):
+    # A loaded or reset project brings its own minimizer and fit settings.
+    backend = _make_backend(monkeypatch)
+
+    backend._project.externalProjectLoaded.emit()
+    backend._project.externalProjectReset.emit()
+
+    assert backend._analysis.project_loaded_calls == 2
 
 
 def test_backend_fit_finished_refreshes_summary(monkeypatch, qcore_application):

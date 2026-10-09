@@ -21,6 +21,7 @@ class StubProjectLogic:
         self.reset_calls = 0
         self.added_samples = []
         self.replaced_samples = []
+        self.load_report = []
         # Stands in for the model/experiment content the real fingerprint covers.
         self.content_version = 0
 

@@ -30,6 +30,8 @@ class Project(QObject):
     externalNameChanged = Signal()
     externalProjectLoaded = Signal()
     externalProjectReset = Signal()
+    # Emitted after a successful load with what could not be restored as saved.
+    projectLoadWarning = Signal(str)
     sampleLoadWarning = Signal(str)
     projectLoadError = Signal(str)
     projectSaved = Signal(str)
@@ -299,6 +301,8 @@ class Project(QObject):
             self.locationChanged.emit()
             self.externalProjectLoaded.emit()
         self._clear_dirty()
+        if self._logic.load_report:
+            self.projectLoadWarning.emit('\n\n'.join(self._logic.load_report))
 
     @Slot()
     def save(self) -> None:

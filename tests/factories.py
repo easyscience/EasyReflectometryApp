@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
+from easyreflectometry.fit_settings import FitSettings
+
 
 class ValueHolder:
     def __init__(self, value):
@@ -373,6 +375,8 @@ class FakeProject:
         ]
         self.models_have_magnetism = False
         self.minimizer = FakeMinimizerValue(minimizer_name)
+        self.fit_settings = FitSettings()
+        self.load_report = []
         self._fitter = None
         self.fitter = None
         self._info = {'name': 'Demo Project', 'short_description': 'Demo Description', 'modified': '2026-03-19'}

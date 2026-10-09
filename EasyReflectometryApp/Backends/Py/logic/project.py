@@ -7,6 +7,8 @@ from typing import Callable
 import numpy as np
 from easyreflectometry import Project as ProjectLib
 
+from .minimizers import apply_app_defaults
+
 
 class Project:
     def __init__(self, project_lib: ProjectLib):
@@ -19,6 +21,7 @@ class Project:
         # it, so such state can be rebuilt from the new project.
         self._post_load_hooks: list[Callable[[], None]] = []
         self._project_lib.default_model()
+        apply_app_defaults(self._project_lib)
         self._update_enablement_of_fixed_layers_for_model(0)
 
     @property
@@ -282,4 +285,11 @@ class Project:
     def reset(self) -> None:
         self._project_lib.reset()
         self._project_lib.default_model()
+        # A loaded project keeps its own minimizer; only a new one gets the app's.
+        apply_app_defaults(self._project_lib)
         self._run_post_load_hooks()
+
+    @property
+    def load_report(self) -> list[str]:
+        """Warnings about the last loaded project file, e.g. an unavailable minimizer."""
+        return list(self._project_lib.load_report)

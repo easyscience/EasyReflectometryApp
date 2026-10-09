@@ -44,7 +44,8 @@ DIRTYING_SIGNALS = {
         'externalCalculatorChanged',
         'externalExperimentChanged',
         'externalFittingChanged',  # a finished fit rewrites parameter values
-        'externalMinimizerChanged',  # stored as 'fitter_minimizer' in the project file
+        'externalMinimizerChanged',  # stored in 'fit_settings' in the project file
+        'externalFitSettingsChanged',  # tolerance, budget, objective, options: also 'fit_settings'
         'externalParametersChanged',
         'parametersChanged',
     ),
@@ -288,6 +289,9 @@ class PyBackend(QObject):
         self._project.externalCreatedChanged.connect(self._analysis.clearBayesianResults)
         self._project.externalProjectLoaded.connect(self._analysis.clearBayesianResults)
         self._project.externalProjectReset.connect(self._analysis.clearBayesianResults)
+        # A loaded or reset project brings its own minimizer and fit settings.
+        self._project.externalProjectLoaded.connect(self._analysis.onProjectLoaded)
+        self._project.externalProjectReset.connect(self._analysis.onProjectLoaded)
 
     def _connect_sample_page(self) -> None:
         # Removing a model also removes its experiment. Connected first, so that every

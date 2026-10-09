@@ -225,14 +225,13 @@ class TestPolarizedFitting:
         project = self._polarized_project(tmp_path)
         logic = FittingLogic(project)
 
-        fitter, x_data, y_data, weights, method = logic.prepare_threaded_fit(_StubMinimizers())
+        prepared = logic.prepare_threaded_fit(_StubMinimizers())
 
         assert logic.fit_error_message == ''
         # One dataset per measured channel, not one per experiment.
-        assert len(x_data) == 2
-        assert len(y_data) == 2
-        assert len(weights) == 2
-        assert method is None
+        assert len(prepared.x) == 2
+        assert len(prepared.y) == 2
+        assert len(prepared.weights) == 2
 
     def test_mixed_polarized_and_ordinary_experiments(self, tmp_path):
         project = self._polarized_project(tmp_path)
@@ -240,10 +239,10 @@ class TestPolarizedFitting:
         project.load_new_experiment(plain)
         logic = FittingLogic(project)
 
-        _fitter, x_data, _y, _w, _m = logic.prepare_threaded_fit(_StubMinimizers())
+        prepared = logic.prepare_threaded_fit(_StubMinimizers())
 
         # Two channels of the polarized experiment plus the ordinary one.
-        assert len(x_data) == 3
+        assert len(prepared.x) == 3
 
     def test_simultaneous_channel_fit_recovers_the_magnetic_sld(self):
         """The whole chain: magnetism from the Sample page, fit from the Analysis page."""
@@ -287,8 +286,8 @@ class TestPolarizedFitting:
         }
 
         logic = FittingLogic(project)
-        fitter, x_data, y_data, weights, _method = logic.prepare_threaded_fit(_StubMinimizers())
-        results = fitter.fit(x_data, y_data, weights=weights)
+        prepared = logic.prepare_threaded_fit(_StubMinimizers())
+        results = prepared.execute()
 
         assert all(result.success for result in results)
         assert magnetism.rho_m.value == pytest.approx(5.0, abs=0.05)
