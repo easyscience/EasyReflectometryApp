@@ -115,6 +115,48 @@ def test_options_of_the_selected_minimizer():
     assert project.fit_settings.engine_options == {}
 
 
+@pytest.mark.parametrize('tolerance_first', [True, False])
+def test_an_option_conflicting_with_another_field_is_refused_in_either_order(tolerance_first):
+    # DFO-LS: rhobeg must exceed the tolerance, whichever is edited last
+    project = _project(FitSettings(minimizer=AvailableMinimizers.DFO_leastsq))
+    logic = minimizers_module.Minimizers(project)
+    if tolerance_first:
+        assert logic.set_tolerance(0.1) is True
+        with pytest.raises(ValueError, match='rhobeg'):
+            logic.set_option('rhobeg', 0.01)
+        assert project.fit_settings.engine_options == {}
+    else:
+        assert logic.set_option('rhobeg', 0.01) is True
+        with pytest.raises(ValueError, match='rhobeg'):
+            logic.set_tolerance(0.1)
+        assert project.fit_settings.tolerance is None
+    project.fit_settings.validate()
+
+
+def test_a_refused_option_keeps_the_previous_value():
+    project = _project(FitSettings(minimizer=AvailableMinimizers.DFO_leastsq, tolerance=0.01))
+    logic = minimizers_module.Minimizers(project)
+    assert logic.set_option('rhobeg', 0.5) is True
+
+    with pytest.raises(ValueError):
+        logic.set_option('rhobeg', 0.001)
+
+    assert project.fit_settings.engine_options == {'DFO_leastsq': {'rhobeg': 0.5}}
+
+
+def test_a_switch_is_allowed_but_reports_settings_that_do_not_suit_the_new_minimizer():
+    project = _project(FitSettings(minimizer=AvailableMinimizers.LMFit_leastsq))
+    logic = minimizers_module.Minimizers(project)
+    assert logic.set_tolerance(0.5) is True  # fine for LMFit
+    assert logic.settings_error() is None
+
+    assert logic.set_minimizer_current_index(_index(logic, 'DFO_leastsq')) is True
+
+    assert project.fit_settings.minimizer is AvailableMinimizers.DFO_leastsq
+    assert project.fit_settings.tolerance == 0.5
+    assert '0.1' in logic.settings_error()
+
+
 def test_app_defaults_give_a_new_project_bumps():
     project = _project(FitSettings(minimizer=AvailableMinimizers.LMFit_leastsq, mode='sample'))
 

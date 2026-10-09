@@ -32,9 +32,10 @@ EaElements.Dialog {
         }
 
         // Bounds are edited in the parameter table: filter it to the free
-        // parameters, where the missing bounds are highlighted.
+        // parameters, where the missing bounds are highlighted. Compared with the
+        // backend's untranslated title, so a translation cannot hide the button.
         EaElements.Button {
-            visible: dialog.title === qsTr('Invalid Parameter Bounds')
+            visible: dialog.title === 'Invalid Parameter Bounds'
             text: qsTr('Show free parameters')
             onClicked: {
                 Globals.BackendWrapper.analysisShowFreeParameters()

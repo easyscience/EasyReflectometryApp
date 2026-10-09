@@ -7,6 +7,7 @@ from PySide6.QtCore import Signal
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
 from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
+from EasyReflectometryApp.Backends.Py.logic.parameters import Parameters as ParametersLogic
 from tests.factories import make_project
 
 
@@ -205,13 +206,14 @@ def test_fitting_start_stop_emits_stop_signal_when_fit_is_running(monkeypatch, q
     assert received['count'] == 1
 
 
-def _param(name, min_value, max_value, fit=True):
-    return {'name': name, 'min': min_value, 'max': max_value, 'fit': fit}
+def _param(name, min_value, max_value, fit=True, obj=None):
+    return {'name': name, 'min': min_value, 'max': max_value, 'fit': fit, 'object': obj or object()}
 
 
 def _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_leastsq'):
     analysis = _make_analysis(monkeypatch)
-    analysis._chached_parameters = parameters
+    # The checks read every parameter, not the table's filtered rows
+    analysis._parameters_logic.all_parameters = lambda: parameters
     analysis._minimizers_logic.minimizers_available = lambda: [minimizer]
     analysis._minimizers_logic.minimizer_current_index = lambda: 0
     # The engine decides, not the combo label (see logic/minimizers.py)
@@ -250,6 +252,33 @@ def test_prefit_errors_allows_infinite_bounds_for_other_minimizers(monkeypatch, 
     analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', float('-inf'), float('inf'))])
 
     assert analysis._prefit_errors() == []
+
+
+def test_finite_bounds_checks_ignore_the_table_filters(monkeypatch, qcore_application):
+    shared = object()
+    parameters = [
+        _param('a', 0.0, float('inf')),
+        # One object listed once per model (a shared layer): one parameter
+        _param('M1 b', float('-inf'), 1.0, obj=shared),
+        _param('M2 b', float('-inf'), 1.0, obj=shared),
+        _param('fixed', float('-inf'), float('inf'), fit=False),
+    ]
+    analysis = _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_differential_evolution')
+    # The real table filters, over the parameters above
+    table = ParametersLogic(analysis._project_lib)
+    table.all_parameters = lambda: parameters
+    analysis._parameters_logic = table
+
+    for name_filter, variability, rows in (('', 'all', 4), ('', 'fixed', 1), ('zzz', 'free', 0)):
+        table.set_name_filter_criteria(name_filter)
+        table.set_variability_filter_criteria(variability)
+        analysis._chached_parameters = None
+        assert len(analysis.fitableParameters) == rows
+
+        assert analysis.unboundedFreeParametersCount == 2
+        errors = analysis._prefit_errors()
+        assert len(errors) == 1
+        assert '\na,\nM1 b\n' in errors[0]
 
 
 def test_fitting_start_stop_emits_prefit_check_failed_and_does_not_start(monkeypatch, qcore_application):

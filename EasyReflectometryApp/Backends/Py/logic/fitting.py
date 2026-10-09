@@ -1,3 +1,4 @@
+import copy
 import logging
 import warnings
 from typing import TYPE_CHECKING
@@ -453,34 +454,27 @@ class Fitting:
 
             experiments = self._ordered_experiments()
             if not experiments:
-                self._fit_error_message = 'No experiments to sample'
-                self._running = False
-                self._finished = True
-                self._show_results_dialog = True
+                self._fail_before_start('No experiments to sample')
                 return None, None
 
             constraints_error = self.inequality_constraints_error(minimizers_logic)
             if constraints_error:
                 logger.warning('Sampling refused: %s', constraints_error)
-                self._fit_error_message = constraints_error
-                self._running = False
-                self._finished = True
-                self._show_results_dialog = True
+                self._fail_before_start(constraints_error)
                 return None, None
 
             models = [experiment.model for experiment in experiments]
             multi_fitter = MultiFitter(*models)
             # Sampled with a snapshot of the project's settings (a BUMPS minimizer
-            # in sampling mode, and the zero-variance objective).
-            multi_fitter.settings = self._project_lib.fit_settings
+            # in sampling mode, and the zero-variance objective), taken here: the
+            # library snapshots them only once the worker runs, and the minimizer
+            # controls stay editable meanwhile.
+            multi_fitter.settings = copy.deepcopy(self._project_lib.fit_settings)
 
             data_group = self.collect_all_experiments_datagroup()
             return multi_fitter, data_group
         except Exception as e:
-            self._fit_error_message = f'Error preparing sampling: {e}'
-            self._running = False
-            self._finished = True
-            self._show_results_dialog = True
+            self._fail_before_start(f'Error preparing sampling: {e}')
             logger.exception('Error preparing threaded sample')
             return None, None
 

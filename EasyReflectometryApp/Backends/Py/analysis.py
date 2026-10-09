@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from pathlib import Path
 from typing import List
@@ -22,6 +23,11 @@ from .logic.parameters import Parameters as ParametersLogic
 from .workers import FitterWorker
 
 logger = logging.getLogger(__name__)
+
+
+def _lacks_finite_bounds(param: dict) -> bool:
+    """The library's rule for minimizers that need bounds (differential evolution)."""
+    return not (math.isfinite(param['min']) and math.isfinite(param['max']))
 
 
 class Analysis(QObject):
@@ -1011,7 +1017,7 @@ class Analysis(QObject):
         Returns one message per problem found; an empty list means the fit can start.
         """
         errors = []
-        fit_params = [param for param in self.fitableParameters if param['fit']]
+        fit_params = self._free_parameters()
 
         # 1. wrong bounds on parameters
         for param in fit_params:
@@ -1023,9 +1029,7 @@ class Analysis(QObject):
 
         # 2. some minimizers (differential evolution) need finite bounds on all parameters
         if self._minimizers_logic.requires_finite_bounds():
-            bad_params = [
-                param['name'] for param in fit_params if param['min'] == float('-inf') or param['max'] == float('inf')
-            ]
+            bad_params = [param['name'] for param in fit_params if _lacks_finite_bounds(param)]
             if bad_params:
                 joined = '\n' + ',\n'.join(bad_params) + '\n'
                 errors.append(
@@ -1034,6 +1038,19 @@ class Analysis(QObject):
                 )
 
         return errors
+
+    def _free_parameters(self) -> List[dict]:
+        """The parameters a fit varies, each once.
+
+        Read from the unfiltered list: the table's name and free/fixed filters
+        must not change what the fit-wide checks see. A parameter shared by
+        several models is listed once per model, hence the identity check.
+        """
+        unique = {}
+        for param in self._parameters_logic.all_parameters():
+            if param['fit'] and param.get('enabled', True):
+                unique.setdefault(id(param['object']), param)
+        return list(unique.values())
 
     ########################
     ## Calculators
@@ -1222,6 +1239,16 @@ class Analysis(QObject):
         if self._minimizers_logic.set_minimizer_current_index(new_value):
             self.minimizerChanged.emit()
             self.externalMinimizerChanged.emit()
+            # The switch stands; a setting that does not suit the new minimizer is
+            # reported now rather than when the fit is refused.
+            error = self._minimizers_logic.settings_error()
+            if error:
+                logger.warning('Minimizer settings invalid after switch: %s', error)
+                self.prefitCheckFailed.emit(
+                    'Invalid Minimizer Setting',
+                    f'{self._minimizers_logic.selected_minimizer_enum().name} is selected, but its settings '
+                    f'are not valid for it:\n\n{error}\n\nCorrect them before fitting.',
+                )
 
     @Property('QVariant', notify=minimizerChanged)
     def minimizerTolerance(self) -> Optional[float]:
@@ -1305,11 +1332,7 @@ class Analysis(QObject):
     @Property(int, notify=parametersChanged)
     def unboundedFreeParametersCount(self) -> int:
         """Free parameters lacking a finite min or max (relevant when the minimizer needs them)."""
-        return sum(
-            1
-            for param in self.fitableParameters
-            if param['fit'] and (param['min'] == float('-inf') or param['max'] == float('inf'))
-        )
+        return sum(1 for param in self._free_parameters() if _lacks_finite_bounds(param))
 
     @Slot()
     def showFreeParameters(self) -> None:

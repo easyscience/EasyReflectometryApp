@@ -1,3 +1,4 @@
+import copy
 from typing import Any
 
 from easyreflectometry import Project as ProjectLib
@@ -94,6 +95,19 @@ class Minimizers:
             self._settings.mode = 'minimize'
         return True
 
+    def settings_error(self) -> str | None:
+        """Why the settings would refuse a fit, or None.
+
+        A switch is never refused, but the tolerance it keeps, or the options
+        stored for the new minimizer, may not suit it (DFO-LS caps the
+        tolerance at 0.1 and needs ``rhobeg`` above it).
+        """
+        try:
+            self._settings.validate()
+        except ValueError as error:
+            return str(error)
+        return None
+
     # Generic settings: None means "engine default".
 
     @property
@@ -140,7 +154,7 @@ class Minimizers:
     # Method-specific options of the selected minimizer.
 
     def options(self) -> list[dict]:
-        """One entry per option the selected minimizer declares; empty on an older easyscience."""
+        """One entry per option the selected minimizer declares (none when sampling)."""
         if self.is_bayesian_selected():
             return []
         values = self._settings.active_options()
@@ -157,8 +171,19 @@ class Minimizers:
         ]
 
     def set_option(self, name: str, value: Any) -> bool:
-        """Set (None: clear) an option. Raises ValueError, changing nothing, if it is invalid."""
+        """Set (None: clear) an option. Raises ValueError, changing nothing, if it is invalid.
+
+        Validated with the whole settings, as :meth:`_set` does: an option can
+        conflict with another field (DFO-LS ``rhobeg`` must exceed the
+        tolerance), and ``FitSettings.set_option`` checks the option alone.
+        """
         if self._settings.active_options().get(name) == value:
             return False
+        old_options = copy.deepcopy(self._settings.engine_options)
         self._settings.set_option(name, value)
+        try:
+            self._settings.validate()
+        except ValueError:
+            self._settings.engine_options = old_options
+            raise
         return True

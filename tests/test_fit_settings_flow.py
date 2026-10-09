@@ -140,3 +140,26 @@ def test_differential_evolution_needs_finite_bounds_of_free_parameters(tmp_path,
     assert analysis.minimizerRequiresFiniteBounds is True
     assert analysis.unboundedFreeParametersCount >= 1
     assert any('does not allow' in error for error in analysis._prefit_errors())
+
+
+def test_switching_to_a_minimizer_the_settings_do_not_suit_warns_at_once(tmp_path, qcore_application):
+    project = _project_with_experiment(tmp_path)
+    analysis = Analysis(project)
+    refused = []
+    analysis.prefitCheckFailed.connect(lambda title, message: refused.append((title, message)))
+    analysis.setMinimizerCurrentIndex(_index(analysis._minimizers_logic, 'LMFit_leastsq'))
+    analysis.setMinimizerTolerance(0.5)
+    assert refused == []
+
+    analysis.setMinimizerCurrentIndex(_index(analysis._minimizers_logic, 'DFO_leastsq'))
+
+    # Allowed (the selection shows DFO-LS), and reported straight away
+    assert analysis.minimizerCurrentIndex == _index(analysis._minimizers_logic, 'DFO_leastsq')
+    assert len(refused) == 1
+    assert refused[0][0] == 'Invalid Minimizer Setting'
+    assert 'DFO_leastsq' in refused[0][1] and '0.1 or smaller' in refused[0][1]
+
+    # Once corrected, further switches are quiet
+    analysis.setMinimizerTolerance(0.01)
+    analysis.setMinimizerCurrentIndex(_index(analysis._minimizers_logic, 'Bumps_simplex'))
+    assert len(refused) == 1
