@@ -3,6 +3,8 @@ from types import ModuleType
 from types import SimpleNamespace
 
 import numpy as np
+from easyreflectometry.fit_settings import FitSettings
+from easyscience import AvailableMinimizers
 
 from EasyReflectometryApp.Backends.Py.logic import fitting as fitting_module
 from tests.factories import make_experiment
@@ -78,14 +80,15 @@ def test_prepare_threaded_fit_handles_empty_experiments():
 
     result = logic.prepare_threaded_fit(StubMinimizersLogic())
 
-    assert result == (None, None, None, None, None)
+    assert result is None
     assert logic.fit_error_message == 'No experiments to fit'
     assert logic.fit_finished is True
     assert logic.show_results_dialog is True
 
 
-def test_prepare_threaded_fit_builds_masked_arrays_and_configures_minimizer(monkeypatch):
-    install_fake_multifitter(monkeypatch)
+def test_prepare_threaded_fit_asks_the_project_for_a_run_and_keeps_its_warnings():
+    import warnings
+
     model_a = make_model(name='A')
     model_b = make_model(name='B')
     experiments = {
@@ -93,40 +96,39 @@ def test_prepare_threaded_fit_builds_masked_arrays_and_configures_minimizer(monk
         2: make_experiment('Exp A', model=model_a, x=np.array([1.0, 2.0, 3.0]), y=np.array([4.0, 5.0, 6.0]), ye=np.array([1.0, 0.0, 4.0])),
     }
     project = make_project(experiments=experiments)
+    prepared = SimpleNamespace(core_fitter=SimpleNamespace(minimizer=SimpleNamespace(name='Bumps_simplex')), objective='hybrid')
+    seen = {}
+
+    def prepare_fit():
+        seen['asked'] = True
+        warnings.warn('Applied Mighell substitution to 1 zero-variance point(s) in Exp A during fitting.', UserWarning)
+        return prepared
+
+    project.prepare_fit = prepare_fit
+    experiments[5].include_in_fit = False
     logic = fitting_module.Fitting(project)
-    selected = SimpleNamespace(name='DREAM')
 
-    fitter, x_data, y_data, weights, method = logic.prepare_threaded_fit(StubMinimizersLogic(selected, 1e-4, 321))
-
-    assert fitter.switched_to is selected
-    assert fitter.tolerance == 1e-4
-    assert fitter.max_evaluations == 321
-    assert [values.tolist() for values in x_data] == [[1.0, 3.0], [5.0, 6.0]]
-    assert [values.tolist() for values in y_data] == [[4.0, 6.0], [7.0, 8.0]]
-    assert [values.tolist() for values in weights] == [[1.0, 0.5], [1 / 3, 0.25]]
-    assert method is None
+    # The library decides the scope (the included experiments) and does the zero-variance handling
+    assert logic.prepare_threaded_fit(StubMinimizersLogic()) is prepared
+    assert seen['asked']
+    assert 'Mighell substitution' in logic.fit_notes
+    assert 'Not included in this fit: Exp B.' in logic.fit_notes
 
 
-def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monkeypatch):
+def test_on_fit_finished_keeps_the_results_for_success_and_message():
     project = make_project()
     logic = fitting_module.Fitting(project)
-    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 2)
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_finished([
         make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi2=1.1),
         make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi2=1.2),
     ])
-
     assert logic.fit_finished is True
     assert logic.fit_success is True
-    assert logic.fit_n_pars == 2
-    assert logic.fit_chi2 == 2.0
 
     logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi2=4.5))
     assert logic.fit_success is False
-    assert logic.fit_n_pars == 1
-    assert logic.fit_chi2 == 4.5
 
 
 def test_last_fit_results_reflects_stored_results():
@@ -146,60 +148,37 @@ def test_last_fit_results_reflects_stored_results():
     assert len(logic.last_fit_results) == 1
 
 
-def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_results(monkeypatch):
+def test_statistics_are_read_from_the_projects_run_record():
     project = make_project()
     logic = fitting_module.Fitting(project)
-    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 3)
+    assert (logic.fit_n_pars, logic.fit_chi2, logic.fit_classical_reduced_chi2, logic.fit_dataset_rows) == (0, 0.0, None, [])
 
-    logic.prepare_for_threaded_fit()
-    logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=3, x=[1, 2, 3], reduced_chi2=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=3, x=[1, 2, 3, 4], reduced_chi2=1.2),
-    ])
+    project.last_fit = SimpleNamespace(
+        n_free_parameters=2,
+        pooled={'objective_reduced_chi2': 2.0, 'classical_reduced_chi2': None},
+        inputs=((0, 'D2O', None), (1, 'Polarized', 'pp')),
+        per_dataset=(
+            {'objective_n_points': 3, 'objective_chi2': 4.0, 'objective_chi2_per_point': 4 / 3, 'share_of_objective': 0.4},
+            {'objective_n_points': 4, 'objective_chi2': 6.0, 'objective_chi2_per_point': 1.5, 'share_of_objective': 0.6},
+        ),
+    )
 
-    assert logic.fit_n_pars == 3
+    assert (logic.fit_n_pars, logic.fit_chi2, logic.fit_classical_reduced_chi2) == (2, 2.0, None)
+    assert [row['name'] for row in logic.fit_dataset_rows] == ['D2O', 'Polarized (pp)']
+    assert [row['share'] for row in logic.fit_dataset_rows] == [0.4, 0.6]
 
 
-def test_pooled_reduced_chi2_uses_the_global_free_parameter_count(monkeypatch):
-    # With shared parameters, each result's n_pars counts them again; the pooled degrees of
-    # freedom must use the global count, as fit_n_pars does.
+def test_a_finished_or_failed_run_is_recorded_on_the_project():
     project = make_project()
+    recorded = []
+    project.record_fit = lambda prepared, results, status: recorded.append((prepared, results, status))
     logic = fitting_module.Fitting(project)
-    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 2)
+    logic._prepared = 'prepared'
 
-    logic.prepare_for_threaded_fit()
-    logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=4, x=[1, 2, 3], reduced_chi2=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=4, x=[1, 2, 3, 4], reduced_chi2=1.2),
-    ])
+    logic.record_on_project(['result'])
+    logic.record_on_project(None, 'cancelled')
 
-    assert logic.fit_chi2 == 2.0  # 10 / (7 - 2)
-
-
-def test_pooled_statistics_describe_the_fit_not_the_edited_project(monkeypatch):
-    # The parameter count is taken when the fit starts; fixing a parameter afterwards
-    # must not change the reduced chi-squared of the results already on screen.
-    project = make_project()
-    logic = fitting_module.Fitting(project)
-    live_count = {'value': 2}
-    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: live_count['value'])
-
-    logic.prepare_for_threaded_fit()
-    logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi2=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi2=1.2),
-    ])
-    assert (logic.fit_n_pars, logic.fit_chi2) == (2, 2.0)
-
-    live_count['value'] = 1  # the user fixed a parameter after the fit
-    assert (logic.fit_n_pars, logic.fit_chi2) == (2, 2.0)
-
-    logic.prepare_for_threaded_fit()  # the next fit takes the new count
-    logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=1, x=[1, 2, 3], reduced_chi2=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=1, x=[1, 2, 3, 4], reduced_chi2=1.2),
-    ])
-    assert (logic.fit_n_pars, logic.fit_chi2) == (1, 10.0 / 6.0)
+    assert recorded == [('prepared', ['result'], 'completed'), ('prepared', None, 'cancelled')]
 
 
 def test_ordered_experiments_sorts_by_key_only():
@@ -297,24 +276,6 @@ def test_fit_failure_and_cancellation_state_transitions():
     assert logic.fit_cancelled is False
 
 
-def test_start_stop_handles_success_and_fiterror():
-    project = make_project(models=[object()])
-    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, chi2=1.7, reduced_chi2=1.7))
-    logic = fitting_module.Fitting(project)
-
-    logic.start_stop()
-    assert logic.fit_finished is True
-    assert logic.show_results_dialog is True
-    assert logic.fit_chi2 == 1.7
-
-    def _raise_fit_error(exp_data):
-        raise fitting_module.FitError('fit failed')
-
-    project.fitter = SimpleNamespace(fit_single_data_set_1d=_raise_fit_error)
-    logic.start_stop()
-    assert 'fit failed' in logic.fit_error_message
-
-
 # ===================================================================
 # Bayesian sampling preparation
 # ===================================================================
@@ -339,6 +300,7 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
                            x=np.array([1.0, 2.0]), y=np.array([4.0, 5.0]), ye=np.array([0.1, 0.2])),
     }
     project = make_project(experiments=experiments)
+    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
     # Mock the datagroup collection to avoid scipp dependency
@@ -349,6 +311,13 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
     assert multi_fitter is not None
     assert multi_fitter.models == (model_a,)
     assert data_group == 'fake-data-group'
+    # Sampled with a snapshot of the project's settings, taken before the worker starts
+    assert multi_fitter.settings == project.fit_settings
+    project.fit_settings.minimizer = AvailableMinimizers.LMFit_leastsq
+    project.fit_settings.mode = 'minimize'
+    project.fit_settings.objective = 'mighell'
+    project.fit_settings.engine_options['LMFit_leastsq'] = {'epsfcn': 1e-3}
+    assert multi_fitter.settings == FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
 
 
 def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):

@@ -100,6 +100,16 @@ QtObject {
         return null
     }
 
+    // Project load warning signal - what a loaded project could not restore as saved
+    signal projectLoadWarning(string message)
+
+    property var _projectLoadWarningConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectLoadWarning) {
+            activeBackend.project.projectLoadWarning.connect(projectLoadWarning)
+        }
+        return null
+    }
+
     // Project save signals - forwarded from backend
     readonly property string projectLastSaved: activeBackend.project.lastSaved ?? ''
     readonly property bool projectHasUnsavedChanges: activeBackend.project.hasUnsavedChanges ?? false
@@ -159,7 +169,12 @@ QtObject {
 
     function sampleSetCurrentModelName(value) { activeBackend.sample.setCurrentModelName(value) }
     function sampleSetModelNameAtIndex(index, value) { activeBackend.sample.setModelNameAtIndex(index, value) }
-    function sampleRemoveModel(value) { activeBackend.sample.removeModel(value) }
+    // `rebindTo`: the model the removed model's experiments move to, or -1 to remove them too
+    function sampleRemoveModel(index, rebindTo) { activeBackend.sample.removeModel(index, rebindTo) }
+    function sampleContrastCandidates(index) { return activeBackend.sample.contrastCandidates?.(index) ?? [] }
+    function sampleAddContrast(referenceIndex, name, choices) { return activeBackend.sample.addContrast(referenceIndex, name, choices) }
+    function sampleDetachParameter(uniqueName, modelIndex) { return activeBackend.sample.detachParameter(uniqueName, modelIndex) }
+    function sampleExperimentsUsingModel(index) { return activeBackend.sample.experimentsUsingModel?.(index) ?? [] }
     function sampleAddNewModel() { activeBackend.sample.addNewModel() }
     function sampleDuplicateSelectedModel() { activeBackend.sample.duplicateSelectedModel() }
     function sampleMoveSelectedModelUp() { activeBackend.sample.moveSelectedModelUp() }
@@ -292,7 +307,7 @@ QtObject {
     function sampleValidateConstraintExpression(index, relation, expression) { return activeBackend.sample.validateConstraintExpression(index, relation, expression) }
     function sampleAddConstraint(index, relation, expression) { return activeBackend.sample.addConstraint(index, relation, expression) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
-    function sampleConstrainModelsParameters(modelIndices) { activeBackend.sample.constrainModelsParameters(modelIndices) }
+    function sampleConstrainModelsParameters(modelIndices, tieMaterials) { return activeBackend.sample.constrainModelsParameters(modelIndices, tieMaterials) }
 
     // Inequality constraints (BUMPS-only fit penalties) and physics-constraint recipes
     readonly property int sampleInequalityConstraintsCount: activeBackend.sample.inequalityConstraintsCount
@@ -389,7 +404,11 @@ QtObject {
         }
     }
 
-    function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
+    function analysisSetModelOnExperiment(index, modelIndex) { activeBackend.analysis.setModelOnExperiment(index, modelIndex) }
+    // Per experiment: its model's index (-1 when it has none) and whether the next fit includes it
+    readonly property var analysisExperimentsModelIndices: activeBackend.analysis.experimentsModelIndices ?? []
+    readonly property var analysisExperimentsIncludedInFit: activeBackend.analysis.experimentsIncludedInFit ?? []
+    function analysisSetExperimentIncludedInFit(index, included) { activeBackend.analysis.setExperimentIncludedInFit(index, included) }
     readonly property var analysisModelForExperiment: activeBackend.analysis.modelIndexForExperiment
     readonly property var modelNamesForExperiment: activeBackend.analysis.modelNamesForExperiment
     readonly property var modelColorsForExperiment: activeBackend.analysis.modelColorsForExperiment
@@ -410,11 +429,21 @@ QtObject {
     function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
     function analysisSetExperimentNameAtIndex(index, value) { activeBackend.analysis.setExperimentNameAtIndex(index, value) }
 
-    // Minimizer
+    // Minimizer (undefined tolerance / budget: the engine default)
     readonly property var analysisMinimizerTolerance: activeBackend.analysis.minimizerTolerance
     function analysisSetMinimizerTolerance(value) { activeBackend.analysis.setMinimizerTolerance(value) }
+    function analysisResetMinimizerTolerance() { activeBackend.analysis.resetMinimizerTolerance() }
     readonly property var analysisMinimizerMaxIterations: activeBackend.analysis.minimizerMaxIterations
     function analysisSetMinimizerMaxIterations(value) { activeBackend.analysis.setMinimizerMaxIterations(value) }
+    function analysisResetMinimizerMaxIterations() { activeBackend.analysis.resetMinimizerMaxIterations() }
+    readonly property var analysisFitObjectives: activeBackend.analysis.fitObjectives
+    readonly property string analysisFitObjective: activeBackend.analysis.fitObjective
+    function analysisSetFitObjective(value) { activeBackend.analysis.setFitObjective(value) }
+    readonly property var analysisMinimizerOptions: activeBackend.analysis.minimizerOptions
+    function analysisSetMinimizerOption(name, text) { activeBackend.analysis.setMinimizerOption(name, text) }
+    readonly property bool analysisMinimizerRequiresFiniteBounds: activeBackend.analysis.minimizerRequiresFiniteBounds
+    readonly property int analysisUnboundedFreeParametersCount: activeBackend.analysis.unboundedFreeParametersCount
+    function analysisShowFreeParameters() { activeBackend.analysis.showFreeParameters() }
 
     // Fitting
     readonly property string analysisFittingStatus: activeBackend.analysis.fittingStatus

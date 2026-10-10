@@ -44,7 +44,8 @@ DIRTYING_SIGNALS = {
         'externalCalculatorChanged',
         'externalExperimentChanged',
         'externalFittingChanged',  # a finished fit rewrites parameter values
-        'externalMinimizerChanged',  # stored as 'fitter_minimizer' in the project file
+        'externalMinimizerChanged',  # stored in 'fit_settings' in the project file
+        'externalFitSettingsChanged',  # tolerance, budget, objective, options: also 'fit_settings'
         'externalParametersChanged',
         'parametersChanged',
     ),
@@ -288,10 +289,14 @@ class PyBackend(QObject):
         self._project.externalCreatedChanged.connect(self._analysis.clearBayesianResults)
         self._project.externalProjectLoaded.connect(self._analysis.clearBayesianResults)
         self._project.externalProjectReset.connect(self._analysis.clearBayesianResults)
+        # A loaded or reset project brings its own minimizer and fit settings.
+        self._project.externalProjectLoaded.connect(self._analysis.onProjectLoaded)
+        self._project.externalProjectReset.connect(self._analysis.onProjectLoaded)
 
     def _connect_sample_page(self) -> None:
-        # Removing a model also removes its experiment. Connected first, so that every
-        # handler below already sees a selection without the removed experiment.
+        # Removing a model can remove its experiments. Connected first, so that every
+        # handler below already sees a selection without them.
+        self._sample.experimentsRemoved.connect(self._analysis.follow_removed_experiments)
         self._sample.modelsTableChanged.connect(self._analysis.prune_selected_experiments)
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)
         # Enabling magnetism can switch the project's calculation engine; the

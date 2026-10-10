@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
+from easyreflectometry import Project as RealProject
+from easyreflectometry.fit_settings import FitSettings
+
 
 class ValueHolder:
     def __init__(self, value):
@@ -271,6 +274,7 @@ class FakeExperiment:
         self.y = [] if y is None else y
         self.ye = [] if ye is None else ye
         self.xe = [] if xe is None else xe
+        self.include_in_fit = True
 
 
 class FakeMinimizerValue:
@@ -329,6 +333,27 @@ class FakeFitResult:
 
 
 class FakeProject:
+    # Experiment keys and pairing are the library's own bookkeeping: it only touches
+    # `_experiments`, `_models` and the current indices, so the fake reuses it.
+    remove_experiment = RealProject.remove_experiment
+    model_index_for_experiment = RealProject.model_index_for_experiment
+    _model_index_for_experiment = RealProject._model_index_for_experiment
+    _model_index = RealProject._model_index
+    set_model_for_experiment = RealProject.set_model_for_experiment
+    experiments_for_model = RealProject.experiments_for_model
+
+    @property
+    def experiments(self):
+        return self._experiments
+
+    @experiments.setter
+    def experiments(self, value):
+        self._experiments = value
+
+    def move_model(self, index, new_index):
+        self.calls.append(('move_model', index, new_index))
+        self._models.insert(new_index, self._models.pop(index))
+
     @property
     def calculator(self):
         return self._calculator_name
@@ -358,8 +383,10 @@ class FakeProject:
         self._materials = materials or FakeMaterialCollection()
         self.current_material_index = 0
         self._experiments = experiments or {}
-        self.experiments = self._experiments
+        self._with_experiments = bool(self._experiments)
         self._current_experiment_index = 0
+        self._last_fit = None
+        self.last_fit = None
         self._models = models or FakeModelCollection()
         self.models = self._models
         self.current_model_index = 0
@@ -373,6 +400,8 @@ class FakeProject:
         ]
         self.models_have_magnetism = False
         self.minimizer = FakeMinimizerValue(minimizer_name)
+        self.fit_settings = FitSettings()
+        self.load_report = []
         self._fitter = None
         self.fitter = None
         self._info = {'name': 'Demo Project', 'short_description': 'Demo Description', 'modified': '2026-03-19'}

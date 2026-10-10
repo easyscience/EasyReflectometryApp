@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from pathlib import Path
 from typing import List
@@ -22,6 +23,14 @@ from .logic.parameters import Parameters as ParametersLogic
 from .workers import FitterWorker
 
 logger = logging.getLogger(__name__)
+
+#: Shown for an experiment that has no model.
+NO_MODEL_COLOR = '#A5A5A5'
+
+
+def _lacks_finite_bounds(param: dict) -> bool:
+    """The library's rule for minimizers that need bounds (differential evolution)."""
+    return not (math.isfinite(param['min']) and math.isfinite(param['max']))
 
 
 class Analysis(QObject):
@@ -50,6 +59,9 @@ class Analysis(QObject):
     posteriorPredictiveCleared = Signal()
 
     externalMinimizerChanged = Signal()
+    # Tolerance, budget, objective or a method option edited by the user; all
+    # are saved with the project.
+    externalFitSettingsChanged = Signal()
     externalParametersChanged = Signal()
     externalCalculatorChanged = Signal()
     externalFittingChanged = Signal()
@@ -169,6 +181,12 @@ class Analysis(QObject):
             'success': self._fitting_logic.fit_success,
             'nvarys': self._fitting_logic.fit_n_pars,
             'chi2': self._fitting_logic.fit_chi2,
+            'classicalChi2': self._fitting_logic.fit_classical_reduced_chi2,
+            'evaluations': self._fitting_logic.fit_evaluations,
+            'message': self._fitting_logic.fit_message,
+            'notes': self._fitting_logic.fit_notes,
+            # One row per fitted dataset (or spin channel), from the project's run record
+            'datasets': self._fitting_logic.fit_dataset_rows,
         }
 
     # ------------------------------------------------------------------
@@ -461,10 +479,10 @@ class Analysis(QObject):
 
         # TODO: Thread-safety: prevent model/parameter edits during fitting or snapshot state before starting the worker.
 
-        # Prepare fit data for all experiments
-        fitter, x_data, y_data, weights, method = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
+        # Prepare the run over all experiments, from a snapshot of the fit settings
+        prepared = self._fitting_logic.prepare_threaded_fit(self._minimizers_logic)
 
-        if fitter is None:
+        if prepared is None:
             # Error already set in fitting logic
             self.fittingChanged.emit()
             if self._fitting_logic.fit_error_message:
@@ -473,13 +491,11 @@ class Analysis(QObject):
 
         # Create and configure worker. The inequality constraints are snapshotted
         # here so edits made while the fit runs cannot change what it enforces.
-        fit_kwargs = {'weights': weights, 'method': method}
-        fit_kwargs.update(self._constraints_kwargs())
         self._fitter_thread = FitterWorker(
-            fitter=fitter,
+            fitter=prepared.core_fitter,
             method_name='fit',
-            args=(x_data, y_data),
-            kwargs=fit_kwargs,
+            args=(prepared.x, prepared.y),
+            kwargs={'weights': prepared.weights, **prepared.call_kwargs(**self._constraints_kwargs())},
             parent=self,
         )
         self._fitter_thread.finished.connect(self._on_fit_finished)
@@ -529,17 +545,12 @@ class Analysis(QObject):
         if self._is_stale_worker_signal():
             return
         self._fitting_logic.on_fit_finished(results)
-        self._project_lib._last_fit_results = self._fitting_logic.last_fit_results
-        # The threaded fit runs on a throwaway fitter's easy_science_multi_fitter,
-        # so the project's canonical MultiFitter never learns the results. Record
-        # them explicitly so the HTML summary's goodness-of-fit (project.fitter
-        # .reduced_chi) reflects the fit instead of showing 'N/A'.
+        # The worker executed a prepared run: record it on the project, whose run
+        # record the results dialog and the summary read.
         try:
-            fitter = self._project_lib.fitter
-            if fitter is not None:
-                fitter.record_fit_results(self._fitting_logic.last_fit_results)
+            self._fitting_logic.record_on_project(self._fitting_logic.last_fit_results)
         except Exception:
-            logger.exception('Failed to record fit results on project fitter')
+            logger.exception('Failed to record the fit on the project')
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
@@ -554,6 +565,10 @@ class Analysis(QObject):
         if is_user_cancel:
             error_message = 'Fitting cancelled by user'
         self._fitting_logic.on_fit_failed(error_message)
+        try:
+            self._fitting_logic.record_on_project(None, 'cancelled' if is_user_cancel else 'failed')
+        except Exception:
+            logger.exception('Failed to record the fit on the project')
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
@@ -1010,7 +1025,7 @@ class Analysis(QObject):
         Returns one message per problem found; an empty list means the fit can start.
         """
         errors = []
-        fit_params = [param for param in self.fitableParameters if param['fit']]
+        fit_params = self._free_parameters()
 
         # 1. wrong bounds on parameters
         for param in fit_params:
@@ -1020,18 +1035,30 @@ class Analysis(QObject):
                     f'min ({param["min"]}) must be less than max ({param["max"]}).'
                 )
 
-        # 2. differential evolution needs finite bounds on all parameters
-        if 'differential_evolution' in self.minimizersAvailable[self.minimizerCurrentIndex]:
-            bad_params = [
-                param['name'] for param in fit_params if param['min'] == float('-inf') or param['max'] == float('inf')
-            ]
+        # 2. some minimizers (differential evolution) need finite bounds on all parameters
+        if self._minimizers_logic.requires_finite_bounds():
+            bad_params = [param['name'] for param in fit_params if _lacks_finite_bounds(param)]
             if bad_params:
                 joined = '\n' + ',\n'.join(bad_params) + '\n'
                 errors.append(
-                    f'Parameters {joined} have infinite bounds, which is not allowed for differential evolution minimizer.'
+                    f'Parameters {joined} have infinite bounds, which '
+                    f'{self._minimizers_logic.selected_minimizer_enum().name} does not allow.'
                 )
 
         return errors
+
+    def _free_parameters(self) -> List[dict]:
+        """The parameters a fit varies, each once.
+
+        Read from the unfiltered list: the table's name and free/fixed filters
+        must not change what the fit-wide checks see. A parameter shared by
+        several models is listed once per model, hence the identity check.
+        """
+        unique = {}
+        for param in self._parameters_logic.all_parameters():
+            if param['fit'] and param.get('enabled', True):
+                unique.setdefault(id(param['object']), param)
+        return list(unique.values())
 
     ########################
     ## Calculators
@@ -1084,11 +1111,27 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
 
-    @Slot(int)
-    def setModelOnExperiment(self, new_value: int) -> None:
-        self._experiments_logic.set_model_on_experiment(new_value)
-        self.experimentsChanged.emit()
-        self.externalExperimentChanged.emit()
+    @Slot(int, int)
+    def setModelOnExperiment(self, index: int, model_index: int) -> None:
+        """Bind the experiment in row `index` to the model at `model_index`."""
+        if self._experiments_logic.set_model_on_experiment(index, model_index):
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsModelIndices(self) -> List[int]:
+        """Per experiment, the index of its model (-1 when it has none)."""
+        return self._experiments_logic.model_indices()
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsIncludedInFit(self) -> List[bool]:
+        return self._experiments_logic.included_in_fit()
+
+    @Slot(int, bool)
+    def setExperimentIncludedInFit(self, index: int, included: bool) -> None:
+        if self._experiments_logic.set_included_in_fit(index, included):
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
 
     @Slot(str)
     def setExperimentName(self, new_name: str) -> None:
@@ -1104,37 +1147,20 @@ class Analysis(QObject):
 
     @Property(int, notify=experimentsChanged)
     def modelIndexForExperiment(self) -> int:
-        # return the model index for the current experiment
-        models = self._experiments_logic._project_lib._models
-        experiments = self._ordered_experiments()
-        index = self.experimentCurrentIndex
-        current_experiment = experiments[index] if 0 <= index < len(experiments) else None
-        if current_experiment is None:
-            return -1
-        try:
-            return models.index(current_experiment.model)
-        except ValueError:
-            # The experiment is unpaired or paired with a model no longer in the project.
-            return -1
+        """The model index of the current experiment (-1 when it has none)."""
+        return self._experiments_logic.model_index_on_experiment()
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelNamesForExperiment(self) -> list:
-        # return a list of model names for each experiment
-        mapped_models = []
+        """Per experiment, its model's name ('' when it has none)."""
         experiments = self._ordered_experiments()
-        for experiment in experiments:
-            name = get_original_name(experiment.model)
-            mapped_models.append(name)
-        return mapped_models
+        return [get_original_name(experiment.model) if experiment.model is not None else '' for experiment in experiments]
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelColorsForExperiment(self) -> list:
-        # return a list of model colors for each experiment
-        mapped_models = []
+        """Per experiment, its model's colour (grey when it has none)."""
         experiments = self._ordered_experiments()
-        for experiment in experiments:
-            mapped_models.append(experiment.model.color)
-        return mapped_models
+        return [experiment.model.color if experiment.model is not None else NO_MODEL_COLOR for experiment in experiments]
 
     @Slot(int)
     def removeExperiment(self, index: int) -> None:
@@ -1185,6 +1211,18 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
 
+    def follow_removed_experiments(self, removed: list) -> None:
+        """The selection follows experiments removed elsewhere (with their model): the removed
+        ones leave it and the later ones move up, as for :meth:`removeExperiment`."""
+        remaining = len(self._experiments_logic.available())
+        changed = False
+        for index in sorted(removed, reverse=True):
+            changed |= self._selection.remove_index(index, remaining)
+        if changed:
+            self._sync_current_experiment_to_selection()
+        self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
+
     def prune_selected_experiments(self) -> bool:
         """Drop selected experiments that no longer exist, e.g. after a model and its
         experiment were removed. Returns whether the selection changed; the caller notifies."""
@@ -1220,24 +1258,112 @@ class Analysis(QObject):
         if self._minimizers_logic.set_minimizer_current_index(new_value):
             self.minimizerChanged.emit()
             self.externalMinimizerChanged.emit()
+            # The switch stands; a setting that does not suit the new minimizer is
+            # reported now rather than when the fit is refused.
+            error = self._minimizers_logic.settings_error()
+            if error:
+                logger.warning('Minimizer settings invalid after switch: %s', error)
+                self.prefitCheckFailed.emit(
+                    'Invalid Minimizer Setting',
+                    f'{self._minimizers_logic.selected_minimizer_enum().name} is selected, but its settings '
+                    f'are not valid for it:\n\n{error}\n\nCorrect them before fitting.',
+                )
 
     @Property('QVariant', notify=minimizerChanged)
     def minimizerTolerance(self) -> Optional[float]:
+        """The tolerance, or None (QML: undefined) for the engine default."""
         return self._minimizers_logic.tolerance
 
     @Property('QVariant', notify=minimizerChanged)
     def minimizerMaxIterations(self) -> Optional[int]:
+        """The budget, or None (QML: undefined) for the engine default."""
         return self._minimizers_logic.max_iterations
+
+    def _apply_fit_setting(self, setter, *args) -> None:
+        """Apply a fit-settings edit; an invalid one is reported and the field reverts."""
+        try:
+            changed = setter(*args)
+        except ValueError as error:
+            logger.warning('Rejected fit setting: %s', error)
+            self.prefitCheckFailed.emit('Invalid Minimizer Setting', str(error))
+            changed = False
+        # Always re-read: a rejected or unchanged edit must show the stored value again.
+        self.minimizerChanged.emit()
+        if changed:
+            self.externalFitSettingsChanged.emit()
 
     @Slot(float)
     def setMinimizerTolerance(self, new_value: float) -> None:
-        if self._minimizers_logic.set_tolerance(new_value):
-            self.minimizerChanged.emit()
+        self._apply_fit_setting(self._minimizers_logic.set_tolerance, new_value)
 
-    @Slot(int)
-    def setMinimizerMaxIterations(self, new_value: int) -> None:
-        if self._minimizers_logic.set_max_iterations(new_value):
-            self.minimizerChanged.emit()
+    @Slot()
+    def resetMinimizerTolerance(self) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_tolerance, None)
+
+    @Slot(float)
+    def setMinimizerMaxIterations(self, new_value: float) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_max_iterations, new_value)
+
+    @Slot()
+    def resetMinimizerMaxIterations(self) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_max_iterations, None)
+
+    @Property('QVariantList', notify=minimizerChanged)
+    def fitObjectives(self) -> List[str]:
+        return self._minimizers_logic.objectives
+
+    @Property(str, notify=minimizerChanged)
+    def fitObjective(self) -> str:
+        return self._minimizers_logic.objective
+
+    @Slot(str)
+    def setFitObjective(self, new_value: str) -> None:
+        self._apply_fit_setting(self._minimizers_logic.set_objective, new_value)
+
+    @Property('QVariantList', notify=minimizerChanged)
+    def minimizerOptions(self) -> list:
+        """Method-specific options of the selected minimizer, for a generic editor."""
+        return self._minimizers_logic.options()
+
+    @Slot(str, str)
+    def setMinimizerOption(self, name: str, text: str) -> None:
+        """Set an option from its text; empty text clears it (engine default)."""
+        self._apply_fit_setting(self._set_option_from_text, name, text)
+
+    def _set_option_from_text(self, name: str, text: str) -> bool:
+        kind = next((option['kind'] for option in self._minimizers_logic.options() if option['name'] == name), None)
+        text = text.strip()
+        if text == '':
+            value = None
+        elif kind in ('int', 'float'):
+            try:
+                value = int(text) if kind == 'int' else float(text)
+            except ValueError:
+                raise ValueError(f'{name} must be a number, got {text!r}.') from None
+        else:
+            value = text
+        return self._minimizers_logic.set_option(name, value)
+
+    @Property(bool, notify=minimizerChanged)
+    def minimizerRequiresFiniteBounds(self) -> bool:
+        return self._minimizers_logic.requires_finite_bounds()
+
+    @Property(int, notify=parametersChanged)
+    def unboundedFreeParametersCount(self) -> int:
+        """Free parameters lacking a finite min or max (relevant when the minimizer needs them)."""
+        return sum(1 for param in self._free_parameters() if _lacks_finite_bounds(param))
+
+    @Slot()
+    def showFreeParameters(self) -> None:
+        """Show only the free parameters, e.g. to correct the bounds a fit was refused for."""
+        self._parameters_logic.set_name_filter_criteria('')
+        self._parameters_logic.set_variability_filter_criteria('free')
+        self._clearCacheAndEmitParametersChanged()
+
+    @Slot()
+    def onProjectLoaded(self) -> None:
+        """A loaded or reset project brings its own fit settings: re-read every bound control."""
+        self.minimizerChanged.emit()
 
     #############
     ## Parameters

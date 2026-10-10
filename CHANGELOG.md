@@ -1,5 +1,41 @@
 # Unreleased
 
+- Multiple contrasts ([#425](https://github.com/easyscience/reflectometry-lib/issues/425)):
+  - New demo files `examples/datasets/film_contrasts.ort` (a film on silicon in
+    D2O, H2O and CMSi, with its slab model in the header) and `dppc_contrasts.ort`
+    (three contrasts of a DPPC monolayer) for trying Add contrast and a joint fit
+    (see the datasets README).
+  - "Add contrast of the selected model…" on the Sample page creates a model
+    sharing the selected one's structure, with chosen materials replaced (e.g.
+    D2O by H2O, which also changes every hydrated layer) or re-formulated
+    (isotopic substitution). Its scale, background and resolution are its own.
+    A shared assembly is marked ⇄ in the model editor: editing it edits every
+    model sharing it.
+  - "Model constraints" is now "Link contrasts": it ties the selected models'
+    corresponding parameters, but no longer their scale and background, and
+    their material SLDs only on request. Layouts that do not correspond are
+    reported instead of being tied partially. Removing a tie restores the
+    parameter's value and bounds from before the link.
+  - The parameters table lists a parameter shared by several models once,
+    marked ⇄ with the models in its tooltip; a shared layer parameter can be
+    detached for one model.
+  - Each experiment's model is chosen per row on the Experiment and Analysis
+    pages and shows the stored pairing (the combo used to reset to the first
+    model and could change another experiment).
+  - A "Fit" checkbox per experiment chooses what the next fit includes; a
+    parameter that an included model follows stays fitted even when its own
+    model is left out. The results dialog lists each dataset's χ² per point
+    and share of the total; the statistics come from the library's record of
+    the run, so they survive switching the current model.
+  - The Analysis chart has the staggered view too.
+  - Removing a model that experiments use asks whether to remove them or fit
+    them with another model; experiments are no longer removed by position.
+  - A data file that cannot be read is reported in a dialog.
+  - The HTML report lists all models, with the model each contrast was derived
+    from.
+- The legacy synchronous fit path (`Fitting.start_stop`) was removed; the GUI
+  always fitted in a worker thread.
+
 - Added a **Structure** tab on the Model page: a schematic view of the layer stack with one
   colored box per layer (colors per material, heights following thickness, "× N" badges for
   collapsed repeating multilayers, legend and total-thickness caption). Boxes show tooltips

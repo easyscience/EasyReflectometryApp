@@ -14,7 +14,7 @@ def test_available_orders_mapping_like_experiments_by_key():
     logic = Experiments(project)
 
     assert logic.available() == ['Earlier', 'Later']
-    assert logic.model_on_experiment(0) is model_a
+    assert logic.model_indices() == [0, 1]
 
 
 def test_set_current_index_and_rename_current_experiment():
@@ -45,16 +45,19 @@ def test_model_index_on_current_experiment_returns_index_or_minus_one():
     assert logic.model_index_on_experiment() == -1
 
 
-def test_set_model_on_experiment_updates_current_experiment_model():
+def test_set_model_on_experiment_binds_only_that_row():
     model_a = object()
     model_b = object()
-    experiments = [make_experiment('First', model=model_a)]
+    experiments = {0: make_experiment('First', model=model_a), 1: make_experiment('Second', model=model_a)}
     project = make_project(experiments=experiments, models=[model_a, model_b])
     logic = Experiments(project)
 
-    logic.set_model_on_experiment(1)
+    assert logic.set_model_on_experiment(1, 1)
 
-    assert experiments[0].model is model_b
+    assert experiments[1].model is model_b
+    assert experiments[0].model is model_a  # only the row asked for
+    assert logic.model_indices() == [0, 1]
+    assert not logic.set_model_on_experiment(1, 1)
 
 
 def test_remove_experiment_updates_current_index_for_mapping_storage():
@@ -93,12 +96,12 @@ def test_remove_first_experiment_keeps_the_others_addressable_by_position():
 
 
 def test_remove_last_remaining_experiment_resets_index_to_zero():
-    experiments = [make_experiment('Only')]
+    experiments = {0: make_experiment('Only')}
     project = make_project(experiments=experiments)
     project._current_experiment_index = 0
     logic = Experiments(project)
 
     logic.remove_experiment(0)
 
-    assert project._experiments == []
+    assert project._experiments == {}
     assert project._current_experiment_index == 0

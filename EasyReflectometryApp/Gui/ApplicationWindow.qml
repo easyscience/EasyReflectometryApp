@@ -371,6 +371,19 @@ EaComponents.ApplicationWindow {
         enabled: target !== null
         ignoreUnknownSignals: true
         function onCalculationEngineRejected(message) {
+            engineRejectionDialog.title = qsTr("Cannot change the calculation engine")
+            engineRejectionDialog.message = message
+            engineRejectionDialog.open()
+        }
+    }
+
+    // A data file that cannot be imported: the same message dialog.
+    Connections {
+        target: Globals.BackendWrapper.activeBackend ? Globals.BackendWrapper.activeBackend.experiment : null
+        enabled: target !== null
+        ignoreUnknownSignals: true
+        function onLoadFailed(message) {
+            engineRejectionDialog.title = qsTr("Cannot import the data")
             engineRejectionDialog.message = message
             engineRejectionDialog.open()
         }
@@ -381,7 +394,6 @@ EaComponents.ApplicationWindow {
 
         property string message: ''
 
-        title: qsTr("Cannot change the calculation engine")
         standardButtons: Dialog.Ok
         closePolicy: Popup.CloseOnEscape
 

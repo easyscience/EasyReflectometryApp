@@ -7,6 +7,7 @@ from PySide6.QtCore import Signal
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
 from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
+from EasyReflectometryApp.Backends.Py.logic.parameters import Parameters as ParametersLogic
 from tests.factories import make_project
 
 
@@ -45,6 +46,21 @@ class StubMinimizersLogic:
 
     def is_bayesian_selected(self):
         return False
+
+    def requires_finite_bounds(self):
+        return False
+
+
+def _prepared(core_fitter='fake-fitter'):
+    """A prepared-run stand-in, as `Project.prepare_fit` returns it."""
+    return SimpleNamespace(
+        core_fitter=core_fitter,
+        x=['x'],
+        y=['y'],
+        weights=['w'],
+        call_kwargs=lambda **kwargs: dict(kwargs),
+        finalize=lambda results: [{'classical_chi2': 1.0}] * len(results),
+    )
 
 
 class StubWorker(QObject):
@@ -95,9 +111,7 @@ def _make_analysis(monkeypatch):
 def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore_application):
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
     fitting_changed = {'count': 0}
     analysis.fittingChanged.connect(
         lambda: fitting_changed.__setitem__('count', fitting_changed['count'] + 1)
@@ -118,7 +132,8 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     )
 
     assert worker.method_name == 'fit'
-    assert worker.kwargs == {'weights': ['w'], 'method': None}
+    assert worker.fitter == 'fake-fitter'
+    assert worker.kwargs == {'weights': ['w']}
     assert worker.start_calls == 1
     assert analysis.fittingRunning is True
     assert analysis.fitIteration == 9
@@ -137,9 +152,7 @@ def test_on_stop_fit_requests_worker_stop_and_keeps_ui_locked_until_thread_exits
     non-abortable minimizer is still mutating the shared parameters."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     worker = StubWorker.instances[-1]
@@ -164,9 +177,7 @@ def test_stale_worker_signals_are_ignored_after_new_fit_starts(monkeypatch, qcor
     """Late signals from a superseded worker must not clobber the current run."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     stale_worker = StubWorker.instances[-1]
@@ -195,15 +206,19 @@ def test_fitting_start_stop_emits_stop_signal_when_fit_is_running(monkeypatch, q
     assert received['count'] == 1
 
 
-def _param(name, min_value, max_value, fit=True):
-    return {'name': name, 'min': min_value, 'max': max_value, 'fit': fit}
+def _param(name, min_value, max_value, fit=True, obj=None):
+    return {'name': name, 'min': min_value, 'max': max_value, 'fit': fit, 'object': obj or object()}
 
 
 def _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_leastsq'):
     analysis = _make_analysis(monkeypatch)
-    analysis._chached_parameters = parameters
+    # The checks read every parameter, not the table's filtered rows
+    analysis._parameters_logic.all_parameters = lambda: parameters
     analysis._minimizers_logic.minimizers_available = lambda: [minimizer]
     analysis._minimizers_logic.minimizer_current_index = lambda: 0
+    # The engine decides, not the combo label (see logic/minimizers.py)
+    analysis._minimizers_logic.requires_finite_bounds = lambda: minimizer == 'LMFit_differential_evolution'
+    analysis._minimizers_logic.selected_minimizer_enum = lambda: SimpleNamespace(name=minimizer)
     return analysis
 
 
@@ -237,6 +252,33 @@ def test_prefit_errors_allows_infinite_bounds_for_other_minimizers(monkeypatch, 
     analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', float('-inf'), float('inf'))])
 
     assert analysis._prefit_errors() == []
+
+
+def test_finite_bounds_checks_ignore_the_table_filters(monkeypatch, qcore_application):
+    shared = object()
+    parameters = [
+        _param('a', 0.0, float('inf')),
+        # One object listed once per model (a shared layer): one parameter
+        _param('M1 b', float('-inf'), 1.0, obj=shared),
+        _param('M2 b', float('-inf'), 1.0, obj=shared),
+        _param('fixed', float('-inf'), float('inf'), fit=False),
+    ]
+    analysis = _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_differential_evolution')
+    # The real table filters, over the parameters above
+    table = ParametersLogic(analysis._project_lib)
+    table.all_parameters = lambda: parameters
+    analysis._parameters_logic = table
+
+    for name_filter, variability, rows in (('', 'all', 4), ('', 'fixed', 1), ('zzz', 'free', 0)):
+        table.set_name_filter_criteria(name_filter)
+        table.set_variability_filter_criteria(variability)
+        analysis._chached_parameters = None
+        assert len(analysis.fitableParameters) == rows
+
+        assert analysis.unboundedFreeParametersCount == 2
+        errors = analysis._prefit_errors()
+        assert len(errors) == 1
+        assert '\na,\nM1 b\n' in errors[0]
 
 
 def test_fitting_start_stop_emits_prefit_check_failed_and_does_not_start(monkeypatch, qcore_application):
@@ -273,27 +315,24 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
 
 
-def test_on_fit_finished_records_results_on_project_fitter(monkeypatch, qcore_application):
-    """The canonical project fitter must learn the fit results.
-
-    Otherwise ``project.fitter.reduced_chi`` stays None and the HTML summary's
-    goodness-of-fit shows 'N/A' even though the Analysis section has a value.
-    """
+def test_finished_and_failed_runs_are_recorded_on_the_project(monkeypatch, qcore_application):
+    """The project's run record is what the results dialog and the HTML summary read."""
     from tests.factories import FakeFitResult
 
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic = Fitting(make_project())
+    project = make_project()
+    recorded = []
+    project.record_fit = lambda prepared, results, status: recorded.append((prepared, results, status))
+    analysis._fitting_logic = Fitting(project)
     analysis._clearCacheAndEmitParametersChanged = MagicMock()
-
-    fitter = MagicMock()
-    analysis._project_lib.fitter = fitter
+    prepared = _prepared()
+    analysis._fitting_logic._prepared = prepared
 
     results = [FakeFitResult(chi2=20.0, n_pars=4, x=list(range(14)))]
     analysis._on_fit_finished(results)
+    analysis._on_fit_failed('boom')
 
-    fitter.record_fit_results.assert_called_once()
-    (recorded,) = fitter.record_fit_results.call_args.args
-    assert recorded == results
+    assert recorded == [(prepared, results, 'completed'), (prepared, None, 'failed')]
 
 
 # ---------------------------------------------------------------------------
@@ -451,21 +490,20 @@ def test_bayesian_initializer_property_round_trip(monkeypatch, qcore_application
     assert analysis.bayesianInitializer == 'cov'
 
 def test_model_index_for_experiment_paired_with_a_removed_model(monkeypatch, qcore_application):
-    analysis = _make_analysis(monkeypatch)
-    project = analysis._experiments_logic._project_lib
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 1)
     project._models.add_model()
-    project._experiments[0] = SimpleNamespace(model=project._models[-1])
+    project._experiments[0].model = project._models[-1]
     assert analysis.modelIndexForExperiment == len(project._models) - 1
 
-    project._experiments[0] = SimpleNamespace(model=object())
+    project._experiments[0].model = object()
 
     assert analysis.modelIndexForExperiment == -1
-
+    assert analysis.experimentsModelIndices == [-1]
 
 
 def _make_analysis_with_experiments(monkeypatch, count):
     """An Analysis with the real experiment logic over `count` named experiments."""
-    project = make_project(experiments={i: SimpleNamespace(name=f'E{i}') for i in range(count)})
+    project = make_project(experiments={i: SimpleNamespace(name=f'E{i}', model=None, include_in_fit=True) for i in range(count)})
     monkeypatch.setattr(analysis_module, 'ParametersLogic', StubParametersLogic)
     monkeypatch.setattr(analysis_module, 'CalculatorsLogic', StubCalculatorsLogic)
     monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubMinimizersLogic)

@@ -101,6 +101,23 @@ Rectangle {
                     updateMultiExperimentSeries()
                 }
 
+                // Experiments drawn, in order; their position sets the staggered offset. A function, so it is current wherever it is called.
+                function shownExperiments() {
+                    const shown = []
+                    for (const row of seriesDataList) {
+                        if (row.hasData && shown.indexOf(row.index) === -1) {
+                            shown.push(row.index)
+                        }
+                    }
+                    return shown
+                }
+                // Decades between consecutive experiments in the staggered view (0: not staggered).
+                // Only the reflectivity is shifted; residuals are computed from the measured data.
+                readonly property double staggerDecades: Globals.Variables.staggerAnalysis && isMultiExperimentMode
+                                                         ? Globals.Variables.analysisStaggerDecades : 0
+                property double staggerSpan: 0
+                onStaggerDecadesChanged: if (useDynamicSeries) updateMultiExperimentSeries()
+
                 // Watch for changes in multi-experiment selection
                 Connections {
                     target: Globals.BackendWrapper.activeBackend ?? null
@@ -302,11 +319,13 @@ Rectangle {
                     if (measuredScatterSerie) measuredScatterSerie.visible = false
                     calculated.visible = false
 
-                    // Create series for each experiment
+                    // Create series for each shown experiment
+                    const shown = shownExperiments()
+                    staggerSpan = staggerDecades * Math.max(0, shown.length - 1)
                     for (var i = 0; i < experimentDataList.length; i++) {
                         var expData = experimentDataList[i]
-                        if (expData.hasData) {
-                            createExperimentSeries(expData.index, expData.name, expData.color, expData.channel || "")
+                        if (shown.indexOf(expData.index) !== -1) {
+                            createExperimentSeries(expData.index, expData.name, expData.color, expData.channel || "", shown)
                         }
                     }
                 }
@@ -325,7 +344,7 @@ Rectangle {
                     multiExperimentSeries = []
                 }
 
-                function createExperimentSeries(expIndex, expName, color, channel) {
+                function createExperimentSeries(expIndex, expName, color, channel, shown) {
                     var xAxis = currentXAxis()
 
                     // Look up the model color for this experiment. A per-channel series
@@ -360,7 +379,9 @@ Rectangle {
                         expIndex: expIndex,
                         expName: expName,
                         color: color,
-                        channel: channel || ""
+                        channel: channel || "",
+                        // The channels of one experiment share its offset
+                        offset: shown.indexOf(expIndex) * staggerDecades
                     }
                     multiExperimentSeries.push(seriesSet)
 
@@ -380,11 +401,11 @@ Rectangle {
                     // Add data points
                     for (var i = 0; i < dataPoints.length; i++) {
                         var point = dataPoints[i]
-                        seriesSet.measuredSerie.append(point.x, point.measured)
+                        seriesSet.measuredSerie.append(point.x, point.measured - seriesSet.offset)
                         // A channel the model cannot calculate (spin-flip on a
                         // non-magnetic model) has no curve; measured points still show.
                         if (point.hasCalculated !== false) {
-                            seriesSet.calculatedSerie.append(point.x, point.calculated)
+                            seriesSet.calculatedSerie.append(point.x, point.calculated - seriesSet.offset)
                         }
                     }
                 }
@@ -500,9 +521,9 @@ Rectangle {
 
                 property double yRange: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) || isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? 10.0 : Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
                 axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
-                axisY.min: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
+                axisY.min: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - staggerSpan - yRange * 0.01
                 axisY.max: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
-                axisY.minAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - yRange * 0.01
+                axisY.minAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - staggerSpan - yRange * 0.01
                 axisY.maxAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
 
                 calcSerie.onHovered: (point, state) => showMainTooltip(analysisChartView, analysisDataToolTip, point, state)
