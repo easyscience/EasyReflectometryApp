@@ -300,7 +300,10 @@ EaElements.GroupBox {
                     // a decoupled density material's unused knobs.
                     readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
                     readonly property bool inactive: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'inactive'
-                    text: (derived ? 'ƒ ' : '') + Globals.BackendWrapper.analysisFitableParameters[index].name
+                    // ⇄: one parameter of several models (contrasts sharing a layer or material)
+                    readonly property var sharedBy: Globals.BackendWrapper.analysisFitableParameters[index].sharedBy ?? []
+                    readonly property int followedBy: Globals.BackendWrapper.analysisFitableParameters[index].followedBy ?? 0
+                    text: (derived ? 'ƒ ' : '') + (sharedBy.length > 1 ? '⇄ ' : '') + Globals.BackendWrapper.analysisFitableParameters[index].name
                     textFormat: Text.PlainText
                     color: !inactive &&
                            (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
@@ -318,6 +321,8 @@ EaElements.GroupBox {
                                         .arg(text)
                                         .arg(Globals.BackendWrapper.analysisFitableParameters[index].dependency || '')
                                   : text
+                                    + (sharedBy.length > 1 ? qsTr("\nOne parameter of %1: changing it changes all of them.").arg(sharedBy.join(', ')) : '')
+                                    + (followedBy > 0 ? qsTr("\nFollowed by %1 parameter(s) of other models.").arg(followedBy) : '')
                 }
 
                 EaComponents.TableViewParameter {
@@ -518,6 +523,42 @@ EaElements.GroupBox {
                     return EaLogic.Utils.toDefaultPrecision(slider.to)
                 }
             }
+        }
+
+        // A parameter several models share (one object): give one of them its own copy.
+        Row {
+            id: detachRow
+            readonly property var current: Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex]
+            readonly property var sharedBy: current?.sharedBy ?? []
+            visible: current?.detachable ?? false
+            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+
+            EaElements.Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Shared by %1. Detach in").arg(detachRow.sharedBy.join(', '))
+            }
+            EaElements.ComboBox {
+                id: detachModel
+                width: EaStyle.Sizes.fontPixelSize * 8
+                model: detachRow.sharedBy
+            }
+            EaElements.Button {
+                text: qsTr("Detach")
+                ToolTip.text: qsTr("That model gets its own copy of the layers, still tied to the others except this parameter")
+                onClicked: {
+                    const result = Globals.BackendWrapper.sampleDetachParameter(
+                        detachRow.current.unique_name, detachRow.current.sharedByIndices[detachModel.currentIndex])
+                    detachMessage.text = result.success ? '' : result.message
+                }
+            }
+        }
+
+        EaElements.Label {
+            id: detachMessage
+            visible: text !== ''
+            width: tableView.width
+            wrapMode: Text.WordWrap
+            color: EaStyle.Colors.red
         }
     }
 

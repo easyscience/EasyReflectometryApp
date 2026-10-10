@@ -356,12 +356,24 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     parameter_list = []
 
+    # The models each parameter belongs to (several when contrasts share an object), and
+    # how many parameters of other models follow it (equality ties between contrasts).
+    # Object paths replace the global_object.map graph, which the new
+    # easyscience core no longer populates with parent->child edges.
+    model_paths = [_build_param_object_paths(model) for model in models]
+    owners: dict[str, list[int]] = {}
+    for model_idx, paths in enumerate(model_paths):
+        for unique_name in paths:
+            owners.setdefault(unique_name, []).append(model_idx)
+    followed_by: dict[str, int] = {}
+    for parameter in parameters:
+        for leader in (getattr(parameter, 'dependency_map', None) or {}).values():
+            leader_name = getattr(leader, 'unique_name', None)
+            if not set(owners.get(parameter.unique_name, [])) & set(owners.get(leader_name, [])):
+                followed_by[leader_name] = followed_by.get(leader_name, 0) + 1
+
     # Process parameters for each model
-    for model_idx, model in enumerate(models):
-        model_prefix = get_original_name(model)
-        # Object paths replace the global_object.map graph, which the new
-        # easyscience core no longer populates with parent->child edges.
-        paths = _build_param_object_paths(model)
+    for model_idx, paths in enumerate(model_paths):
 
         for parameter in parameters:
             # Skip parameters not in this model's tree
@@ -369,24 +381,26 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             if path is None:
                 continue
 
-            # For non-layer parameters, skip if already processed (they're shared across models)
+            # Each parameter once, whichever models share it
             is_layer_param = _is_per_layer_parameter(parameter)
-            if not is_layer_param:
-                if parameter.unique_name in processed_unique_names:
-                    continue
-                processed_unique_names.add(parameter.unique_name)
+            if parameter.unique_name in processed_unique_names:
+                continue
+            processed_unique_names.add(parameter.unique_name)
+            shared_by = owners.get(parameter.unique_name, [model_idx])
 
             display_name, group_name = _get_parameter_display_data(parameter, path)
 
-            # Add model prefix only to layer parameters (thickness, roughness)
+            # Add model prefix only to layer parameters (thickness, roughness); a layer shared
+            # by several models carries all their names.
             if is_layer_param:
-                prefixed_display_name = f'{model_prefix} {display_name}'
+                owner_names = [get_original_name(models[index]) for index in shared_by]
+                prefixed_display_name = f"{'+'.join(owner_names)} {display_name}"
             else:
                 prefixed_display_name = display_name
 
             alias = _make_alias(prefixed_display_name or parameter.name)
             param_value = float(parameter.value)
-            is_derived = _is_derived_parameter(parameter, model)
+            is_derived = _is_derived_parameter(parameter, models[model_idx])
             # A density material's input knobs (density, mw, scattering
             # lengths) stop affecting the reflectivity once the material's
             # sld/isld are decoupled — shown greyed with a note, never hidden
@@ -423,6 +437,14 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'kind': 'derived' if is_derived else 'inactive' if is_inactive else 'parameter',
                     'readOnly': is_derived or is_inactive,
                     'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
+                    # Models it belongs to when several (one object shared), and how many
+                    # parameters of other models follow it
+                    'sharedBy': [get_original_name(models[index]) for index in shared_by] if len(shared_by) > 1 else [],
+                    'sharedByIndices': shared_by if len(shared_by) > 1 else [],
+                    # A shared layer parameter can be given to one model alone (its assembly is
+                    # copied); a material's cannot: materials belong to the project's palette.
+                    'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
+                    'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
                 }
             )

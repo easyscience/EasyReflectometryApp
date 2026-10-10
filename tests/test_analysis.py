@@ -315,31 +315,24 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
 
 
-def test_on_fit_finished_records_results_on_project_fitter(monkeypatch, qcore_application):
-    """The canonical project fitter must learn the fit results.
-
-    Otherwise ``project.fitter.reduced_chi`` stays None and the HTML summary's
-    goodness-of-fit shows 'N/A' even though the Analysis section has a value.
-    """
+def test_finished_and_failed_runs_are_recorded_on_the_project(monkeypatch, qcore_application):
+    """The project's run record is what the results dialog and the HTML summary read."""
     from tests.factories import FakeFitResult
 
     analysis = _make_analysis(monkeypatch)
     project = make_project()
+    recorded = []
+    project.record_fit = lambda prepared, results, status: recorded.append((prepared, results, status))
     analysis._fitting_logic = Fitting(project)
     analysis._clearCacheAndEmitParametersChanged = MagicMock()
-
-    fitter = MagicMock()
-    project.fitter = fitter
-    # The run the worker executed supplies the classical metrics
-    analysis._fitting_logic._prepared = _prepared()
+    prepared = _prepared()
+    analysis._fitting_logic._prepared = prepared
 
     results = [FakeFitResult(chi2=20.0, n_pars=4, x=list(range(14)))]
     analysis._on_fit_finished(results)
+    analysis._on_fit_failed('boom')
 
-    fitter.record_fit_results.assert_called_once()
-    recorded, metrics = fitter.record_fit_results.call_args.args
-    assert recorded == results
-    assert metrics == [{'classical_chi2': 1.0}]
+    assert recorded == [(prepared, results, 'completed'), (prepared, None, 'failed')]
 
 
 # ---------------------------------------------------------------------------
@@ -497,21 +490,20 @@ def test_bayesian_initializer_property_round_trip(monkeypatch, qcore_application
     assert analysis.bayesianInitializer == 'cov'
 
 def test_model_index_for_experiment_paired_with_a_removed_model(monkeypatch, qcore_application):
-    analysis = _make_analysis(monkeypatch)
-    project = analysis._experiments_logic._project_lib
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 1)
     project._models.add_model()
-    project._experiments[0] = SimpleNamespace(model=project._models[-1])
+    project._experiments[0].model = project._models[-1]
     assert analysis.modelIndexForExperiment == len(project._models) - 1
 
-    project._experiments[0] = SimpleNamespace(model=object())
+    project._experiments[0].model = object()
 
     assert analysis.modelIndexForExperiment == -1
-
+    assert analysis.experimentsModelIndices == [-1]
 
 
 def _make_analysis_with_experiments(monkeypatch, count):
     """An Analysis with the real experiment logic over `count` named experiments."""
-    project = make_project(experiments={i: SimpleNamespace(name=f'E{i}') for i in range(count)})
+    project = make_project(experiments={i: SimpleNamespace(name=f'E{i}', model=None, include_in_fit=True) for i in range(count)})
     monkeypatch.setattr(analysis_module, 'ParametersLogic', StubParametersLogic)
     monkeypatch.setattr(analysis_module, 'CalculatorsLogic', StubCalculatorsLogic)
     monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubMinimizersLogic)

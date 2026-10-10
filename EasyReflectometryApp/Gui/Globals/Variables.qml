@@ -14,6 +14,9 @@ QtObject {
     property bool showLegendOnAnalysisResidualsTab: false
     property bool useStaggeredPlotting: false
     property double staggeringFactor: 0.5
+    // Analysis chart: each further shown experiment is drawn this many decades lower
+    property bool staggerAnalysis: false
+    property double analysisStaggerDecades: 1.0
 
     // Sample page plot control settings
     property bool reverseSldZAxis: false

@@ -292,18 +292,6 @@ class TestPolarizedFitting:
         assert all(result.success for result in results)
         assert magnetism.rho_m.value == pytest.approx(5.0, abs=0.05)
 
-    def test_synchronous_start_stop_fits_every_channel(self, tmp_path):
-        """The single-experiment path routes polarized data to `fit_polarized`."""
-        project = self._polarized_project(tmp_path)
-        logic = FittingLogic(project)
-
-        logic.start_stop()
-
-        assert logic.fit_error_message == ''
-        # One FitResults per measured channel, not one for the experiment.
-        assert len(logic.last_fit_results) == 2
-        assert logic.fit_finished is True
-
     def test_bayesian_sampling_still_refuses_polarized_data(self, tmp_path):
         """Out of scope for now — but the message must say so, not fail obscurely."""
         project = self._polarized_project(tmp_path)

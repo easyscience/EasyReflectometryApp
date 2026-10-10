@@ -88,10 +88,17 @@ class Experiment(QObject):
         q_range_changed = False
         for path in paths:
             generalized = IO.generalizePath(path)
-            if self._project_logic.count_datasets_in_file(generalized) > 1:
-                _count, changed = self._project_logic.load_all_experiments_from_file(generalized)
-            else:
-                changed = self._project_logic.load_new_experiment(generalized)
+            # A file that cannot be read is reported and skipped; the library adds
+            # all of a file's datasets or none.
+            try:
+                if self._project_logic.count_datasets_in_file(generalized) > 1:
+                    _count, changed = self._project_logic.load_all_experiments_from_file(generalized)
+                else:
+                    changed = self._project_logic.load_new_experiment(generalized)
+            except Exception as error:  # noqa: BLE001 - any parse error reaches the user, not the event loop
+                console.error(f'Import of {generalized} failed: {error}')
+                self.loadFailed.emit(f'{os.path.basename(generalized)}: {error}')
+                continue
             if changed:
                 q_range_changed = True
             self.experimentChanged.emit()

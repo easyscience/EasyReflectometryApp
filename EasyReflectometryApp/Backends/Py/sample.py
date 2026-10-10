@@ -73,6 +73,8 @@ class Sample(QObject):
     materialsIndexChanged = Signal()
 
     modelsTableChanged = Signal()
+    # Positions of experiments removed together with a model
+    experimentsRemoved = Signal(list)
     modelsIndexChanged = Signal()
 
     assembliesTableChanged = Signal()
@@ -342,13 +344,80 @@ class Sample(QObject):
             self._clearCacheAndEmitLayersChanged()
 
     # Actions
-    @Slot(str)
-    def removeModel(self, value: str) -> None:
-        self._models_logic.remove_at_index(value)
-        # Constraints that tied this model's parameters to another model's (or the
-        # reverse) have lost one end; see _detach_unreachable_constraints.
-        self._detach_unreachable_constraints()
+    @Slot(int, result='QVariantList')
+    def contrastCandidates(self, index: int) -> list[dict]:
+        """What a new contrast of the model at `index` can change, one row each."""
+        return self._models_logic.contrast_candidates(index)
+
+    @Slot(int, str, 'QVariantList', result='QVariant')
+    def addContrast(self, reference_index: int, name: str, choices: list) -> dict:
+        """Add a contrast of the model at `reference_index` (see ``Project.add_contrast``):
+        its structure is shared, the chosen materials are replaced or re-formulated."""
+        try:
+            new_index = self._models_logic.add_contrast(reference_index, name, list(choices))
+        except ValueError as error:
+            return {'success': False, 'message': str(error)}
+        self._project_logic._update_enablement_of_fixed_layers_for_model(new_index)
         self.modelsTableChanged.emit()
+        self.materialsTableChanged.emit()
+        self._emit_constraints_changed()
+        self.setCurrentModelIndex(new_index)
+        return {'success': True, 'message': ''}
+
+    @Slot(str, int, result='QVariant')
+    def detachParameter(self, unique_name: str, model_index: int) -> dict:
+        """Give the model at `model_index` its own copy of a parameter it shares with other
+        models: the shared assembly is copied for it, every other parameter of the copy
+        still tied to the shared one (``Project.detach``)."""
+        parameter = self._find_parameter_object_by_unique_name(unique_name)
+        if parameter is None:
+            return {'success': False, 'message': self.tr('The parameter no longer exists.')}
+        if not parameter.independent:
+            return {'success': False, 'message': self.tr('Remove its constraint first.')}
+        try:
+            self._project_lib.detach(parameter, model_index)
+        except ValueError as error:
+            return {'success': False, 'message': str(error)}
+        self.modelsTableChanged.emit()
+        self.assembliesTableChanged.emit()
+        self._emit_constraints_changed()
+        self.externalSampleChanged.emit()
+        self.externalRefreshPlot.emit()
+        return {'success': True, 'message': ''}
+
+    @Slot(int, result='QVariantList')
+    def experimentsUsingModel(self, index: int) -> list[str]:
+        """Names of the experiments bound to the model at `index`; removing it needs a decision about them."""
+        return self._models_logic.experiments_using(index)
+
+    @Slot(int, int, result='QVariantList')
+    def removeModel(self, index: int, rebind_to: int) -> list[int]:
+        """Remove the model at `index`. Its experiments are removed, or bound to the model at
+        `rebind_to` (an index before the removal) when that is not -1. Returns the
+        positions of the experiments removed with it."""
+        removed = self._models_logic.remove_at_index(index, rebind_to)
+        # Ties to this model's parameters were freed by the library; other constraints that
+        # lost one end are swept here, see _detach_unreachable_constraints.
+        self._detach_unreachable_constraints()
+        self._drop_constraint_states_that_no_longer_hold()
+        if removed:
+            self.experimentsRemoved.emit(removed)
+        self.modelsTableChanged.emit()
+        self.externalRefreshPlot.emit()
+        return removed
+
+    def _drop_constraint_states_that_no_longer_hold(self) -> None:
+        """Forget the rows of constraints the library removed (a tie freed with its model)."""
+        objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
+        stale = [
+            unique_name
+            for unique_name, state in self._constraint_states.items()
+            if unique_name not in objects or not self._constraint_state_holds(objects[unique_name], state)
+        ]
+        for unique_name in stale:
+            del self._constraint_states[unique_name]
+        if stale:
+            self._scheduleConstraintsChanged()
 
     @Slot()
     def addNewModel(self) -> None:
@@ -1530,6 +1599,9 @@ class Sample(QObject):
 
         if state and 'previous' in state:
             self._restore_parameter_state(param_obj, state['previous'])
+        elif any(pair[0] is param_obj for link in self._project_lib.links for pair in link.pairs):
+            # A tie made by a model link gets back its state from before the link.
+            self._project_lib.detach(param_obj)
         else:
             self._make_parameter_independent(param_obj)
         self._emit_constraints_changed()
@@ -1851,139 +1923,35 @@ class Sample(QObject):
             'type': mode,
         }
 
-    @Slot('QVariantList')
-    def constrainModelsParameters(self, model_indices: list) -> None:
-        """Constrain matching parameters across selected models.
+    @Slot('QVariantList', bool, result='QVariant')
+    def constrainModelsParameters(self, model_indices: list, tie_materials: bool = False) -> dict:
+        """Tie the parameters of the selected models to those of the first one (the lowest index).
 
-        For each parameter in the models (except the first one), find the corresponding
-        parameter in the first model and create a constraint to make them equal.
+        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``):
+        scale and background stay per model; material chemistry (SLDs, densities, scattering
+        lengths) is tied only with `tie_materials`, since contrasts usually differ in it.
+        Ties are listed with the other constraints; removing one restores the parameter.
 
-        :param model_indices: List of model indices to constrain together.
+        :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
         """
-        if len(model_indices) < 2:
-            return
-
-        # Sort indices to ensure consistent ordering - first model becomes the reference
-        model_indices = sorted([int(idx) for idx in model_indices])
-
-        # Validate indices
-        num_models = len(self._project_lib._models)
-        for idx in model_indices:
-            if idx < 0 or idx >= num_models:
-                logger.warning('Invalid model index: %s', idx)
-                return
-
-        # Get the reference model (first in the sorted list)
-        reference_model_idx = model_indices[0]
-        reference_model = self._project_lib._models[reference_model_idx]
-
-        # Build a map of parameter paths to parameters for the reference model
-        # The path is relative to the model (sample/assembly/layer structure)
-        reference_params_map = self._build_model_parameters_map(reference_model)
-
-        # For each other model, find matching parameters and constrain them
-        constraints_added = 0
-        for model_idx in model_indices[1:]:
-            model = self._project_lib._models[model_idx]
-            model_params_map = self._build_model_parameters_map(model)
-
-            for param_path, dependent_param in model_params_map.items():
-                if param_path in reference_params_map:
-                    reference_param = reference_params_map[param_path]
-
-                    # Skip if already constrained
-                    if not getattr(dependent_param, 'independent', True):
-                        continue
-
-                    # Skip if it's the same parameter object
-                    if dependent_param.unique_name == reference_param.unique_name:
-                        continue
-
-                    try:
-                        # Capture previous state for undo capability
-                        previous_state = self._capture_parameter_state(dependent_param)
-
-                        # Create a constraint: dependent = reference
-                        constrain(dependent_param, 'a', a=reference_param)
-
-                        # Store constraint state for display
-                        unique_name = getattr(dependent_param, 'unique_name', None)
-                        if unique_name is not None:
-                            # Get display names with model prefix for clarity
-                            # e.g., "M2 SiO2 sld = M1 SiO2 sld"
-                            ref_display = self._get_parameter_display_name(reference_param, reference_model_idx)
-                            dep_display = self._get_parameter_display_name(dependent_param, model_idx)
-
-                            self._constraint_states[unique_name] = {
-                                'mode': 'dynamic',
-                                'relation': '=',
-                                'previous': previous_state,
-                                'expression': 'a',
-                                'raw_expression': 'a',
-                                'pretty_expression': ref_display,
-                                'dependency_map': {'a': reference_param},
-                                'dependent_display': dep_display,
-                            }
-
-                        constraints_added += 1
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning('Failed to constrain parameter %s: %s', param_path, e)
-                        continue
-
-        if constraints_added > 0:
+        indices = sorted({int(index) for index in model_indices})
+        models = self._project_lib.models
+        if len(indices) < 2 or not all(0 <= index < len(models) for index in indices):
+            return {'tied': 0, 'messages': [self.tr('Select at least two models.')]}
+        reference, tied, messages = indices[0], 0, []
+        for follower in indices[1:]:
+            try:
+                plan = self._project_lib.plan_link(follower, reference, materials='tie' if tie_materials else 'skip')
+                tied += len(self._project_lib.apply_link(plan).pairs)
+            except ValueError as error:
+                messages.append(str(error))
+                continue
+            conflicts = [row for row in plan.rows if row.action == 'conflict']
+            messages.extend(f"'{models[follower].name}' {row.path}: {row.reason}" for row in conflicts)
+        if tied:
             self._emit_constraints_changed()
+        return {'tied': tied, 'messages': messages}
 
-    def _build_model_parameters_map(self, model) -> Dict[str, DescriptorNumber]:
-        """Build a map of relative parameter paths to parameter objects for a model.
-
-        The path structure is: assembly_name/layer_name/param_name
-        This allows matching parameters across models with the same structure.
-        """
-        params_map: Dict[str, DescriptorNumber] = {}
-
-        # Get parameters from model structure
-        for assembly_idx, assembly in enumerate(model.sample):
-            # assembly_name = assembly.name
-            for layer_idx, layer in enumerate(assembly.layers):
-                # layer_name = layer.name
-                # Get layer parameters
-                for param in layer.get_all_parameters():
-                    param_name = param.name
-                    # Create a structural path that's independent of model name
-                    path_key = f'{assembly_idx}/{layer_idx}/{param_name}'
-                    params_map[path_key] = param
-
-        return params_map
-
-    def _get_parameter_display_name(self, param: DescriptorNumber, model_index: int | None = None) -> str:
-        """Get a display name for a parameter.
-
-        :param param: The parameter to get the display name for.
-        :param model_index: Optional model index to prefix the display name with (e.g., 'M1').
-        :return: Display name, optionally prefixed with model identifier.
-        """
-        display_name = param.name  # Fallback
-        try:
-            from easyscience import global_object
-
-            # Try to find the parameter's path in the global object map
-            for model in self._project_lib._models:
-                path = global_object.map.find_path(model.unique_name, param.unique_name)
-                if path and len(path) >= 2:
-                    parent_name = global_object.map.get_item_by_key(path[-2]).name
-                    param_name = global_object.map.get_item_by_key(path[-1]).name
-                    display_name = f'{parent_name} {param_name}'
-                    break
-        except Exception:  # noqa: S110
-            pass
-
-        if model_index is not None:
-            return f'M{model_index + 1} {display_name}'
-        return display_name
-
-    # # #
-    # Q Range
-    # # #
     @Property(float, notify=qRangeChanged)
     def q_min(self) -> float:
         return self._project_logic.q_min

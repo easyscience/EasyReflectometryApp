@@ -65,7 +65,12 @@ EaElements.GroupBox {
                     enabled: (modelView.model > 1) ? true : false//When item is selected
                     ToolTip.text: qsTr("Remove this model")
                     onClicked: {
-                        Globals.BackendWrapper.sampleRemoveModel(index)
+                        const experiments = Globals.BackendWrapper.sampleExperimentsUsingModel(index)
+                        if (experiments.length === 0) {
+                            Globals.BackendWrapper.sampleRemoveModel(index, -1)
+                        } else {
+                            removeModelDialog.ask(index, experiments)
+                        }
                     }
                 }
 
@@ -111,6 +116,172 @@ EaElements.GroupBox {
                 fontIcon: "arrow-down"
                 ToolTip.text: qsTr("Move model down")
                 onClicked: Globals.BackendWrapper.sampleMoveSelectedModelDown()
+            }
+        }
+
+        // A contrast: a new model sharing the selected model's structure
+        EaElements.SideBarButton {
+            wide: true
+            enabled: modelView.currentIndex > -1
+            fontIcon: "layer-group"
+            text: qsTr("Add contrast of the selected model…")
+            ToolTip.text: qsTr("A new model with the same structure, e.g. the sample measured in another solvent")
+            onClicked: addContrastDialog.ask(Globals.BackendWrapper.sampleCurrentModelIndex)
+        }
+
+        EaElements.Label {
+            id: contrastError
+            visible: text !== ''
+            width: EaStyle.Sizes.sideBarContentWidth
+            wrapMode: Text.WordWrap
+            color: EaStyle.Colors.red
+        }
+    }
+
+    EaElements.Dialog {
+        id: addContrastDialog
+
+        property int referenceIndex: -1
+        property var candidates: []
+
+        function ask(index) {
+            referenceIndex = index
+            candidates = Globals.BackendWrapper.sampleContrastCandidates(index)
+            contrastName.text = (Globals.BackendWrapper.sampleModels[index]?.label ?? '') + qsTr(' contrast')
+            contrastError.text = ''
+            open()
+        }
+
+        title: qsTr("Add contrast")
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: {
+            const choices = []
+            for (let i = 0; i < candidateRows.count; i++) {
+                const choice = candidateRows.itemAt(i).choice()
+                if (choice !== null) {
+                    choices.push(choice)
+                }
+            }
+            const result = Globals.BackendWrapper.sampleAddContrast(referenceIndex, contrastName.text, choices)
+            contrastError.text = result.success ? '' : result.message
+        }
+
+        Column {
+            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+
+            EaElements.Label {
+                width: EaStyle.Sizes.sideBarContentWidth * 1.3
+                wrapMode: Text.WordWrap
+                text: qsTr("The new model shares the structure of '%1': editing a shared layer edits both. "
+                           + "Choose what this contrast changes; scale, background and resolution are its own.")
+                      .arg(Globals.BackendWrapper.sampleModels[addContrastDialog.referenceIndex]?.label ?? '')
+            }
+
+            Row {
+                spacing: EaStyle.Sizes.fontPixelSize * 0.5
+                EaElements.Label { text: qsTr("Name"); anchors.verticalCenter: parent.verticalCenter }
+                EaElements.TextField { id: contrastName; width: EaStyle.Sizes.sideBarContentWidth }
+            }
+
+            Repeater {
+                id: candidateRows
+                model: addContrastDialog.candidates
+
+                Row {
+                    spacing: EaStyle.Sizes.fontPixelSize * 0.5
+
+                    // The choice for this row, or null to keep it as in the reference
+                    function choice() {
+                        if (modelData.kind === 'material') {
+                            return replacement.currentIndex > 0 ? { candidate: index, material: replacement.currentIndex - 1 } : null
+                        }
+                        return formula.text !== modelData.formula ? { candidate: index, formula: formula.text } : null
+                    }
+
+                    EaElements.Label {
+                        width: EaStyle.Sizes.fontPixelSize * 12
+                        elide: Text.ElideRight
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.label
+                    }
+                    EaElements.ComboBox {
+                        id: replacement
+                        visible: modelData.kind === 'material'
+                        width: EaStyle.Sizes.fontPixelSize * 12
+                        model: [qsTr("keep")].concat(Globals.BackendWrapper.sampleMaterialNames)
+                    }
+                    EaElements.TextField {
+                        id: formula
+                        visible: modelData.kind === 'formula'
+                        width: EaStyle.Sizes.fontPixelSize * 12
+                        text: modelData.formula ?? ''
+                        ToolTip.text: qsTr("Chemical formula, e.g. with D for deuterium")
+                    }
+                }
+            }
+        }
+    }
+
+    // Removing a model that experiments use: remove them too, or move them to another model.
+    EaElements.Dialog {
+        id: removeModelDialog
+
+        property int modelIndex: -1
+        property var experiments: []
+        // Every model but the one being removed, as {index, label}
+        readonly property var otherModels: Globals.BackendWrapper.sampleModels
+                                           .map((model, index) => ({ index: index, label: model.label }))
+                                           .filter(model => model.index !== modelIndex)
+
+        function ask(index, boundExperiments) {
+            modelIndex = index
+            experiments = boundExperiments
+            removeExperimentsButton.checked = true
+            open()
+        }
+
+        title: qsTr("Remove model")
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: {
+            Globals.BackendWrapper.sampleRemoveModel(modelIndex, rebindButton.checked ? otherModels[targetModel.currentIndex].index : -1)
+        }
+
+        ButtonGroup { id: experimentsChoice }
+
+        Column {
+            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+
+            EaElements.Label {
+                width: EaStyle.Sizes.sideBarContentWidth
+                wrapMode: Text.WordWrap
+                text: qsTr("These experiments use '%1': %2")
+                      .arg(Globals.BackendWrapper.sampleModels[removeModelDialog.modelIndex]?.label ?? '')
+                      .arg(removeModelDialog.experiments.join(', '))
+            }
+
+            EaElements.RadioButton {
+                id: removeExperimentsButton
+                ButtonGroup.group: experimentsChoice
+                text: qsTr("Remove them as well")
+            }
+
+            Row {
+                spacing: EaStyle.Sizes.fontPixelSize * 0.5
+
+                EaElements.RadioButton {
+                    id: rebindButton
+                    ButtonGroup.group: experimentsChoice
+                    text: qsTr("Fit them with")
+                    enabled: removeModelDialog.otherModels.length > 0
+                }
+
+                EaElements.ComboBox {
+                    id: targetModel
+                    enabled: rebindButton.checked
+                    model: removeModelDialog.otherModels.map(model => model.label)
+                }
             }
         }
     }

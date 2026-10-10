@@ -115,17 +115,18 @@ def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_share
 
     result = parameters_module._from_parameters_to_list_of_dicts([thickness, scale, dependent], models)
 
+    # The thickness is one object in both models: one row, named for both, and marked shared
     assert [entry['display_name'] for entry in result] == [
-        'M1 LayerA thickness',
+        'M1+M2 LayerA thickness',
         'Instrument scale',
         'Instrument background',
-        'M2 LayerA thickness',
     ]
     assert result[1]['dependency'] == ''
     assert result[2]['dependency'] == '2*Instrument scale'
     assert result[2]['enabled'] is False
-    assert result[0]['alias'] == 'm1_layera_thickness'
-    assert result[3]['alias'] == 'm2_layera_thickness'
+    assert result[0]['alias'] == 'm1_m2_layera_thickness'
+    assert result[0]['sharedBy'] == ['M1', 'M2'] and result[0]['sharedByIndices'] == [0, 1]
+    assert result[2]['sharedBy'] == [] and result[1]['followedBy'] == 0
 
 
 def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):

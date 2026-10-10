@@ -57,8 +57,13 @@ EaElements.GroupBox {
             // Rows
             delegate: EaComponents.TableViewDelegate {
                 EaComponents.TableViewLabel {
+                    // ⇄: the assembly is shared with other models (contrasts); editing it edits them too
+                    readonly property var sharedWith: Globals.BackendWrapper.sampleAssemblies[index]?.sharedWith ?? []
                     color: EaStyle.Colors.themeForegroundMinor
-                    text: index + 1
+                    text: (index + 1) + (sharedWith.length ? ' ⇄' : '')
+                    ToolTip.text: sharedWith.length
+                                  ? qsTr("Shared with %1: editing its layers changes them too").arg(sharedWith.join(', '))
+                                  : ''
                 }
 
                 EaComponents.TableViewTextInput {

@@ -54,9 +54,7 @@ class Summary:
 
     @property
     def as_html(self) -> str:
-        base_html = self._summary.compile_html_summary()
-        return base_html
-        # return self._inject_multimodel_multiexperiment_sections(base_html)
+        return self._inject_models_section(self._summary.compile_html_summary())
 
     def save_as_html(self, file_path: str | None = None) -> None:
         if not self._project_lib.path.exists():
@@ -64,8 +62,7 @@ class Summary:
 
         target_path = Path(file_path) if file_path else self.file_path.with_suffix('.html')
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        html_content = self._summary.compile_html_summary(figures=True)
-        # html_content = self._inject_multimodel_multiexperiment_sections(html_content)
+        html_content = self._inject_models_section(self._summary.compile_html_summary(figures=True))
 
         with open(target_path, 'w', encoding='utf-8') as report_file:
             report_file.write(html_content)
@@ -257,28 +254,28 @@ class Summary:
             return sorted(experiments.items(), key=lambda item: item[0])
         return list(enumerate(experiments))
 
-    def _inject_multimodel_multiexperiment_sections(self, html: str) -> str:
-        extra_sections = [
-            self._all_models_section_html(),
-            self._all_experiments_section_html(),
-        ]
-        combined_sections = ''.join(section for section in extra_sections if section)
-        if not combined_sections:
+    def _inject_models_section(self, html: str) -> str:
+        """Add the table of models when there are several (contrasts); the library's
+        summary already lists every experiment and every model's parameters."""
+        if len(self._project_lib.models) < 2:
             return html
-
+        section = self._all_models_section_html()
         if '</body>' in html:
-            return html.replace('</body>', f'{combined_sections}</body>', 1)
-        return f'{html}\n{combined_sections}'
+            return html.replace('</body>', f'{section}</body>', 1)
+        return f'{html}\n{section}'
 
     def _all_models_section_html(self) -> str:
+        models = self._project_lib.models
         rows = []
-        for model_index, model in enumerate(self._project_lib.models):
+        for model_index, model in enumerate(models):
             assemblies = len(model.sample)
             layers = sum(len(assembly.layers) for assembly in model.sample)
+            reference = self._project_lib.contrast_reference(model_index)
+            derived_from = escape(models[reference].name) if reference is not None else ''
             rows.append(
                 (
                     f'<tr><td>{model_index}</td><td>{escape(model.name)}</td>'
-                    f'<td>{assemblies}</td><td>{layers}</td></tr>'
+                    f'<td>{assemblies}</td><td>{layers}</td><td>{derived_from}</td></tr>'
                 )
             )
 
@@ -289,36 +286,7 @@ class Summary:
         return (
             '<h3>All Samples</h3>'
             '<table>'
-            '<tr><th>Index</th><th>Name</th><th>Assemblies</th><th>Layers</th></tr>'
+            '<tr><th>Index</th><th>Name</th><th>Assemblies</th><th>Layers</th><th>Contrast of</th></tr>'
             f'{table_rows}'
-            '</table>'
-        )
-
-    def _all_experiments_section_html(self) -> str:
-        experiment_rows = []
-        for experiment_index, experiment in self._ordered_experiments():
-            x = np.asarray(experiment.x)
-            q_min = float(np.min(x)) if x.size else float('nan')
-            q_max = float(np.max(x)) if x.size else float('nan')
-            model_name = getattr(getattr(experiment, 'model', None), 'name', 'N/A')
-            name = experiment.name or f'Experiment {experiment_index + 1}'
-
-            experiment_rows.append(
-                (
-                    f'<tr><td>{experiment_index}</td><td>{escape(name)}</td>'
-                    f'<td>{escape(model_name)}</td><td>{len(x)}</td>'
-                    f'<td>{q_min:.6g}</td><td>{q_max:.6g}</td></tr>'
-                )
-            )
-
-        if not experiment_rows:
-            return '<h3>All Experiments</h3><p>No experiments available.</p>'
-
-        rows_str = ''.join(experiment_rows)
-        return (
-            '<h3>All Experiments</h3>'
-            '<table>'
-            '<tr><th>Index</th><th>Name</th><th>Model</th><th>Points</th><th>q min</th><th>q max</th></tr>'
-            f'{rows_str}'
             '</table>'
         )
