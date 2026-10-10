@@ -5,6 +5,7 @@ import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 EaElements.GroupBox {
@@ -77,6 +78,34 @@ EaElements.GroupBox {
             }
         }
 
+        // Staggered view, shared with the Experiment page
+        Row {
+            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+            visible: selectedExperimentIndices.length > 1
+
+            EaElements.CheckBox {
+                id: staggeredCheckBox
+                checked: Globals.Variables.staggerAnalysis
+                text: qsTr("Staggered view")
+                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.75
+                ToolTip.text: qsTr("Shift each further experiment down, to compare them more easily")
+                onToggled: Globals.Variables.staggerAnalysis = checked
+            }
+
+            EaElements.Slider {
+                width: EaStyle.Sizes.fontPixelSize * 6
+                anchors.verticalCenter: parent.verticalCenter
+                from: 0.0
+                to: 5.0
+                stepSize: 0.05
+                value: Globals.Variables.analysisStaggerDecades
+                enabled: staggeredCheckBox.checked
+                ToolTip.text: qsTr("Shift between experiments: %1 decades").arg(Number(value).toFixed(2))
+                ToolTip.visible: hovered
+                onMoved: Globals.Variables.analysisStaggerDecades = value
+            }
+        }
+
         Row {
             spacing: EaStyle.Sizes.fontPixelSize
 
@@ -129,6 +158,11 @@ EaElements.GroupBox {
                         text: "Color"
                         width: EaStyle.Sizes.fontPixelSize * 2.5
                     }
+
+                    EaComponents.TableViewLabel {
+                        text: qsTr("Fit")
+                        width: EaStyle.Sizes.tableRowHeight
+                    }
                 }
 
                 delegate: EaComponents.TableViewDelegate {
@@ -174,14 +208,22 @@ EaElements.GroupBox {
                         font.bold: true
                     }
 
-                    EaComponents.TableViewLabel {
+                    Gui.ExperimentModelComboBox {
                         id: modelAccess
-                        text: Globals.BackendWrapper.modelNamesForExperiment[model.index] || ""
+                        row: index
+                        width: EaStyle.Sizes.fontPixelSize * 9.5
                     }
 
                     EaComponents.TableViewLabel {
                         id: colorLabel
-                        backgroundColor: Globals.BackendWrapper.modelColorsForExperiment[model.index]
+                        backgroundColor: Globals.BackendWrapper.modelColorsForExperiment[index] ?? 'transparent'
+                    }
+
+                    EaComponents.TableViewCheckBox {
+                        width: EaStyle.Sizes.tableRowHeight
+                        checked: Globals.BackendWrapper.analysisExperimentsIncludedInFit[index] ?? true
+                        ToolTip.text: qsTr("Include this experiment in the next fit")
+                        onToggled: Globals.BackendWrapper.analysisSetExperimentIncludedInFit(index, checked)
                     }
 
                     mouseArea.onPressed: (mouse) => {
@@ -259,8 +301,11 @@ EaElements.GroupBox {
             Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(primaryIndex)
         }
 
+        // Follow the experiment's model; one without a model leaves the current model alone.
         var modelIndexFromExperiment = Globals.BackendWrapper.analysisModelForExperiment
-        Globals.BackendWrapper.sampleSetCurrentModelIndex(modelIndexFromExperiment)
+        if (modelIndexFromExperiment >= 0) {
+            Globals.BackendWrapper.sampleSetCurrentModelIndex(modelIndexFromExperiment)
+        }
     }
 
     Component.onCompleted: {

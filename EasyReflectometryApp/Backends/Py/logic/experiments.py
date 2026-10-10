@@ -131,67 +131,45 @@ class Experiments:
         if exp:
             exp.name = new_name
 
-    def model_on_experiment(self, experiment_index: int = -1) -> dict:
-        if experiment_index == -1:
-            experiment_index = self._project_lib._current_experiment_index
-        exp = self._experiment_at_index(experiment_index)
-        if exp:
-            return exp.model
-        return {}
+    def model_indices(self) -> list[int]:
+        """Per experiment, the index of its model (-1 when it has none)."""
+        indices = []
+        for key, _ in self._ordered_experiment_items():
+            index = self._project_lib.model_index_for_experiment(key)
+            indices.append(-1 if index is None else index)
+        return indices
 
     def model_index_on_experiment(self) -> int:
-        model = self.model_on_experiment()
-        if model:
-            return self._project_lib._models.index(model)
-        return -1
+        indices = self.model_indices()
+        current = self._project_lib._current_experiment_index
+        return indices[current] if 0 <= current < len(indices) else -1
 
-    def set_model_on_experiment(self, new_value: int) -> None:
-        exp = self._experiment_at_index(self._project_lib._current_experiment_index)
-        models = self._project_lib._models
-        if exp and models:
-            try:
-                model = models[new_value]
-                exp.model = model
-            except IndexError:
-                logger.warning('Model index %s is out of range for the current experiment.', new_value)
-        else:
-            logger.warning('No experiment or models available to set on the experiment.')
-        pass
+    def set_model_on_experiment(self, index: int, model_index: int) -> bool:
+        """Bind the experiment at `index` to the model at `model_index`; whether it changed."""
+        key = self._experiment_key_at_index(index)
+        if key is None or not 0 <= model_index < len(self._project_lib._models):
+            logger.warning('Cannot bind experiment %s to model %s.', index, model_index)
+            return False
+        if self._project_lib.model_index_for_experiment(key) == model_index:
+            return False
+        self._project_lib.set_model_for_experiment(key, model_index)
+        return True
+
+    def included_in_fit(self) -> list[bool]:
+        """Per experiment, whether the next fit includes it."""
+        return [experiment.include_in_fit for _, experiment in self._ordered_experiment_items()]
+
+    def set_included_in_fit(self, index: int, included: bool) -> bool:
+        experiment = self._experiment_at_index(index)
+        if experiment is None or experiment.include_in_fit == included:
+            return False
+        experiment.include_in_fit = included
+        return True
 
     def remove_experiment(self, index: int) -> None:
-        """Remove the experiment at the given (ordered) index.
-
-        The remaining experiments are re-keyed 0..n-1 in order. Everything else addresses
-        experiments by position - the selection, the current index, and the library's own
-        ``experimental_data_for_model_at_index``, which looks the position up as a key - and
-        the library hands out ``len(experiments)`` as the next key, which would collide with
-        a surviving key if a gap were left. Keeping the keys contiguous is what makes a
-        position and a key the same thing.
-        """
-        total = len(self.available())
-        if not (0 <= index < total):
+        """Remove the experiment at the given (ordered) index; the library re-keys the rest."""
+        key = self._experiment_key_at_index(index)
+        if key is None:
             logger.warning('Experiment index %s is out of range.', index)
             return
-
-        experiments = self._project_lib._experiments
-        exp_key = self._experiment_key_at_index(index)
-        if exp_key is None:
-            logger.warning('Experiment index %s is out of range.', index)
-            return
-
-        if hasattr(experiments, 'items'):
-            del experiments[exp_key]
-            remaining = [experiment for _, experiment in self._ordered_experiment_items()]
-            experiments.clear()
-            experiments.update(enumerate(remaining))
-        else:
-            experiments.pop(index)
-
-        current = self._project_lib._current_experiment_index
-        new_total = max(0, total - 1)
-        if new_total == 0:
-            self._project_lib._current_experiment_index = 0
-        elif current > index:
-            self._project_lib._current_experiment_index = current - 1
-        elif current >= new_total:
-            self._project_lib._current_experiment_index = new_total - 1
+        self._project_lib.remove_experiment(key)

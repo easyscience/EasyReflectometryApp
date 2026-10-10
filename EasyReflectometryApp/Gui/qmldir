@@ -2,6 +2,7 @@ module Gui
 
 ApplicationWindow ApplicationWindow.qml
 CalculationEngineControl CalculationEngineControl.qml
+ExperimentModelComboBox ExperimentModelComboBox.qml
 MagneticProfileControl MagneticProfileControl.qml
 PlotControlRefLines PlotControlRefLines.qml
 SpinAsymmetryChart SpinAsymmetryChart.qml

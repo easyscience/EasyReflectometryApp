@@ -200,7 +200,6 @@ def test_summary_ordering_and_empty_sections(tmp_path, monkeypatch):
 
     assert logic._ordered_experiments() == []
     assert logic._all_models_section_html() == '<h3>All Samples</h3><p>No samples available.</p>'
-    assert logic._all_experiments_section_html() == '<h3>All Experiments</h3><p>No experiments available.</p>'
 
 
 def test_summary_injection_and_explicit_paths(tmp_path, monkeypatch):
@@ -210,10 +209,14 @@ def test_summary_injection_and_explicit_paths(tmp_path, monkeypatch):
     logic.file_name = 'custom-summary'
     logic.plot_file_name = 'custom-plots'
 
-    injected = logic._inject_multimodel_multiexperiment_sections('<div>base</div>')
+    assert logic._inject_models_section('<div>base</div>') == '<div>base</div>'  # one model: nothing to add
+    project.models.append(make_model(name='Contrast', unique_name='m2', sample=project.models[0].sample))
+    project.contrast_reference = lambda index: 0 if index == 1 else None
+    injected = logic._inject_models_section('<div>base</div>')
 
-    # assert 'All Samples' in injected
-    assert 'All Experiments' in injected
+    # Several models: listed, with the model each contrast was derived from
+    assert 'All Samples' in injected
+    assert 'Contrast of' in injected
     assert logic.file_path == project.path / 'custom-summary'
     assert logic.plot_file_path == project.path / 'custom-plots'
 
@@ -224,21 +227,6 @@ def test_summary_injection_and_explicit_paths(tmp_path, monkeypatch):
 
     assert html_target.exists()
     assert logic._summary.saved_pdf_path == pdf_target
-
-
-def test_summary_experiment_section_handles_empty_names_missing_models_and_nan_ranges(tmp_path, monkeypatch):
-    monkeypatch.setattr(summary_module, 'SummaryLib', FakeSummaryLib)
-    project = make_project(models=make_model_collection())
-    project.path = tmp_path / 'report'
-    project.experiments = [make_experiment('', model=None, x=np.array([]), y=np.array([]), ye=np.array([]))]
-    project._experiments = project.experiments
-    logic = summary_module.Summary(project)
-
-    html = logic._all_experiments_section_html()
-
-    assert 'Experiment 1' in html
-    assert 'N/A' in html
-    assert 'nan' in html
 
 
 def test_summary_make_plot_uses_plain_plot_without_valid_errors_and_sample_fallback(tmp_path, monkeypatch):

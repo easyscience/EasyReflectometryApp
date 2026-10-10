@@ -501,21 +501,14 @@ class TestEqualityConstraintPersistence:
     def test_linked_models_survive_reload(self, project_and_backend):
         project, backend = project_and_backend
         project.models.duplicate_model(0)
-        backend.constrainModelsParameters([0, 1])
-        linked = [
-            row
-            for row in backend.constraintsList
-            if row['type'] == 'dynamic' and row['uniqueName'] in backend._constraint_states
-        ]
+        assert backend.constrainModelsParameters([0, 1])['tied']
+        # The library's ties are listed from the parameters themselves
+        linked = [row for row in backend.constraintsList if row['type'] == 'dynamic']
         assert linked
 
         reloaded, reloaded_backend, _ = _save_and_reload(project, backend)
 
-        reloaded_linked = [
-            row
-            for row in reloaded_backend.constraintsList
-            if row['type'] == 'dynamic' and row['uniqueName'] in reloaded_backend._constraint_states
-        ]
+        reloaded_linked = [row for row in reloaded_backend.constraintsList if row['type'] == 'dynamic']
         assert sorted((row['dependentName'], row['expression']) for row in reloaded_linked) == sorted(
             (row['dependentName'], row['expression']) for row in linked
         )
@@ -552,7 +545,6 @@ class TestEqualityConstraintPersistence:
         project.models.duplicate_model(0)
         backend.constrainModelsParameters([0, 1])
         target = project.models[1].sample[2].layers[1].thickness
-        assert target.unique_name in backend._constraint_states
         backend.setCurrentModelIndex(1)
         assert backend.applyPhysicsConstraint(2, 'conformal_thickness')['success']
         assert target.dependency_expression == 'a'
@@ -802,7 +794,7 @@ class TestStructuralEditsDetachCutOffConstraints:
         ]
         assert linked
 
-        backend.removeModel('0')
+        backend.removeModel(0, -1)
 
         assert all(p.independent for p in linked)
         assert backend._constraint_states == {}

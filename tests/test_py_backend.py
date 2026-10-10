@@ -40,6 +40,7 @@ class StubProject(QObject):
 
 class StubSample(QObject):
     externalSampleChanged = Signal()
+    experimentsRemoved = Signal(list)
     calculationEngineChanged = Signal()
     externalRefreshPlot = Signal()
     modelsTableChanged = Signal()
@@ -111,6 +112,9 @@ class StubAnalysis(QObject):
     def prune_selected_experiments(self):
         self.prune_calls += 1
         return False
+
+    def follow_removed_experiments(self, removed):
+        self.removed_experiments = removed
 
     def reset_selected_experiments(self):
         self.reset_selection_calls += 1

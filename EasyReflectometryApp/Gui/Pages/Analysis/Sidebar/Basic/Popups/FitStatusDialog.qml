@@ -82,6 +82,34 @@ EaElements.Dialog {
             text: "Classical reduced Chi2: " + Number(classical).toFixed(4)
         }
 
+        // Per fitted dataset, when there are several: how much of the total chi2 each contributes.
+        // Its chi2 per point is not a reduced chi2: the degrees of freedom belong to the joint fit.
+        Grid {
+            id: datasetTable
+            readonly property var datasets: Globals.BackendWrapper.analysisFitResults.datasets ?? []
+            visible: !Globals.BackendWrapper.bayesianResultAvailable && Globals.BackendWrapper.analysisFitSuccess && datasets.length > 1
+            columns: 4
+            columnSpacing: EaStyle.Sizes.fontPixelSize
+            rowSpacing: EaStyle.Sizes.fontPixelSize * 0.25
+
+            Repeater {
+                model: [qsTr("Dataset"), qsTr("Points"), qsTr("Chi2/point"), qsTr("Share")]
+                EaElements.Label { text: modelData; font.bold: true }
+            }
+            Repeater {
+                model: datasetTable.datasets.length * 4
+                EaElements.Label {
+                    readonly property var dataset: datasetTable.datasets[Math.floor(index / 4)]
+                    text: {
+                        const value = [dataset.name, dataset.points, dataset.chi2PerPoint, dataset.share][index % 4]
+                        if (index % 4 === 2) return value === null ? '–' : Number(value).toFixed(3)
+                        if (index % 4 === 3) return value === null ? '–' : (100 * value).toFixed(1) + ' %'
+                        return String(value)
+                    }
+                }
+            }
+        }
+
         EaElements.Label {
             visible: !Globals.BackendWrapper.bayesianResultAvailable && Globals.BackendWrapper.analysisFitResults.evaluations > 0
             text: "Function evaluations: " + Globals.BackendWrapper.analysisFitResults.evaluations
