@@ -166,6 +166,44 @@ first one, the D2O stack.
 5. Save and reload the project. The contrasts still share the structure, and
    each experiment keeps its model pairing.
 
+**Variant: linking a contrast built separately.** **Link contrasts** ties models
+that already exist, e.g. built by hand or kept from an older project. Here the
+CMSi contrast is built as a copy of the D2O model and linked to it, instead of
+being added with **Add contrast**.
+
+<!-- DRAFT, not yet followable in the app (2026-10-11): steps 2-4 of this variant
+     hit three defects: Add contrast ignores a replacement that is a density
+     material; re-picking a layer's material does not reach the calculator until
+     the project is reloaded; and linking needs the waters to be the same kind of
+     material. The verified numbers below were obtained through the app backend
+     with the calculation refreshed. -->
+
+1. As in step 1, but create the CMSi material by **duplicating D2O** in the
+   *Material editor* and setting the copy's name to `CMSi` and its SLD to 2.07.
+   Linking matches the two models layer by layer, so the two waters must be the
+   same kind of material: D2O from the file is a plain-SLD material, and so is
+   its duplicate, while a material added with **+** is a density material.
+2. **Add contrast of the selected model…** for H2O only, as in step 2.
+3. Select the D2O model and duplicate it in the *Models selector*; rename the
+   copy `Film in CMSi`. The copy has its own copies of the materials, under the
+   same names. In the *Layer editor*, pick each of its layers' materials again:
+   `Si`, `SiO2` and `Film`, so that it shares them with the D2O model, and `CMSi`
+   for the subphase.
+4. *Sample › Advanced › Link contrasts*: tick the D2O model and `Film in CMSi`,
+   leave **Also tie material SLDs and densities** unticked, and press **Link
+   selected models**: "5 parameter(s) tied." These are the oxide and film
+   thicknesses and roughnesses, and the subphase roughness. The shared materials
+   need no tie, and the CMSi SLD stays its own. The five ties are listed in the
+   *Model Constraints* table.
+5. Continue with steps 3 and 4 above, pairing the CMSi experiment with
+   `Film in CMSi`. The fit is the same as with **Add contrast**: oxide 15.2 Å,
+   film 80.0 Å, SLD 2.00, roughness 5.0 Å, scales 0.99 / 0.95 / 0.98, pooled
+   reduced χ² 0.89.
+6. Remove one of the rows from the *Model Constraints* table: the parameter it
+   names is free again in `Film in CMSi`, with the value and bounds it had before
+   the link. (The oxide and film rows read alike, since a layer parameter is
+   named after its assembly, `Loaded layer`.)
+
 
 ## 6. `dppc_contrasts.ort` — multiple contrasts of a monolayer (advanced)
 

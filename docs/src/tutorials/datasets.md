@@ -24,7 +24,7 @@ in the ORSO model language, so the files can be opened in two ways:
 | `swapped_layers.ort` | A layer-ordering inequality: started from the swapped guess, the fit only recovers the truth with a `≤` constraint between the two thicknesses. |
 | `ni_ti_multilayer.ort` | A `[Ti / Ni] × 8` repeating multilayer with a Bragg peak that pins the period - the **Constant period Λ** and **Conformal roughness** recipes. |
 | `dppc_monolayer.ort` | A DPPC monolayer at the air/D2O interface - the surfactant recipes (equal head/tail area per molecule, solvent roughness). |
-| `film_contrasts.ort` | Three contrasts (D2O, H2O, CMSi) of a film on silicon in one file. Each dataset carries its exact slab model, so **Load sample from file** builds the D2O model. It demonstrates **Add contrast**, pairing experiments with models, per-contrast scale and background, and a joint fit. Start here for multiple contrasts. |
+| `film_contrasts.ort` | Three contrasts (D2O, H2O, CMSi) of a film on silicon in one file. Each dataset carries its exact slab model, so **Load sample from file** builds the D2O model. It demonstrates **Add contrast**, pairing experiments with models, per-contrast scale and background, and a joint fit, and in a variant **Link contrasts** for a contrast built as a separate model. Start here for multiple contrasts. |
 | `dppc_contrasts.ort` | Three contrasts of one DPPC monolayer in one file (d-DPPC on D2O, d-DPPC on air-contrast-matched water, h-DPPC on D2O). It demonstrates **Add contrast**, pairing experiments with models, and a joint fit that separates head hydration from head thickness, which no single contrast can do. |
 
 ```{note}
