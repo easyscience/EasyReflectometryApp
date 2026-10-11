@@ -110,6 +110,15 @@ class TestContrast:
         assert {row['detachable'] for row in shared} == {True, False}
         assert not any(row['detachable'] for row in shared if row['name'].endswith('sld'))
 
+    def test_candidates_listed_for_another_model_are_refused(self, project_and_sample):
+        project, sample = project_and_sample
+        rows = sample.contrastCandidates(0)
+        project.models.duplicate_model(0)
+        sample.contrastCandidates(1)  # the dialog was opened again, for another model
+        result = sample.addContrast(0, 'x', [{'candidate': 0, 'material': 0}])
+        assert result['success'] is False and 'open it again' in result['message']
+        assert len(project.models) == 2 and rows
+
     def test_detach_gives_one_model_its_own_copy(self, project_and_sample):
         project, sample = project_and_sample
         _contrast(project, sample)
@@ -150,6 +159,16 @@ class TestLinkModels:
         result = sample.constrainModelsParameters([0, 1], False)
         assert result['tied'] == 0 and 'layout' in result['messages'][0]
 
+    def test_linking_several_models_is_all_or_nothing(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)  # links cleanly
+        sample.addNewModel()  # does not
+        project.models[2].add_assemblies()
+        result = sample.constrainModelsParameters([0, 1, 2], False)
+        assert result['tied'] == 0 and 'No model was linked.' in result['messages']
+        assert project.links == []
+        assert project.models[1].sample[1].layers[0].thickness.independent
+
 
 class TestExperiments:
     def test_pairing_inclusion_and_removal(self, project_and_sample):
@@ -183,6 +202,38 @@ class TestExperiments:
         assert backend.analysis.selectedExperimentIndices == [0, 1]
         assert [experiment.name for experiment in project.experiments.values()] == ['data 0', 'data 0']
 
+    def test_several_experiments_removed_with_a_model_keep_a_later_selection(self, qcore_application):
+        from EasyReflectometryApp.Backends.Py.py_backend import PyBackend
+
+        backend = PyBackend()
+        project = backend._project_lib
+        project.models.duplicate_model(0)
+        project.experiments = {
+            0: _data(project, 1),
+            1: _data(project, 1),
+            2: _data(project, 0),
+            3: _data(project, 0),
+            4: _data(project, 0),
+        }
+        project.experiments[4].name = 'selected'
+        backend.analysis.setSelectedExperimentIndices([4])
+
+        assert backend.sample.removeModel(1, -1) == [0, 1]
+
+        assert backend.analysis.selectedExperimentIndices == [2]
+        assert project.experiments[2].name == 'selected'
+
+    def test_rebinding_uses_the_index_from_before_the_removal(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        project.models.duplicate_model(0)
+        last = project.models[2]
+        project.experiments = {0: _data(project, 0)}
+
+        sample.removeModel(0, 2)  # the dialog lists the models as they are before the removal
+
+        assert project.experiments[0].model is last
+
     def test_a_file_that_cannot_be_read_is_reported(self, project_and_sample, tmp_path):
         project, _ = project_and_sample
         broken = tmp_path / 'broken.ort'
@@ -193,6 +244,79 @@ class TestExperiments:
         backend.load(str(broken))
         assert failures and 'broken.ort' in failures[0]
         assert project.experiments == {}
+
+
+@pytest.mark.parametrize(('start', 'step'), [(1, 'up'), (0, 'down'), (1, 'down')])
+def test_moving_the_selected_model_keeps_it_selected(project_and_sample, start, step):
+    project, sample = project_and_sample
+    project.models.duplicate_model(0)
+    project.models.duplicate_model(0)
+    project.current_model_index = start
+    moved = project.models[start]
+    changed = []
+    sample.modelsIndexChanged.connect(lambda: changed.append(True))
+
+    (sample.moveSelectedModelUp if step == 'up' else sample.moveSelectedModelDown)()
+
+    assert project.models[project.current_model_index] is moved
+    assert project.current_model_index == start + (-1 if step == 'up' else 1)
+    assert changed
+
+
+def test_a_model_left_out_of_the_fit_does_not_block_it(project_and_sample):
+    from EasyReflectometryApp.Backends.Py.analysis import Analysis
+
+    project, _ = project_and_sample
+    project.models.duplicate_model(0)
+    project.experiments = {0: _data(project, 0), 1: _data(project, 1)}
+    project.experiments[1].include_in_fit = False
+    analysis = Analysis(project)
+    included_scale, excluded_film = project.models[0].scale, project.models[1].sample[1].layers[0].thickness
+    included_scale.fixed = False
+    included_scale.min, included_scale.max = 0.5, 1.5
+    excluded_film.fixed = False
+    excluded_film.max = np.inf
+    names = analysis._minimizers_logic.minimizers_available()
+    analysis.setMinimizerCurrentIndex(names.index('LMFit_differential_evolution'))
+    analysis._chached_parameters = None
+
+    assert analysis._prefit_errors() == []
+    assert analysis.unboundedFreeParametersCount == 0
+    project.experiments[1].include_in_fit = True
+    assert any('does not allow' in error for error in analysis._prefit_errors())
+
+
+def test_the_film_demo_sets_up_three_paired_contrasts(qcore_application):
+    """The README's film_contrasts.ort workflow, through the backend."""
+    from pathlib import Path
+
+    from easyreflectometry.sample import Material
+
+    from EasyReflectometryApp.Backends.Py.py_backend import PyBackend
+
+    url = (Path(__file__).parents[1] / 'examples' / 'datasets' / 'film_contrasts.ort').resolve().as_uri()
+    backend = PyBackend()
+    project, sample = backend._project_lib, backend._sample
+    backend._project.sampleLoad(url, False)
+    for name, sld in (('H2O', -0.56), ('CMSi', 2.07)):
+        project.add_material(Material(sld=sld, isld=0.0, name=name))
+    for name in ('H2O', 'CMSi'):
+        sample.setCurrentModelIndex(0)  # a new contrast is selected: back to the reference
+        rows = sample.contrastCandidates(0)
+        d2o = next(index for index, row in enumerate(rows) if row['label'] == 'D2O')
+        choice = {'candidate': d2o, 'material': sample.materialNames.index(name)}
+        assert sample.addContrast(0, name, [choice])['success']
+    backend._experiment.load([url])
+    for row in range(3):
+        backend.analysis.setModelOnExperiment(row, row)
+
+    assert [model.sample[-1].layers[0].material.name for model in project.models] == ['D2O', 'H2O', 'CMSi']
+    assert [project.model_index_for_experiment(key) for key in sorted(project.experiments)] == [0, 1, 2]
+    assert [experiment.name for experiment in project.experiments.values()] == [
+        'Film on silicon in D2O',
+        'Film on silicon in H2O',
+        'Film on silicon in CMSi',
+    ]
 
 
 def test_a_two_contrast_fit_is_recorded_per_dataset(project_and_sample):

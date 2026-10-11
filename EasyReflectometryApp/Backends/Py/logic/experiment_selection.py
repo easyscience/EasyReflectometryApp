@@ -33,11 +33,10 @@ class ExperimentSelection:
         self._indices = valid
         return True
 
-    def remove_index(self, removed: int, available_count: int) -> bool:
-        """Follow the removal of experiment `removed`: drop it and shift the later ones down.
-        `available_count` is the number of experiments left."""
-        shifted = [index - 1 if index > removed else index for index in self._indices if index != removed]
-        return self.set_indices(shifted, available_count)
+    def remap(self, keys: dict, available_count: int) -> bool:
+        """Follow removed experiments with the library's old -> new key table (the removed
+        ones are not in it). `available_count` is the number of experiments left."""
+        return self.set_indices([keys[index] for index in self._indices if index in keys], available_count)
 
     def prune(self, available_count: int) -> bool:
         """Drop indices that no longer exist (after experiments were removed elsewhere)."""

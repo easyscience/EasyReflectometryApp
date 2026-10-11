@@ -315,14 +315,15 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
 
 
-def test_finished_and_failed_runs_are_recorded_on_the_project(monkeypatch, qcore_application):
-    """The project's run record is what the results dialog and the HTML summary read."""
+def test_a_completed_run_is_recorded_and_a_failed_one_is_not(monkeypatch, qcore_application):
+    """The project's run record is what the results dialog and the HTML summary read: a
+    failed or cancelled run must not replace the description of the last completed one."""
     from tests.factories import FakeFitResult
 
     analysis = _make_analysis(monkeypatch)
     project = make_project()
     recorded = []
-    project.record_fit = lambda prepared, results, status: recorded.append((prepared, results, status))
+    project.record_fit = lambda prepared, results: recorded.append((prepared, results))
     analysis._fitting_logic = Fitting(project)
     analysis._clearCacheAndEmitParametersChanged = MagicMock()
     prepared = _prepared()
@@ -330,9 +331,10 @@ def test_finished_and_failed_runs_are_recorded_on_the_project(monkeypatch, qcore
 
     results = [FakeFitResult(chi2=20.0, n_pars=4, x=list(range(14)))]
     analysis._on_fit_finished(results)
+    analysis._fitting_logic._prepared = _prepared()
     analysis._on_fit_failed('boom')
 
-    assert recorded == [(prepared, results, 'completed'), (prepared, None, 'failed')]
+    assert recorded == [(prepared, results)]
 
 
 # ---------------------------------------------------------------------------

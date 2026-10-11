@@ -351,8 +351,11 @@ class FakeProject:
         self._experiments = value
 
     def move_model(self, index, new_index):
+        # As the library: the current model stays the current one wherever it moves
         self.calls.append(('move_model', index, new_index))
+        current = self._models[self.current_model_index]
         self._models.insert(new_index, self._models.pop(index))
+        self.current_model_index = next(i for i, model in enumerate(self._models) if model is current)
 
     @property
     def calculator(self):

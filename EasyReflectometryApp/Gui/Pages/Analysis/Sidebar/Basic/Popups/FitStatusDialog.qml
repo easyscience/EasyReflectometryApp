@@ -70,7 +70,10 @@ EaElements.Dialog {
 
         EaElements.Label {
             visible: !Globals.BackendWrapper.bayesianResultAvailable && Globals.BackendWrapper.analysisFitSuccess
-            text: "Reduced Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
+            readonly property int datasets: (Globals.BackendWrapper.analysisFitResults.datasets ?? []).length
+            // Pooled over the datasets in the fit, which may be fewer than those loaded
+            text: "Reduced Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4) +
+                  (datasets > 1 ? qsTr(" (%1 datasets)").arg(datasets) : "")
         }
 
         // Over the measured points only, when the zero-variance handling makes it differ.
@@ -93,7 +96,7 @@ EaElements.Dialog {
             rowSpacing: EaStyle.Sizes.fontPixelSize * 0.25
 
             Repeater {
-                model: [qsTr("Dataset"), qsTr("Points"), qsTr("Chi2/point"), qsTr("Share")]
+                model: [qsTr("Dataset"), qsTr("Points fitted"), qsTr("Chi2/point"), qsTr("Share")]
                 EaElements.Label { text: modelData; font.bold: true }
             }
             Repeater {
@@ -104,6 +107,8 @@ EaElements.Dialog {
                         const value = [dataset.name, dataset.points, dataset.chi2PerPoint, dataset.share][index % 4]
                         if (index % 4 === 2) return value === null ? '–' : Number(value).toFixed(3)
                         if (index % 4 === 3) return value === null ? '–' : (100 * value).toFixed(1) + ' %'
+                        // The zero-variance handling can fit fewer points than were measured
+                        if (index % 4 === 1 && dataset.measuredPoints !== value) return value + ' (' + dataset.measuredPoints + ' measured)'
                         return String(value)
                     }
                 }

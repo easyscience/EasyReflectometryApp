@@ -158,27 +158,56 @@ def test_statistics_are_read_from_the_projects_run_record():
         pooled={'objective_reduced_chi2': 2.0, 'classical_reduced_chi2': None},
         inputs=((0, 'D2O', None), (1, 'Polarized', 'pp')),
         per_dataset=(
-            {'objective_n_points': 3, 'objective_chi2': 4.0, 'objective_chi2_per_point': 4 / 3, 'share_of_objective': 0.4},
-            {'objective_n_points': 4, 'objective_chi2': 6.0, 'objective_chi2_per_point': 1.5, 'share_of_objective': 0.6},
+            {
+                'objective_n_points': 3,
+                'classical_n_points': 3,
+                'objective_chi2': 4.0,
+                'objective_chi2_per_point': 4 / 3,
+                'share_of_objective': 0.4,
+            },
+            {
+                'objective_n_points': 4,
+                'classical_n_points': 5,
+                'objective_chi2': 6.0,
+                'objective_chi2_per_point': 1.5,
+                'share_of_objective': 0.6,
+            },
         ),
     )
 
     assert (logic.fit_n_pars, logic.fit_chi2, logic.fit_classical_reduced_chi2) == (2, 2.0, None)
     assert [row['name'] for row in logic.fit_dataset_rows] == ['D2O', 'Polarized (pp)']
     assert [row['share'] for row in logic.fit_dataset_rows] == [0.4, 0.6]
+    assert [(row['points'], row['measuredPoints']) for row in logic.fit_dataset_rows] == [(3, 3), (4, 5)]
 
 
-def test_a_finished_or_failed_run_is_recorded_on_the_project():
+def test_a_completed_run_is_recorded_once():
     project = make_project()
     recorded = []
-    project.record_fit = lambda prepared, results, status: recorded.append((prepared, results, status))
+    project.record_fit = lambda prepared, results: recorded.append((prepared, results))
     logic = fitting_module.Fitting(project)
     logic._prepared = 'prepared'
 
     logic.record_on_project(['result'])
-    logic.record_on_project(None, 'cancelled')
+    logic.record_on_project(['again'])  # the prepared run is used up
 
-    assert recorded == [('prepared', ['result'], 'completed'), ('prepared', None, 'cancelled')]
+    assert recorded == [('prepared', ['result'])]
+
+
+def test_a_failure_or_a_sampling_run_cannot_be_recorded_against_a_previous_fit():
+    project = make_project()
+    recorded = []
+    project.record_fit = lambda prepared, results: recorded.append((prepared, results))
+    logic = fitting_module.Fitting(project)
+
+    logic._prepared = 'prepared'
+    logic.on_fit_failed('boom')
+    logic.record_on_project(['result'])
+    logic._prepared = 'prepared'
+    logic.prepare_for_threaded_sample()
+    logic.record_on_project(['result'])
+
+    assert recorded == []
 
 
 def test_ordered_experiments_sorts_by_key_only():
@@ -304,7 +333,7 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
     logic = fitting_module.Fitting(project)
 
     # Mock the datagroup collection to avoid scipp dependency
-    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda: 'fake-data-group')
+    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda experiments: 'fake-data-group')
 
     multi_fitter, data_group = logic.prepare_threaded_sample(StubMinimizersLogic())
 
@@ -318,6 +347,31 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
     project.fit_settings.objective = 'mighell'
     project.fit_settings.engine_options['LMFit_leastsq'] = {'epsfcn': 1e-3}
     assert multi_fitter.settings == FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+
+
+def test_sampling_covers_the_included_experiments_only(monkeypatch):
+    install_fake_multifitter(monkeypatch)
+    model_a, model_b = make_model(name='A'), make_model(name='B')
+    experiments = {0: make_experiment('Exp A', model=model_a), 1: make_experiment('Exp B', model=model_b)}
+    project = make_project(experiments=experiments)
+    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    logic = fitting_module.Fitting(project)
+    sampled = []
+    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda experiments: sampled.append(experiments))
+
+    experiments[0].include_in_fit = False
+    multi_fitter, _ = logic.prepare_threaded_sample(StubMinimizersLogic())
+    assert multi_fitter.models == (model_b,)
+    assert sampled == [[experiments[1]]]
+
+    experiments[1].include_in_fit = False
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) == (None, None)
+    assert 'tick Fit' in logic.fit_error_message
+
+    experiments[1].include_in_fit = True
+    experiments[1].model = None
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) == (None, None)
+    assert 'no model' in logic.fit_error_message
 
 
 def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):

@@ -111,9 +111,11 @@ Rectangle {
                     }
                     return shown
                 }
-                // Decades between consecutive experiments in the staggered view (0: not staggered).
-                // Only the reflectivity is shifted; residuals are computed from the measured data.
+                // Decades between consecutive experiments in the staggered view (0: not staggered,
+                // also in the R·q⁴ view, whose curves are compared on one scale). Only the
+                // reflectivity is shifted; residuals are computed from the measured data.
                 readonly property double staggerDecades: Globals.Variables.staggerAnalysis && isMultiExperimentMode
+                                                         && !Globals.BackendWrapper.plottingPlotRQ4
                                                          ? Globals.Variables.analysisStaggerDecades : 0
                 property double staggerSpan: 0
                 onStaggerDecadesChanged: if (useDynamicSeries) updateMultiExperimentSeries()

@@ -564,11 +564,9 @@ class Analysis(QObject):
         is_user_cancel = self._fitting_logic.fit_cancelled and 'cancel' in error_message.lower()
         if is_user_cancel:
             error_message = 'Fitting cancelled by user'
+        # Not recorded on the project: its record keeps describing the last completed fit,
+        # which the parameters still hold. The dialog shows this error.
         self._fitting_logic.on_fit_failed(error_message)
-        try:
-            self._fitting_logic.record_on_project(None, 'cancelled' if is_user_cancel else 'failed')
-        except Exception:
-            logger.exception('Failed to record the fit on the project')
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
@@ -1048,15 +1046,19 @@ class Analysis(QObject):
         return errors
 
     def _free_parameters(self) -> List[dict]:
-        """The parameters a fit varies, each once.
+        """The parameters the next fit varies, each once.
 
         Read from the unfiltered list: the table's name and free/fixed filters
         must not change what the fit-wide checks see. A parameter shared by
-        several models is listed once per model, hence the identity check.
+        several models is listed once per model, hence the identity check. The
+        library says which parameters the included experiments' fit varies
+        (``Project.fit_parameters``), so a model left out does not block it.
         """
+        fit_parameters = getattr(self._project_lib, 'fit_parameters', None)
+        in_fit = None if fit_parameters is None else {id(parameter) for parameter in fit_parameters()}
         unique = {}
         for param in self._parameters_logic.all_parameters():
-            if param['fit'] and param.get('enabled', True):
+            if param['fit'] and param.get('enabled', True) and (in_fit is None or id(param['object']) in in_fit):
                 unique.setdefault(id(param['object']), param)
         return list(unique.values())
 
@@ -1168,12 +1170,7 @@ class Analysis(QObject):
         Remove the experiment at the given index.
         """
         if 0 <= index < len(self._experiments_logic.available()):
-            self._experiments_logic.remove_experiment(index)
-            # The selection follows: the removed experiment leaves it, later ones shift down.
-            if self._selection.remove_index(index, len(self._experiments_logic.available())):
-                self._sync_current_experiment_to_selection()
-            self.experimentsChanged.emit()
-            self.externalExperimentChanged.emit()
+            self.follow_rekeyed_experiments(self._experiments_logic.remove_experiment(index))
         else:
             logger.warning('Experiment index %s is out of range.', index)
 
@@ -1211,14 +1208,11 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
 
-    def follow_removed_experiments(self, removed: list) -> None:
-        """The selection follows experiments removed elsewhere (with their model): the removed
-        ones leave it and the later ones move up, as for :meth:`removeExperiment`."""
-        remaining = len(self._experiments_logic.available())
-        changed = False
-        for index in sorted(removed, reverse=True):
-            changed |= self._selection.remove_index(index, remaining)
-        if changed:
+    def follow_rekeyed_experiments(self, keys: dict) -> None:
+        """The selection follows removed experiments, by the library's old -> new key table
+        (the removed ones are not in it). The experiment list changed, so it is announced
+        whether or not the selection did."""
+        if self._selection.remap(keys, len(self._experiments_logic.available())):
             self._sync_current_experiment_to_selection()
         self.experimentsChanged.emit()
         self.externalExperimentChanged.emit()

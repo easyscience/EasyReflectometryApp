@@ -187,6 +187,7 @@ class Fitting:
         """
         self._result = None
         self._results = []
+        self._prepared = None
         self._fit_error_message = error_message
         self._running = False
         self._finished = True
@@ -248,11 +249,14 @@ class Fitting:
         'Bayesian sampling of polarized experiments is not supported yet.'
     )
 
-    def _has_polarized_experiments(self) -> bool:
-        """Whether any loaded experiment carries per-channel (polarized) data."""
-        return any(
-            getattr(experiment, 'available_channels', None) is not None for experiment in self._ordered_experiments()
-        )
+    def _has_polarized_experiments(self, experiments: Optional[list] = None) -> bool:
+        """Whether any of `experiments` (by default every loaded one) carries per-channel data."""
+        experiments = self._ordered_experiments() if experiments is None else experiments
+        return any(getattr(experiment, 'available_channels', None) is not None for experiment in experiments)
+
+    def _included_experiments(self) -> list:
+        """The experiments whose Fit box is ticked, in order."""
+        return [experiment for experiment in self._ordered_experiments() if getattr(experiment, 'include_in_fit', True)]
 
     # ------------------------------------------------------------------
     # Inequality constraints (BUMPS penalties)
@@ -377,11 +381,13 @@ class Fitting:
         self._finished = True
         self._show_results_dialog = True
 
-    def record_on_project(self, results: Optional[list], status: str = 'completed') -> None:
-        """Record the outcome of the worker's run on the project (``Project.last_fit``),
-        which the results dialog and the summary read."""
+    def record_on_project(self, results: list) -> None:
+        """Record the completed run on the project (``Project.last_fit``), which the results
+        dialog and the summary read. The prepared run is used up: a later failure, or a
+        sampling run, cannot be recorded against it."""
         if self._prepared is not None:
-            self._project_lib.record_fit(self._prepared, results, status)
+            prepared, self._prepared = self._prepared, None
+            self._project_lib.record_fit(prepared, results)
 
     @property
     def _run(self):
@@ -399,6 +405,7 @@ class Fitting:
                 {
                     'name': name if channel is None else f'{name} ({channel})',
                     'points': entry['objective_n_points'],
+                    'measuredPoints': entry['classical_n_points'],
                     'chi2': entry['objective_chi2'],
                     'chi2PerPoint': entry['objective_chi2_per_point'],
                     'share': entry['share_of_objective'],
@@ -430,25 +437,23 @@ class Fitting:
     # Bayesian sampling helpers
     # ------------------------------------------------------------------
 
-    def collect_all_experiments_datagroup(self) -> 'sc.DataGroup':
+    def collect_all_experiments_datagroup(self, experiments: Optional[list] = None) -> 'sc.DataGroup':
         """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.mcmc_sample()``.
 
-        Scope decision (see issue #319): Bayesian sampling deliberately runs over
-        **all** experiments, mirroring the classical fit path (``prepare_threaded_fit``)
-        which also fits every experiment. The experiment selection currently affects
-        only plotting, not the fit/sampling scope. If per-selection sampling is ever
-        wanted, filter ``self._ordered_experiments()`` here and rename accordingly.
+        Sampling covers the experiments whose Fit box is ticked, like a classical fit;
+        the selection only affects plotting.
 
+        :param experiments: The experiments to sample, by default the included ones.
         :return: DataGroup with reflectivity coords and data.
         :rtype: sc.DataGroup
         """
         import numpy as np
         import scipp as sc
 
-        if self._has_polarized_experiments():
+        experiments = self._included_experiments() if experiments is None else experiments
+        if self._has_polarized_experiments(experiments):
             raise ValueError(self._POLARIZED_SAMPLE_MESSAGE)
 
-        experiments = self._ordered_experiments()
         coords = {}
         data = {}
         for i, experiment in enumerate(experiments):
@@ -483,9 +488,17 @@ class Fitting:
         try:
             from easyreflectometry.fitting import MultiFitter
 
-            experiments = self._ordered_experiments()
-            if not experiments:
+            if not self._ordered_experiments():
                 self._fail_before_start('No experiments to sample')
+                return None, None
+            experiments = self._included_experiments()
+            if not experiments:
+                self._fail_before_start('No experiment to sample: tick Fit for at least one experiment.')
+                return None, None
+            unbound = [experiment.name for experiment in experiments if experiment.model is None]
+            if unbound:
+                names = ', '.join(f"'{name}'" for name in unbound)
+                self._fail_before_start(f'{names} cannot be sampled: no model is assigned.')
                 return None, None
 
             constraints_error = self.inequality_constraints_error(minimizers_logic)
@@ -494,6 +507,7 @@ class Fitting:
                 self._fail_before_start(constraints_error)
                 return None, None
 
+            # The library adds the free parameters of excluded models that these follow.
             models = [experiment.model for experiment in experiments]
             multi_fitter = MultiFitter(*models)
             # Sampled with a snapshot of the project's settings (a BUMPS minimizer
@@ -502,7 +516,7 @@ class Fitting:
             # controls stay editable meanwhile.
             multi_fitter.settings = copy.deepcopy(self._project_lib.fit_settings)
 
-            data_group = self.collect_all_experiments_datagroup()
+            data_group = self.collect_all_experiments_datagroup(experiments)
             return multi_fitter, data_group
         except Exception as e:
             self._fail_before_start(f'Error preparing sampling: {e}')
@@ -511,6 +525,7 @@ class Fitting:
 
     def prepare_for_threaded_sample(self) -> None:
         """Set running flags and sampling progress message before launching the worker."""
+        self._prepared = None  # a sampling run is not recorded as a classical one
         self.reset_stop_flag()
         self._running = True
         self._finished = False

@@ -33,18 +33,26 @@ def test_set_indices_without_experiments_is_empty():
     assert selection.indices == []
 
 
-def test_remove_index_shifts_later_experiments_down():
+def test_remap_follows_the_library_key_table():
     selection = ExperimentSelection([0, 2, 3])
 
-    # Experiment 2 removed: 3 experiments are left.
-    assert selection.remove_index(2, available_count=3) is True
+    # Experiment 2 removed: 3 experiments are left, 3 is now 2.
+    assert selection.remap({0: 0, 1: 1, 3: 2}, available_count=3) is True
     assert selection.indices == [0, 2]
 
 
-def test_remove_index_of_the_only_selected_selects_the_first():
+def test_remap_after_several_removals_keeps_a_later_selection():
+    # Experiments 0 and 1 removed at once: the selected 4 is now 2, not dropped on the way.
+    selection = ExperimentSelection([4])
+
+    assert selection.remap({2: 0, 3: 1, 4: 2}, available_count=3) is True
+    assert selection.indices == [2]
+
+
+def test_remap_of_the_only_selected_selects_the_first():
     selection = ExperimentSelection([1])
 
-    assert selection.remove_index(1, available_count=2) is True
+    assert selection.remap({0: 0}, available_count=1) is True
     assert selection.indices == [0]
 
 

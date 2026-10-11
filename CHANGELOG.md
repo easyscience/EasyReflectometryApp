@@ -22,12 +22,16 @@
   - Each experiment's model is chosen per row on the Experiment and Analysis
     pages and shows the stored pairing (the combo used to reset to the first
     model and could change another experiment).
-  - A "Fit" checkbox per experiment chooses what the next fit includes; a
-    parameter that an included model follows stays fitted even when its own
-    model is left out. The results dialog lists each dataset's χ² per point
-    and share of the total; the statistics come from the library's record of
-    the run, so they survive switching the current model.
-  - The Analysis chart has the staggered view too.
+  - A "Fit" checkbox per experiment chooses what the next fit, or Bayesian
+    sampling, includes; a parameter that an included model follows stays
+    fitted even when its own model is left out. The pre-fit bound checks look
+    only at the parameters the fit varies. The results dialog lists each
+    dataset's χ² per point and share of the total; the statistics come from
+    the library's record of the last completed run, so they survive switching
+    the current model and are not replaced by a failed or cancelled run.
+  - The Analysis chart has the staggered view too (not in the R·q⁴ view).
+  - Linking several models links all of them or, when one cannot be linked,
+    none.
   - Removing a model that experiments use asks whether to remove them or fit
     them with another model; experiments are no longer removed by position.
   - A data file that cannot be read is reported in a dialog.

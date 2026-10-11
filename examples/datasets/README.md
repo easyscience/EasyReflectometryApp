@@ -138,19 +138,24 @@ first one, the D2O stack.
 1. *Sample* › **Load sample from file** with `film_contrasts.ort`. This builds
    Si | SiO2 | Film | D2O; the palette is Si, SiO2, Film, D2O. Add two
    materials: `H2O` (−0.56) and `CMSi` (2.07).
-2. **Add contrast of the selected model…** twice: replace D2O with H2O, then
-   with CMSi. The new models share the D2O model's oxide and film. Editing the
-   film thickness in one model changes all three. Only the subphase is the
-   contrast's own.
+2. **Add contrast of the selected model…** with the D2O model selected: replace
+   D2O with H2O. The new contrast becomes the selected model, so **select the D2O
+   model again** and add the second contrast: replace D2O with CMSi. The new
+   models share the D2O model's oxide and film, which are one object in all
+   three: editing the film thickness in any model changes all three. Each
+   contrast has its own subphase, whose roughness is tied to the D2O one: edit
+   that in the D2O model.
 3. *Experiment* › **Load experiment(s) from file(s)** with the same file. This
    creates three experiments ("Film on silicon in D2O / H2O / CMSi"), all bound
-   to the current model. Pair the H2O and CMSi experiments with their contrasts.
+   to the model selected at the time. Pair **each** of the three with its model
+   (D2O, H2O, CMSi) in the experiments table.
 4. *Analysis*: set each model's background to its value in the table above and
    keep it fixed. Free the oxide thickness, the film thickness, SLD and
    roughness, and the three scales. Start from a wrong guess, e.g. oxide 25 Å,
    film 70 Å, SLD 1.0, roughness 3 Å. Fit all three: oxide 15.2 Å, film 80.0 Å,
-   SLD 2.00, roughness 5.0 Å. The scales come back per contrast (H2O 0.95), and
-   each contrast's reduced χ² is about 0.9. The same result came from
+   SLD 2.00, roughness 5.0 Å. The scales come back per contrast (H2O 0.95), the
+   pooled reduced χ² is about 0.9 and each dataset's χ²/point is about 0.9 too.
+   The same result came from
    oxide 10 / film 90 / SLD 3.0 and from 20 / 75 / 1.5.
    - **Leave the backgrounds fixed.** With all three backgrounds free from a
      common 1e-6, LMFit ends in a local minimum: the D2O background drops to
@@ -189,16 +194,20 @@ exercises the formula substitution and a solvent shared by two layers.
    molecule**, **Conformal roughness** and **Solvent roughness follows the
    surfactant** recipes. Start from a wrong guess, e.g. tail 20 Å, head 12 Å, APM
    45 Å², solvent fraction 0.1. Add an `ACMW` material with SLD 0.
-2. **Add contrast of the selected model…** twice:
+2. **Add contrast of the selected model…** twice, each time with the **d-DPPC /
+   D2O model selected** (a new contrast becomes the selected model, so select the
+   reference again before the second one):
    - `d-DPPC / ACMW`: replace D2O with ACMW. This one change swaps both the
      subphase and the head solvent.
    - `h-DPPC / D2O`: give the tail layer the formula `C32H64`.
 
-   The contrasts share the reference's structure. Editing the tail thickness in
-   any model changes all three.
+   Each contrast has its own copy of the surfactant layer, with its parameters
+   tied to the reference's: edit the tail thickness, APM, solvation and
+   roughness in the d-DPPC / D2O model, and all three follow.
 3. *Experiment* › **Load experiment(s) from file(s)** with `dppc_contrasts.ort`.
    This creates three experiments, named after the dataset titles and all bound to
-   the current model. Pair each one with its contrast in the experiments list.
+   the model selected at the time. Pair **each** of the three with its model in
+   the experiments table.
 4. *Analysis*: free the tail and head thicknesses, the APM, the head solvent
    fraction, the roughness, and each model's scale and background. Fit.
    - **D2O contrast alone** (untick **Fit** on the other two): the head solvation
@@ -207,9 +216,9 @@ exercises the formula substitution and a solvent shared by two layers.
      head thickness.
    - **All three jointly**: tail 14.1 Å, head 9.25 Å, APM 51.7 Å², solvent
      fraction 0.21, roughness 3.9 Å, with finite uncertainties. Scales and
-     backgrounds come back per contrast (h-DPPC scale 0.94). Each contrast's
-     reduced χ² is about 1. Verified through the library API, starting from
-     the wrong guess above.
+     backgrounds come back per contrast (h-DPPC scale 0.94). The pooled reduced
+     χ² and each dataset's χ²/point are about 1. Verified through the library
+     API, starting from the wrong guess above.
 5. Save and reload the project. The contrasts still share their structure, and
    each experiment keeps its model pairing.
 

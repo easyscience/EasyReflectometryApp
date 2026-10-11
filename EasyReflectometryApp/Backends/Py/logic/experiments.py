@@ -166,10 +166,11 @@ class Experiments:
         experiment.include_in_fit = included
         return True
 
-    def remove_experiment(self, index: int) -> None:
-        """Remove the experiment at the given (ordered) index; the library re-keys the rest."""
+    def remove_experiment(self, index: int) -> dict:
+        """Remove the experiment at the given (ordered) index; returns the library's old -> new
+        key table of the remaining ones (empty when nothing was removed)."""
         key = self._experiment_key_at_index(index)
         if key is None:
             logger.warning('Experiment index %s is out of range.', index)
-            return
-        self._project_lib.remove_experiment(key)
+            return {}
+        return self._project_lib.remove_experiment(key)

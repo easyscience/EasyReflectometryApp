@@ -73,8 +73,9 @@ class Sample(QObject):
     materialsIndexChanged = Signal()
 
     modelsTableChanged = Signal()
-    # Positions of experiments removed together with a model
-    experimentsRemoved = Signal(list)
+    # Experiments removed together with a model: old row -> new row of each remaining one.
+    # An object, not a dict: Qt would turn the int keys into strings.
+    experimentsRekeyed = Signal(object)
     modelsIndexChanged = Signal()
 
     assembliesTableChanged = Signal()
@@ -352,7 +353,8 @@ class Sample(QObject):
     @Slot(int, str, 'QVariantList', result='QVariant')
     def addContrast(self, reference_index: int, name: str, choices: list) -> dict:
         """Add a contrast of the model at `reference_index` (see ``Project.add_contrast``):
-        its structure is shared, the chosen materials are replaced or re-formulated."""
+        its structure is shared, the chosen materials are replaced or re-formulated.
+        `choices` refer to the rows of the last :meth:`contrastCandidates` of that model."""
         try:
             new_index = self._models_logic.add_contrast(reference_index, name, list(choices))
         except ValueError as error:
@@ -395,13 +397,14 @@ class Sample(QObject):
         """Remove the model at `index`. Its experiments are removed, or bound to the model at
         `rebind_to` (an index before the removal) when that is not -1. Returns the
         positions of the experiments removed with it."""
-        removed = self._models_logic.remove_at_index(index, rebind_to)
+        removal = self._models_logic.remove_at_index(index, rebind_to)
         # Ties to this model's parameters were freed by the library; other constraints that
         # lost one end are swept here, see _detach_unreachable_constraints.
         self._detach_unreachable_constraints()
         self._drop_constraint_states_that_no_longer_hold()
+        removed = removal.experiments if rebind_to < 0 else []
         if removed:
-            self.experimentsRemoved.emit(removed)
+            self.experimentsRekeyed.emit(removal.remap)
         self.modelsTableChanged.emit()
         self.externalRefreshPlot.emit()
         return removed
@@ -436,11 +439,13 @@ class Sample(QObject):
     def moveSelectedModelUp(self) -> None:
         self._models_logic.move_selected_up()
         self.modelsTableChanged.emit()
+        self.modelsIndexChanged.emit()
 
     @Slot()
     def moveSelectedModelDown(self) -> None:
         self._models_logic.move_selected_down()
         self.modelsTableChanged.emit()
+        self.modelsIndexChanged.emit()
 
     # # #
     # Assemblies
@@ -1938,16 +1943,28 @@ class Sample(QObject):
         models = self._project_lib.models
         if len(indices) < 2 or not all(0 <= index < len(models) for index in indices):
             return {'tied': 0, 'messages': [self.tr('Select at least two models.')]}
-        reference, tied, messages = indices[0], 0, []
+        reference, plans, messages = indices[0], [], []
+        materials = 'tie' if tie_materials else 'skip'
+        # One action: every follower is planned first, and linked only if all of them can be.
         for follower in indices[1:]:
             try:
-                plan = self._project_lib.plan_link(follower, reference, materials='tie' if tie_materials else 'skip')
-                tied += len(self._project_lib.apply_link(plan).pairs)
+                plans.append((follower, self._project_lib.plan_link(follower, reference, materials=materials)))
             except ValueError as error:
                 messages.append(str(error))
-                continue
+        if messages:
+            return {'tied': 0, 'messages': messages + [self.tr('No model was linked.')]}
+        records = []
+        try:
+            for _, plan in plans:
+                records.append(self._project_lib.apply_link(plan))
+        except ValueError as error:
+            for record in records:
+                self._project_lib.unlink(record)
+            return {'tied': 0, 'messages': [str(error), self.tr('No model was linked.')]}
+        for follower, plan in plans:
             conflicts = [row for row in plan.rows if row.action == 'conflict']
             messages.extend(f"'{models[follower].name}' {row.path}: {row.reason}" for row in conflicts)
+        tied = sum(len(record.pairs) for record in records)
         if tied:
             self._emit_constraints_changed()
         return {'tied': tied, 'messages': messages}

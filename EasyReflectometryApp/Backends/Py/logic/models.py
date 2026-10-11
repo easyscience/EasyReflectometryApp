@@ -8,6 +8,7 @@ from easyreflectometry.contrasts import substitution_candidates
 from easyreflectometry.model import Model
 from easyreflectometry.model import ModelCollection
 from easyreflectometry.model.resolution_functions import PercentageFwhm
+from easyreflectometry.project import ModelRemoval
 
 from .helpers import get_original_name
 
@@ -19,7 +20,7 @@ def _formula_of(target) -> str:
 class Models:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
-        self._contrast_candidates: list = []
+        self._contrast_candidates: tuple = (None, [])
 
     @property
     def _models(self) -> ModelCollection:
@@ -98,7 +99,7 @@ class Models:
         (``'material'``: replace it by another material; ``'formula'``: give it another
         chemical formula) and, for a formula, the current one."""
         materials, formulas = substitution_candidates(self._project_lib.models[index])
-        self._contrast_candidates = materials + formulas
+        self._contrast_candidates = (self._project_lib.models[index], materials + formulas)
         rows = [{'label': material.name, 'kind': 'material'} for material in materials]
         rows += [{'label': target.name, 'kind': 'formula', 'formula': _formula_of(target)} for target in formulas]
         # Two distinct objects may share a name (each surfactant layer has its own D2O).
@@ -113,10 +114,18 @@ class Models:
     def add_contrast(self, index: int, name: str, choices: list[dict]) -> int:
         """Add a contrast of the model at `index`; `choices` refer to the rows of the last
         :meth:`contrast_candidates`, each with a palette ``material`` index or a ``formula``.
-        Returns the new model's index."""
+        Returns the new model's index.
+
+        Raises ValueError when the model changed since the candidates were listed: a row
+        would then name another object."""
+        model, candidates = self._contrast_candidates
+        materials, formulas = substitution_candidates(self._project_lib.models[index])
+        current = materials + formulas
+        if model is not self._project_lib.models[index] or [id(c) for c in current] != [id(c) for c in candidates]:
+            raise ValueError('The model changed since the dialog opened; open it again.')
         substitutions = []
         for choice in choices:
-            candidate = self._contrast_candidates[int(choice['candidate'])]
+            candidate = candidates[int(choice['candidate'])]
             if 'material' in choice:
                 material = self._project_lib._materials[int(choice['material'])]
                 if material is not candidate:
@@ -130,14 +139,14 @@ class Models:
         experiments = self._project_lib.experiments
         return [experiments[key].name for key in self._project_lib.experiments_for_model(index)]
 
-    def remove_at_index(self, index: int, rebind_to: int = -1) -> list[int]:
+    def remove_at_index(self, index: int, rebind_to: int = -1) -> ModelRemoval:
         """Remove the model; its experiments are removed, or bound to `rebind_to` when that is
-        a model index. Returns the keys of the experiments removed with it."""
+        a model index (counted before the removal). Returns the library's account of it: with
+        the experiments removed, ``remap`` keys the remaining ones."""
         experiments = None
         if self._project_lib.experiments_for_model(index):
             experiments = rebind_to if rebind_to >= 0 else 'remove'
-        removal = self._project_lib.remove_model_at_index(index, experiments=experiments)
-        return removal.experiments if experiments == 'remove' else []
+        return self._project_lib.remove_model_at_index(index, experiments=experiments)
 
     def default_model_content(self, model: Model) -> None:
         """Set the default content for a model."""
@@ -189,15 +198,14 @@ class Models:
         """
         model.interface = self._project_lib._calculator
 
+    # The library keeps the moved model the current one.
     def move_selected_up(self) -> None:
         if self.index > 0:
             self._project_lib.move_model(self.index, self.index - 1)
-            self.index = self.index - 1
 
     def move_selected_down(self) -> None:
         if self.index < len(self._models) - 1:
             self._project_lib.move_model(self.index, self.index + 1)
-            self.index = self.index + 1
 
 
 def _from_models_collection_to_list_of_dicts(models_collection: ModelCollection) -> list[dict[str, str]]:
