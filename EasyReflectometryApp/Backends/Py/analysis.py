@@ -618,7 +618,7 @@ class Analysis(QObject):
         self._fitting_logic.prepare_for_threaded_sample()
         self.fittingChanged.emit()
 
-        multi_fitter, data_group = self._fitting_logic.prepare_threaded_sample(self._minimizers_logic)
+        multi_fitter = self._fitting_logic.prepare_threaded_sample(self._minimizers_logic)
 
         if multi_fitter is None:
             self.fittingChanged.emit()
@@ -638,7 +638,9 @@ class Analysis(QObject):
         self._fitter_thread = FitterWorker(
             fitter=multi_fitter,  # the high-level reflectometry MultiFitter
             method_name='mcmc_sample',
-            args=(data_group,),  # sc.DataGroup
+            # No DataGroup: the fitter samples the experiments it was prepared
+            # for, each dataset with its own resolution.
+            args=(),
             kwargs={
                 'samples': self._bayesian_logic.samples,
                 'burn': self._bayesian_logic.burn,
@@ -723,12 +725,14 @@ class Analysis(QObject):
                 q_i = np.asarray(experiment.x)
                 model_i = experiment.model
 
+                # Smeared like the sampler smeared this dataset: with its own resolution.
                 median_i, lo_i, hi_i = posterior_predictive_reflectivity(
                     posterior['draws'],
                     posterior['param_names'],
                     model=model_i,
                     q_values=q_i,
                     n_samples=200,
+                    resolution_function=getattr(experiment, 'resolution_function', None),
                 )
                 logger.info(
                     'Posterior predictive for experiment %d: q=%d, median shape=%s',

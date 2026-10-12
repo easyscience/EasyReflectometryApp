@@ -315,13 +315,13 @@ def test_prepare_threaded_sample_handles_empty_experiments():
 
     result = logic.prepare_threaded_sample(StubMinimizersLogic())
 
-    assert result == (None, None)
+    assert result is None
     assert logic.fit_error_message == 'No experiments to sample'
     assert logic.fit_finished is True
     assert logic.show_results_dialog is True
 
 
-def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
+def test_prepare_threaded_sample_asks_the_project_for_an_experiment_fitter(monkeypatch):
     install_fake_multifitter(monkeypatch)
     model_a = make_model(name='A')
     experiments = {
@@ -332,14 +332,13 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
     project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
-    # Mock the datagroup collection to avoid scipp dependency
-    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda experiments: 'fake-data-group')
+    multi_fitter = logic.prepare_threaded_sample(StubMinimizersLogic())
 
-    multi_fitter, data_group = logic.prepare_threaded_sample(StubMinimizersLogic())
-
-    assert multi_fitter is not None
+    # Built by `Project.prepare_sample` over the experiments themselves, so each
+    # dataset is sampled with its own resolution (no hand-built DataGroup).
+    assert ('prepare_sample', [experiments[0]]) in project.calls
     assert multi_fitter.models == (model_a,)
-    assert data_group == 'fake-data-group'
+    assert multi_fitter.fit_datasets == [experiments[0]]
     # Sampled with a snapshot of the project's settings, taken before the worker starts
     assert multi_fitter.settings == project.fit_settings
     project.fit_settings.minimizer = AvailableMinimizers.LMFit_leastsq
@@ -356,128 +355,35 @@ def test_sampling_covers_the_included_experiments_only(monkeypatch):
     project = make_project(experiments=experiments)
     project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
-    sampled = []
-    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda experiments: sampled.append(experiments))
 
     experiments[0].include_in_fit = False
-    multi_fitter, _ = logic.prepare_threaded_sample(StubMinimizersLogic())
+    multi_fitter = logic.prepare_threaded_sample(StubMinimizersLogic())
     assert multi_fitter.models == (model_b,)
-    assert sampled == [[experiments[1]]]
+    assert multi_fitter.fit_datasets == [experiments[1]]
 
     experiments[1].include_in_fit = False
-    assert logic.prepare_threaded_sample(StubMinimizersLogic()) == (None, None)
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
     assert 'tick Fit' in logic.fit_error_message
 
     experiments[1].include_in_fit = True
     experiments[1].model = None
-    assert logic.prepare_threaded_sample(StubMinimizersLogic()) == (None, None)
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
     assert 'no model' in logic.fit_error_message
 
 
-def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):
-    # Fake scipp to avoid import issues
-    import numpy as np
-
-    # We need to make scipp available; we'll mock the import within the method
-    model = make_model(name='M1')
-    experiments = {
-        0: make_experiment('Exp 1', model=model,
-                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([0.01, 0.04])),
-    }
+def test_a_project_refusal_is_reported_not_raised(monkeypatch):
+    install_fake_multifitter(monkeypatch)
+    experiments = {0: make_experiment('Exp A', model=make_model(name='A'))}
     project = make_project(experiments=experiments)
     logic = fitting_module.Fitting(project)
 
-    # Create a minimal sc.DataGroup stand-in
-    class FakeSCUnit:
-        def __init__(self, unit_str):
-            self._str = unit_str
-        def __eq__(self, other):
-            return isinstance(other, FakeSCUnit) and other._str == self._str
+    def refuse(experiments, **kwargs):
+        raise ValueError("'Exp A' cannot be sampled: no model of this project is assigned.")
 
-    class FakeSCArray:
-        _registry = []
-        def __init__(self, *, dims, values, variances=None, unit=None):
-            self.dims = dims
-            self.values = values
-            self.variances = variances
-            self.unit = unit
-            FakeSCArray._registry.append(self)
+    monkeypatch.setattr(project, 'prepare_sample', refuse)
 
-    class FakeSCDataGroup(dict):
-        def __init__(self, data=None, coords=None, attrs=None):
-            super().__init__()
-            self.data = data or {}
-            self.coords = coords or {}
-            self.attrs = attrs or {}
-        def __repr__(self):
-            return f'DataGroup({dict(self.data)})'
-
-    FakeSCArray._registry = []
-
-    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
-    monkeypatch.setattr('scipp.array', FakeSCArray)
-    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
-
-    dg = logic.collect_all_experiments_datagroup()
-
-    assert dg.coords.keys() == {'Qz_0'}
-    assert dg.data.keys() == {'R_0'}
-
-    coord = dg.coords['Qz_0']
-    assert coord.dims == ['Qz_0']
-    assert list(coord.values) == [1.0, 2.0]
-    # mcmc_sample only reads the coordinate's values; no variances are attached
-    # (xe may be empty for 2/3-column data files, which scipp would reject).
-    assert coord.variances is None
-    assert coord.unit == FakeSCUnit('1/angstrom')
-
-    measurement = dg.data['R_0']
-    assert measurement.dims == ['Qz_0']
-    assert list(measurement.values) == [0.1, 0.2]
-    assert list(measurement.variances) == [0.01, 0.04]
-
-
-def test_collect_all_experiments_datagroup_missing_ye_falls_back_to_zero_variance(monkeypatch):
-    """Data files without an uncertainty column yield empty/absent ye; the
-    DataGroup must still build (with zero variances) instead of crashing in
-    scipp, so mcmc_sample can report the missing uncertainties itself."""
-    import numpy as np
-
-    model = make_model(name='M1')
-    experiments = {
-        0: make_experiment('Exp 1', model=model,
-                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([])),
-    }
-    project = make_project(experiments=experiments)
-    logic = fitting_module.Fitting(project)
-
-    class FakeSCUnit:
-        def __init__(self, unit_str):
-            self._str = unit_str
-
-    class FakeSCArray:
-        def __init__(self, *, dims, values, variances=None, unit=None):
-            if variances is not None and np.shape(variances) != np.shape(values):
-                raise ValueError("The shapes of 'values' and 'variances' differ")
-            self.dims = dims
-            self.values = values
-            self.variances = variances
-            self.unit = unit
-
-    class FakeSCDataGroup(dict):
-        def __init__(self, data=None, coords=None, attrs=None):
-            super().__init__()
-            self.data = data or {}
-            self.coords = coords or {}
-            self.attrs = attrs or {}
-
-    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
-    monkeypatch.setattr('scipp.array', FakeSCArray)
-    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
-
-    dg = logic.collect_all_experiments_datagroup()
-
-    assert list(dg.data['R_0'].variances) == [0.0, 0.0]
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
+    assert 'cannot be sampled' in logic.fit_error_message
 
 
 def test_prepare_for_threaded_sample_sets_flags_and_message():

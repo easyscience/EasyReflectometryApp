@@ -27,7 +27,7 @@ class FakeSummaryLib:
 
 
 class FakeCalculatorRuntime:
-    def reflectity_profile(self, x, unique_name):
+    def reflectity_profile(self, x, unique_name, resolution_function=None):
         return np.asarray(x) * 0 + 0.25
 
 
@@ -282,7 +282,7 @@ class FakePolarizedCalculatorRuntime(FakeCalculatorRuntime):
 
     CHANNEL_LEVEL = {'pp': 0.9, 'pm': 0.3, 'mp': 0.2, 'mm': 0.6}
 
-    def reflectivity_profile_channel(self, x, unique_name, channel):
+    def reflectivity_profile_channel(self, x, unique_name, channel, resolution_function=None):
         level = self.CHANNEL_LEVEL.get(getattr(channel, 'value', channel))
         if level is None:
             raise ValueError(f'Unknown channel {channel}')
@@ -362,7 +362,7 @@ def test_summary_omits_the_overlay_when_a_channel_cannot_be_calculated(tmp_path,
     """A non-magnetic model has no spin cross-sections: show data, no wrong curve."""
 
     class NoChannelSupport(FakeCalculatorRuntime):
-        def reflectivity_profile_channel(self, x, unique_name, channel):
+        def reflectivity_profile_channel(self, x, unique_name, channel, resolution_function=None):
             raise ValueError('requires magnetism')
 
     figure = _plot_polarized(tmp_path, monkeypatch, FakePolarizedCalculatorFactory(NoChannelSupport))

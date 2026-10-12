@@ -387,6 +387,13 @@ EaComponents.ApplicationWindow {
             engineRejectionDialog.message = message
             engineRejectionDialog.open()
         }
+        // Imported, but with an assumption the user should know about (e.g. a
+        // file without a resolution column merged with files that have one).
+        function onLoadWarning(message) {
+            engineRejectionDialog.title = qsTr("Data imported with a warning")
+            engineRejectionDialog.message = message
+            engineRejectionDialog.open()
+        }
     }
 
     EaElements.Dialog {

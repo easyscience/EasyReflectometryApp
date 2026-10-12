@@ -96,18 +96,26 @@ class TestCrossSectionsOfAMagneticModel:
     def test_the_curves_are_drawn_without_resolution_smearing(self, qcore_application):
         """The plain curve is ideal; a smeared cross-section next to it would
         compare the model against itself under two different instruments."""
+        from unittest.mock import patch
+
         from easyreflectometry.model import PercentageFwhm
 
         project = _magnetic_project()
         project.models[0].resolution_function = PercentageFwhm(5.0)
+        model_resolution = project.models[0].resolution_function
         plotting = Plotting1d(project_lib=project, parent=None)
+        wrapper = project.models[0].interface()._wrapper
 
-        up_up = _y_values(plotting.getSampleChannelDataPointsForModel(0, 'pp'))
-        plain = _y_values(plotting.getSampleDataPointsForModel(0))
+        # The zero width is bound to the calculation: nothing is (re-)registered
+        # on the calculator, which a fit in the worker thread reads concurrently.
+        with patch.object(wrapper, 'set_resolution_function', wraps=wrapper.set_resolution_function) as registered:
+            up_up = _y_values(plotting.getSampleChannelDataPointsForModel(0, 'pp'))
+            plain = _y_values(plotting.getSampleDataPointsForModel(0))
 
         assert np.array_equal(up_up, plain)
+        assert not registered.called
         # ... and the model keeps the resolution it came with.
-        assert project.models[0].resolution_function.as_dict()['constant'] == 5.0
+        assert project.models[0].resolution_function is model_resolution
 
     def test_points_follow_the_rq4_plot_mode(self, qcore_application):
         plotting = Plotting1d(project_lib=_magnetic_project(), parent=None)

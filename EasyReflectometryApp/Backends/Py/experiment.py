@@ -1,4 +1,5 @@
 import os
+import warnings
 
 from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
@@ -30,6 +31,8 @@ class Experiment(QObject):
     qRangeUpdated = Signal()
     # Emitted with a user-facing message when an import is rejected.
     loadFailed = Signal(str)
+    # Emitted with a user-facing message when an import succeeded with a caveat.
+    loadWarning = Signal(str)
     # Emitted with the list position of a newly imported experiment.
     experimentLoaded = Signal(int)
 
@@ -99,6 +102,50 @@ class Experiment(QObject):
                 console.error(f'Import of {generalized} failed: {error}')
                 self.loadFailed.emit(f'{os.path.basename(generalized)}: {error}')
                 continue
+            if changed:
+                q_range_changed = True
+            self.experimentChanged.emit()
+            self.externalExperimentChanged.emit()
+        if q_range_changed:
+            self.qRangeUpdated.emit()
+
+    @Slot('QVariant')
+    def appendToCurrent(self, paths) -> None:
+        """Add the files to the current experiment as more curves of the same contrast.
+
+        A contrast is often measured as several curves (one per angle or
+        wavelength band), each with its own q-resolution. Every file's points
+        are merged into the current experiment and keep their own resolution,
+        so the fit smears each point with the width it was measured with.
+
+        A file that cannot be added (a polarized experiment, a file holding
+        several datasets, a parse error) is reported through `loadFailed` and
+        skipped; the others are still added. A file without a resolution column
+        mixed with files that have one is added with an assumed resolution and
+        reported through `loadWarning`.
+        """
+        paths = _from_qml(paths)
+        if isinstance(paths, str):
+            paths = paths.split(',')
+
+        q_range_changed = False
+        for path in paths:
+            if not path:
+                continue
+            generalized = IO.generalizePath(str(path))
+            name = os.path.basename(generalized)
+            try:
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    changed = self._project_logic.append_to_current_experiment(generalized)
+            except Exception as error:  # noqa: BLE001 - any refusal reaches the user, not the event loop
+                console.error(f'Adding {generalized} to the current experiment failed: {error}')
+                self.loadFailed.emit(f'{name}: {error}')
+                continue
+            for caught_warning in caught:
+                if issubclass(caught_warning.category, UserWarning):
+                    console.info(f'{name}: {caught_warning.message}')
+                    self.loadWarning.emit(f'{name}: {caught_warning.message}')
             if changed:
                 q_range_changed = True
             self.experimentChanged.emit()
