@@ -378,6 +378,10 @@ EaElements.GroupBox {
                               Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
                     text: derived ? '' :
                           EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].min).replace('Infinity', 'inf')
+                    // Missing bound of a free parameter while the minimizer needs finite ones
+                    warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
+                            Globals.BackendWrapper.analysisFitableParameters[index].fit &&
+                            !isFinite(Globals.BackendWrapper.analysisFitableParameters[index].min)
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'min' field of fittable on Analysis page ***")
@@ -394,6 +398,10 @@ EaElements.GroupBox {
                               Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
                     text: derived ? '' :
                           EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].max).replace('Infinity', 'inf')
+                    // Missing bound of a free parameter while the minimizer needs finite ones
+                    warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
+                            Globals.BackendWrapper.analysisFitableParameters[index].fit &&
+                            !isFinite(Globals.BackendWrapper.analysisFitableParameters[index].max)
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'max' field of fittable on Analysis page ***")

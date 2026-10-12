@@ -82,6 +82,13 @@ Grid {
     Connections {
         target: Globals.BackendWrapper
         function onProjectLoadError(message) {
+            projectLoadErrorDialog.title = qsTr('Project Load Error')
+            projectLoadErrorDialog.errorMessage = message
+            projectLoadErrorDialog.open()
+        }
+        // The project loaded, but something could not be restored as saved.
+        function onProjectLoadWarning(message) {
+            projectLoadErrorDialog.title = qsTr('Project Loaded with Warnings')
             projectLoadErrorDialog.errorMessage = message
             projectLoadErrorDialog.open()
         }

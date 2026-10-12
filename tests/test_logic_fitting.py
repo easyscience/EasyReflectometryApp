@@ -3,6 +3,8 @@ from types import ModuleType
 from types import SimpleNamespace
 
 import numpy as np
+from easyreflectometry.fit_settings import FitSettings
+from easyscience import AvailableMinimizers
 
 from EasyReflectometryApp.Backends.Py.logic import fitting as fitting_module
 from tests.factories import make_experiment
@@ -78,14 +80,15 @@ def test_prepare_threaded_fit_handles_empty_experiments():
 
     result = logic.prepare_threaded_fit(StubMinimizersLogic())
 
-    assert result == (None, None, None, None, None)
+    assert result is None
     assert logic.fit_error_message == 'No experiments to fit'
     assert logic.fit_finished is True
     assert logic.show_results_dialog is True
 
 
-def test_prepare_threaded_fit_builds_masked_arrays_and_configures_minimizer(monkeypatch):
-    install_fake_multifitter(monkeypatch)
+def test_prepare_threaded_fit_asks_the_project_for_a_run_and_keeps_its_warnings():
+    import warnings
+
     model_a = make_model(name='A')
     model_b = make_model(name='B')
     experiments = {
@@ -93,18 +96,21 @@ def test_prepare_threaded_fit_builds_masked_arrays_and_configures_minimizer(monk
         2: make_experiment('Exp A', model=model_a, x=np.array([1.0, 2.0, 3.0]), y=np.array([4.0, 5.0, 6.0]), ye=np.array([1.0, 0.0, 4.0])),
     }
     project = make_project(experiments=experiments)
+    prepared = SimpleNamespace(core_fitter=SimpleNamespace(minimizer=SimpleNamespace(name='Bumps_simplex')), objective='hybrid')
+    seen = {}
+
+    def prepare_fit(ordered):
+        seen['names'] = [experiment.name for experiment in ordered]
+        warnings.warn('Applied Mighell substitution to 1 zero-variance point(s) in Exp A during fitting.', UserWarning)
+        return prepared
+
+    project.prepare_fit = prepare_fit
     logic = fitting_module.Fitting(project)
-    selected = SimpleNamespace(name='DREAM')
 
-    fitter, x_data, y_data, weights, method = logic.prepare_threaded_fit(StubMinimizersLogic(selected, 1e-4, 321))
-
-    assert fitter.switched_to is selected
-    assert fitter.tolerance == 1e-4
-    assert fitter.max_evaluations == 321
-    assert [values.tolist() for values in x_data] == [[1.0, 3.0], [5.0, 6.0]]
-    assert [values.tolist() for values in y_data] == [[4.0, 6.0], [7.0, 8.0]]
-    assert [values.tolist() for values in weights] == [[1.0, 0.5], [1 / 3, 0.25]]
-    assert method is None
+    assert logic.prepare_threaded_fit(StubMinimizersLogic()) is prepared
+    # In experiment order; the library does the zero-variance handling and says so
+    assert seen['names'] == ['Exp A', 'Exp B']
+    assert 'Mighell substitution' in logic.fit_notes
 
 
 def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monkeypatch):
@@ -339,6 +345,7 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
                            x=np.array([1.0, 2.0]), y=np.array([4.0, 5.0]), ye=np.array([0.1, 0.2])),
     }
     project = make_project(experiments=experiments)
+    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
     # Mock the datagroup collection to avoid scipp dependency
@@ -349,6 +356,13 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
     assert multi_fitter is not None
     assert multi_fitter.models == (model_a,)
     assert data_group == 'fake-data-group'
+    # Sampled with a snapshot of the project's settings, taken before the worker starts
+    assert multi_fitter.settings == project.fit_settings
+    project.fit_settings.minimizer = AvailableMinimizers.LMFit_leastsq
+    project.fit_settings.mode = 'minimize'
+    project.fit_settings.objective = 'mighell'
+    project.fit_settings.engine_options['LMFit_leastsq'] = {'epsfcn': 1e-3}
+    assert multi_fitter.settings == FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
 
 
 def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):

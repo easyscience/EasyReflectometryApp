@@ -100,6 +100,16 @@ QtObject {
         return null
     }
 
+    // Project load warning signal - what a loaded project could not restore as saved
+    signal projectLoadWarning(string message)
+
+    property var _projectLoadWarningConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectLoadWarning) {
+            activeBackend.project.projectLoadWarning.connect(projectLoadWarning)
+        }
+        return null
+    }
+
     // Project save signals - forwarded from backend
     readonly property string projectLastSaved: activeBackend.project.lastSaved ?? ''
     readonly property bool projectHasUnsavedChanges: activeBackend.project.hasUnsavedChanges ?? false
@@ -410,11 +420,21 @@ QtObject {
     function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
     function analysisSetExperimentNameAtIndex(index, value) { activeBackend.analysis.setExperimentNameAtIndex(index, value) }
 
-    // Minimizer
+    // Minimizer (undefined tolerance / budget: the engine default)
     readonly property var analysisMinimizerTolerance: activeBackend.analysis.minimizerTolerance
     function analysisSetMinimizerTolerance(value) { activeBackend.analysis.setMinimizerTolerance(value) }
+    function analysisResetMinimizerTolerance() { activeBackend.analysis.resetMinimizerTolerance() }
     readonly property var analysisMinimizerMaxIterations: activeBackend.analysis.minimizerMaxIterations
     function analysisSetMinimizerMaxIterations(value) { activeBackend.analysis.setMinimizerMaxIterations(value) }
+    function analysisResetMinimizerMaxIterations() { activeBackend.analysis.resetMinimizerMaxIterations() }
+    readonly property var analysisFitObjectives: activeBackend.analysis.fitObjectives
+    readonly property string analysisFitObjective: activeBackend.analysis.fitObjective
+    function analysisSetFitObjective(value) { activeBackend.analysis.setFitObjective(value) }
+    readonly property var analysisMinimizerOptions: activeBackend.analysis.minimizerOptions
+    function analysisSetMinimizerOption(name, text) { activeBackend.analysis.setMinimizerOption(name, text) }
+    readonly property bool analysisMinimizerRequiresFiniteBounds: activeBackend.analysis.minimizerRequiresFiniteBounds
+    readonly property int analysisUnboundedFreeParametersCount: activeBackend.analysis.unboundedFreeParametersCount
+    function analysisShowFreeParameters() { activeBackend.analysis.showFreeParameters() }
 
     // Fitting
     readonly property string analysisFittingStatus: activeBackend.analysis.fittingStatus

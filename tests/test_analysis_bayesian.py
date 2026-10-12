@@ -872,7 +872,7 @@ class TestBayesianStateClearing:
         self._set_full_result(analysis)
         # Classical path: give the stub what _start_threaded_fit needs and make
         # preparation fail so no worker is actually started.
-        analysis._fitting_logic.prepare_threaded_fit = lambda ml: (None, None, None, None, None)
+        analysis._fitting_logic.prepare_threaded_fit = lambda ml: None
 
         analysis._start_threaded_fit()
 
