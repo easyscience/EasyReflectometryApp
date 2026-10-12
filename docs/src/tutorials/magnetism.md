@@ -33,6 +33,22 @@ example `Magnetism: Multi-layer`, and shows one row per layer of that assembly.
 scattering. This is the value to start from for a simple saturated film.
 ```
 
+### The moment angle slider
+
+Selecting a magnetic row shows a slider below the table, spanning the whole `0-360°`
+range of `θM`, with the guide field reference **H →** and the resulting arrow beside it -
+the same arrow the [Structure tab](#moment-arrows-on-the-structure-tab) draws. Its
+tooltip gives the angle both ways: `φ` from **H**, and the `θM` the table edits.
+
+Dragging the slider sets `θM`, snapped to 5°; the text field remains the precise input.
+The slider is read-only - and says so in its tooltip - while a fit is running, or when
+`θM` follows a constraint, because then the parameter is not the user's to set.
+
+The slider edits `θM` itself, exactly as the table column does. The arrow beside it shows
+`φ`, the direction the moment physically points, so with a **negative `ρM`** the arrow
+points opposite the angle on the slider - the moment is reversed while the parameter
+stays where it was put.
+
 ### Switching the calculation engine
 
 Ticking **Magn.** while the project uses an engine that cannot model magnetism opens the
@@ -79,6 +95,12 @@ on, so `ρ + ρM` is never clipped. If no model is magnetic, the chart, its lege
 sidebar are unchanged.
 
 ```{note}
+The `refl1d` calculator cannot repeat slabs that carry magnetism, so a magnetic model with
+a repeating multilayer has no magnetic depth profile at all - and therefore none of these
+curves. The **Magnetic profile** group reports the reason.
+```
+
+```{note}
 For a magnetic sample the plain model curve is **not** an unpolarised average - the
 calculator returns the ↑↑ cross-section - so `R↑↑` is drawn on top of it. The sidebar says
 so as well.
@@ -86,3 +108,49 @@ so as well.
 
 The `Analysis` reflectivity chart is unaffected by this switch: it already draws one
 calculated curve per measured spin channel when the experiment is polarised.
+
+## Which way the moments point
+
+`θM` is a number, and a stack of numbers does not show at a glance whether a model is
+collinear, canted or twisted. The app therefore draws the moment as an arrow, in a single
+convention shared by every view:
+
+- the arrows are a **top view along the surface normal** - a compass laid over the sample;
+- screen **right is the guide field H**, and the angle drawn is `φ`, measured from **H**
+  counterclockwise: `φ = θM − 270°`;
+- a **negative `ρM`** is the same moment reversed, so the arrow points the opposite way
+  and the tooltip carries the signed parameter;
+- a magnetic layer whose `ρM` is below 1 % of the largest one in the model gets a **hollow
+  dot** - "magnetic, but no moment": the direction of a zero-length vector means nothing.
+  A layer with no magnetism at all gets nothing.
+
+| `θM` | Arrow | Physics |
+|---|---|---|
+| 270° (default) | → along **H** | collinear, no spin flip |
+| 90° | ← against **H** | collinear reversed, no spin flip |
+| 0° / 180° | ↑ / ↓ | fully transverse, maximal spin flip |
+| 40° | ↖ (`φ` = 130°) | canted |
+
+Every arrow view shows the **H →** reference on screen. Tooltips lead with `φ`, then the
+`θM` and signed `ρM` the sidebar edits, then the split `M∥` / `M⊥` - the components the
+non-spin-flip and spin-flip channels see.
+
+Arrows are constant length everywhere: they encode direction only. The magnitude is the
+`ρM` curve's job, and the exact value is in the tooltip.
+
+(moment-arrows-on-the-structure-tab)=
+### On the Structure tab
+
+Each magnetic layer's box gets an arrow between its name and its thickness annotation.
+This needs no switch: attaching magnetism *is* the request to see it. Boxes too short for
+a readable glyph drop the arrow and keep it in the tooltip, and the box layout of a
+non-magnetic sample is unchanged.
+
+The Structure tab draws the **current model**; switch models in the header to inspect
+another one. A repeating multilayer that the tab collapses to its repeat unit shows one
+arrow per drawn box - the direction of the repeat unit, which every repeat shares.
+
+Gradient layers get no arrow. A gradient has no single moment of its own, and one
+"representative" arrow would be actively misleading when its slices oppose; the `ρM(z)`
+and `θM(z)` curves remain the truth for graded structures.
+

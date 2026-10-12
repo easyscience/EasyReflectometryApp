@@ -1,5 +1,23 @@
 # Unreleased
 
+- Moment direction is now drawn, not just numbered. One convention, defined once
+  in the library: arrows are a top view along the surface normal, screen right is
+  the guide field H, and the angle drawn is φ = θM − 270° (a negative ρM points
+  the other way, with the signed parameter in the tooltip). A magnetic layer with
+  a negligible moment gets a hollow dot; a non-magnetic layer gets nothing, and a
+  gradient assembly - which has no single moment - gets nothing either.
+  - **Structure tab**: an arrow in every magnetic layer's box, between the name
+    and the thickness annotation, with no switch to find - attaching magnetism is
+    the request. Tooltips lead with φ, then θM and signed ρM, then the M∥/M⊥ split.
+    A magnetism edit now refreshes the boxes; previously a θM change updated the
+    chart while the boxes kept the old value.
+  - **Magnetism group**: the selected magnetic layer's angle as a 0-360° slider,
+    with the H reference and the resulting arrow beside it. Dragging it sets θM
+    in 5° steps - the same write the θM column makes - and it is read-only while
+    a fit runs or θM follows a constraint.
+  - An "H →" reference is on screen wherever an arrow is.
+  - A project with no magnetic layer is unchanged: no arrows, no slider, and the
+    same Structure and SLD layout as before.
 - Multiple contrasts ([#425](https://github.com/easyscience/reflectometry-lib/issues/425)):
   - New demo files `examples/datasets/film_contrasts.ort` (a film on silicon in
     D2O, H2O and CMSi, with its slab model in the header) and `dppc_contrasts.ort`

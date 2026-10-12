@@ -1,5 +1,6 @@
 from EasyReflectometryApp.Backends.Py.logic import layers as layers_module
 from tests.factories import FakeLayerAreaPerMolecule
+from tests.factories import FakeLayerMagnetism
 from tests.factories import make_assembly
 from tests.factories import make_layer
 from tests.factories import make_layer_collection
@@ -187,3 +188,49 @@ def test_layers_index_based_setters_ignore_invalid_indices(monkeypatch):
 
     assert logic._layers[0].material.name == 'Air'
     assert logic._layers[0].thickness.value == 10.0
+
+
+# The moment compass (spin-direction design A5/A6): phi is reported per row and
+# set back through the guide-field convention, which never appears in QML.
+
+
+def _magnetism_logic(rho_m=3.0, theta_m=40.0, independent=True):
+    magnetism = FakeLayerMagnetism(rho_m=rho_m, theta_m=theta_m)
+    magnetism.theta_m.independent = independent
+    materials = make_material_collection(make_material('Air'), make_material('Fe'))
+    sample = make_sample(
+        make_assembly(
+            name='Fe',
+            layers=[
+                make_layer(name='Plain Layer', material=materials[0]),
+                make_layer(name='Fe Layer', material=materials[1], magnetism=magnetism),
+            ],
+        )
+    )
+    project = make_project(materials=materials, models=make_model_collection(make_model(sample=sample)))
+    return layers_module.Layers(project), magnetism
+
+
+def test_magnetism_rows_report_the_drawn_direction():
+    logic, _ = _magnetism_logic(theta_m=40.0)
+
+    plain, magnetic = logic.magnetism
+
+    assert magnetic['phi'] == '130.0'  # 40 deg is 130 deg from the guide field
+    assert magnetic['editable'] == 'True'
+    # A non-magnetic layer has no direction and nothing to drag.
+    assert (plain['phi'], plain['editable']) == ('', '')
+
+
+def test_a_constrained_theta_m_is_reported_as_not_editable():
+    logic, _ = _magnetism_logic(theta_m=40.0, independent=False)
+
+    # The slider reads this to go read-only rather than to write a refused value.
+    assert logic.magnetism[1]['editable'] == 'False'
+
+
+def test_a_negative_moment_points_the_arrow_the_other_way():
+    logic, _ = _magnetism_logic(rho_m=-3.0, theta_m=270.0)
+
+    # theta_m is along the guide field, so the moment itself points against it.
+    assert logic.magnetism[1]['phi'] == '180.0'
