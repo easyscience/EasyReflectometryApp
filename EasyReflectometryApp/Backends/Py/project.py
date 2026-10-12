@@ -2,6 +2,7 @@ import logging
 import warnings
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Callable
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.orso_utils import load_orso_model
@@ -29,6 +30,8 @@ class Project(QObject):
     externalNameChanged = Signal()
     externalProjectLoaded = Signal()
     externalProjectReset = Signal()
+    # Emitted after a successful load with what could not be restored as saved.
+    projectLoadWarning = Signal(str)
     sampleLoadWarning = Signal(str)
     projectLoadError = Signal(str)
     projectSaved = Signal(str)
@@ -44,6 +47,14 @@ class Project(QObject):
         # create, save, load and reset). None means "unknown", in which case a dirtying signal
         # is trusted as is.
         self._clean_fingerprint = None
+
+    def add_pre_save_hook(self, hook: Callable[[], None]) -> None:
+        """Run `hook` before the project is serialized (save, create and dirty checks)."""
+        self._logic.add_pre_save_hook(hook)
+
+    def add_post_load_hook(self, hook: Callable[[], None]) -> None:
+        """Run `hook` right after a project is loaded or reset, before it is fingerprinted."""
+        self._logic.add_post_load_hook(hook)
 
     # Properties
 
@@ -290,6 +301,8 @@ class Project(QObject):
             self.locationChanged.emit()
             self.externalProjectLoaded.emit()
         self._clear_dirty()
+        if self._logic.load_report:
+            self.projectLoadWarning.emit('\n\n'.join(self._logic.load_report))
 
     @Slot()
     def save(self) -> None:
@@ -332,7 +345,11 @@ class Project(QObject):
         # Load the sample model
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter('always')
-            sample = load_orso_model(orso_data)
+            try:
+                sample = load_orso_model(orso_data)
+            except Exception as ex:
+                self.projectLoadError.emit(f'Failed to read the sample model from the ORSO file: {ex}')
+                return
         if sample is None:
             warning_msg = 'The ORSO file does not contain a valid sample model definition. No sample was loaded.'
             for w in caught_warnings:

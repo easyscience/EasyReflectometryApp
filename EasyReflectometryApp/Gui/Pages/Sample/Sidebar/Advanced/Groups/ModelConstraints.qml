@@ -8,7 +8,7 @@ import Gui.Globals as Globals
 
 EaElements.GroupBox {
     id: modelConstraintsGroup
-    title: qsTr("Model constraints")
+    title: qsTr("Link contrasts")
     enabled: true
     last: true
 
@@ -21,7 +21,8 @@ EaElements.GroupBox {
 
         EaElements.Label {
             width: parent.width
-            text: qsTr("Select models to constrain all their matching parameters.")
+            text: qsTr("Tie the parameters of the selected models to those of the first one, e.g. contrasts "
+                       + "of one sample. Scale and background stay per model.")
             wrapMode: Text.Wrap
             color: EaStyle.Colors.themeForegroundMinor
         }
@@ -109,21 +110,36 @@ EaElements.GroupBox {
             width: 1
         }
 
+        // Contrasts differ in their materials, so their SLDs are tied only on request.
+        EaElements.CheckBox {
+            id: tieMaterialsCheckBox
+            checked: false
+            text: qsTr("Also tie material SLDs and densities")
+            ToolTip.text: qsTr("Leave unticked when the models are contrasts, i.e. differ in their materials")
+        }
+
         EaElements.SideBarButton {
             id: constrainModelsButton
             wide: true
-            fontIcon: "plus-circle"
-            text: qsTr("Constrain models parameters")
+            fontIcon: "link"
+            text: qsTr("Link selected models")
             enabled: modelConstraintsGroup.selectedModelsCount > 1
             onClicked: {
-                // Call backend to constrain parameters
-                if (typeof Globals.BackendWrapper.sampleConstrainModelsParameters === 'function') {
-                    Globals.BackendWrapper.sampleConstrainModelsParameters(modelConstraintsGroup.selectedModelIndices)
-                    console.debug("Constrained models parameters for indices:", modelConstraintsGroup.selectedModelIndices)
-                } else {
-                    console.debug("Backend method not available")
-                }
+                const result = Globals.BackendWrapper.sampleConstrainModelsParameters(
+                    modelConstraintsGroup.selectedModelIndices, tieMaterialsCheckBox.checked)
+                linkResult.text = result
+                    ? qsTr("%1 parameter(s) tied.").arg(result.tied)
+                      + (result.messages.length ? '\n' + result.messages.join('\n') : '')
+                    : ''
             }
+        }
+
+        EaElements.Label {
+            id: linkResult
+            width: parent.width
+            visible: text !== ''
+            wrapMode: Text.Wrap
+            color: EaStyle.Colors.themeForegroundMinor
         }
 
         // Model constraints table

@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 from PySide6.QtCore import QObject
 
+from EasyReflectometryApp.Backends.Py.logic.experiment_data import concatenated_experiment_data
+from EasyReflectometryApp.Backends.Py.logic.experiment_data import individual_experiment_data_list
 from EasyReflectometryApp.Backends.Py.logic.experiments import experiment_channel_values
 from EasyReflectometryApp.Backends.Py.logic.experiments import flatten_polarized
 from EasyReflectometryApp.Backends.Py.logic.project import Project as ProjectLogic
@@ -519,23 +521,20 @@ class TestSwitchingBetweenExperiments:
 class TestMultiExperimentChannelExpansion:
     """Selecting several experiments must not collapse a polarized one to one channel."""
 
-    def _analysis(self, visible_channels=None):
-        from EasyReflectometryApp.Backends.Py import analysis as analysis_module
-
-        analysis = analysis_module.Analysis.__new__(analysis_module.Analysis)
-        experiment = _polarized_experiment()
-        project = FakeProjectLib(experiment)
+    @staticmethod
+    def _rows(visible_channels=None, expand_channels=False):
+        project = FakeProjectLib(_polarized_experiment())
         project._experiments[1] = FakeDataset([0.1, 0.4], [3e-2, 3e-3])  # unpolarized
-        analysis._experiments_logic = SimpleNamespace(
-            _project_lib=project,
-            available=lambda: ['polarized', 'plain'],
+        return individual_experiment_data_list(
+            project,
+            ['polarized', 'plain'],
+            [0, 1],
+            frozenset(visible_channels or {'pp', 'mm'}),
+            expand_channels=expand_channels,
         )
-        analysis._selected_experiment_indices = [0, 1]
-        analysis._plotting = SimpleNamespace(_visible_channels=frozenset(visible_channels or {'pp', 'mm'}))
-        return analysis
 
     def test_polarized_experiment_expands_to_one_entry_per_visible_channel(self):
-        rows = self._analysis().get_individual_experiment_data_list(expand_channels=True)
+        rows = self._rows(expand_channels=True)
 
         assert [row['channel'] for row in rows] == ['pp', 'mm', '']
         assert [row['index'] for row in rows] == [0, 0, 1]
@@ -544,25 +543,27 @@ class TestMultiExperimentChannelExpansion:
         assert '↑↑ pp' in rows[0]['name'] and '↓↓ mm' in rows[1]['name']
 
     def test_hidden_channels_are_not_plotted(self):
-        rows = self._analysis(visible_channels={'mm'}).get_individual_experiment_data_list(expand_channels=True)
+        rows = self._rows(visible_channels={'mm'}, expand_channels=True)
 
         assert [row['channel'] for row in rows] == ['mm', '']
 
     def test_flat_list_keeps_one_entry_per_experiment(self):
         """Consumers that are not channel aware yet must not get duplicate series."""
-        rows = self._analysis().get_individual_experiment_data_list()
+        rows = self._rows()
 
         assert [row['channel'] for row in rows] == ['', '']
         assert [row['index'] for row in rows] == [0, 1]
 
     def test_flat_list_follows_the_visible_channel(self):
-        rows = self._analysis(visible_channels={'mm'}).get_individual_experiment_data_list()
+        rows = self._rows(visible_channels={'mm'})
 
         # The flattened polarized entry shows the first *visible* channel.
         assert list(rows[0]['data'].x) == [0.1, 0.3]
 
     def test_concatenated_data_follows_the_visible_channel(self):
-        combined = self._analysis(visible_channels={'mm'}).get_concatenated_experiment_data()
+        project = FakeProjectLib(_polarized_experiment())
+        project._experiments[1] = FakeDataset([0.1, 0.4], [3e-2, 3e-3])  # unpolarized
+        combined = concatenated_experiment_data(project, ['polarized', 'plain'], [0, 1], frozenset({'mm'}))
 
         # mm spans 0.1/0.3, the unpolarized experiment 0.1/0.4; pp (0.1/0.2) is
         # hidden and must not be the one that gets concatenated.

@@ -5,6 +5,7 @@ CalculationEngineControl CalculationEngineControl.qml
 GuideFieldLegend GuideFieldLegend.qml
 MagnetizationAngleSlider MagnetizationAngleSlider.qml
 MagnetizationArrow MagnetizationArrow.qml
+ExperimentModelComboBox ExperimentModelComboBox.qml
 MagneticProfileControl MagneticProfileControl.qml
 PlotControlRefLines PlotControlRefLines.qml
 SpinAsymmetryChart SpinAsymmetryChart.qml

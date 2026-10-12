@@ -3,8 +3,9 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QObject
 
+from EasyReflectometryApp.Backends.Py import plotting_1d as plotting_module
+from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.plotting_1d import Plotting1d
 
 
@@ -44,7 +45,7 @@ class FakeProject:
             SimpleNamespace(color='#111111', scale=SimpleNamespace(value=0.0), background=SimpleNamespace(value=0.0)),
             SimpleNamespace(color='#222222', scale=SimpleNamespace(value=2.0), background=SimpleNamespace(value=1e-6)),
         ]
-        self._experiments = {0: object(), 1: object()}
+        self._experiments = {0: SimpleNamespace(name='E0'), 1: SimpleNamespace(name='E1')}
         self._sample = {
             0: FakeData(x=[0.1, 0.2], y=[1.0, 2.0]),
             1: FakeData(x=[0.05, 0.4], y=[3.0, 4.0]),
@@ -73,30 +74,10 @@ class FakeProject:
         return self._exp[index]
 
 
-class FakeAnalysisProxy:
-    def __init__(self, selected):
-        self._selected_experiment_indices = selected
-
-    def get_concatenated_experiment_data(self):
-        return FakeData(x=[0.1, 0.2, 0.3], y=[1e-6, 2e-6, 3e-6], ye=[1e-8, 1e-8, 1e-8])
-
-    def get_individual_experiment_data_list(self, expand_channels=False):
-        return [
-            {'name': 'E0', 'color': '#111111', 'index': 0, 'data': FakeData(x=[0.1], y=[1e-6], ye=[1e-8])},
-            {'name': 'E1', 'color': '#222222', 'index': 1, 'data': FakeData(x=[0.2], y=[2e-6], ye=[1e-8])},
-        ]
-
-
-class FakeBackendParent(QObject):
-    def __init__(self, selected):
-        super().__init__()
-        self._analysis = FakeAnalysisProxy(selected)
-
-
 def _make_plotting(selected=None):
     project = FakeProject()
-    proxy = FakeBackendParent([0] if selected is None else selected)
-    plotting = Plotting1d(project, parent=proxy)
+    selection = ExperimentSelection([0] if selected is None else selected)
+    plotting = Plotting1d(project, selection=selection)
     plotting._chartRefs['QtCharts']['experimentPage']['measuredSerie'] = FakeSeries()
     plotting._chartRefs['QtCharts']['experimentPage']['errorUpperSerie'] = FakeSeries()
     plotting._chartRefs['QtCharts']['experimentPage']['errorLowerSerie'] = FakeSeries()
@@ -239,19 +220,19 @@ def _make_project_stub(q, r_exp, r_calc, q_min=0.0, q_max=1.0, ye=None):
     proj.q_max = q_max
     proj.current_experiment_index = 0
     proj.current_model_index = 0
-    proj.experimental_data_for_model_at_index.return_value = _make_exp_data_stub(q, r_exp, ye)
+    proj.models = [MagicMock()]
+    experiment = _make_exp_data_stub(q, r_exp, ye)
+    experiment.model = proj.models[0]  # plots pair an experiment with its own model only
+    proj.experimental_data_for_model_at_index.return_value = experiment
     proj.model_data_for_model_at_index.return_value = _DataSet1DStub(name='calc', x=q, y=r_calc)
     proj.sample_data_for_model_at_index.return_value = _DataSet1DStub(name='sample', x=np.array([q_min, q_max]), y=np.array([1.0, 1.0]))
-    proj.models = [MagicMock()]
     return proj
 
 
 def _make_plotting_stub(project, rq4=False):
-    proxy = MagicMock()
-    proxy._analysis._selected_experiment_indices = [0]
     p = Plotting1d.__new__(Plotting1d)
     p._project_lib = project
-    p._proxy = proxy
+    p._selection = ExperimentSelection([0])
     p._plot_rq4 = rq4
     p._x_axis_log = False
     p._sld_x_reversed = False
@@ -332,6 +313,91 @@ class TestGetAlignedAnalysisValues:
         expected_calc = 2e-2 * (0.10 ** 4)
         assert pytest.approx(result[0]['measured'], rel=1e-6) == expected_meas
         assert pytest.approx(result[0]['calculated'], rel=1e-6) == expected_calc
+
+
+# ---------------------------------------------------------------------------
+# Model/experiment pairing and the "no calculated curve" branches (#311, item 6)
+# ---------------------------------------------------------------------------
+
+class TestAnalysisPairingAndMissingCurve:
+    Q = np.array([0.05, 0.10, 0.15, 0.20])
+    R_EXP = np.array([1e-1, 1e-2, 1e-3, 1e-4])
+    R_CALC = np.array([1.1e-1, 1.1e-2, 1.1e-3, 1.1e-4])
+
+    def _setup(self, calc=None):
+        proj = _make_project_stub(self.Q, self.R_EXP, self.R_CALC if calc is None else calc, q_max=0.25)
+        return proj, _make_plotting_stub(proj)
+
+    def _assert_no_curve(self, p):
+        points = p._get_aligned_analysis_values(0)
+        assert [pt['measured'] for pt in points] == pytest.approx(self.R_EXP)  # measured still shown
+        assert all(pt['has_calculated'] is False for pt in points)
+        assert all(np.isnan(pt['calculated']) for pt in points)
+        assert all(pt['hasCalculated'] is False for pt in p.getAnalysisDataPoints(0))
+        assert p.getResidualDataPoints(0) == []
+
+    def test_curve_comes_from_the_experiments_own_model(self):
+        # Experiment 0 paired with model 1: the curve must be model 1's, not model 0's.
+        proj, p = self._setup()
+        proj.models = [MagicMock(), MagicMock()]
+        proj.experimental_data_for_model_at_index.return_value.model = proj.models[1]
+
+        p._get_aligned_analysis_values(0)
+
+        assert proj.model_data_for_model_at_index.call_args.args[0] == 1
+
+    def test_experiment_without_a_model_has_no_curve(self):
+        proj, p = self._setup()
+        proj.experimental_data_for_model_at_index.return_value.model = None
+
+        self._assert_no_curve(p)
+        proj.model_data_for_model_at_index.assert_not_called()
+
+    def test_experiment_paired_with_a_removed_model_has_no_curve(self):
+        # Before: fell back to the model at the experiment's index (or model 0).
+        proj, p = self._setup()
+        proj.experimental_data_for_model_at_index.return_value.model = MagicMock()  # not in proj.models
+
+        self._assert_no_curve(p)
+        proj.model_data_for_model_at_index.assert_not_called()
+
+    def test_unpaired_experiment_is_reported_once(self, monkeypatch):
+        proj, p = self._setup()
+        proj.experimental_data_for_model_at_index.return_value.model = None
+        messages = []
+        monkeypatch.setattr(plotting_module.console, 'error', messages.append)
+
+        p._get_aligned_analysis_values(0)
+        p._get_aligned_analysis_values(0)
+
+        assert len(messages) == 1 and 'not paired' in messages[0]
+
+    def test_empty_calculation_has_no_curve(self):
+        # Before: the measured values were copied into 'calculated'.
+        _, p = self._setup(calc=np.empty(0))
+        self._assert_no_curve(p)
+
+    def test_misaligned_calculation_without_q_has_no_curve(self):
+        # Before: np.resize repeated the values to fill the measured points.
+        proj, p = self._setup()
+        proj.model_data_for_model_at_index.return_value = _DataSet1DStub(name='calc', y=np.array([1.0, 2.0, 3.0]))
+        self._assert_no_curve(p)
+
+    def test_single_calculated_value_is_not_spread_over_every_point(self):
+        # Before: one value was broadcast to all measured points.
+        proj, p = self._setup()
+        proj.model_data_for_model_at_index.return_value = _DataSet1DStub(name='calc', y=np.array([0.5]))
+        self._assert_no_curve(p)
+
+    def test_calculation_on_its_own_q_grid_is_interpolated(self):
+        proj, p = self._setup()
+        calc_q = np.array([0.0, 0.25])
+        proj.model_data_for_model_at_index.return_value = _DataSet1DStub(name='calc', x=calc_q, y=np.array([0.0, 1.0]))
+
+        points = p._get_aligned_analysis_values(0)
+
+        assert all(pt['has_calculated'] for pt in points)
+        assert [pt['calculated'] for pt in points] == pytest.approx(self.Q / 0.25)
 
 
 # ---------------------------------------------------------------------------

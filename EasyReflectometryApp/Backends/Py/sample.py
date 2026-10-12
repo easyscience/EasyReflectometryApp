@@ -9,9 +9,12 @@ from typing import Tuple
 import numpy as np
 from asteval import Interpreter
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.constraints import USER_CONSTRAINT_FLAG
+from easyreflectometry.constraints import constrain
 from easyreflectometry.inequality_constraints import InequalitySpec
 from easyreflectometry.inequality_constraints import check_units
 from easyreflectometry.inequality_constraints import evaluate_spec
+from easyscience.variable import Parameter
 from easyscience.variable.descriptor_number import DescriptorNumber
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -60,12 +63,19 @@ _GLOBAL_SYMBOLS: Dict[str, Any] = {
     'e': math.e,
 }
 
+# Key in the project's `info` under which the GUI keeps what the library does not:
+# bound rows ("≥ 10"), the pre-constraint state used by Remove, and display texts.
+APP_CONSTRAINTS_INFO_KEY = 'app_constraints'
+
 
 class Sample(QObject):
     materialsTableChanged = Signal()
     materialsIndexChanged = Signal()
 
     modelsTableChanged = Signal()
+    # Experiments removed together with a model: old row -> new row of each remaining one.
+    # An object, not a dict: Qt would turn the int keys into strings.
+    experimentsRekeyed = Signal(object)
     modelsIndexChanged = Signal()
 
     assembliesTableChanged = Signal()
@@ -233,6 +243,9 @@ class Sample(QObject):
         if getattr(material, 'sld_coupled', True):
             return  # already coupled: no user constraint to have been overwritten
         for parameter in (getattr(material, 'sld', None), getattr(material, 'isld', None)):
+            # The density dependency replacing the user's must not be saved as theirs.
+            if parameter is not None and hasattr(parameter, USER_CONSTRAINT_FLAG):
+                delattr(parameter, USER_CONSTRAINT_FLAG)
             unique_name = getattr(parameter, 'unique_name', None)
             if unique_name and self._constraint_states.pop(unique_name, None) is not None:
                 logger.warning(
@@ -254,6 +267,7 @@ class Sample(QObject):
     @Slot(str)
     def removeMaterial(self, value: str) -> None:
         self._material_logic.remove_at_index(value)
+        self._detach_unreachable_constraints()
         self.materialsTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -331,10 +345,82 @@ class Sample(QObject):
             self._clearCacheAndEmitLayersChanged()
 
     # Actions
-    @Slot(str)
-    def removeModel(self, value: str) -> None:
-        self._models_logic.remove_at_index(value)
+    @Slot(int, result='QVariantList')
+    def contrastCandidates(self, index: int) -> list[dict]:
+        """What a new contrast of the model at `index` can change, one row each."""
+        return self._models_logic.contrast_candidates(index)
+
+    @Slot(int, str, 'QVariantList', result='QVariant')
+    def addContrast(self, reference_index: int, name: str, choices: list) -> dict:
+        """Add a contrast of the model at `reference_index` (see ``Project.add_contrast``):
+        its structure is shared, the chosen materials are replaced or re-formulated.
+        `choices` refer to the rows of the last :meth:`contrastCandidates` of that model."""
+        try:
+            new_index = self._models_logic.add_contrast(reference_index, name, list(choices))
+        except ValueError as error:
+            return {'success': False, 'message': str(error)}
+        self._project_logic._update_enablement_of_fixed_layers_for_model(new_index)
         self.modelsTableChanged.emit()
+        self.materialsTableChanged.emit()
+        self._emit_constraints_changed()
+        self.setCurrentModelIndex(new_index)
+        return {'success': True, 'message': ''}
+
+    @Slot(str, int, result='QVariant')
+    def detachParameter(self, unique_name: str, model_index: int) -> dict:
+        """Give the model at `model_index` its own copy of a parameter it shares with other
+        models: the shared assembly is copied for it, every other parameter of the copy
+        still tied to the shared one (``Project.detach``)."""
+        parameter = self._find_parameter_object_by_unique_name(unique_name)
+        if parameter is None:
+            return {'success': False, 'message': self.tr('The parameter no longer exists.')}
+        if not parameter.independent:
+            return {'success': False, 'message': self.tr('Remove its constraint first.')}
+        try:
+            self._project_lib.detach(parameter, model_index)
+        except ValueError as error:
+            return {'success': False, 'message': str(error)}
+        self.modelsTableChanged.emit()
+        self.assembliesTableChanged.emit()
+        self._emit_constraints_changed()
+        self.externalSampleChanged.emit()
+        self.externalRefreshPlot.emit()
+        return {'success': True, 'message': ''}
+
+    @Slot(int, result='QVariantList')
+    def experimentsUsingModel(self, index: int) -> list[str]:
+        """Names of the experiments bound to the model at `index`; removing it needs a decision about them."""
+        return self._models_logic.experiments_using(index)
+
+    @Slot(int, int, result='QVariantList')
+    def removeModel(self, index: int, rebind_to: int) -> list[int]:
+        """Remove the model at `index`. Its experiments are removed, or bound to the model at
+        `rebind_to` (an index before the removal) when that is not -1. Returns the
+        positions of the experiments removed with it."""
+        removal = self._models_logic.remove_at_index(index, rebind_to)
+        # Ties to this model's parameters were freed by the library; other constraints that
+        # lost one end are swept here, see _detach_unreachable_constraints.
+        self._detach_unreachable_constraints()
+        self._drop_constraint_states_that_no_longer_hold()
+        removed = removal.experiments if rebind_to < 0 else []
+        if removed:
+            self.experimentsRekeyed.emit(removal.remap)
+        self.modelsTableChanged.emit()
+        self.externalRefreshPlot.emit()
+        return removed
+
+    def _drop_constraint_states_that_no_longer_hold(self) -> None:
+        """Forget the rows of constraints the library removed (a tie freed with its model)."""
+        objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
+        stale = [
+            unique_name
+            for unique_name, state in self._constraint_states.items()
+            if unique_name not in objects or not self._constraint_state_holds(objects[unique_name], state)
+        ]
+        for unique_name in stale:
+            del self._constraint_states[unique_name]
+        if stale:
+            self._scheduleConstraintsChanged()
 
     @Slot()
     def addNewModel(self) -> None:
@@ -353,11 +439,13 @@ class Sample(QObject):
     def moveSelectedModelUp(self) -> None:
         self._models_logic.move_selected_up()
         self.modelsTableChanged.emit()
+        self.modelsIndexChanged.emit()
 
     @Slot()
     def moveSelectedModelDown(self) -> None:
         self._models_logic.move_selected_down()
         self.modelsTableChanged.emit()
+        self.modelsIndexChanged.emit()
 
     # # #
     # Assemblies
@@ -472,6 +560,7 @@ class Sample(QObject):
         self._assemblies_logic.remove_at_index(value)
         self._refreshCurrentAssemblySelectionState()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
+        self._detach_unreachable_constraints()
         self.assembliesTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -558,6 +647,8 @@ class Sample(QObject):
     @Slot(int)
     def setCurrentLayerMaterial(self, new_value: int) -> None:
         if self._layers_logic.set_material_at_current_index(new_value):
+            # The previous material may now be used by no model (see _detach_unreachable_constraints).
+            self._detach_unreachable_constraints()
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -565,6 +656,7 @@ class Sample(QObject):
     @Slot(int, int)
     def setLayerMaterialAtIndex(self, index: int, new_value: int) -> None:
         if self._layers_logic.set_material_at_index(index, new_value):
+            self._detach_unreachable_constraints()
             self._clearCacheAndEmitLayersChanged()
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
@@ -657,6 +749,7 @@ class Sample(QObject):
     @Slot(str)
     def removeLayer(self, value: str) -> None:
         self._layers_logic.remove_at_index(value)
+        self._detach_unreachable_constraints()
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -879,8 +972,7 @@ class Sample(QObject):
         interpreter = Interpreter(config=_ASTEVAL_CONFIG)
         for name, value in _GLOBAL_SYMBOLS.items():
             interpreter.symtable[name] = value
-            if isinstance(value, numbers.Number):
-                interpreter.readonly_symbols.add(name)
+            interpreter.readonly_symbols.add(name)
         for alias, dependency in aliases.items():
             interpreter.symtable[alias] = float(dependency.value) if numeric else dependency
             interpreter.readonly_symbols.add(alias)
@@ -903,8 +995,11 @@ class Sample(QObject):
         except Exception as e:
             # Provide helpful error message showing available aliases
             if 'not defined' in str(e):
-                available = ', '.join(sorted(aliases_to_add.keys())[:10])  # Show first 10
-                raise NameError(f'{str(e)}\nAvailable aliases: {available}...') from None
+                aliases = sorted(aliases_to_add.keys())
+                available = ', '.join(aliases[:10])  # Show first 10
+                if len(aliases) > 10:
+                    available += ', ...'
+                raise NameError(f'{str(e)}\nAvailable aliases: {available}') from None
             raise
         return result
 
@@ -1029,6 +1124,14 @@ class Sample(QObject):
             if dependency_map:
                 if not isinstance(evaluation_result, DescriptorNumber):
                     raise TypeError('Expressions referencing parameters must evaluate to a parameter quantity.')
+                # The dependent would take the expression's unit (e.g. a thickness in 1/Å^2),
+                # which breaks every calculation using it and the project's next load.
+                dependent_unit = str(independent_entries[dependent_index]['object'].unit)
+                result_unit = str(evaluation_result.unit)
+                if result_unit != dependent_unit:
+                    raise ValueError(
+                        f"Incompatible units: the parameter is in '{dependent_unit}', the expression in '{result_unit}'."
+                    )
                 return {
                     'mode': 'dynamic',
                     'expression': expression_text,
@@ -1037,6 +1140,17 @@ class Sample(QObject):
                     'relation': relation,
                 }
             numeric_value = self._to_float(evaluation_result)
+            # The value setter clamps to the bounds: "= 100" on a parameter with max 50 would
+            # report success and pin the parameter at 50, with a row that does not describe it.
+            dependent_obj = independent_entries[dependent_index]['object']
+            lower = getattr(dependent_obj, 'min', None)
+            upper = getattr(dependent_obj, 'max', None)
+            if lower is not None and upper is not None and not float(lower) <= numeric_value <= float(upper):
+                raise ValueError(
+                    f'The value {self._format_numeric(numeric_value)} is outside the parameter bounds '
+                    f'[{self._format_numeric(float(lower))}, {self._format_numeric(float(upper))}]. '
+                    'Widen the bounds first, or choose a value within them.'
+                )
             return {
                 'mode': 'static',
                 'value': numeric_value,
@@ -1157,17 +1271,42 @@ class Sample(QObject):
 
     @staticmethod
     def _ensure_parameter_independent(parameter: DescriptorNumber) -> None:
+        """Drop any dependency, together with the library's mark that it is a user constraint.
+
+        A mark left on an independent parameter is ignored by the library, but would be picked
+        up again (and saved as the user's) if something internal later made it dependent.
+        """
         try:
             parameter.make_independent()
         except AttributeError:
             parameter._independent = True
+        if hasattr(parameter, USER_CONSTRAINT_FLAG):
+            delattr(parameter, USER_CONSTRAINT_FLAG)
+
+    @staticmethod
+    def _apply_static_constraint(parameter: DescriptorNumber, value: float) -> None:
+        """Pin `parameter` to `value`: fixed, and marked non-independent so it reads as constrained."""
+        parameter.value = value
+        parameter.free = False
+        parameter._independent = False
 
     def _infer_constraint_state(
         self,
         parameter_obj: DescriptorNumber,
         display_lookup: Dict[str, str],
+        display_by_object: Dict[int, str] | None = None,
     ) -> dict[str, Any] | None:
-        if getattr(parameter_obj, 'independent', True):
+        """Describe a constraint from the parameter itself.
+
+        Used when the GUI holds no state for it, notably after a project is loaded. Dependencies
+        are named by object identity where possible, since aliases in a saved expression need
+        not match the aliases the current project would generate.
+
+        Only the user's constraints are described. The library ties parameters internally too
+        (a density material's or an area-per-molecule layer's sld, an assembly's conformal
+        roughness), and it marks only the user's with `USER_CONSTRAINT_FLAG`.
+        """
+        if getattr(parameter_obj, 'independent', True) or not getattr(parameter_obj, USER_CONSTRAINT_FLAG, False):
             return None
 
         try:
@@ -1185,7 +1324,11 @@ class Sample(QObject):
             }
 
         dependency_map = getattr(parameter_obj, 'dependency_map', {}) or {}
-        alias_display_subset = {alias: display_lookup.get(alias, alias) for alias in dependency_map.keys()}
+        display_by_object = display_by_object or {}
+        alias_display_subset = {
+            alias: display_by_object.get(id(dependency), display_lookup.get(alias, alias))
+            for alias, dependency in dependency_map.items()
+        }
         pretty_expression = self._pretty_expression(raw_expression, alias_display_subset)
         return {
             'mode': 'dynamic',
@@ -1200,18 +1343,22 @@ class Sample(QObject):
         self,
         parameter_obj: DescriptorNumber,
         display_lookup: Dict[str, str],
+        display_by_object: Dict[int, str] | None = None,
     ) -> dict[str, Any] | None:
         unique_name = getattr(parameter_obj, 'unique_name', None)
         if unique_name is not None:
             stored = self._constraint_states.get(unique_name)
-            if stored is not None:
+            # A stale state (the constraint was replaced or undone elsewhere) must not describe
+            # the parameter; it is not saved either (see store_constraint_metadata).
+            if stored is not None and self._constraint_state_holds(parameter_obj, stored):
                 return stored
-        return self._infer_constraint_state(parameter_obj, display_lookup)
+        return self._infer_constraint_state(parameter_obj, display_lookup, display_by_object)
 
     @staticmethod
     def _capture_parameter_state(parameter: DescriptorNumber) -> dict[str, Any]:
         state: dict[str, Any] = {
             'value': float(parameter.value),
+            'unit': str(parameter.unit),
             'free': bool(parameter.free),
             'independent': getattr(parameter, 'independent', True),
             '_independent': getattr(parameter, '_independent', True),
@@ -1230,11 +1377,16 @@ class Sample(QObject):
 
     @staticmethod
     def _restore_parameter_state(parameter: DescriptorNumber, state: dict[str, Any]) -> None:
-        try:
-            parameter.make_independent()
-        except AttributeError:
-            parameter._independent = True
+        Sample._ensure_parameter_independent(parameter)
 
+        # A dependency also imposes its source's unit; the restored numbers are in the old one.
+        if state.get('unit') and str(parameter.unit) != state['unit']:
+            parameter.convert_unit(state['unit'])
+        # A dependency imposes its source's bounds, and the value setter clamps to the current
+        # bounds; widen them first, or the old value would be clipped before they are restored.
+        if hasattr(parameter, 'min') and hasattr(parameter, 'max'):
+            parameter.min = -math.inf
+            parameter.max = math.inf
         if 'value' in state and state['value'] is not None:
             parameter.value = state['value']
         if 'min' in state and state['min'] is not None:
@@ -1287,6 +1439,7 @@ class Sample(QObject):
         """Get the list of active constraints with display metadata."""
         constraints: list[dict[str, str]] = []
         context, _, display_lookup = self._build_constraint_context()
+        display_by_object = {id(entry['object']): entry['display_name'] for entry in context}
         owned = self._physics_constraints_logic.owned_parameters()
         recipe_rows: dict[tuple, dict[str, Any]] = {}
 
@@ -1319,7 +1472,7 @@ class Sample(QObject):
                     }
                 recipe_rows[key]['members'].append(entry['display_name'])
                 continue
-            state = self._resolve_constraint_state(parameter_obj, display_lookup)
+            state = self._resolve_constraint_state(parameter_obj, display_lookup, display_by_object)
             if state is None:
                 continue
 
@@ -1427,7 +1580,7 @@ class Sample(QObject):
                 return
 
         constraints_list = self.constraintsList
-        if index >= len(constraints_list):
+        if not 0 <= index < len(constraints_list):
             return
 
         row = constraints_list[index]
@@ -1457,23 +1610,212 @@ class Sample(QObject):
 
         if state and 'previous' in state:
             self._restore_parameter_state(param_obj, state['previous'])
+        elif any(pair[0] is param_obj for link in self._project_lib.links for pair in link.pairs):
+            # A tie made by a model link gets back its state from before the link.
+            self._project_lib.detach(param_obj)
         else:
             self._make_parameter_independent(param_obj)
         self._emit_constraints_changed()
 
     def _find_parameter_object_by_unique_name(self, unique_name: str):
-        """Find a parameter object by its unique_name (stable identity)."""
-        for param in self._parameters_logic.parameters:
+        """Find a parameter object by its unique_name (stable identity).
+
+        Searches every parameter, not the filtered table list: a constrained parameter can be
+        disabled (e.g. a layer moved to the superphase) and still owns its constraint.
+        """
+        for param in self._parameters_logic.all_parameters():
             if param.get('unique_name') == unique_name:
                 return param['object']
         return None
 
+    # ----- persistence of the GUI's constraint state -----
+
+    _PERSISTED_STATE_KEYS = (
+        'mode',
+        'relation',
+        'value',
+        'expression',
+        'raw_expression',
+        'pretty_expression',
+        'dependent_display',
+        'previous',
+    )
+
+    def _constraint_candidates(self) -> list:
+        """Every parameter the library would try to persist a constraint of: the models'
+        parameters plus those of materials no model uses (``Project._constraint_candidates``).
+        Empty when the project does not expose them (test fakes)."""
+        try:
+            candidates = list(self._project_lib.parameters)
+        except AttributeError:
+            return []
+        seen = {id(parameter) for parameter in candidates}
+        materials = getattr(self._project_lib, '_materials', None)
+        get_all_parameters = getattr(materials, 'get_all_parameters', None)
+        if callable(get_all_parameters):
+            for parameter in get_all_parameters():
+                if id(parameter) not in seen:
+                    seen.add(id(parameter))
+                    candidates.append(parameter)
+        return candidates
+
+    def _detach_unreachable_constraints(self) -> int:
+        """Detach the user constraints a structural edit has cut off from the models.
+
+        Policy: an assembly, layer, model or material can always be removed, and a layer's
+        material swapped. A constraint whose target, or one of whose dependencies, is no
+        longer reachable from the models afterwards is detached, as the library refuses to
+        save it (``ValueError`` from ``Project.as_dict``) and the project would otherwise be
+        unsavable after an ordinary edit - with, for a material no model uses any more, not
+        even a row left to remove it by. The parameter becomes independent and keeps its
+        current value; its pre-constraint ``free`` state is restored when known. Returns the
+        number of detached constraints; the constraints list is refreshed when any.
+        """
+        parameter_path = getattr(self._project_lib, 'parameter_path', None)
+        if not callable(parameter_path):
+            return 0
+        detached = 0
+        for parameter in self._constraint_candidates():
+            if getattr(parameter, 'independent', True) or not getattr(parameter, USER_CONSTRAINT_FLAG, False):
+                continue
+            unreachable = parameter_path(parameter) is None
+            for dependency in (getattr(parameter, 'dependency_map', {}) or {}).values():
+                if unreachable:
+                    break
+                # A constant built for the expression is embedded by value; only parameters need a path.
+                if isinstance(dependency, Parameter) and parameter_path(dependency) is None:
+                    unreachable = True
+            if not unreachable:
+                continue
+            unique_name = getattr(parameter, 'unique_name', None)
+            state = self._constraint_states.pop(unique_name, None) if unique_name else None
+            self._ensure_parameter_independent(parameter)
+            previous_free = ((state or {}).get('previous') or {}).get('free')
+            if previous_free is not None:
+                parameter.free = bool(previous_free)
+            logger.warning(
+                'The constraint on %s was removed: it, or a parameter it depends on, is no longer part of a model.',
+                getattr(parameter, 'name', '?'),
+            )
+            detached += 1
+        if detached:
+            self._scheduleConstraintsChanged()
+        return detached
+
+    def _dependency_paths(self, parameter) -> Dict[str, str] | None:
+        """``{alias: structural path}`` of `parameter`'s live dependencies; None if one has no path."""
+        paths = {}
+        for alias, dependency in (getattr(parameter, 'dependency_map', {}) or {}).items():
+            path = self._project_lib.parameter_path(dependency)
+            if path is None:
+                return None
+            paths[alias] = path
+        return paths
+
+    def _same_dependency(self, parameter, state: dict[str, Any]) -> bool:
+        """Whether `parameter` still depends on what `state` describes: same expression, and the
+        same parameter behind every alias. Expressions alone are not enough ('a' is common)."""
+        if getattr(parameter, 'dependency_expression', None) != state.get('expression'):
+            return False
+        live = getattr(parameter, 'dependency_map', {}) or {}
+        if 'dependency_map' in state:  # in-session state holds the objects themselves
+            recorded = state['dependency_map']
+            return live.keys() == recorded.keys() and all(live[alias] is recorded[alias] for alias in live)
+        recorded_paths = state.get('dependency_paths')  # a loaded record holds their paths
+        if not isinstance(recorded_paths, dict) or live.keys() != recorded_paths.keys():
+            return False
+        for alias, path in recorded_paths.items():
+            try:
+                if self._project_lib.resolve_parameter_path(path) is not live[alias]:
+                    return False
+            except KeyError:
+                return False
+        return True
+
+    def _constraint_state_holds(self, parameter, state: dict[str, Any]) -> bool:
+        """Whether `state` still describes `parameter`. Edits made elsewhere (the parameter table,
+        a physics recipe replacing a tie) can undo or replace a constraint."""
+        mode = state.get('mode')
+        if mode == 'dynamic':
+            return not getattr(parameter, 'independent', True) and self._same_dependency(parameter, state)
+        if mode == 'static':
+            # A loaded project keeps only the value and the fixed state, not the marker.
+            return state.get('value') is not None and not parameter.free and float(parameter.value) == float(state['value'])
+        if mode == 'lower_bound':
+            return state.get('value') is not None and float(parameter.min) == float(state['value'])
+        if mode == 'upper_bound':
+            return state.get('value') is not None and float(parameter.max) == float(state['value'])
+        return False
+
+    def store_constraint_metadata(self) -> None:
+        """Write the GUI's constraint state into the project's `info`, just before it is saved.
+
+        Equality constraints themselves are saved by the library and bounds are ordinary
+        min/max values. What only the GUI knows is kept here: that a bound is a constraint
+        row, the pre-constraint state that Remove restores, and the display texts. Records are
+        keyed by structural path, because unique names are regenerated on load; a dynamic
+        record also keeps the paths of its dependencies, so that a different tie written with
+        the same expression is not mistaken for it on load.
+        """
+        # Every structural edit detaches what it cuts off; this is the safety net, so that a
+        # save never fails on a constraint the edits above missed.
+        self._detach_unreachable_constraints()
+        # All parameters, not the filtered table list: disabled ones keep their constraints.
+        objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
+        records = []
+        for unique_name, state in self._constraint_states.items():
+            parameter = objects.get(unique_name)
+            if parameter is None or not self._constraint_state_holds(parameter, state):
+                continue
+            path = self._project_lib.parameter_path(parameter)
+            if path is None:
+                continue
+            record = {key: state[key] for key in self._PERSISTED_STATE_KEYS if key in state}
+            if state.get('mode') == 'dynamic':
+                dependency_paths = self._dependency_paths(parameter)
+                if dependency_paths is None:
+                    continue  # cannot be matched on load; the row is described from the parameter
+                record['dependency_paths'] = dependency_paths
+            record['path'] = path
+            records.append(record)
+        info = self._project_lib._info
+        if records:
+            info[APP_CONSTRAINTS_INFO_KEY] = records
+        else:
+            info.pop(APP_CONSTRAINTS_INFO_KEY, None)
+
+    def reload_constraint_states(self) -> None:
+        """Rebuild the GUI's constraint state for a project that was just loaded or reset.
+
+        The previous state belongs to parameters that no longer exist. Records that no longer
+        hold are dropped; an equality constraint without a record is still listed, described
+        from the parameter itself.
+        """
+        self._constraint_states = {}
+        for record in self._project_lib._info.get(APP_CONSTRAINTS_INFO_KEY) or []:
+            try:
+                parameter = self._project_lib.resolve_parameter_path(record['path'])
+            except (KeyError, TypeError):
+                logger.warning('Cannot restore the constraint row for %r: the parameter no longer exists.', record.get('path'))
+                continue
+            state = {key: value for key, value in record.items() if key != 'path'}
+            if not self._constraint_state_holds(parameter, state):
+                continue
+            if state.get('mode') == 'dynamic':
+                state['dependency_map'] = dict(getattr(parameter, 'dependency_map', {}) or {})
+                del state['dependency_paths']
+            elif state.get('mode') == 'static':
+                self._apply_static_constraint(parameter, float(state['value']))
+            unique_name = getattr(parameter, 'unique_name', None)
+            if unique_name:
+                self._constraint_states[unique_name] = state
+        # Coalesced (next event-loop turn): this runs inside a load, before the clean state is
+        # recorded, and constraintsChanged marks the project dirty.
+        self._scheduleConstraintsChanged()
+
     def _make_parameter_independent(self, param_obj) -> None:
         """Make a parameter independent, handling different parameter types."""
-        try:
-            param_obj.make_independent()
-        except AttributeError:
-            param_obj._independent = True  # Fallback for custom ERL constraints
+        self._ensure_parameter_independent(param_obj)
 
     @Slot(int, str, str, result='QVariant')
     def validateConstraintExpression(self, dependent_index: int, relation: str, expression: str):
@@ -1520,14 +1862,23 @@ class Sample(QObject):
 
         try:
             if mode == 'dynamic':
-                dependent.make_dependent_on(
-                    dependency_expression=instruction['expression'],
-                    dependency_map=instruction['dependency_map'],
-                )
+                # Through the library's `constrain`, which marks the dependency as the user's:
+                # only marked dependencies are written to the project file.
+                constrain(dependent, instruction['expression'], **instruction['dependency_map'])
+                if dependent.min == dependent.max:
+                    # The dependent took collapsed bounds (e.g. 'x * 0'). The library cannot load a
+                    # parameter whose min equals its max: the project would save but never open.
+                    # (Rolled back below, with every other failure.)
+                    pinned = self._format_numeric(float(dependent.value))
+                    raise ValueError(
+                        f'The expression pins the parameter to a single value ({pinned}). '
+                        'Use a numeric constraint ("= value") instead.'
+                    )
             elif mode == 'static':
-                dependent.value = instruction['value']
-                dependent.free = False
-                dependent._independent = False
+                # Not a dependency on a constant: that would set min == max, which the library
+                # then refuses to load. The value and fixed state are saved with the parameter;
+                # the row itself is restored from `store_constraint_metadata`.
+                self._apply_static_constraint(dependent, instruction['value'])
             elif mode == 'lower_bound':
                 dependent.min = instruction['value']
                 dependent.free = True
@@ -1537,6 +1888,12 @@ class Sample(QObject):
             else:
                 raise ValueError(f'Unsupported constraint mode: {mode}')
         except Exception as error:  # noqa: BLE001
+            # The parameter may already be half-changed (dependent, or with another unit or
+            # bounds); leaving it so would be saved and could make the project unloadable.
+            try:
+                self._restore_parameter_state(dependent, previous_state)
+            except Exception:  # noqa: BLE001
+                logger.exception('Could not roll back %s after a failed constraint', getattr(dependent, 'name', '?'))
             return {'success': False, 'message': str(error)}
 
         unique_name = getattr(dependent, 'unique_name', None)
@@ -1577,142 +1934,47 @@ class Sample(QObject):
             'type': mode,
         }
 
-    @Slot('QVariantList')
-    def constrainModelsParameters(self, model_indices: list) -> None:
-        """Constrain matching parameters across selected models.
+    @Slot('QVariantList', bool, result='QVariant')
+    def constrainModelsParameters(self, model_indices: list, tie_materials: bool = False) -> dict:
+        """Tie the parameters of the selected models to those of the first one (the lowest index).
 
-        For each parameter in the models (except the first one), find the corresponding
-        parameter in the first model and create a constraint to make them equal.
+        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``):
+        scale and background stay per model; material chemistry (SLDs, densities, scattering
+        lengths) is tied only with `tie_materials`, since contrasts usually differ in it.
+        Ties are listed with the other constraints; removing one restores the parameter.
 
-        :param model_indices: List of model indices to constrain together.
+        :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
         """
-        if len(model_indices) < 2:
-            return
-
-        # Sort indices to ensure consistent ordering - first model becomes the reference
-        model_indices = sorted([int(idx) for idx in model_indices])
-
-        # Validate indices
-        num_models = len(self._project_lib._models)
-        for idx in model_indices:
-            if idx < 0 or idx >= num_models:
-                logger.warning('Invalid model index: %s', idx)
-                return
-
-        # Get the reference model (first in the sorted list)
-        reference_model_idx = model_indices[0]
-        reference_model = self._project_lib._models[reference_model_idx]
-
-        # Build a map of parameter paths to parameters for the reference model
-        # The path is relative to the model (sample/assembly/layer structure)
-        reference_params_map = self._build_model_parameters_map(reference_model)
-
-        # For each other model, find matching parameters and constrain them
-        constraints_added = 0
-        for model_idx in model_indices[1:]:
-            model = self._project_lib._models[model_idx]
-            model_params_map = self._build_model_parameters_map(model)
-
-            for param_path, dependent_param in model_params_map.items():
-                if param_path in reference_params_map:
-                    reference_param = reference_params_map[param_path]
-
-                    # Skip if already constrained
-                    if not getattr(dependent_param, 'independent', True):
-                        continue
-
-                    # Skip if it's the same parameter object
-                    if dependent_param.unique_name == reference_param.unique_name:
-                        continue
-
-                    try:
-                        # Capture previous state for undo capability
-                        previous_state = self._capture_parameter_state(dependent_param)
-
-                        # Create a constraint: dependent = reference
-                        dependent_param.make_dependent_on(
-                            dependency_expression='a',
-                            dependency_map={'a': reference_param},
-                        )
-
-                        # Store constraint state for display
-                        unique_name = getattr(dependent_param, 'unique_name', None)
-                        if unique_name is not None:
-                            # Get display names with model prefix for clarity
-                            # e.g., "M2 SiO2 sld = M1 SiO2 sld"
-                            ref_display = self._get_parameter_display_name(reference_param, reference_model_idx)
-                            dep_display = self._get_parameter_display_name(dependent_param, model_idx)
-
-                            self._constraint_states[unique_name] = {
-                                'mode': 'dynamic',
-                                'relation': '=',
-                                'previous': previous_state,
-                                'expression': 'a',
-                                'raw_expression': 'a',
-                                'pretty_expression': ref_display,
-                                'dependency_map': {'a': reference_param},
-                                'dependent_display': dep_display,
-                            }
-
-                        constraints_added += 1
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning('Failed to constrain parameter %s: %s', param_path, e)
-                        continue
-
-        if constraints_added > 0:
-            self._emit_constraints_changed()
-
-    def _build_model_parameters_map(self, model) -> Dict[str, DescriptorNumber]:
-        """Build a map of relative parameter paths to parameter objects for a model.
-
-        The path structure is: assembly_name/layer_name/param_name
-        This allows matching parameters across models with the same structure.
-        """
-        params_map: Dict[str, DescriptorNumber] = {}
-
-        # Get parameters from model structure
-        for assembly_idx, assembly in enumerate(model.sample):
-            # assembly_name = assembly.name
-            for layer_idx, layer in enumerate(assembly.layers):
-                # layer_name = layer.name
-                # Get layer parameters
-                for param in layer.get_all_parameters():
-                    param_name = param.name
-                    # Create a structural path that's independent of model name
-                    path_key = f'{assembly_idx}/{layer_idx}/{param_name}'
-                    params_map[path_key] = param
-
-        return params_map
-
-    def _get_parameter_display_name(self, param: DescriptorNumber, model_index: int | None = None) -> str:
-        """Get a display name for a parameter.
-
-        :param param: The parameter to get the display name for.
-        :param model_index: Optional model index to prefix the display name with (e.g., 'M1').
-        :return: Display name, optionally prefixed with model identifier.
-        """
-        display_name = param.name  # Fallback
+        indices = sorted({int(index) for index in model_indices})
+        models = self._project_lib.models
+        if len(indices) < 2 or not all(0 <= index < len(models) for index in indices):
+            return {'tied': 0, 'messages': [self.tr('Select at least two models.')]}
+        reference, plans, messages = indices[0], [], []
+        materials = 'tie' if tie_materials else 'skip'
+        # One action: every follower is planned first, and linked only if all of them can be.
+        for follower in indices[1:]:
+            try:
+                plans.append((follower, self._project_lib.plan_link(follower, reference, materials=materials)))
+            except ValueError as error:
+                messages.append(str(error))
+        if messages:
+            return {'tied': 0, 'messages': messages + [self.tr('No model was linked.')]}
+        records = []
         try:
-            from easyscience import global_object
+            for _, plan in plans:
+                records.append(self._project_lib.apply_link(plan))
+        except ValueError as error:
+            for record in records:
+                self._project_lib.unlink(record)
+            return {'tied': 0, 'messages': [str(error), self.tr('No model was linked.')]}
+        for follower, plan in plans:
+            conflicts = [row for row in plan.rows if row.action == 'conflict']
+            messages.extend(f"'{models[follower].name}' {row.path}: {row.reason}" for row in conflicts)
+        tied = sum(len(record.pairs) for record in records)
+        if tied:
+            self._emit_constraints_changed()
+        return {'tied': tied, 'messages': messages}
 
-            # Try to find the parameter's path in the global object map
-            for model in self._project_lib._models:
-                path = global_object.map.find_path(model.unique_name, param.unique_name)
-                if path and len(path) >= 2:
-                    parent_name = global_object.map.get_item_by_key(path[-2]).name
-                    param_name = global_object.map.get_item_by_key(path[-1]).name
-                    display_name = f'{parent_name} {param_name}'
-                    break
-        except Exception:  # noqa: S110
-            pass
-
-        if model_index is not None:
-            return f'M{model_index + 1} {display_name}'
-        return display_name
-
-    # # #
-    # Q Range
-    # # #
     @Property(float, notify=qRangeChanged)
     def q_min(self) -> float:
         return self._project_logic.q_min

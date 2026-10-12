@@ -18,6 +18,11 @@ QtObject {
     // Minimizer
     readonly property double minimizerTolerance: 1.0
     readonly property int minimizerMaxIterations: 2
+    readonly property var fitObjectives: ['hybrid', 'mighell', 'legacy_mask']
+    readonly property string fitObjective: 'hybrid'
+    readonly property var minimizerOptions: []
+    readonly property bool minimizerRequiresFiniteBounds: false
+    readonly property int unboundedFreeParametersCount: 0
 
     // Fitting
     readonly property string fittingStatus: ''//undefined  //'Success'
@@ -61,9 +66,20 @@ QtObject {
     function bayesianComputeHeatmap(x, y) {
         console.debug(`bayesianComputeHeatmap ${x}, ${y}`)
     }
+    function saveBayesianPlot(sourceUrl, destinationUrl) {
+        console.debug(`saveBayesianPlot ${sourceUrl} -> ${destinationUrl}`)
+        return true
+    }
+    function bayesianPlotSuggestedFileUrl(sourceUrl) {
+        console.debug(`bayesianPlotSuggestedFileUrl ${sourceUrl}`)
+        return ''
+    }
 
     // Fit failure signal (mirrors Python backend)
     signal fitFailed(string message)
+
+    // Pre-fit check failure signal (mirrors Python backend)
+    signal prefitCheckFailed(string title, string message)
 
     // Stop fit signal (mirrors Python backend)
     signal stopFit()
@@ -138,6 +154,21 @@ QtObject {
     }
     function setMinimizerTolerance(value) {
         console.debug(`setMinimizerTolerance ${value}`)
+    }
+    function resetMinimizerTolerance() {
+        console.debug('resetMinimizerTolerance')
+    }
+    function resetMinimizerMaxIterations() {
+        console.debug('resetMinimizerMaxIterations')
+    }
+    function setFitObjective(value) {
+        console.debug(`setFitObjective ${value}`)
+    }
+    function setMinimizerOption(name, text) {
+        console.debug(`setMinimizerOption ${name} ${text}`)
+    }
+    function showFreeParameters() {
+        console.debug('showFreeParameters')
     }
     function setMinimizerMaxIterations(value) {
         console.debug(`setMinimizerMaxIterations ${value}`)

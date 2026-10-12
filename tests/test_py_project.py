@@ -21,6 +21,7 @@ class StubProjectLogic:
         self.reset_calls = 0
         self.added_samples = []
         self.replaced_samples = []
+        self.load_report = []
         # Stands in for the model/experiment content the real fingerprint covers.
         self.content_version = 0
 
@@ -150,6 +151,24 @@ def test_sample_load_emits_warning_when_model_missing(monkeypatch, qcore_applica
     assert project._logic.added_samples == []
     assert project._logic.replaced_samples == []
     assert received == ['Missing model in ORSO']
+
+
+def test_sample_load_emits_error_when_the_model_cannot_be_read(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+    monkeypatch.setattr(project_module.orso, 'load_orso', lambda _path: 'orso-data')
+
+    def _raise(_orso_data):
+        raise ValueError('bad layer')
+
+    monkeypatch.setattr(project_module, 'load_orso_model', _raise)
+    errors = []
+    project.projectLoadError.connect(errors.append)
+
+    project.sampleLoad('sample.orso')
+
+    assert project._logic.added_samples == []
+    assert errors == ['Failed to read the sample model from the ORSO file: bad layer']
 
 
 def test_load_emits_error_on_outdated_file_format(monkeypatch, qcore_application):
