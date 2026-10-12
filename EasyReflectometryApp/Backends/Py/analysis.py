@@ -24,6 +24,9 @@ from .workers import FitterWorker
 
 logger = logging.getLogger(__name__)
 
+#: Shown for an experiment that has no model.
+NO_MODEL_COLOR = '#A5A5A5'
+
 
 def _lacks_finite_bounds(param: dict) -> bool:
     """The library's rule for minimizers that need bounds (differential evolution)."""
@@ -182,6 +185,8 @@ class Analysis(QObject):
             'evaluations': self._fitting_logic.fit_evaluations,
             'message': self._fitting_logic.fit_message,
             'notes': self._fitting_logic.fit_notes,
+            # One row per fitted dataset (or spin channel), from the project's run record
+            'datasets': self._fitting_logic.fit_dataset_rows,
         }
 
     # ------------------------------------------------------------------
@@ -540,13 +545,12 @@ class Analysis(QObject):
         if self._is_stale_worker_signal():
             return
         self._fitting_logic.on_fit_finished(results)
-        self._project_lib._last_fit_results = self._fitting_logic.last_fit_results
-        # The worker executed a prepared run, so the project's fitter (which the
-        # HTML summary reads) never saw it: hand it the results and metrics.
+        # The worker executed a prepared run: record it on the project, whose run
+        # record the results dialog and the summary read.
         try:
             self._fitting_logic.record_on_project(self._fitting_logic.last_fit_results)
         except Exception:
-            logger.exception('Failed to record fit results on project fitter')
+            logger.exception('Failed to record the fit on the project')
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
@@ -560,6 +564,8 @@ class Analysis(QObject):
         is_user_cancel = self._fitting_logic.fit_cancelled and 'cancel' in error_message.lower()
         if is_user_cancel:
             error_message = 'Fitting cancelled by user'
+        # Not recorded on the project: its record keeps describing the last completed fit,
+        # which the parameters still hold. The dialog shows this error.
         self._fitting_logic.on_fit_failed(error_message)
         self._fitter_thread = None
         self.fittingChanged.emit()
@@ -1040,15 +1046,19 @@ class Analysis(QObject):
         return errors
 
     def _free_parameters(self) -> List[dict]:
-        """The parameters a fit varies, each once.
+        """The parameters the next fit varies, each once.
 
         Read from the unfiltered list: the table's name and free/fixed filters
         must not change what the fit-wide checks see. A parameter shared by
-        several models is listed once per model, hence the identity check.
+        several models is listed once per model, hence the identity check. The
+        library says which parameters the included experiments' fit varies
+        (``Project.fit_parameters``), so a model left out does not block it.
         """
+        fit_parameters = getattr(self._project_lib, 'fit_parameters', None)
+        in_fit = None if fit_parameters is None else {id(parameter) for parameter in fit_parameters()}
         unique = {}
         for param in self._parameters_logic.all_parameters():
-            if param['fit'] and param.get('enabled', True):
+            if param['fit'] and param.get('enabled', True) and (in_fit is None or id(param['object']) in in_fit):
                 unique.setdefault(id(param['object']), param)
         return list(unique.values())
 
@@ -1103,11 +1113,27 @@ class Analysis(QObject):
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
 
-    @Slot(int)
-    def setModelOnExperiment(self, new_value: int) -> None:
-        self._experiments_logic.set_model_on_experiment(new_value)
-        self.experimentsChanged.emit()
-        self.externalExperimentChanged.emit()
+    @Slot(int, int)
+    def setModelOnExperiment(self, index: int, model_index: int) -> None:
+        """Bind the experiment in row `index` to the model at `model_index`."""
+        if self._experiments_logic.set_model_on_experiment(index, model_index):
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsModelIndices(self) -> List[int]:
+        """Per experiment, the index of its model (-1 when it has none)."""
+        return self._experiments_logic.model_indices()
+
+    @Property('QVariantList', notify=experimentsChanged)
+    def experimentsIncludedInFit(self) -> List[bool]:
+        return self._experiments_logic.included_in_fit()
+
+    @Slot(int, bool)
+    def setExperimentIncludedInFit(self, index: int, included: bool) -> None:
+        if self._experiments_logic.set_included_in_fit(index, included):
+            self.experimentsChanged.emit()
+            self.externalExperimentChanged.emit()
 
     @Slot(str)
     def setExperimentName(self, new_name: str) -> None:
@@ -1123,37 +1149,20 @@ class Analysis(QObject):
 
     @Property(int, notify=experimentsChanged)
     def modelIndexForExperiment(self) -> int:
-        # return the model index for the current experiment
-        models = self._experiments_logic._project_lib._models
-        experiments = self._ordered_experiments()
-        index = self.experimentCurrentIndex
-        current_experiment = experiments[index] if 0 <= index < len(experiments) else None
-        if current_experiment is None:
-            return -1
-        try:
-            return models.index(current_experiment.model)
-        except ValueError:
-            # The experiment is unpaired or paired with a model no longer in the project.
-            return -1
+        """The model index of the current experiment (-1 when it has none)."""
+        return self._experiments_logic.model_index_on_experiment()
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelNamesForExperiment(self) -> list:
-        # return a list of model names for each experiment
-        mapped_models = []
+        """Per experiment, its model's name ('' when it has none)."""
         experiments = self._ordered_experiments()
-        for experiment in experiments:
-            name = get_original_name(experiment.model)
-            mapped_models.append(name)
-        return mapped_models
+        return [get_original_name(experiment.model) if experiment.model is not None else '' for experiment in experiments]
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelColorsForExperiment(self) -> list:
-        # return a list of model colors for each experiment
-        mapped_models = []
+        """Per experiment, its model's colour (grey when it has none)."""
         experiments = self._ordered_experiments()
-        for experiment in experiments:
-            mapped_models.append(experiment.model.color)
-        return mapped_models
+        return [experiment.model.color if experiment.model is not None else NO_MODEL_COLOR for experiment in experiments]
 
     @Slot(int)
     def removeExperiment(self, index: int) -> None:
@@ -1161,12 +1170,7 @@ class Analysis(QObject):
         Remove the experiment at the given index.
         """
         if 0 <= index < len(self._experiments_logic.available()):
-            self._experiments_logic.remove_experiment(index)
-            # The selection follows: the removed experiment leaves it, later ones shift down.
-            if self._selection.remove_index(index, len(self._experiments_logic.available())):
-                self._sync_current_experiment_to_selection()
-            self.experimentsChanged.emit()
-            self.externalExperimentChanged.emit()
+            self.follow_rekeyed_experiments(self._experiments_logic.remove_experiment(index))
         else:
             logger.warning('Experiment index %s is out of range.', index)
 
@@ -1203,6 +1207,15 @@ class Analysis(QObject):
             self._sync_current_experiment_to_selection()
             self.experimentsChanged.emit()
             self.externalExperimentChanged.emit()
+
+    def follow_rekeyed_experiments(self, keys: dict) -> None:
+        """The selection follows removed experiments, by the library's old -> new key table
+        (the removed ones are not in it). The experiment list changed, so it is announced
+        whether or not the selection did."""
+        if self._selection.remap(keys, len(self._experiments_logic.available())):
+            self._sync_current_experiment_to_selection()
+        self.experimentsChanged.emit()
+        self.externalExperimentChanged.emit()
 
     def prune_selected_experiments(self) -> bool:
         """Drop selected experiments that no longer exist, e.g. after a model and its

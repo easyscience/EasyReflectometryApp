@@ -7,9 +7,7 @@ from typing import Optional
 from typing import cast
 
 from easyreflectometry import Project as ProjectLib
-from easyreflectometry.utils import count_free_parameters
 from easyscience.fitting import FitResults
-from easyscience.fitting.minimizers.utils import FitError
 
 if TYPE_CHECKING:
     import scipp as sc
@@ -28,9 +26,6 @@ class Fitting:
         self._finished = True
         self._result: Optional[FitResults] = None
         self._results: List[FitResults] = []  # For multi-experiment fits
-        # The number of distinct free parameters the running/last fit refined, taken when
-        # the fit starts: the result's statistics must not follow later project edits.
-        self._fit_n_pars: Optional[int] = None
         self._show_results_dialog = False
         self._fit_error_message: Optional[str] = None
         self._fit_cancelled = False
@@ -192,6 +187,7 @@ class Fitting:
         """
         self._result = None
         self._results = []
+        self._prepared = None
         self._fit_error_message = error_message
         self._running = False
         self._finished = True
@@ -227,7 +223,6 @@ class Fitting:
         self._fit_error_message = None
         self._result = None
         self._results = []
-        self._fit_n_pars = count_free_parameters(self._project_lib)
         self.clear_fit_progress()
         self._fit_running_message = 'Fitting...'
 
@@ -254,11 +249,14 @@ class Fitting:
         'Bayesian sampling of polarized experiments is not supported yet.'
     )
 
-    def _has_polarized_experiments(self) -> bool:
-        """Whether any loaded experiment carries per-channel (polarized) data."""
-        return any(
-            getattr(experiment, 'available_channels', None) is not None for experiment in self._ordered_experiments()
-        )
+    def _has_polarized_experiments(self, experiments: Optional[list] = None) -> bool:
+        """Whether any of `experiments` (by default every loaded one) carries per-channel data."""
+        experiments = self._ordered_experiments() if experiments is None else experiments
+        return any(getattr(experiment, 'available_channels', None) is not None for experiment in experiments)
+
+    def _included_experiments(self) -> list:
+        """The experiments whose Fit box is ticked, in order."""
+        return [experiment for experiment in self._ordered_experiments() if getattr(experiment, 'include_in_fit', True)]
 
     # ------------------------------------------------------------------
     # Inequality constraints (BUMPS penalties)
@@ -313,7 +311,7 @@ class Fitting:
         return self._project_lib.build_constraints_factory()
 
     def prepare_threaded_fit(self, minimizers_logic: 'Minimizers') -> 'PreparedFit | None':
-        """Prepare a fit of all experiments for a worker thread.
+        """Prepare a fit of the included experiments for a worker thread.
 
         The library prepares the run from a snapshot of the project's fit
         settings: minimizer, tolerance, budget, zero-variance objective and
@@ -343,8 +341,9 @@ class Fitting:
 
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter('always')
-                prepared = self._project_lib.prepare_fit(experiments)
+                prepared = self._project_lib.prepare_fit()
             self._fit_notes = list(dict.fromkeys(str(warning.message) for warning in caught))
+            self._fit_notes.extend(self._scope_notes(prepared))
             for note in self._fit_notes:
                 logger.warning(note)
             logger.info('Fitting: prepared %s with objective %s', prepared.core_fitter.minimizer.name, prepared.objective)
@@ -355,6 +354,27 @@ class Fitting:
             logger.exception('Error preparing threaded fit')
             return None
 
+    def _scope_notes(self, prepared) -> list[str]:
+        """What the fit covers beyond the included experiments' own models."""
+        notes = []
+        models = self._project_lib.models
+        for parameter in getattr(prepared, 'added_roots', []):
+            owners = ', '.join(f"'{models[index].name}'" for index in self._project_lib.parameter_models(parameter))
+            notes.append(
+                f"'{parameter.name}' of {owners} is fitted too: a parameter of a fitted model follows it, "
+                'although no experiment of that model is included.'
+            )
+        excluded = [name for name, included in zip(self._experiment_names(), self._inclusion()) if not included]
+        if excluded:
+            notes.append(f'Not included in this fit: {", ".join(excluded)}.')
+        return notes
+
+    def _experiment_names(self) -> list[str]:
+        return [experiment.name for experiment in self._ordered_experiments()]
+
+    def _inclusion(self) -> list[bool]:
+        return [experiment.include_in_fit for experiment in self._ordered_experiments()]
+
     def _fail_before_start(self, message: str) -> None:
         self._fit_error_message = message
         self._running = False
@@ -362,16 +382,36 @@ class Fitting:
         self._show_results_dialog = True
 
     def record_on_project(self, results: list) -> None:
-        """Hand a finished worker run's results and metrics to the project's fitter.
+        """Record the completed run on the project (``Project.last_fit``), which the results
+        dialog and the summary read. The prepared run is used up: a later failure, or a
+        sampling run, cannot be recorded against it."""
+        if self._prepared is not None:
+            prepared, self._prepared = self._prepared, None
+            self._project_lib.record_fit(prepared, results)
 
-        The worker executes a prepared run, so the project's fitter (which the
-        summary reads) never saw it; the metrics come from the same run's
-        measured arrays, so the classical ones are available too.
-        """
-        metrics = self._prepared.finalize(results) if self._prepared is not None else None
-        fitter = self._project_lib.fitter
-        if fitter is not None:
-            fitter.record_fit_results(results, metrics)
+    @property
+    def _run(self):
+        return getattr(self._project_lib, 'last_fit', None)
+
+    @property
+    def fit_dataset_rows(self) -> list[dict]:
+        """Per fitted dataset of the last run: name, points, chi2, chi2 per point, share of the total."""
+        run = self._run
+        if run is None:
+            return []
+        rows = []
+        for (_, name, channel), entry in zip(run.inputs, run.per_dataset):
+            rows.append(
+                {
+                    'name': name if channel is None else f'{name} ({channel})',
+                    'points': entry['objective_n_points'],
+                    'measuredPoints': entry['classical_n_points'],
+                    'chi2': entry['objective_chi2'],
+                    'chi2PerPoint': entry['objective_chi2_per_point'],
+                    'share': entry['share_of_objective'],
+                }
+            )
+        return rows
 
     @property
     def fit_notes(self) -> str:
@@ -390,34 +430,30 @@ class Fitting:
 
     @property
     def fit_classical_reduced_chi2(self) -> float | None:
-        """Reduced chi2 over the measured points with positive variance, when available."""
-        fitter = self._project_lib.fitter
-        value = getattr(fitter, 'classical_reduced_chi', None) if fitter is not None else None
-        return float(value) if isinstance(value, (int, float)) else None
+        """Pooled reduced chi2 over the measured points with positive variance, when defined."""
+        return self._run.pooled.get('classical_reduced_chi2') if self._run is not None else None
 
     # ------------------------------------------------------------------
     # Bayesian sampling helpers
     # ------------------------------------------------------------------
 
-    def collect_all_experiments_datagroup(self) -> 'sc.DataGroup':
+    def collect_all_experiments_datagroup(self, experiments: Optional[list] = None) -> 'sc.DataGroup':
         """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.mcmc_sample()``.
 
-        Scope decision (see issue #319): Bayesian sampling deliberately runs over
-        **all** experiments, mirroring the classical fit path (``prepare_threaded_fit``)
-        which also fits every experiment. The experiment selection currently affects
-        only plotting, not the fit/sampling scope. If per-selection sampling is ever
-        wanted, filter ``self._ordered_experiments()`` here and rename accordingly.
+        Sampling covers the experiments whose Fit box is ticked, like a classical fit;
+        the selection only affects plotting.
 
+        :param experiments: The experiments to sample, by default the included ones.
         :return: DataGroup with reflectivity coords and data.
         :rtype: sc.DataGroup
         """
         import numpy as np
         import scipp as sc
 
-        if self._has_polarized_experiments():
+        experiments = self._included_experiments() if experiments is None else experiments
+        if self._has_polarized_experiments(experiments):
             raise ValueError(self._POLARIZED_SAMPLE_MESSAGE)
 
-        experiments = self._ordered_experiments()
         coords = {}
         data = {}
         for i, experiment in enumerate(experiments):
@@ -452,9 +488,17 @@ class Fitting:
         try:
             from easyreflectometry.fitting import MultiFitter
 
-            experiments = self._ordered_experiments()
-            if not experiments:
+            if not self._ordered_experiments():
                 self._fail_before_start('No experiments to sample')
+                return None, None
+            experiments = self._included_experiments()
+            if not experiments:
+                self._fail_before_start('No experiment to sample: tick Fit for at least one experiment.')
+                return None, None
+            unbound = [experiment.name for experiment in experiments if experiment.model is None]
+            if unbound:
+                names = ', '.join(f"'{name}'" for name in unbound)
+                self._fail_before_start(f'{names} cannot be sampled: no model is assigned.')
                 return None, None
 
             constraints_error = self.inequality_constraints_error(minimizers_logic)
@@ -463,6 +507,7 @@ class Fitting:
                 self._fail_before_start(constraints_error)
                 return None, None
 
+            # The library adds the free parameters of excluded models that these follow.
             models = [experiment.model for experiment in experiments]
             multi_fitter = MultiFitter(*models)
             # Sampled with a snapshot of the project's settings (a BUMPS minimizer
@@ -471,7 +516,7 @@ class Fitting:
             # controls stay editable meanwhile.
             multi_fitter.settings = copy.deepcopy(self._project_lib.fit_settings)
 
-            data_group = self.collect_all_experiments_datagroup()
+            data_group = self.collect_all_experiments_datagroup(experiments)
             return multi_fitter, data_group
         except Exception as e:
             self._fail_before_start(f'Error preparing sampling: {e}')
@@ -480,6 +525,7 @@ class Fitting:
 
     def prepare_for_threaded_sample(self) -> None:
         """Set running flags and sampling progress message before launching the worker."""
+        self._prepared = None  # a sampling run is not recorded as a classical one
         self.reset_stop_flag()
         self._running = True
         self._finished = False
@@ -536,10 +582,6 @@ class Fitting:
         self._show_results_dialog = True
         self._fit_error_message = None
         self.clear_fit_progress()
-        if self._fit_n_pars is None:
-            # Results adopted without prepare_for_threaded_fit: the project is still in the
-            # state they were produced in, so this is the count the fit refined.
-            self._fit_n_pars = count_free_parameters(self._project_lib)
 
         # Store result(s) - handle both single and multiple results
         if isinstance(results, list) and len(results) > 0:
@@ -547,7 +589,7 @@ class Fitting:
             self._results = results
             self._result = results[0]
             engine_name = getattr(results[0], 'minimizer_engine', 'unknown')
-            logger.info('Fit finished: engine=%s, chi2=%s, success=%s', engine_name, self.fit_chi2, results[0].success)
+            logger.info('Fit finished: engine=%s, success=%s', engine_name, results[0].success)
         else:
             single_result = cast(Optional[FitResults], results)
             self._result = single_result
@@ -559,75 +601,12 @@ class Fitting:
 
     @property
     def fit_n_pars(self) -> int:
-        """The number of distinct parameters the last fit refined.
-
-        With several results (one per experiment or spin channel) every result's ``n_pars``
-        counts the shared parameters again, so the count taken when the fit started is used
-        instead; that snapshot, not the live project, keeps the statistic that of the fit
-        that produced the results.
-        """
-        if len(self._results) > 1:
-            if self._fit_n_pars is None:
-                self._fit_n_pars = count_free_parameters(self._project_lib)
-            return self._fit_n_pars
-        if self._result is None:
-            return 0
-        return self._result.n_pars
+        """The number of parameters the last fit varied."""
+        return self._run.n_free_parameters if self._run is not None else 0
 
     @property
     def fit_chi2(self) -> float:
-        """Return reduced chi-squared across all fits."""
-        if self._results:
-            try:
-                if len(self._results) == 1:
-                    return float(self._results[0].reduced_chi2)
-                total_chi2 = float(sum(result.chi2 for result in self._results))
-                total_points = sum(len(result.x) for result in self._results)
-                total_dof = total_points - self.fit_n_pars
-                if total_dof <= 0:
-                    return 0.0
-                return total_chi2 / total_dof
-            except (ValueError, TypeError):
-                return 0.0
-        if self._result is None:
-            return 0.0
-        try:
-            return float(self._result.reduced_chi2)
-        except (ValueError, TypeError):
-            return 0.0
+        """The pooled reduced chi-squared of the last fit (0 when undefined)."""
+        value = self._run.pooled.get('objective_reduced_chi2') if self._run is not None else None
+        return float(value) if value is not None else 0.0
 
-    def start_stop(self) -> None:
-        if self._running:
-            # Stop running the fitting
-            self._running = False
-        else:
-            # Start running the fitting
-            self._running = True
-            self._finished = False
-            self._show_results_dialog = False
-            self._fit_error_message = None
-            self._fit_n_pars = count_free_parameters(self._project_lib)
-            try:
-                # This needs extension to support multiple data sets
-                exp_data = self._project_lib.experimental_data_for_model_at_index(0)
-                if getattr(exp_data, 'available_channels', None) is not None:
-                    # All measured spin channels against the one shared model.
-                    channel_results = self._project_lib.fitter.fit_polarized(exp_data)
-                    self._results = list(channel_results.values())
-                    self._result = self._results[0] if self._results else None
-                else:
-                    self._result = self._project_lib.fitter.fit_single_data_set_1d(exp_data)
-            except FitError as e:
-                # Handle fit failure - create a failed result
-                self._result = None
-                self._fit_error_message = str(e)
-                logger.warning('Fit failed: %s', e)
-            except Exception as e:
-                # Handle any other unexpected exceptions
-                self._result = None
-                self._fit_error_message = str(e)
-                logger.warning('Unexpected error during fit: %s', e)
-            finally:
-                self._running = False
-                self._finished = True
-                self._show_results_dialog = True

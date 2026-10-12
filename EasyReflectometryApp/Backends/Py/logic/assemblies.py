@@ -6,6 +6,8 @@ from easyreflectometry.sample import RepeatingMultilayer
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample import SurfactantLayer
 
+from .helpers import get_original_name
+
 
 class Assemblies:
     def __init__(self, project_lib: ProjectLib):
@@ -56,7 +58,16 @@ class Assemblies:
 
     @property
     def assemblies(self) -> list[dict[str, str]]:
-        return _from_assemblies_collection_to_list_of_dicts(self._assemblies)
+        rows = _from_assemblies_collection_to_list_of_dicts(self._assemblies)
+        # An assembly is one object in every model sharing it (contrasts): editing it edits all.
+        current = self._project_lib.current_model_index
+        for row, assembly in zip(rows, self._assemblies):
+            row['sharedWith'] = [
+                get_original_name(model)
+                for index, model in enumerate(self._project_lib._models)
+                if index != current and any(other is assembly for other in model.sample)
+            ]
+        return rows
 
     @property
     def assemblies_names(self) -> list[str]:

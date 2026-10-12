@@ -5,7 +5,7 @@ import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
 
-//import Gui.Globals 1.0 as ExGlobals
+import Gui as Gui
 import Gui.Globals as Globals
 
 EaElements.GroupBox {
@@ -192,8 +192,7 @@ EaElements.GroupBox {
             }
 
             delegate: EaComponents.TableViewDelegate {
-                //property var dataModel: model
-                
+
                 // Property to track if this row is selected
                 property bool isSelected: {
                     for (var i = 0; i < selectedExperimentIndices.length; i++) {
@@ -246,33 +245,22 @@ EaElements.GroupBox {
                     font.bold: true
                 }
 
-                EaComponents.TableViewComboBox {
+                Gui.ExperimentModelComboBox {
                     id: modelAccess
-                    horizontalAlignment: Text.AlignLeft
+                    row: index
                     width: EaStyle.Sizes.sideBarContentWidth - (noLabel.width + deleteRowColumn.width + colorLabel.width + labelLabel.width + 5 * EaStyle.Sizes.tableColumnSpacing)
-                    model: Globals.BackendWrapper.sampleModelNames
-                    onActivated: {
-                        Globals.BackendWrapper.analysisSetModelOnExperiment(currentIndex)
-                    }
-                    Component.onCompleted: {
-                        Globals.BackendWrapper.analysisSetExperimentsCurrentIndex(model.index)
-                        Globals.BackendWrapper.analysisSetModelOnExperiment(model.index)
-                        currentIndex = 0
-                    }
                 }
 
                 EaComponents.TableViewLabel {
                     id: colorLabel
-                    backgroundColor: Globals.BackendWrapper.sampleModels[modelAccess.currentIndex].color
+                    backgroundColor: Globals.BackendWrapper.modelColorsForExperiment[index] ?? 'transparent'
                 }
 
                 EaComponents.TableViewButton {
                     id: deleteRowColumn
                     fontIcon: "minus-circle"
                     ToolTip.text: qsTr("Remove this dataset")
-                    onClicked: {
-                        Globals.BackendWrapper.analysisRemoveExperiment(index)
-                    }
+                    onClicked: Globals.BackendWrapper.analysisRemoveExperiment(index)
                 }
                 mouseArea.onPressed: (mouse) => {
                     // Handle multi-selection with Ctrl key

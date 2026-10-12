@@ -70,7 +70,10 @@ EaElements.Dialog {
 
         EaElements.Label {
             visible: !Globals.BackendWrapper.bayesianResultAvailable && Globals.BackendWrapper.analysisFitSuccess
-            text: "Reduced Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4)
+            readonly property int datasets: (Globals.BackendWrapper.analysisFitResults.datasets ?? []).length
+            // Pooled over the datasets in the fit, which may be fewer than those loaded
+            text: "Reduced Chi2: " + Globals.BackendWrapper.analysisFitChi2.toFixed(4) +
+                  (datasets > 1 ? qsTr(" (%1 datasets)").arg(datasets) : "")
         }
 
         // Over the measured points only, when the zero-variance handling makes it differ.
@@ -80,6 +83,36 @@ EaElements.Dialog {
                      classical !== undefined && classical !== null &&
                      Math.abs(classical - Globals.BackendWrapper.analysisFitChi2) > 1e-6 * Math.abs(classical)
             text: "Classical reduced Chi2: " + Number(classical).toFixed(4)
+        }
+
+        // Per fitted dataset, when there are several: how much of the total chi2 each contributes.
+        // Its chi2 per point is not a reduced chi2: the degrees of freedom belong to the joint fit.
+        Grid {
+            id: datasetTable
+            readonly property var datasets: Globals.BackendWrapper.analysisFitResults.datasets ?? []
+            visible: !Globals.BackendWrapper.bayesianResultAvailable && Globals.BackendWrapper.analysisFitSuccess && datasets.length > 1
+            columns: 4
+            columnSpacing: EaStyle.Sizes.fontPixelSize
+            rowSpacing: EaStyle.Sizes.fontPixelSize * 0.25
+
+            Repeater {
+                model: [qsTr("Dataset"), qsTr("Points fitted"), qsTr("Chi2/point"), qsTr("Share")]
+                EaElements.Label { text: modelData; font.bold: true }
+            }
+            Repeater {
+                model: datasetTable.datasets.length * 4
+                EaElements.Label {
+                    readonly property var dataset: datasetTable.datasets[Math.floor(index / 4)]
+                    text: {
+                        const value = [dataset.name, dataset.points, dataset.chi2PerPoint, dataset.share][index % 4]
+                        if (index % 4 === 2) return value === null ? '–' : Number(value).toFixed(3)
+                        if (index % 4 === 3) return value === null ? '–' : (100 * value).toFixed(1) + ' %'
+                        // The zero-variance handling can fit fewer points than were measured
+                        if (index % 4 === 1 && dataset.measuredPoints !== value) return value + ' (' + dataset.measuredPoints + ' measured)'
+                        return String(value)
+                    }
+                }
+            }
         }
 
         EaElements.Label {
