@@ -367,7 +367,7 @@ def test_start_threaded_sample_forwards_bayesian_kwargs(monkeypatch, qcore_appli
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
     # Set non-default Bayesian hyper-params
     analysis._bayesian_logic.samples = 5000
@@ -380,7 +380,7 @@ def test_start_threaded_sample_forwards_bayesian_kwargs(monkeypatch, qcore_appli
 
     worker = StubWorker.instances[-1]
     assert worker.method_name == 'mcmc_sample'
-    assert worker.args == ('data-group',)
+    assert worker.args == ()  # no DataGroup: the fitter samples its own experiments
     assert worker.kwargs == {
         'samples': 5000,
         'burn': 1000,
@@ -397,7 +397,7 @@ def test_start_threaded_sample_uses_defaults_when_not_set(monkeypatch, qcore_app
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
 
     analysis._start_threaded_sample()
@@ -417,7 +417,7 @@ def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_a
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
 
     analysis._start_threaded_sample()
@@ -440,7 +440,7 @@ def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcor
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
 
     # Mock the pre-fit check to avoid complex real checks
@@ -462,11 +462,11 @@ def test_start_threaded_sample_error_emits_fit_failed(monkeypatch, qcore_applica
     """When prepare_threaded_sample returns None, fitFailed signal is emitted."""
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_sample = MagicMock(return_value=(None, None))
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(return_value=None)
     # Make prepare_threaded_sample return None and set error message (as real code does)
     def _prepare_and_fail(*args, **kwargs):
         analysis._fitting_logic._fit_error_message = 'No experiments to sample'
-        return None, None
+        return None
 
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(side_effect=_prepare_and_fail)
 

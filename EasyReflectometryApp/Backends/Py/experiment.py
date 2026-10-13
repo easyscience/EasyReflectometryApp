@@ -1,9 +1,11 @@
 import os
+import warnings
 
 from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 from PySide6.QtQml import QJSValue
@@ -20,6 +22,37 @@ def _from_qml(value):
     return value
 
 
+def _local_path(path) -> str:
+    """A local file path from a QML file-dialog entry (`QUrl`), a file URL or a path.
+
+    `str()` of a `QUrl` is its Python repr, and `generalizePath` does not undo
+    percent-encoding (spaces, non-ASCII names), so URLs go through Qt.
+    """
+    if isinstance(path, QUrl):
+        return path.toLocalFile()
+    path = str(path)
+    if path.startswith('file:'):
+        return QUrl(path).toLocalFile()
+    return IO.generalizePath(path)
+
+
+# The library's caveat for a file without a resolution column merged with
+# files that have one, in the words of the user guide.
+_NO_RESOLUTION_WARNING = 'carry no q-resolution'
+_NO_RESOLUTION_MESSAGE = (
+    'the file has no q-resolution column while the other data of this experiment do; '
+    'its points are given a percentage (dq/q) resolution instead.'
+)
+
+
+def _user_warning_text(message) -> str:
+    """The library's warning text, reworded for the dialog where it names internals."""
+    text = str(message)
+    if _NO_RESOLUTION_WARNING in text:
+        return _NO_RESOLUTION_MESSAGE
+    return text
+
+
 # Spin channels accepted by the polarized import, in canonical order.
 _CHANNELS = ('pp', 'pm', 'mp', 'mm')
 
@@ -30,6 +63,8 @@ class Experiment(QObject):
     qRangeUpdated = Signal()
     # Emitted with a user-facing message when an import is rejected.
     loadFailed = Signal(str)
+    # Emitted with a user-facing message when an import succeeded with a caveat.
+    loadWarning = Signal(str)
     # Emitted with the list position of a newly imported experiment.
     experimentLoaded = Signal(int)
 
@@ -105,6 +140,77 @@ class Experiment(QObject):
             self.externalExperimentChanged.emit()
         if q_range_changed:
             self.qRangeUpdated.emit()
+
+    @Slot('QVariant')
+    def appendToCurrent(self, paths) -> None:
+        """Add the files to the current experiment as more curves of the same contrast.
+
+        A contrast is often measured as several curves (one per angle or
+        wavelength band), each with its own q-resolution. Every file's points
+        are merged into the current experiment and keep their own resolution,
+        so the fit smears each point with the width it was measured with.
+
+        `paths` is a list of `QUrl` (a QML file dialog's `selectedFiles`), file
+        URLs or local paths.
+
+        A file that cannot be added (a polarized experiment, a file holding
+        several datasets, a parse error) is skipped; the others are still added.
+        A file without a resolution column mixed with files that have one is
+        added with an assumed resolution. All refusals and caveats of one call
+        are reported together: through `loadFailed` when any file was refused,
+        otherwise through `loadWarning`.
+        """
+        paths = _from_qml(paths)
+        if isinstance(paths, (str, QUrl)):
+            paths = paths.split(',') if isinstance(paths, str) else [paths]
+
+        failures = []
+        caveats = []
+        q_range_changed = False
+        for path in paths:
+            if not path or (isinstance(path, QUrl) and path.isEmpty()):
+                continue
+            generalized = _local_path(path)
+            name = os.path.basename(generalized)
+            # catch_warnings swaps the process-wide warning state; the Experimental
+            # data group is disabled while a fit runs, so no worker thread is
+            # warning concurrently when this is reached from the GUI.
+            try:
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    changed = self._project_logic.append_to_current_experiment(generalized)
+            except Exception as error:  # noqa: BLE001 - any refusal reaches the user, not the event loop
+                console.error(f'Adding {generalized} to the current experiment failed: {error}')
+                failures.append(f'{name}: {error}')
+                continue
+            for caught_warning in caught:
+                if issubclass(caught_warning.category, UserWarning):
+                    console.info(f'{name}: {caught_warning.message}')
+                    caveats.append(f'{name}: {_user_warning_text(caught_warning.message)}')
+                else:
+                    # Not meant for the user (e.g. deprecations): hand it back to
+                    # the normal warning machinery instead of swallowing it.
+                    warnings.warn_explicit(
+                        caught_warning.message,
+                        caught_warning.category,
+                        caught_warning.filename,
+                        caught_warning.lineno,
+                    )
+            if changed:
+                q_range_changed = True
+            self.experimentChanged.emit()
+            self.externalExperimentChanged.emit()
+        if q_range_changed:
+            self.qRangeUpdated.emit()
+        # One message per call: the GUI shows a single dialog, so per-file
+        # emissions would leave only the last one visible.
+        if failures:
+            message = '\n'.join(failures)
+            if caveats:
+                message += '\n\nAdded with a warning:\n' + '\n'.join(caveats)
+            self.loadFailed.emit(message)
+        elif caveats:
+            self.loadWarning.emit('\n'.join(caveats))
 
     @Slot('QVariant', result='QVariantList')
     def suggestPolarizedChannels(self, paths) -> list:

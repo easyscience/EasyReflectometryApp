@@ -383,7 +383,22 @@ EaComponents.ApplicationWindow {
         enabled: target !== null
         ignoreUnknownSignals: true
         function onLoadFailed(message) {
-            engineRejectionDialog.title = qsTr("Cannot import the data")
+            showLoadMessage(qsTr("Cannot import the data"), message)
+        }
+        // Imported, but with an assumption the user should know about (e.g. a
+        // file without a resolution column merged with files that have one).
+        function onLoadWarning(message) {
+            showLoadMessage(qsTr("Data imported with a warning"), message)
+        }
+        // An import of several files reports file by file: add to a dialog
+        // that is still open rather than replacing what it shows, and keep
+        // its first title (a refusal outranks a later warning).
+        function showLoadMessage(title, message) {
+            if (engineRejectionDialog.visible) {
+                engineRejectionDialog.message += '\n\n' + message
+                return
+            }
+            engineRejectionDialog.title = title
             engineRejectionDialog.message = message
             engineRejectionDialog.open()
         }

@@ -339,6 +339,8 @@ QtObject {
     readonly property var experimentResolution: activeBackend.experiment.resolution
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
     function experimentLoad(value) { activeBackend.experiment.load(value) }
+    // More curves of the selected experiment's contrast, merged into it (each point keeps its resolution)
+    function experimentAppendToCurrent(value) { activeBackend.experiment.appendToCurrent(value) }
     // Polarized experiment import (one file per spin channel)
     function experimentSuggestPolarizedChannels(value) { return activeBackend.experiment.suggestPolarizedChannels(value) }
     // Returns '' on success, or the reason the import was rejected. The backend

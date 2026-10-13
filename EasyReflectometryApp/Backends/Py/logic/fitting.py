@@ -1,4 +1,3 @@
-import copy
 import logging
 import warnings
 from typing import TYPE_CHECKING
@@ -10,7 +9,7 @@ from easyreflectometry import Project as ProjectLib
 from easyscience.fitting import FitResults
 
 if TYPE_CHECKING:
-    import scipp as sc
+    from easyreflectometry.fitting import MultiFitter
     from easyreflectometry.fitting import PreparedFit
 
     from .minimizers import Minimizers
@@ -437,91 +436,50 @@ class Fitting:
     # Bayesian sampling helpers
     # ------------------------------------------------------------------
 
-    def collect_all_experiments_datagroup(self, experiments: Optional[list] = None) -> 'sc.DataGroup':
-        """Build the scipp DataGroup required by reflectometry-lib ``MultiFitter.mcmc_sample()``.
+    def prepare_threaded_sample(self, minimizers_logic: 'Minimizers') -> 'MultiFitter | None':
+        """Prepare the library fitter for Bayesian sampling, or None (with the reason reported).
 
-        Sampling covers the experiments whose Fit box is ticked, like a classical fit;
-        the selection only affects plotting.
-
-        :param experiments: The experiments to sample, by default the included ones.
-        :return: DataGroup with reflectivity coords and data.
-        :rtype: sc.DataGroup
-        """
-        import numpy as np
-        import scipp as sc
-
-        experiments = self._included_experiments() if experiments is None else experiments
-        if self._has_polarized_experiments(experiments):
-            raise ValueError(self._POLARIZED_SAMPLE_MESSAGE)
-
-        coords = {}
-        data = {}
-        for i, experiment in enumerate(experiments):
-            x_vals = np.asarray(experiment.x, dtype=float)
-            y_vals = np.asarray(experiment.y, dtype=float)
-
-            # ye holds variances (σ²), same convention as prepare_threaded_fit.
-            # Data files without an uncertainty column yield an empty/absent ye;
-            # scipp requires variances to match the values' shape, so fall back
-            # to zeros and let mcmc_sample's zero-variance handling report it.
-            ye_raw = getattr(experiment, 'ye', None)
-            ye_vals = np.asarray(ye_raw, dtype=float) if ye_raw is not None else np.zeros_like(y_vals)
-            if ye_vals.shape != y_vals.shape:
-                ye_vals = np.zeros_like(y_vals)
-
-            # No variances on the Qz coordinate: mcmc_sample only reads its
-            # values, and xe may be empty for 2/3-column data files.
-            coords[f'Qz_{i}'] = sc.array(
-                dims=[f'Qz_{i}'], values=x_vals, unit=sc.Unit('1/angstrom'),
-            )
-            data[f'R_{i}'] = sc.array(
-                dims=[f'Qz_{i}'], values=y_vals, variances=ye_vals,
-            )
-        return sc.DataGroup(data=data, coords=coords, attrs={})
-
-    def prepare_threaded_sample(self, minimizers_logic: 'Minimizers') -> tuple:
-        """Prepare high-level MultiFitter + DataGroup for Bayesian sampling.
+        The fitter comes from ``Project.prepare_sample``: it samples each
+        included experiment's datasets with the resolution each was measured
+        with, exactly as the classical fit does, and carries a snapshot of the
+        project's settings taken here (the minimizer controls stay editable
+        while the worker runs). The worker calls ``mcmc_sample()`` on it with
+        no ``DataGroup``.
 
         :param minimizers_logic: The minimizers logic instance.
-        :return: Tuple of (multi_fitter, data_group) or (None, None) on error.
+        :return: The fitter, or None when sampling cannot start.
         """
         try:
-            from easyreflectometry.fitting import MultiFitter
-
+            # `prepare_sample` refuses the same cases (FitScopeError, reported
+            # below); these checks stay for the GUI wording ("tick Fit ...").
             if not self._ordered_experiments():
                 self._fail_before_start('No experiments to sample')
-                return None, None
+                return None
             experiments = self._included_experiments()
             if not experiments:
                 self._fail_before_start('No experiment to sample: tick Fit for at least one experiment.')
-                return None, None
+                return None
             unbound = [experiment.name for experiment in experiments if experiment.model is None]
             if unbound:
                 names = ', '.join(f"'{name}'" for name in unbound)
                 self._fail_before_start(f'{names} cannot be sampled: no model is assigned.')
-                return None, None
+                return None
+            if self._has_polarized_experiments(experiments):
+                self._fail_before_start(self._POLARIZED_SAMPLE_MESSAGE)
+                return None
 
             constraints_error = self.inequality_constraints_error(minimizers_logic)
             if constraints_error:
                 logger.warning('Sampling refused: %s', constraints_error)
                 self._fail_before_start(constraints_error)
-                return None, None
+                return None
 
             # The library adds the free parameters of excluded models that these follow.
-            models = [experiment.model for experiment in experiments]
-            multi_fitter = MultiFitter(*models)
-            # Sampled with a snapshot of the project's settings (a BUMPS minimizer
-            # in sampling mode, and the zero-variance objective), taken here: the
-            # library snapshots them only once the worker runs, and the minimizer
-            # controls stay editable meanwhile.
-            multi_fitter.settings = copy.deepcopy(self._project_lib.fit_settings)
-
-            data_group = self.collect_all_experiments_datagroup(experiments)
-            return multi_fitter, data_group
+            return self._project_lib.prepare_sample(experiments)
         except Exception as e:
             self._fail_before_start(f'Error preparing sampling: {e}')
             logger.exception('Error preparing threaded sample')
-            return None, None
+            return None
 
     def prepare_for_threaded_sample(self) -> None:
         """Set running flags and sampling progress message before launching the worker."""

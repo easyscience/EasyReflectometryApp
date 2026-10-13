@@ -362,6 +362,21 @@ class FakeProject:
     def experiments(self, value):
         self._experiments = value
 
+    def prepare_sample(self, experiments=None, *, skip_invalid=False):
+        """As the library: a `for_experiments` fitter with a snapshot of the fit settings.
+
+        `MultiFitter` is looked up at call time, so a test's fake fitting module applies.
+        """
+        import copy
+
+        from easyreflectometry.fitting import MultiFitter
+
+        self.calls.append(('prepare_sample', list(experiments or [])))
+        fitter = MultiFitter.for_experiments(list(experiments))
+        fitter.settings = copy.deepcopy(self.fit_settings)
+        fitter.skipped = []
+        return fitter
+
     def move_model(self, index, new_index):
         # As the library: the current model stays the current one wherever it moves
         self.calls.append(('move_model', index, new_index))

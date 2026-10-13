@@ -80,7 +80,7 @@ class StubFittingLogic:
         pass
 
     def prepare_threaded_sample(self, minimizers_logic):
-        return ('fake-multi-fitter', 'fake-data-group')
+        return 'fake-multi-fitter'
 
     def on_sample_finished(self):
         pass
@@ -935,7 +935,7 @@ class TestStartThreadedSample:
         assert worker.start_calls == 1
 
     def test_emits_fit_failed_on_preparation_error(self, analysis):
-        analysis._fitting_logic.prepare_threaded_sample = lambda ml: (None, None)
+        analysis._fitting_logic.prepare_threaded_sample = lambda ml: None
         analysis._fitting_logic.fit_error_message = 'No experiments to sample'
         received = []
         analysis.fitFailed.connect(received.append)

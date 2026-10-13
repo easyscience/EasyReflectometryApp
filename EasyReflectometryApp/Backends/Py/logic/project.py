@@ -185,6 +185,23 @@ class Project:
         self._project_lib.load_new_experiment(path)
         return self._sync_q_max_with_loaded_experiments()
 
+    def append_to_current_experiment(self, path: str) -> bool:
+        """Merge another measured curve of the same contrast into the current experiment.
+
+        Every point keeps the resolution it was measured with, see
+        ``Project.append_to_experiment_at_index``; a polarized experiment and a
+        file holding several datasets are refused there with ``ValueError``.
+
+        :return: True if q_max was changed, False otherwise.
+        """
+        experiments = self._project_lib._experiments
+        keys = sorted(experiments.keys()) if hasattr(experiments, 'keys') else list(range(len(experiments)))
+        position = self._project_lib._current_experiment_index
+        if not 0 <= position < len(keys):
+            raise IndexError('Select the experiment to add the file(s) to.')
+        self._project_lib.append_to_experiment_at_index(keys[position], path)
+        return self._sync_q_max_with_loaded_experiments()
+
     def count_datasets_in_file(self, path: str) -> int:
         return self._project_lib.count_datasets_in_file(path)
 

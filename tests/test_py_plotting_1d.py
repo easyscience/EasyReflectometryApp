@@ -62,7 +62,7 @@ class FakeProject:
     def sample_data_for_model_at_index(self, index):
         return self._sample[index]
 
-    def model_data_for_model_at_index(self, index, q_values=None):
+    def model_data_for_model_at_index(self, index, q_values=None, channel=None, resolution_function=None):
         if q_values is None:
             return FakeData(x=[0.1, 0.2], y=[1e-6, 2e-6])
         return FakeData(x=q_values, y=np.ones_like(q_values) * 2e-6)

@@ -1020,11 +1020,12 @@ class Plotting1d(QObject):
         that no longer exists are all "nothing to draw" — the chart keeps the
         single curve it draws today.
 
-        Resolution is switched off for the evaluation, the same swap
-        `sample_data_for_model_at_index` makes for the plain curve: the two are
-        drawn in one chart and a smeared cross-section next to an ideal curve
-        would compare the wrong things. The library's channel-aware entry point
-        does not do it, hence the swap here.
+        Calculated without resolution smearing, like the plain curve from
+        `sample_data_for_model_at_index`: the two are drawn in one chart and a
+        smeared cross-section next to an ideal curve would compare the wrong
+        things. The zero width is bound to this one calculation; the model's
+        resolution is calculator state a fit in the worker thread reads, so it
+        is never swapped.
 
         Cached per (model, channel): both cross-sections come out of one refl1d
         evaluation, but each call still crosses the library, and a chart refresh
@@ -1040,13 +1041,9 @@ class Plotting1d(QObject):
         data = None
         if channel in self.MODEL_SPIN_CHANNELS and self.modelHasMagnetism(model_index):
             try:
-                model = self._project_lib.models[model_index]
-                original_resolution = model.resolution_function
-                model.resolution_function = PercentageFwhm(0)
-                try:
-                    data = self._project_lib.model_data_for_model_at_index(model_index, channel=channel)
-                finally:
-                    model.resolution_function = original_resolution
+                data = self._project_lib.model_data_for_model_at_index(
+                    model_index, channel=channel, resolution_function=PercentageFwhm(0)
+                )
             except (IndexError, KeyError, ValueError, NotImplementedError, AttributeError, TypeError) as e:
                 # Same root cause as a magnetic model without depth profiles
                 # (a calculator that lost its magnetism), and the sidebar group
@@ -1514,6 +1511,14 @@ class Plotting1d(QObject):
 
         # The stored experiment carries the pairing (a polarized one shares it across channels).
         model_index = self._get_experiment_model_index(experiment_index, experiment)
+        # The curve the fit compares these points to: smeared with the
+        # resolution the dataset (or spin channel) was measured with, not the
+        # model's. They differ for every dataset of a model but the first.
+        # Evaluated on all measured q and masked afterwards: a per-point
+        # (Pointwise) resolution is exact only on its own q array, and a merged
+        # dataset can hold one q twice with different widths, which a subset
+        # would interpolate to the same width.
+        resolution_function = getattr(exp_data, 'resolution_function', None)
         if model_index is None:
             calc_data = None
         elif channel:
@@ -1521,21 +1526,22 @@ class Plotting1d(QObject):
             # cannot be computed (e.g. spin-flip on a non-magnetic model), show
             # the measured points alone rather than another channel's curve.
             try:
-                calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered, channel=channel)
+                calc_data = self._project_lib.model_data_for_model_at_index(
+                    model_index, q_values, channel=channel, resolution_function=resolution_function
+                )
             except Exception as exception:  # noqa: BLE001 - any backend refusal means "no curve"
                 console.debug(f'No calculated curve for channel {channel}: {exception}')
                 calc_data = None
         else:
-            try:
-                calc_data = self._project_lib.model_data_for_model_at_index(model_index, q_filtered)
-            except TypeError:
-                calc_data = self._project_lib.model_data_for_model_at_index(model_index)
+            calc_data = self._project_lib.model_data_for_model_at_index(
+                model_index, q_values, resolution_function=resolution_function
+            )
 
         calc_values = np.asarray(getattr(calc_data, 'y', np.empty(0)), dtype=float)
         calc_q_values = np.asarray(getattr(calc_data, 'x', np.empty(0)), dtype=float)
         has_calculated = True
-        if calc_values.size == q_filtered.size and calc_values.size > 0:
-            calculated_filtered = calc_values
+        if calc_values.size == q_values.size and calc_values.size > 0:
+            calculated_filtered = calc_values[q_mask]
         elif calc_q_values.size == calc_values.size and calc_values.size > 1:
             # Calculated on its own q grid: interpolate onto the measured q.
             calculated_filtered = np.interp(q_filtered, calc_q_values, calc_values)
@@ -1545,9 +1551,9 @@ class Plotting1d(QObject):
             # report "no curve" so plots and residuals leave it out.
             if calc_values.size:
                 self._warn_once(
-                    ('misaligned', experiment_index, channel, calc_values.size, q_filtered.size),
+                    ('misaligned', experiment_index, channel, calc_values.size, q_values.size),
                     f'Calculated curve for experiment {experiment_index} has {calc_values.size} values '
-                    f'for {q_filtered.size} measured points and no q to align them; it is not shown.',
+                    f'for {q_values.size} measured points and no q to align them; it is not shown.',
                 )
             has_calculated = False
             calculated_filtered = np.full(q_filtered.size, np.nan)

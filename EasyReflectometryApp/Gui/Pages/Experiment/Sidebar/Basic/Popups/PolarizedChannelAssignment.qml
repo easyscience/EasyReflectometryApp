@@ -125,9 +125,9 @@ EaElements.Dialog {
         }
 
         EaElements.Label {
-            // Model.resolution_function is per experiment.
+            // Each channel dataset keeps its own resolution; the model's follows the first channel.
             color: EaStyle.Colors.themeForegroundMinor
-            text: qsTr("Note: one resolution function is used for the whole experiment,\ntaken from the first assigned channel. Differing per-channel\nresolution metadata in the other files is ignored.")
+            text: qsTr("Note: each channel is fitted with the resolution of its own file.\nThe model's resolution field follows the first assigned channel.")
         }
 
         Repeater {

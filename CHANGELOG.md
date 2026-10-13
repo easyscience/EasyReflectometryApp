@@ -18,6 +18,28 @@
   - An "H →" reference is on screen wherever an arrow is.
   - A project with no magnetic layer is unchanged: no arrows, no slider, and the
     same Structure and SLD layout as before.
+- Variable resolution ([#425](https://github.com/easyscience/reflectometry-lib/issues/425), item 3):
+  - Every dataset is shown with the resolution it was measured with. The
+    calculated curve and residuals on the Analysis page, the report figures and
+    the Bayesian posterior band used the model's resolution, which follows the
+    first dataset loaded onto it; a second angle, contrast or spin channel on
+    the same model was drawn with the wrong smearing although the fit used the
+    right one.
+  - Bayesian sampling compares each dataset to the curve the classical fit
+    does: it now goes through the library's `Project.prepare_sample()` instead
+    of building a `DataGroup` that carried no resolution, so the posterior no
+    longer disagrees with the fit when a model has several datasets.
+  - "Add file(s) to the selected experiment" on the Experiment page merges more
+    measured curves of one contrast (other angles or wavelength bands) into the
+    selected experiment; every point keeps its own resolution. A file that
+    cannot be added is reported and skipped; one without a resolution column is
+    added with an assumed resolution, and a message says so.
+  - The model spin cross-sections on the Sample page are calculated without
+    smearing by passing a zero width to the one calculation; the model's
+    resolution is no longer swapped back and forth, which could disturb a fit
+    running at the same time.
+  - The polarized import dialog and the polarized-data guide no longer say that
+    one resolution is used for the whole experiment.
 - Multiple contrasts ([#425](https://github.com/easyscience/reflectometry-lib/issues/425)):
   - New demo files `examples/datasets/film_contrasts.ort` (a film on silicon in
     D2O, H2O and CMSi, with its slab model in the header) and `dppc_contrasts.ort`
@@ -121,9 +143,10 @@
   - Report figures plot each channel's spin cross-section in its channel
     colour. A channel that cannot be calculated (for example spin-flip on a
     non-magnetic model) is shown as measured data only.
-  - **Limitations:** one resolution function per polarized experiment (taken
-    from the first assigned channel; the import dialog says so); Bayesian
-    sampling of polarized experiments is not supported yet.
+  - Each channel is fitted, drawn and reported with the resolution of its own
+    file (see "Variable resolution" above).
+  - **Limitation:** Bayesian sampling of polarized experiments is not
+    supported yet.
   - Project save/load now fully supports polarized experiments.
 - Magnetism editing and polarized fitting:
   - New "Magnetism" group on the Sample page: one row per layer of the current

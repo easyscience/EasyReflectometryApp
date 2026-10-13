@@ -29,9 +29,10 @@ The dialog refuses to continue and explains why if a channel is assigned to more
 file, if a file is missing, or if nothing at all is assigned.
 
 ```{note}
-One resolution function is used for the whole polarised experiment, taken from the first
-assigned channel. Differing per-channel resolution metadata in the other files is ignored;
-the dialog says so.
+Each channel keeps the resolution of its own file: the fit, the per-channel curves on the
+`Analysis` page and the report all smear a channel with the resolution it was measured
+with. The model's resolution field on the `Experiment` page follows the first assigned
+channel; it is used for simulations and for a file without a resolution column.
 ```
 
 If the project's calculation engine cannot model magnetism, the dialog also notes that the
@@ -93,6 +94,5 @@ colour.
 
 ## Limitations
 
-- One resolution function per polarised experiment, taken from the first assigned channel.
 - Bayesian sampling of polarised experiments is not supported yet; see
   [Bayesian analysis](./bayesian.md).

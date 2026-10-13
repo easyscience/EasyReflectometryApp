@@ -297,8 +297,8 @@ class TestPolarizedFitting:
         project = self._polarized_project(tmp_path)
         logic = FittingLogic(project)
 
-        with pytest.raises(ValueError, match='Bayesian sampling'):
-            logic.collect_all_experiments_datagroup()
+        assert logic.prepare_threaded_sample(_StubMinimizers()) is None
+        assert 'Bayesian sampling of polarized experiments' in logic.fit_error_message
 
 
 class TestAnalysisChartChannels:
