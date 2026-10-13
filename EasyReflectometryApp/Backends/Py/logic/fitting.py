@@ -450,6 +450,8 @@ class Fitting:
         :return: The fitter, or None when sampling cannot start.
         """
         try:
+            # `prepare_sample` refuses the same cases (FitScopeError, reported
+            # below); these checks stay for the GUI wording ("tick Fit ...").
             if not self._ordered_experiments():
                 self._fail_before_start('No experiments to sample')
                 return None

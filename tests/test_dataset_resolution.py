@@ -57,6 +57,28 @@ class TestAnalysisCurve:
             expected = project.model_data_for_experiment_at_index(index, q_range=q).y
             np.testing.assert_allclose(drawn, expected, rtol=1e-12)
 
+    def test_a_narrowed_q_range_keeps_the_widths_of_overlapping_measurements(self, qcore_application, tmp_path):
+        # Two measurements of one contrast on the same q grid with very different
+        # widths: the merged dataset holds every q twice. Restricting the q range
+        # must not change the curve at the points that remain.
+        q = np.array([0.01, 0.03, 0.05, 0.08, 0.10, 0.15, 0.20, 0.25, 0.30])
+        project = Project()
+        project.default_model()
+        project.load_new_experiment(_write_file(tmp_path / 'sharp.txt', q, 0.002))
+        project.append_to_experiment_at_index(0, _write_file(tmp_path / 'broad.txt', q, 0.08))
+        merged = project.experiments[0]
+        full = np.asarray(project.model_data_for_experiment_at_index(0).y)
+        project.q_min = 0.03
+        project.q_max = 0.25
+        plotting = Plotting1d(project_lib=project, parent=None)
+
+        points = plotting._get_aligned_analysis_values(0)
+
+        x = np.asarray(merged.x)
+        mask = (x >= 0.03) & (x <= 0.25)
+        np.testing.assert_allclose([point['q'] for point in points], x[mask])
+        np.testing.assert_allclose([point['calculated'] for point in points], full[mask], rtol=1e-12)
+
     def test_the_second_dataset_is_not_drawn_with_the_models_resolution(self, qcore_application, tmp_path):
         project = two_datasets_on_one_model(tmp_path)
         plotting = Plotting1d(project_lib=project, parent=None)
@@ -220,6 +242,84 @@ class TestAppendToSelectedExperiment:
 
         assert len(failures) == 1 and failures[0].startswith('missing.txt:')
         assert project.experiments[0].x.size == 2 * q.size
+
+    def test_files_from_the_qml_dialog_are_added(self, qcore_application, tmp_path):
+        # A QML FileDialog's selectedFiles reaches the slot as a list of QUrl;
+        # names with spaces, commas and non-ASCII characters must survive.
+        from PySide6.QtCore import QUrl
+
+        project = Project()
+        project.default_model()
+        q = np.linspace(0.01, 0.2, 10)
+        project.load_new_experiment(_write_file(tmp_path / 'first.txt', q, 0.01))
+        backend = self._backend(project)
+        failures = []
+        backend.loadFailed.connect(failures.append)
+        names = ['angle 2, run 7.txt', 'Messung ß µ.txt']
+        urls = [
+            QUrl.fromLocalFile(str(_write_file(tmp_path / name, q + 0.001 * (i + 1), 0.02)))
+            for i, name in enumerate(names)
+        ]
+
+        backend.appendToCurrent(urls)
+
+        assert failures == []
+        assert project.experiments[0].x.size == 3 * q.size
+
+    def test_a_file_url_string_is_added(self, qcore_application, tmp_path):
+        from PySide6.QtCore import QUrl
+
+        project = Project()
+        project.default_model()
+        q = np.linspace(0.01, 0.2, 10)
+        project.load_new_experiment(_write_file(tmp_path / 'first.txt', q, 0.01))
+        backend = self._backend(project)
+        failures = []
+        backend.loadFailed.connect(failures.append)
+        url = QUrl.fromLocalFile(str(_write_file(tmp_path / 'with space.txt', q + 0.001, 0.02))).toString()
+
+        backend.appendToCurrent([url])
+
+        assert failures == []
+        assert project.experiments[0].x.size == 2 * q.size
+
+    def test_refusals_and_warnings_of_one_call_are_reported_together(self, qcore_application, tmp_path):
+        # The GUI shows one dialog: per-file emissions would leave only the last visible.
+        project = Project()
+        project.default_model()
+        q = np.linspace(0.01, 0.2, 10)
+        project.load_new_experiment(_write_file(tmp_path / 'first.txt', q, 0.01))
+        backend = self._backend(project)
+        failures, cautions = [], []
+        backend.loadFailed.connect(failures.append)
+        backend.loadWarning.connect(cautions.append)
+
+        backend.appendToCurrent(
+            [
+                str(tmp_path / 'missing_a.txt'),
+                str(self._three_column(tmp_path / 'plain.txt', q + 0.005)),
+                str(tmp_path / 'missing_b.txt'),
+            ]
+        )
+
+        assert cautions == []
+        assert len(failures) == 1
+        assert 'missing_a.txt:' in failures[0] and 'missing_b.txt:' in failures[0]
+        assert 'plain.txt:' in failures[0]
+
+    def test_the_warning_is_worded_for_the_user(self, qcore_application, tmp_path):
+        project = Project()
+        project.default_model()
+        q = np.linspace(0.01, 0.2, 10)
+        project.load_new_experiment(_write_file(tmp_path / 'measured.txt', q, 0.01))
+        backend = self._backend(project)
+        cautions = []
+        backend.loadWarning.connect(cautions.append)
+
+        backend.appendToCurrent([str(self._three_column(tmp_path / 'plain.txt', q + 0.005))])
+
+        assert len(cautions) == 1
+        assert 'PercentageFwhm' not in cautions[0] and cautions[0].count('plain.txt') == 1
 
     def test_appending_to_a_polarized_experiment_is_refused(self, qcore_application, tmp_path):
         from easyreflectometry.data import DataSet1D

@@ -1514,6 +1514,10 @@ class Plotting1d(QObject):
         # The curve the fit compares these points to: smeared with the
         # resolution the dataset (or spin channel) was measured with, not the
         # model's. They differ for every dataset of a model but the first.
+        # Evaluated on all measured q and masked afterwards: a per-point
+        # (Pointwise) resolution is exact only on its own q array, and a merged
+        # dataset can hold one q twice with different widths, which a subset
+        # would interpolate to the same width.
         resolution_function = getattr(exp_data, 'resolution_function', None)
         if model_index is None:
             calc_data = None
@@ -1523,21 +1527,21 @@ class Plotting1d(QObject):
             # the measured points alone rather than another channel's curve.
             try:
                 calc_data = self._project_lib.model_data_for_model_at_index(
-                    model_index, q_filtered, channel=channel, resolution_function=resolution_function
+                    model_index, q_values, channel=channel, resolution_function=resolution_function
                 )
             except Exception as exception:  # noqa: BLE001 - any backend refusal means "no curve"
                 console.debug(f'No calculated curve for channel {channel}: {exception}')
                 calc_data = None
         else:
             calc_data = self._project_lib.model_data_for_model_at_index(
-                model_index, q_filtered, resolution_function=resolution_function
+                model_index, q_values, resolution_function=resolution_function
             )
 
         calc_values = np.asarray(getattr(calc_data, 'y', np.empty(0)), dtype=float)
         calc_q_values = np.asarray(getattr(calc_data, 'x', np.empty(0)), dtype=float)
         has_calculated = True
-        if calc_values.size == q_filtered.size and calc_values.size > 0:
-            calculated_filtered = calc_values
+        if calc_values.size == q_values.size and calc_values.size > 0:
+            calculated_filtered = calc_values[q_mask]
         elif calc_q_values.size == calc_values.size and calc_values.size > 1:
             # Calculated on its own q grid: interpolate onto the measured q.
             calculated_filtered = np.interp(q_filtered, calc_q_values, calc_values)
@@ -1547,9 +1551,9 @@ class Plotting1d(QObject):
             # report "no curve" so plots and residuals leave it out.
             if calc_values.size:
                 self._warn_once(
-                    ('misaligned', experiment_index, channel, calc_values.size, q_filtered.size),
+                    ('misaligned', experiment_index, channel, calc_values.size, q_values.size),
                     f'Calculated curve for experiment {experiment_index} has {calc_values.size} values '
-                    f'for {q_filtered.size} measured points and no q to align them; it is not shown.',
+                    f'for {q_values.size} measured points and no q to align them; it is not shown.',
                 )
             has_calculated = False
             calculated_filtered = np.full(q_filtered.size, np.nan)

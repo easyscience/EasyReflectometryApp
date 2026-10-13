@@ -144,7 +144,7 @@
     colour. A channel that cannot be calculated (for example spin-flip on a
     non-magnetic model) is shown as measured data only.
   - Each channel is fitted, drawn and reported with the resolution of its own
-    file (see "Variable resolution" below).
+    file (see "Variable resolution" above).
   - **Limitation:** Bayesian sampling of polarized experiments is not
     supported yet.
   - Project save/load now fully supports polarized experiments.
