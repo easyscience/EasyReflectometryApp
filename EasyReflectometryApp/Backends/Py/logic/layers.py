@@ -10,6 +10,7 @@ from easyreflectometry.sample import Material
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
 
+from .structure import guide_field_reference
 from .structure import magnetic_vector_for_layer
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,9 @@ class Layers:
         draws - and ``editable`` whether that direction can be set by dragging
         it (a constrained ``theta_m`` follows its expression, not the pointer).
         Both are empty for a non-magnetic layer, which has no direction.
+        ``material_magnetic`` says whether the layer's material carries a
+        moment (a ``MaterialMagnetic``), and ``rho_m_coupled`` whether the
+        layer takes ``rho_m`` from it.
         """
         rows = []
         for layer in self._layers:
@@ -243,6 +247,8 @@ class Layers:
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
                     'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
                     'editable': '' if magnetism is None else str(magnetism.theta_m.independent),
+                    'material_magnetic': str(getattr(layer.material, 'rho_m', None) is not None),
+                    'rho_m_coupled': str(layer.rho_m_coupled),
                 }
             )
         return rows
@@ -268,10 +274,43 @@ class Layers:
         layer.magnetism = LayerMagnetism() if new_value else None
         if new_value:
             self._ensure_calculator_magnetism()
-            # Bring the fresh parameters under the project's limit/enablement
-            # policy, exactly as a newly created layer would be.
-            self._project_lib._sync_parameter_states()
+        # Bring fresh parameters under the project's limit/enablement policy,
+        # exactly as a newly created layer would be; the model's field
+        # parameters follow whether the model is magnetic.
+        self._project_lib._sync_parameter_states()
         return True
+
+    def set_rho_m_coupled_at_index(self, index: int, coupled: bool) -> bool:
+        """Take the layer's ``rho_m`` from its magnetic material, or stop doing so."""
+        if not self._has_valid_layer_index(index):
+            return False
+        layer = self._layers[index]
+        if layer.magnetism is None or layer.rho_m_coupled == bool(coupled):
+            return False
+        try:
+            layer.rho_m_coupled = bool(coupled)
+        except ValueError:
+            logger.warning('Layer %r has no magnetic material to take rho_m from', layer.name)
+            return False
+        self._project_lib._sync_parameter_states()
+        return True
+
+    @property
+    def field(self) -> dict:
+        """The current model's guide field angle (degrees) and applied field
+        (tesla), with where its reference arrow points (:func:`guide_field_reference`)."""
+        model = self._project_lib._models[self._project_lib.current_model_index]
+        guide_field_angle = float(model.guide_field_angle.value)
+        return {
+            'guide_field_angle': guide_field_angle,
+            'applied_field': float(model.applied_field.value),
+            **guide_field_reference(guide_field_angle),
+        }
+
+    def set_field(self, name: str, new_value: float) -> bool:
+        """Set ``guide_field_angle`` or ``applied_field`` of the current model."""
+        model = self._project_lib._models[self._project_lib.current_model_index]
+        return _set_parameter_value(getattr(model, name), new_value)
 
     def _ensure_calculator_magnetism(self) -> None:
         """Make sure attaching magnetism actually reached the calculator.
@@ -300,25 +339,32 @@ class Layers:
         magnetism = self.magnetism_at_index(index)
         if magnetism is None:
             return False
-        try:
-            value = float(new_value)
-        except (TypeError, ValueError):
-            return False
-        parameter = getattr(magnetism, attribute)
-        if parameter.value == value:
-            return False
-        try:
-            parameter.value = value
-        except (ValueError, TypeError):
-            logger.exception('Failed to set %s to %s', attribute, value)
-            return False
-        return True
+        return _set_parameter_value(getattr(magnetism, attribute), new_value)
 
     def magnetism_at_index(self, index: int) -> Optional[LayerMagnetism]:
         """The layer's magnetism, or None when the layer is not magnetic/valid."""
         if not self._has_valid_layer_index(index):
             return None
         return getattr(self._layers[index], 'magnetism', None)
+
+
+def _set_parameter_value(parameter, new_value) -> bool:
+    """Set a parameter from an edit; False for no change, bad input or a
+    dependent parameter (a coupled rho_m follows its material)."""
+    if not parameter.independent:
+        return False
+    try:
+        value = float(new_value)
+    except (TypeError, ValueError):
+        return False
+    if parameter.value == value:
+        return False
+    try:
+        parameter.value = value
+    except (ValueError, TypeError):
+        logger.exception('Failed to set %s to %s', parameter.name, value)
+        return False
+    return True
 
 
 def _from_layers_collection_to_list_of_dicts(

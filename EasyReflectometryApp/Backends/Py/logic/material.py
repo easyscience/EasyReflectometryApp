@@ -4,6 +4,7 @@ from typing import Union
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import MaterialCollection
 from easyreflectometry.sample import MaterialDensity
+from easyreflectometry.sample import MaterialMagnetic
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,14 @@ def _parameter_is_writable(parameter) -> bool:
 # molecular_weight is deliberately absent: it is a DescriptorNumber (a
 # formula constant, never fittable) and has no `free` flag.
 _DENSITY_KNOB_NAMES = ('density', 'scattering_length_real', 'scattering_length_imag')
+
+
+def inactive_density_knobs(material) -> tuple[str, ...]:
+    """The density knobs that stop affecting anything when the nuclear SLD
+    is decoupled. A magnetic material's density keeps driving its rho_m."""
+    if getattr(material, 'rho_m', None) is not None:
+        return tuple(name for name in _DENSITY_KNOB_NAMES if name != 'density')
+    return _DENSITY_KNOB_NAMES
 
 
 class Material:
@@ -70,6 +79,11 @@ class Material:
         # a plain `Material` offers. The library's defaults (Si at 2.33 g/cm3) also start the
         # material at a physical SLD rather than the zero a plain `Material` would carry.
         self._materials.add_material(MaterialDensity(name='Material added'))
+
+    def add_new_magnetic(self) -> None:
+        # Bulk iron (the MaterialMagnetic defaults): a physical starting point,
+        # like the Si of `add_new`. Layers take its rho_m once coupled to it.
+        self._materials.add_material(MaterialMagnetic(name='Magnetic material added'))
 
     def duplicate_selected(self) -> None:
         self._materials.duplicate_material(self.index)
@@ -152,10 +166,27 @@ class Material:
             # display-only — the fitter reads Parameter.free, so a knob
             # ticked before decoupling would otherwise keep entering the
             # minimizer after it stops affecting the reflectivity.
-            for knob_name in _DENSITY_KNOB_NAMES:
-                knob = getattr(material, knob_name, None)
-                if knob is not None:
-                    knob.free = False
+            for knob_name in inactive_density_knobs(material):
+                getattr(material, knob_name).free = False
+        return True
+
+    def set_magnetic_moment_at_index(self, index: int, new_value: float) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        moment = getattr(self._materials[index], 'magnetic_moment', None)
+        if moment is None:
+            return False
+        try:
+            value = float(new_value)
+        except (TypeError, ValueError):
+            return False
+        if moment.value == value:
+            return False
+        try:
+            moment.value = value
+        except Exception:
+            logger.warning('Rejected out-of-bounds magnetic moment %r', value)
+            return False
         return True
 
     def set_formula_at_index(self, index: int, formula: str) -> bool:
@@ -198,6 +229,7 @@ def _from_materials_collection_to_list_of_dicts(materials_collection: MaterialCo
     materials_list = []
     for material in materials_collection:
         is_density = _is_density_material(material)
+        magnetic = getattr(material, 'magnetic_moment', None) is not None
         materials_list.append(
             {
                 'label': material.name,
@@ -207,6 +239,10 @@ def _from_materials_collection_to_list_of_dicts(materials_collection: MaterialCo
                 'formula': material.chemical_structure if is_density else '',
                 'density': str(material.density.value) if is_density else '',
                 'sld_coupled': bool(material.sld_coupled) if is_density else True,
+                'number_density': f'{material.number_density:.5f}' if is_density else '',
+                'magnetic': magnetic,
+                'magnetic_moment': str(material.magnetic_moment.value) if magnetic else '',
+                'rho_m': f'{material.rho_m.value:.3f}' if magnetic else '',
             }
         )
     return materials_list

@@ -139,8 +139,10 @@ class Sample(QObject):
         # ownership across all assemblies), so bursts of layersChange within one
         # event-loop turn are coalesced into a single constraintsChanged.
         self.layersChange.connect(self._scheduleConstraintsChanged)
-        # The magnetism table lists the current assembly's layers.
+        # The magnetism table lists the current assembly's layers, and the
+        # field controls show the current model's field.
         self.assembliesIndexChanged.connect(self.magnetismChanged)
+        self.modelsIndexChanged.connect(self.magnetismChanged)
 
     def _scheduleConstraintsChanged(self) -> None:
         self._constraints_notify_timer.start()
@@ -277,6 +279,19 @@ class Sample(QObject):
         self._material_logic.add_new()
         self.materialsTableChanged.emit()
         self.externalSampleChanged.emit()
+
+    @Slot()
+    def addNewMagneticMaterial(self) -> None:
+        self._material_logic.add_new_magnetic()
+        self.materialsTableChanged.emit()
+        self.externalSampleChanged.emit()
+
+    @Slot(int, str)
+    def setMaterialMagneticMomentAtIndex(self, index: int, new_value: str) -> None:
+        # Coupled layers follow the moment: their rho_m, arrows and curves change too.
+        if self._material_logic.set_magnetic_moment_at_index(index, new_value):
+            self._emitDensityMaterialChanged()
+            self._emitMagnetismChanged()
 
     @Slot()
     def duplicateSelectedMaterial(self) -> None:
@@ -896,6 +911,26 @@ class Sample(QObject):
     @Slot(int, float)
     def setLayerThetaMAtIndex(self, index: int, new_value: float) -> None:
         if self._layers_logic.set_theta_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    @Slot(int, bool)
+    def setLayerRhoMCoupledAtIndex(self, index: int, coupled: bool) -> None:
+        if self._layers_logic.set_rho_m_coupled_at_index(index, coupled):
+            self._emitMagnetismChanged()
+
+    @Property('QVariantMap', notify=magnetismChanged)
+    def magneticField(self) -> dict:
+        """The current model's guide field angle and applied field, and where H points."""
+        return self._layers_logic.field
+
+    @Slot(str)
+    def setGuideFieldAngle(self, new_value: str) -> None:
+        if self._layers_logic.set_field('guide_field_angle', new_value):
+            self._emitMagnetismChanged()
+
+    @Slot(str)
+    def setAppliedField(self, new_value: str) -> None:
+        if self._layers_logic.set_field('applied_field', new_value):
             self._emitMagnetismChanged()
 
     def _emitMagnetismChanged(self) -> None:

@@ -29,9 +29,47 @@ example `Magnetism: Multi-layer`, and shows one row per layer of that assembly.
 `ρM` and `θM` are only editable once **Magn.** is ticked.
 
 ```{note}
-`θM = 270°` aligns the moment with the guide field, which produces no spin-flip
-scattering. This is the value to start from for a simple saturated film.
+With the default in-plane guide field (270°), `θM = 270°` aligns the moment with the
+field, which produces no spin-flip scattering. This is the value to start from for a
+simple saturated film.
 ```
+
+### ρM from a magnetic material
+
+`ρM` can also come from the layer's material instead of being typed. **Add magnetic
+material** in the **Materials** group creates a material with a formula, a mass density
+and a **Moment** in Bohr magnetons per formula unit (bulk iron to start with: Fe,
+7.874 g/cm³, 2.2 µB). The material editor shows the resulting `ρM` and the number density
+`N`: `ρM = N × moment × 2.6991·10⁻⁵ Å`.
+
+Give a layer that material, make it magnetic, select its row and tick **ρM from material**
+below the table. The layer's `ρM` then follows the material's moment and density and is no
+longer editable in the table; `θM` stays the layer's own, so two layers of one material can
+point different ways. Unticking keeps the current value.
+
+The moment is the effective in-plane net moment per formula unit, which is the moment per
+atom only for a one-element formula. In the `Analysis` table it is greyed out until some
+layer takes `ρM` from the material. If the material's SLD is set directly (unticked
+**SLD computed from formula and density**), its density still sets `ρM`; the data then
+constrain only density × moment, so ticking one of the two for fitting unticks the other.
+
+### The guide field
+
+Below the table, **Guide field angle** and **Applied field (T)** set the field of the
+current model (refl1d's `Aguide` and `H`):
+
+| Guide field angle | Field direction |
+|---|---|
+| 270° or −90° (default) | in the sample plane |
+| 90° | in the sample plane, reversed |
+| 0° or 180° | along the surface normal |
+| anything else | tilted out of the sample plane |
+
+The applied field adds a Zeeman term along the field, so its effect depends on the field
+and its direction relative to the moments. Both appear in the `Analysis` parameter table,
+named after the model, and can be fitted; they are shown only while the model is magnetic
+and the engine is `refl1d`. The ORSO model language has no field, so model export warns
+when it is not the default.
 
 ### The moment angle slider
 
@@ -69,7 +107,8 @@ while the sample still has magnetic layers is refused, with a message on both pa
 `ρM` and `θM` appear in the `Analysis` parameter table like any other layer parameter,
 named after their assembly and model - for example `Model Fe rho_m`. They come with default
 limits, a fit checkbox and can be used in constraints. The parameter name filter accepts
-`magnetic` as a keyword to show only the magnetic parameters.
+`magnetic` as a keyword to show only the magnetic parameters: `ρM`, `θM`, the material
+moments and the field.
 
 ## Magnetic depth profiles
 
@@ -79,9 +118,12 @@ controls, below **Magnetism**. The same switches are repeated in `Analysis` ›
 
 <!-- TODO: screenshot of the Magnetic profile group -> _images/sample_magnetic_profile.png -->
 
-- **Show ρ↑ and ρ↓** - adds the spin-up and spin-down potentials
-  `ρ ± ρM·cos(θM − A)` for each magnetic model to the SLD chart, dashed in the model's
-  colour. For non-magnetic layers the two curves collapse onto the nuclear SLD.
+- **Show ρ ± ρM∥** - adds the nuclear SLD plus and minus the magnetic SLD along the
+  field for each magnetic model to the SLD chart, dashed in the model's colour. These are
+  the potentials of the two spin states only when every moment is parallel to the field
+  and there is no applied field; a moment across the field mixes the spin states instead.
+  For non-magnetic layers, and for moments across the field, the two curves collapse onto
+  the nuclear SLD.
 - **Show ρM** - the magnetic SLD profile on its own.
 - **Show θM** - the in-plane moment angle, on its own right-hand axis. `θM` is only defined
   where there is a moment, so the curve is drawn in pieces rather than joined across the
@@ -116,8 +158,11 @@ collinear, canted or twisted. The app therefore draws the moment as an arrow, in
 convention shared by every view:
 
 - the arrows are a **top view along the surface normal** - a compass laid over the sample;
-- screen **right is the guide field H**, and the angle drawn is `φ`, measured from **H**
-  counterclockwise: `φ = θM − 270°`;
+- screen **right is the default guide field H** (in the sample plane at 270°), and the angle
+  drawn is `φ`, measured from it counterclockwise: `φ = θM − 270°`. The arrows stay in this
+  frame when the field is changed; the **H** reference follows the field instead, pointing
+  left for a reversed in-plane field and replaced by its angle when the field is tilted out
+  of the sample plane;
 - a **negative `ρM`** is the same moment reversed, so the arrow points the opposite way
   and the tooltip carries the signed parameter;
 - a magnetic layer whose `ρM` is below 1 % of the largest one in the model gets a **hollow
@@ -131,9 +176,9 @@ convention shared by every view:
 | 0° / 180° | ↑ / ↓ | fully transverse, maximal spin flip |
 | 40° | ↖ (`φ` = 130°) | canted |
 
-Every arrow view shows the **H →** reference on screen. Tooltips lead with `φ`, then the
-`θM` and signed `ρM` the sidebar edits, then the split `M∥` / `M⊥` - the components the
-non-spin-flip and spin-flip channels see.
+Every arrow view shows the **H** reference on screen. Tooltips lead with `φ`, then the
+`θM` and signed `ρM` the sidebar edits, then the part of the moment along the field and the
+size of the part across it - what the non-spin-flip and the spin-flip channels mostly see.
 
 Arrows are constant length everywhere: they encode direction only. The magnitude is the
 `ρM` curve's job, and the exact value is in the tooltip.

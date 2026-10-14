@@ -319,6 +319,22 @@ QtObject {
     function setLayerThetaMAtIndex(index, value) {
         console.debug(`setLayerThetaMAtIndex ${index} ${value}`)
     }
+    function setLayerRhoMCoupledAtIndex(index, value) {
+        console.debug(`setLayerRhoMCoupledAtIndex ${index} ${value}`)
+    }
+    readonly property var magneticField: ({ guide_field_angle: 270, applied_field: 0, in_plane: true, phi: 0 })
+    function setGuideFieldAngle(value) {
+        console.debug(`setGuideFieldAngle ${value}`)
+    }
+    function setAppliedField(value) {
+        console.debug(`setAppliedField ${value}`)
+    }
+    function addNewMagneticMaterial() {
+        console.debug(`addNewMagneticMaterial`)
+    }
+    function setMaterialMagneticMomentAtIndex(index, value) {
+        console.debug(`setMaterialMagneticMomentAtIndex ${index} ${value}`)
+    }
 
     // Table functions
     function removeLayer(value) {

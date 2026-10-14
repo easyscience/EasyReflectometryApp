@@ -12,6 +12,7 @@ from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
+from .material import inactive_density_knobs
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +90,9 @@ class Parameters:
         if normalized == 'experiment':
             return _is_experiment_parameter(parameter)
         if normalized in {'magnetic', 'magnetism'}:
-            # The magnetic parameters are named after the physics (rho_m/theta_m),
-            # so neither word appears in their text; match them explicitly.
-            return 'rho_m' in searchable_text or 'theta_m' in searchable_text
+            # The magnetic parameters are named after the physics, so the word
+            # rarely appears in their text; match them explicitly.
+            return any(name in searchable_text for name in MAGNETIC_PARAMETER_NAMES)
         if normalized in {'cell', 'atom_site'}:
             return normalized in searchable_text
         if normalized == 'b_iso':
@@ -231,6 +232,11 @@ class Parameters:
         parameter = entry['object']
         if bool(new_value) != parameter.free:
             parameter.free = bool(new_value)
+            # The data only constrain the product of these two: freeing one
+            # fixes the other (see `_exclusive_partner`).
+            partner = entry.get('exclusive_with')
+            if parameter.free and partner is not None:
+                partner.free = False
             return True
         return False
 
@@ -365,6 +371,14 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
     for model_idx, paths in enumerate(model_paths):
         for unique_name in paths:
             owners.setdefault(unique_name, []).append(model_idx)
+    # Materials some layer takes its rho_m from: only their moment acts.
+    coupled_materials = {
+        id(layer.material)
+        for model in models
+        for assembly in model.sample
+        for layer in assembly.layers
+        if getattr(layer, 'rho_m_coupled', False)
+    }
     followed_by: dict[str, int] = {}
     for parameter in parameters:
         for leader in (getattr(parameter, 'dependency_map', None) or {}).values():
@@ -403,10 +417,12 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             is_derived = _is_derived_parameter(parameter, models[model_idx])
             # A density material's input knobs (density, mw, scattering
             # lengths) stop affecting the reflectivity once the material's
-            # sld/isld are decoupled — shown greyed with a note, never hidden
-            # (enabled must stay True: _parameter_matches_filters drops
+            # sld/isld are decoupled, and a material's moment does nothing
+            # while no layer is coupled to it — shown greyed with a note, never
+            # hidden (enabled must stay True: _parameter_matches_filters drops
             # enabled=False rows from the list entirely).
-            is_inactive = _is_inactive_density_knob(parameter, path)
+            inactive_note = _inactive_note(parameter, path, coupled_materials)
+            is_inactive = inactive_note is not None
             parameter_list.append(
                 {
                     'name': prefixed_display_name,
@@ -425,7 +441,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'fit': False if (is_derived or is_inactive) else parameter.free,
                     'independent': parameter.independent,
                     'dependency': (
-                        _INACTIVE_KNOB_NOTE
+                        inactive_note
                         if is_inactive
                         else _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
                         if is_derived
@@ -446,6 +462,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
                     'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
+                    'exclusive_with': _exclusive_partner(parameter, path),
                 }
             )
 
@@ -456,25 +473,46 @@ _DERIVED_DESCRIPTIONS = {
     'total_thickness': 'Σ film layer thicknesses',
 }
 
-# The input knobs of a density material (MaterialDensity); inactive when the
-# material's sld/isld are decoupled from them. molecular_weight is not listed:
-# it is a DescriptorNumber, so the Parameter tree walk never yields it and it
-# never appears in this table at all.
-_DENSITY_KNOB_NAMES = {'density', 'scattering_length_real', 'scattering_length_imag'}
+# What the 'magnetic' name filter shows.
+MAGNETIC_PARAMETER_NAMES = ('rho_m', 'theta_m', 'magnetic_moment', 'magnetic_sld', 'guide_field_angle', 'applied_field')
+
 _INACTIVE_KNOB_NOTE = 'unused (SLD is fitted directly)'
+_UNUSED_MOMENT_NOTE = 'unused (no layer takes ρM from this material)'
 
 
-def _is_inactive_density_knob(parameter: Parameter, path) -> bool:
-    """True for a density-material knob whose material is decoupled.
+def _inactive_note(parameter: Parameter, path, coupled_materials: set[int]):
+    """Why a parameter has no effect, or None when it has.
 
-    Duck-typed on the owner's ``sld_coupled`` (only ``MaterialDensity``
-    carries it); the getattr default True keeps every other owner active.
+    A density material's knob is unused once its sld/isld are decoupled
+    (duck-typed on the owner's ``sld_coupled``: only ``MaterialDensity``
+    carries it); a magnetic material's moment is unused while no layer takes
+    its rho_m. molecular_weight never appears here: it is a DescriptorNumber,
+    so the Parameter tree walk never yields it.
     """
     if path is None or len(path) < 2:
-        return False
-    if parameter.name not in _DENSITY_KNOB_NAMES:
-        return False
-    return getattr(path[-2], 'sld_coupled', True) is False
+        return None
+    owner = path[-2]
+    if getattr(owner, 'sld_coupled', True) is False and parameter.name in inactive_density_knobs(owner):
+        return _INACTIVE_KNOB_NOTE
+    if parameter.name == 'magnetic_moment' and id(owner) not in coupled_materials:
+        return _UNUSED_MOMENT_NOTE
+    return None
+
+
+def _exclusive_partner(parameter: Parameter, path):
+    """The parameter that must not be free together with this one, or None.
+
+    With its nuclear SLD decoupled, a magnetic material's density enters only
+    its rho_m, together with the moment: the data constrain their product,
+    so fitting both is degenerate.
+    """
+    if path is None or len(path) < 2:
+        return None
+    owner = path[-2]
+    if getattr(owner, 'magnetic_moment', None) is None or owner.sld_coupled:
+        return None
+    partners = {'density': owner.magnetic_moment, 'magnetic_moment': owner.density}
+    return partners.get(parameter.name)
 
 
 def _is_derived_parameter(parameter: Parameter, model) -> bool:

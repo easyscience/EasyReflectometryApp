@@ -65,6 +65,6 @@ def test_guide_field_legend_is_gated_on_a_magnetic_box():
 def test_magnetic_tooltip_leads_with_the_angle_the_arrow_draws():
     view_qml = (GUI / 'Pages' / 'Sample' / 'MainContent' / 'StructureView.qml').read_text(encoding='utf-8')
 
-    assert "qsTr('Moment: %1° from H (θM %2°, ρM %3)')" in view_qml
+    assert "qsTr('Moment: %1° in the sample plane (θM %2°, ρM %3)')" in view_qml
     assert "qsTr('Magnetic, no moment (ρM %1)')" in view_qml
-    assert 'M∥ %1 (no spin flip), M⊥ %2 (spin flip)' in view_qml
+    assert 'Along the field %1, across it %2 (mostly spin flip)' in view_qml

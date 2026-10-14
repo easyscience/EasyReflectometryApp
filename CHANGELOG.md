@@ -1,5 +1,22 @@
 # Unreleased
 
+- Magnetism parameterisation and guide field ([#425](https://github.com/easyscience/reflectometry-lib/issues/425), requirement 4):
+  - **Add magnetic material** in the Materials group creates a material with a
+    formula, a density and a moment in Bohr magnetons per formula unit (bulk iron
+    to start with); the editor shows its ρM and number density.
+  - **ρM from material** in the Magnetism group makes the selected layer take its
+    ρM from that moment; the ρM cell is then read-only. The moment is greyed in the
+    Analysis table until a layer uses it, and with the material's SLD set directly,
+    density and moment cannot both be fitted.
+  - **Guide field angle** and **Applied field (T)** set the current model's field.
+    They appear in the Analysis table while the model is magnetic and the engine is
+    refl1d. The H reference follows the field: reversed in-plane, or its angle when
+    tilted out of the sample plane; arrows stay in the sample plane, and tooltips
+    give the parts of the moment along and across the field.
+  - The ρ↑/ρ↓ curves are now labelled ρ ± ρM∥: the nuclear SLD plus and minus the
+    magnetic SLD along the field, which are the spin potentials only for moments
+    parallel to the field.
+  - The `magnetic` parameter filter also shows material moments and the field.
 - Moment direction is now drawn, not just numbered. One convention, defined once
   in the library: arrows are a top view along the surface normal, screen right is
   the guide field H, and the angle drawn is φ = θM − 270° (a negative ρM points

@@ -114,7 +114,10 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewTextInput {
                     horizontalAlignment: Text.AlignHCenter
-                    enabled: rowIsMagnetic
+                    // A layer coupled to its material shows the material's ρM.
+                    enabled: rowIsMagnetic && rowData.rho_m_coupled !== "True"
+                    ToolTip.text: rowData && rowData.rho_m_coupled === "True" ?
+                                      qsTr("Taken from the material's moment — untick 'ρM from material' below to edit") : ''
                     text: rowData ? Number(rowData.rho_m).toFixed(3) : '--'
                     onEditingFinished: Globals.BackendWrapper.sampleSetLayerRhoMAtIndex(index, text)
                 }
@@ -165,12 +168,76 @@ EaElements.GroupBox {
                                                Globals.BackendWrapper.sampleCurrentLayerIndex, thetaM)
         }
 
+        // The selected row's ρM from its material's moment (a magnetic
+        // material, see the Materials group); the layer keeps its own θM.
+        EaElements.CheckBox {
+            readonly property bool coupled: magnetismGroup.currentRow !== null
+                                            && magnetismGroup.currentRow.rho_m_coupled === "True"
+            visible: magnetismGroup.currentRow !== null
+                     && magnetismGroup.currentRow.magnetic === "True"
+                     && magnetismGroup.currentRow.material_magnetic === "True"
+            topPadding: 0
+            text: qsTr("ρM from material")
+            ToolTip.text: qsTr("Take ρM from the moment of this layer's magnetic material. Unticking keeps the current value.")
+            checked: coupled
+            onToggled: {
+                Globals.BackendWrapper.sampleSetLayerRhoMCoupledAtIndex(
+                            Globals.BackendWrapper.sampleCurrentLayerIndex, checked)
+                checked = Qt.binding(function () { return coupled })
+            }
+        }
+
+        // The current model's field (refl1d's Aguide and H); both can be fitted.
+        Row {
+            visible: magnetismGroup.supported
+            spacing: EaStyle.Sizes.fontPixelSize
+
+            EaElements.TextField {
+                id: guideFieldAngleField
+                width: (EaStyle.Sizes.sideBarContentWidth - parent.spacing) / 2
+                topInset: guideFieldAngleLabel.height
+                topPadding: topInset + padding
+                horizontalAlignment: TextInput.AlignLeft
+                ToolTip.text: qsTr("Angle of the field about the beam axis: 270° (or −90°) in the sample plane, 90° in the plane but reversed, 0° or 180° along the surface normal.")
+                text: Number(Globals.BackendWrapper.sampleMagneticField.guide_field_angle).toFixed(1)
+                onEditingFinished: {
+                    Globals.BackendWrapper.sampleSetGuideFieldAngle(text)
+                    text = Qt.binding(function () {
+                        return Number(Globals.BackendWrapper.sampleMagneticField.guide_field_angle).toFixed(1)
+                    })
+                }
+                EaElements.Label {
+                    id: guideFieldAngleLabel
+                    text: qsTr('Guide field angle (°)')
+                }
+            }
+
+            EaElements.TextField {
+                width: guideFieldAngleField.width
+                topInset: appliedFieldLabel.height
+                topPadding: topInset + padding
+                horizontalAlignment: TextInput.AlignLeft
+                ToolTip.text: qsTr("Applied field in tesla. It adds a Zeeman term along the field, so its effect depends on the field and its direction relative to the moments.")
+                text: Number(Globals.BackendWrapper.sampleMagneticField.applied_field).toFixed(3)
+                onEditingFinished: {
+                    Globals.BackendWrapper.sampleSetAppliedField(text)
+                    text = Qt.binding(function () {
+                        return Number(Globals.BackendWrapper.sampleMagneticField.applied_field).toFixed(3)
+                    })
+                }
+                EaElements.Label {
+                    id: appliedFieldLabel
+                    text: qsTr('Applied field (T)')
+                }
+            }
+        }
+
         EaElements.Label {
             visible: magnetismGroup.supported
             color: EaStyle.Colors.themeForegroundMinor
             wrapMode: Text.WordWrap
             width: EaStyle.Sizes.sideBarContentWidth
-            text: qsTr("θM = 270° aligns the moment with the guide field, giving no spin-flip.\nρM and θM appear in the Analysis parameter table and can be fitted.")
+            text: qsTr("With the in-plane guide field at 270°, θM = 270° aligns the moment with the field, giving no spin-flip.\nρM, θM and the field appear in the Analysis parameter table and can be fitted.")
         }
 
         EaElements.Label {

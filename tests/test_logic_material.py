@@ -1,5 +1,6 @@
 import pytest
 from easyreflectometry.sample import MaterialDensity
+from easyreflectometry.sample import MaterialMagnetic
 from numpy.testing import assert_almost_equal
 
 from EasyReflectometryApp.Backends.Py.logic.material import Material
@@ -21,9 +22,11 @@ def test_from_materials_collection_to_list_of_dicts_serializes_values():
 
     result = _from_materials_collection_to_list_of_dicts(materials)
 
+    sld_only = {'formula': '', 'density': '', 'sld_coupled': True, 'number_density': '', 'magnetic': False}
+    no_moment = {'magnetic_moment': '', 'rho_m': ''}
     assert result == [
-        {'label': 'Air', 'sld': '0.0', 'isld': '0.0', 'kind': 'sld', 'formula': '', 'density': '', 'sld_coupled': True},
-        {'label': 'Si', 'sld': '2.07', 'isld': '0.1', 'kind': 'sld', 'formula': '', 'density': '', 'sld_coupled': True},
+        {'label': 'Air', 'sld': '0.0', 'isld': '0.0', 'kind': 'sld', **sld_only, **no_moment},
+        {'label': 'Si', 'sld': '2.07', 'isld': '0.1', 'kind': 'sld', **sld_only, **no_moment},
     ]
 
 
@@ -175,3 +178,44 @@ def test_material_setters_return_change_state():
 
     assert logic.set_isld_at_current_index(0.45) is True
     assert logic.set_isld_at_current_index(0.45) is False
+
+
+def test_magnetic_material_row_and_moment():
+    materials = make_material_collection(MaterialMagnetic(name='Fe'))
+    logic = Material(make_project(materials=materials))
+
+    (row,) = logic.materials
+    assert row['kind'] == 'density'
+    assert row['magnetic'] is True
+    assert row['magnetic_moment'] == '2.2'
+    assert row['rho_m'] == '5.042'
+    assert row['number_density'] == '0.08491'
+
+    assert logic.set_magnetic_moment_at_index(0, 1.1) is True
+    assert logic.set_magnetic_moment_at_index(0, 1.1) is False
+    assert logic.set_magnetic_moment_at_index(0, 'not a number') is False
+    assert_almost_equal(materials[0].rho_m.value, 5.042 / 2, decimal=3)
+
+
+def test_moment_is_refused_on_a_non_magnetic_material():
+    logic = Material(make_project(materials=make_material_collection(make_density_material())))
+    assert logic.set_magnetic_moment_at_index(0, 1.0) is False
+
+
+def test_add_new_magnetic_material():
+    project = make_project(materials=make_material_collection())
+    Material(project).add_new_magnetic()
+    assert isinstance(project._materials[0], MaterialMagnetic)
+
+
+def test_decoupling_a_magnetic_material_keeps_its_density_fittable():
+    iron = MaterialMagnetic(name='Fe')
+    iron.density.free = True
+    iron.scattering_length_real.free = True
+    logic = Material(make_project(materials=make_material_collection(iron)))
+
+    assert logic.set_sld_coupled_at_index(0, False) is True
+
+    # The density still drives rho_m; the scattering lengths no longer act.
+    assert iron.density.free is True
+    assert iron.scattering_length_real.free is False

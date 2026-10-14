@@ -57,11 +57,13 @@ def test_a_negligible_moment_draws_a_dot_rather_than_a_direction():
     assert 'if (!root.hasMoment)' in arrow_qml
 
 
-def test_the_guide_field_legend_reuses_the_arrow_at_phi_zero():
+def test_the_guide_field_legend_reuses_the_arrow_along_the_model_field():
     legend_qml = LEGEND.read_text(encoding='utf-8')
 
     assert 'MagnetizationArrow {' in legend_qml
-    assert 'phi: 0' in legend_qml
+    # 0 for the default in-plane field, 180 reversed; no arrow when tilted.
+    assert 'phi: root.field.phi' in legend_qml
+    assert 'visible: root.field.in_plane' in legend_qml
     assert 'text: "H"' in legend_qml
 
 

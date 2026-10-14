@@ -192,12 +192,12 @@ Rectangle {
                             // Lead with the arrow's own quantity, then the
                             // parameters the sidebar table edits.
                             lines.push(modelData.has_moment
-                                       ? qsTr('Moment: %1° from H (θM %2°, ρM %3)')
+                                       ? qsTr('Moment: %1° in the sample plane (θM %2°, ρM %3)')
                                          .arg(modelData.phi.toFixed(1))
                                          .arg(modelData.theta_m.toFixed(1))
                                          .arg(modelData.rho_m.toFixed(3))
                                        : qsTr('Magnetic, no moment (ρM %1)').arg(modelData.rho_m.toFixed(3)))
-                            lines.push(qsTr('M∥ %1 (no spin flip), M⊥ %2 (spin flip)')
+                            lines.push(qsTr('Along the field %1, across it %2 (mostly spin flip)')
                                        .arg(modelData.m_par.toFixed(3))
                                        .arg(modelData.m_perp.toFixed(3)))
                             if (modelData.repetitions > 1)

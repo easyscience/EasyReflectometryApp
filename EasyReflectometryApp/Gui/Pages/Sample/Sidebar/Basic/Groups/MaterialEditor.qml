@@ -153,6 +153,15 @@ EaElements.GroupBox {
             }
         }
 
+        // A material with a magnetic moment (bulk iron to start with): layers
+        // can take their ρM from it in the Magnetism group.
+        EaElements.SideBarButton {
+            width: EaStyle.Sizes.sideBarContentWidth
+            fontIcon: "magnet"
+            text: qsTr("Add magnetic material")
+            onClicked: Globals.BackendWrapper.sampleAddNewMagneticMaterial()
+        }
+
         // Density-material detail: formula and density are the physical inputs;
         // the checkbox decouples sld/isld for direct entry and fitting
         // (see SLD_CHECKBOX_PLAN.md). Visible only when the selected material
@@ -170,14 +179,19 @@ EaElements.GroupBox {
             // instead of inviting edits that change nothing.
             readonly property bool sldCoupled:
                 isDensity ? densityMaterial.sld_coupled : true
+            // A magnetic material's density also sets its ρM, so it stays
+            // editable when the nuclear SLD is set directly.
+            readonly property bool isMagnetic: isDensity && densityMaterial.magnetic === true
 
             visible: isDensity
             spacing: EaStyle.Sizes.fontPixelSize * 0.5
 
             EaElements.Label {
                 color: EaStyle.Colors.themeForegroundMinor
-                text: densityMaterialSection.isDensity ?
-                          qsTr("Density material '%1'").arg(densityMaterialSection.densityMaterial.label) : ''
+                text: !densityMaterialSection.isDensity ? '' :
+                      densityMaterialSection.isMagnetic ?
+                          qsTr("Magnetic material '%1'").arg(densityMaterialSection.densityMaterial.label) :
+                          qsTr("Density material '%1'").arg(densityMaterialSection.densityMaterial.label)
             }
 
             Row {
@@ -217,9 +231,10 @@ EaElements.GroupBox {
                     topInset: densityLabel.height
                     topPadding: topInset + padding
                     horizontalAlignment: TextInput.AlignLeft
-                    readOnly: !densityMaterialSection.sldCoupled
-                    ToolTip.text: densityMaterialSection.sldCoupled ?
-                                      '' :
+                    readOnly: !densityMaterialSection.sldCoupled && !densityMaterialSection.isMagnetic
+                    ToolTip.text: densityMaterialSection.sldCoupled ? '' :
+                                  densityMaterialSection.isMagnetic ?
+                                      qsTr("Sets ρM only while SLD is set directly") :
                                       qsTr("Unused while SLD is set directly — check 'SLD computed from formula and density' below to edit")
                     text: densityMaterialSection.isDensity ? densityMaterialSection.densityMaterial.density : ''
                     onEditingFinished: {
@@ -233,6 +248,48 @@ EaElements.GroupBox {
                     EaElements.Label {
                         id: densityLabel
                         text: qsTr('Density (g/cm³)')
+                    }
+                }
+            }
+
+            Row {
+                visible: densityMaterialSection.isMagnetic
+                spacing: EaStyle.Sizes.fontPixelSize
+
+                EaElements.TextField {
+                    id: momentField
+                    width: (EaStyle.Sizes.sideBarContentWidth - parent.spacing) / 2
+                    topInset: momentLabel.height
+                    topPadding: topInset + padding
+                    horizontalAlignment: TextInput.AlignLeft
+                    ToolTip.text: qsTr("Effective in-plane net moment in Bohr magnetons per formula unit (per atom for a one-element formula).")
+                    text: densityMaterialSection.isMagnetic ? densityMaterialSection.densityMaterial.magnetic_moment : ''
+                    onEditingFinished: {
+                        Globals.BackendWrapper.sampleSetMaterialMagneticMomentAtIndex(
+                                    Globals.BackendWrapper.sampleCurrentMaterialIndex, text)
+                        text = Qt.binding(function () {
+                            return densityMaterialSection.isMagnetic ?
+                                        densityMaterialSection.densityMaterial.magnetic_moment : ''
+                        })
+                    }
+                    EaElements.Label {
+                        id: momentLabel
+                        text: qsTr('Moment (µB/f.u.)')
+                    }
+                }
+
+                EaElements.Label {
+                    anchors.bottom: momentField.bottom
+                    anchors.bottomMargin: momentField.padding
+                    color: EaStyle.Colors.themeForegroundMinor
+                    text: densityMaterialSection.isMagnetic ?
+                              qsTr("ρM %1 · N %2 Å⁻³")
+                              .arg(densityMaterialSection.densityMaterial.rho_m)
+                              .arg(densityMaterialSection.densityMaterial.number_density) : ''
+                    ToolTip.visible: rhoMHover.hovered
+                    ToolTip.text: qsTr("Magnetic SLD (10⁻⁶ Å⁻²) = number density × moment × 2.6991·10⁻⁵ Å. Layers use it when 'ρM from material' is ticked in the Magnetism group.")
+                    HoverHandler {
+                        id: rhoMHover
                     }
                 }
             }
