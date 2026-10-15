@@ -139,8 +139,10 @@ class Sample(QObject):
         # ownership across all assemblies), so bursts of layersChange within one
         # event-loop turn are coalesced into a single constraintsChanged.
         self.layersChange.connect(self._scheduleConstraintsChanged)
-        # The magnetism table lists the current assembly's layers.
+        # The magnetism table lists the current assembly's layers, and the
+        # field controls show the current model's field.
         self.assembliesIndexChanged.connect(self.magnetismChanged)
+        self.modelsIndexChanged.connect(self.magnetismChanged)
 
     def _scheduleConstraintsChanged(self) -> None:
         self._constraints_notify_timer.start()
@@ -208,25 +210,36 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
-    def _emitDensityMaterialChanged(self) -> None:
+    def _emitDensityMaterialChanged(self, index: int = -1) -> None:
         """Signal fan-out for density-material edits (formula, density, the
-        sld_coupled toggle). Beyond the usual material-edit trio, these change
-        which parameters are fittable/inactive (rebuilds the Analysis table via
-        the modelsTableChanged wiring in py_backend) and can invalidate user
-        constraints referencing the material's sld/isld.
+        sld_coupled toggle, a magnetic material's moment). Beyond the usual
+        material-edit trio, these change which parameters are fittable/inactive
+        (rebuilds the Analysis table via the modelsTableChanged wiring in
+        py_backend) and can invalidate user constraints referencing the
+        material's sld/isld.
+
+        A magnetic material's edits also change the rho_m of every layer
+        coupled to it, which the Magnetism table shows: notify it as well
+        (the structure view and the curves already follow the signals above).
         """
         self.materialsTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
         self.modelsTableChanged.emit()
         self._scheduleConstraintsChanged()
+        if self._material_is_magnetic(index):
+            self.magnetismChanged.emit()
+
+    def _material_is_magnetic(self, index: int) -> bool:
+        materials = self._project_lib._materials
+        return 0 <= index < len(materials) and getattr(materials[index], 'rho_m', None) is not None
 
     @Slot(int, bool)
     def setMaterialSldCoupledAtIndex(self, index: int, coupled: bool) -> None:
         if coupled:
             self._drop_stale_sld_constraint_states(index)
         if self._material_logic.set_sld_coupled_at_index(index, coupled):
-            self._emitDensityMaterialChanged()
+            self._emitDensityMaterialChanged(index)
 
     def _drop_stale_sld_constraint_states(self, index: int) -> None:
         """Re-coupling calls MaterialDensity._setup_sld_constraints(), which
@@ -256,12 +269,12 @@ class Sample(QObject):
     @Slot(int, str)
     def setMaterialFormulaAtIndex(self, index: int, formula: str) -> None:
         if self._material_logic.set_formula_at_index(index, formula):
-            self._emitDensityMaterialChanged()
+            self._emitDensityMaterialChanged(index)
 
     @Slot(int, str)
     def setMaterialDensityAtIndex(self, index: int, new_value: str) -> None:
         if self._material_logic.set_density_at_index(index, new_value):
-            self._emitDensityMaterialChanged()
+            self._emitDensityMaterialChanged(index)
 
     # Actions
     @Slot(str)
@@ -277,6 +290,18 @@ class Sample(QObject):
         self._material_logic.add_new()
         self.materialsTableChanged.emit()
         self.externalSampleChanged.emit()
+
+    @Slot()
+    def addNewMagneticMaterial(self) -> None:
+        self._material_logic.add_new_magnetic()
+        self.materialsTableChanged.emit()
+        self.externalSampleChanged.emit()
+
+    @Slot(int, str)
+    def setMaterialMagneticMomentAtIndex(self, index: int, new_value: str) -> None:
+        # Coupled layers follow the moment: their rho_m, arrows and curves change too.
+        if self._material_logic.set_magnetic_moment_at_index(index, new_value):
+            self._emitDensityMaterialChanged(index)
 
     @Slot()
     def duplicateSelectedMaterial(self) -> None:
@@ -896,6 +921,26 @@ class Sample(QObject):
     @Slot(int, float)
     def setLayerThetaMAtIndex(self, index: int, new_value: float) -> None:
         if self._layers_logic.set_theta_m_at_index(index, new_value):
+            self._emitMagnetismChanged()
+
+    @Slot(int, bool)
+    def setLayerRhoMCoupledAtIndex(self, index: int, coupled: bool) -> None:
+        if self._layers_logic.set_rho_m_coupled_at_index(index, coupled):
+            self._emitMagnetismChanged()
+
+    @Property('QVariantMap', notify=magnetismChanged)
+    def magneticField(self) -> dict:
+        """The current model's guide field angle and applied field, and where H points."""
+        return self._layers_logic.field
+
+    @Slot(str)
+    def setGuideFieldAngle(self, new_value: str) -> None:
+        if self._layers_logic.set_field('guide_field_angle', new_value):
+            self._emitMagnetismChanged()
+
+    @Slot(str)
+    def setAppliedField(self, new_value: str) -> None:
+        if self._layers_logic.set_field('applied_field', new_value):
             self._emitMagnetismChanged()
 
     def _emitMagnetismChanged(self) -> None:

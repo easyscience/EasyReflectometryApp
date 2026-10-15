@@ -67,8 +67,8 @@ Rectangle {
     // Line style per magnetic curve; the model colour carries the identity.
     function magneticCurveStyle(curve) {
         switch (curve) {
-        case 'spin_up':   return {dash: Qt.DashLine,    width: 1.5, label: qsTr("ρ↑ (spin-up potential)")}
-        case 'spin_down': return {dash: Qt.DashLine,    width: 1.5, label: qsTr("ρ↓ (spin-down potential)")}
+        case 'spin_up':   return {dash: Qt.DashLine,    width: 1.5, label: qsTr("ρ + ρM∥")}
+        case 'spin_down': return {dash: Qt.DashLine,    width: 1.5, label: qsTr("ρ − ρM∥")}
         case 'rho_m':     return {dash: Qt.DotLine,     width: 1.5, label: qsTr("ρM (magnetic SLD)")}
         case 'theta_m':   return {dash: Qt.DashDotLine, width: 1.0, label: qsTr("θM (moment angle)")}
         }

@@ -20,8 +20,8 @@ Column {
     EaElements.CheckBox {
         topPadding: 0
         checked: Globals.BackendWrapper.plottingVisibleSldCurves.indexOf('spin_up') !== -1
-        text: qsTr("Show ρ↑ and ρ↓")
-        ToolTip.text: qsTr("ρ ± ρM·cos(θM − A) — the effective SLD each spin state sees")
+        text: qsTr("Show ρ ± ρM∥")
+        ToolTip.text: qsTr("Nuclear SLD plus and minus the magnetic SLD along the field. These are the potentials of the two spin states only when every moment is parallel to the field and there is no applied field.")
         onToggled: Globals.BackendWrapper.plottingSetSldCurveVisible('spin_up', checked)
     }
 
@@ -45,7 +45,7 @@ Column {
         color: EaStyle.Colors.themeForegroundMinor
         wrapMode: Text.WordWrap
         width: EaStyle.Sizes.sideBarContentWidth
-        text: qsTr("For non-magnetic layers, ρ↑ and ρ↓ collapse onto the nuclear SLD.")
+        text: qsTr("For non-magnetic layers, and for moments across the field, ρ ± ρM∥ collapse onto the nuclear SLD.")
     }
 
     // The magnetic profiles failed to compute (e.g. the calculator lost its

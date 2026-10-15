@@ -155,6 +155,8 @@ QtObject {
     function sampleSetMaterialDensityAtIndex(index, value) { activeBackend.sample.setMaterialDensityAtIndex(index, value) }
     function sampleRemoveMaterial(value) { activeBackend.sample.removeMaterial(value) }
     function sampleAddNewMaterial() { activeBackend.sample.addNewMaterial() }
+    function sampleAddNewMagneticMaterial() { activeBackend.sample.addNewMagneticMaterial() }
+    function sampleSetMaterialMagneticMomentAtIndex(index, value) { activeBackend.sample.setMaterialMagneticMomentAtIndex(index, value) }
     function sampleDuplicateSelectedMaterial() { activeBackend.sample.duplicateSelectedMaterial() }
     function sampleMoveSelectedMaterialUp() { activeBackend.sample.moveSelectedMaterialUp() }
     function sampleMoveSelectedMaterialDown() { activeBackend.sample.moveSelectedMaterialDown() }
@@ -294,6 +296,18 @@ QtObject {
     function sampleSetLayerMagneticAtIndex(index, value) { activeBackend.sample.setLayerMagneticAtIndex(index, value) }
     function sampleSetLayerRhoMAtIndex(index, value) { activeBackend.sample.setLayerRhoMAtIndex(index, value) }
     function sampleSetLayerThetaMAtIndex(index, value) { activeBackend.sample.setLayerThetaMAtIndex(index, value) }
+    function sampleSetLayerRhoMCoupledAtIndex(index, value) { activeBackend.sample.setLayerRhoMCoupledAtIndex(index, value) }
+    // The current model's field: guide_field_angle, applied_field, in_plane, phi (where H points).
+    readonly property var sampleMagneticField: {
+        try {
+            return activeBackend.sample.magneticField || ({ guide_field_angle: 270, applied_field: 0, model_magnetic: false, in_plane: true, phi: 0 })
+        } catch (e) {
+            console.warn("sampleMagneticField failed:", e)
+            return ({ guide_field_angle: 270, applied_field: 0, model_magnetic: false, in_plane: true, phi: 0 })
+        }
+    }
+    function sampleSetGuideFieldAngle(value) { activeBackend.sample.setGuideFieldAngle(value) }
+    function sampleSetAppliedField(value) { activeBackend.sample.setAppliedField(value) }
 
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames

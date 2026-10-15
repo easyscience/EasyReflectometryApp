@@ -356,12 +356,27 @@ class Project(QObject):
                 warning_msg = str(w.message)
             self.sampleLoadWarning.emit(warning_msg)
             return
-        if append:
-            # Add the sample as a new model in the project
-            self._logic.add_sample_from_orso(sample)
-        else:
-            # Replace all existing models with the loaded sample
-            self._logic.replace_models_from_orso(sample)
+        try:
+            if append:
+                # Add the sample as a new model in the project
+                self._logic.add_sample_from_orso(sample)
+            else:
+                # Replace all existing models with the loaded sample
+                self._logic.replace_models_from_orso(sample)
+        except Exception as ex:
+            # The library refuses what it cannot attach (a magnetic sample on an
+            # engine without magnetism) before changing the project, so the
+            # project is as it was; say why instead of raising out of a slot.
+            self.projectLoadError.emit(f'Failed to add the sample from the ORSO file: {ex}')
+            return
+        # A usable sample can still have lost something on the way in (a
+        # skipped moment, an unknown unit, an ignored relative density): the
+        # importer warns, and the user must see it, not only a successful load.
+        # Only the importer's UserWarnings: deprecation notices of the libraries
+        # it calls are not about the file.
+        messages = list(dict.fromkeys(str(w.message) for w in caught_warnings if issubclass(w.category, UserWarning)))
+        if messages:
+            self.sampleLoadWarning.emit('The sample was loaded with warnings:\n' + '\n'.join(messages))
         # An imported sample is project content, unlike the project loads this signal otherwise
         # announces; marked here rather than left to the relay's incidental table signals.
         self.markDirty()

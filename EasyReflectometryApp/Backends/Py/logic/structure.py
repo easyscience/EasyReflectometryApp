@@ -3,6 +3,7 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.model.model import COLORS
 from easyreflectometry.project import GUIDE_FIELD_ANGLE
 from easyreflectometry.project import MAGNETIC_MOMENT_FLOOR_FRACTION
+from easyreflectometry.special.calculations import field_frame_components
 
 # An assembly whose expanded box count would exceed this collapses to its repeat unit
 MAX_EXPANDED_BOXES_PER_ASSEMBLY = 12
@@ -33,7 +34,9 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
     model_index = project_lib.current_model_index
     if model_index is None or not 0 <= model_index < len(project_lib._models):
         return [], [], 0.0
-    sample = project_lib._models[model_index].sample
+    model = project_lib._models[model_index]
+    sample = model.sample
+    guide_field_angle = float(model.guide_field_angle.value)
 
     colors = _ColorMap(project_lib._materials)
     moment_floor = _moment_floor(sample)
@@ -54,7 +57,7 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
 
         for _ in range(1 if collapsed else repetitions):
             for layer_index, layer in enumerate(assembly.layers):
-                boxes.append(_layer_box(layer, assembly, assembly_index, layer_index, colors, moment_floor))
+                boxes.append(_layer_box(layer, assembly, assembly_index, layer_index, colors, moment_floor, guide_field_angle))
         if collapsed:
             boxes[-len(assembly.layers)]['repetitions'] = repetitions
 
@@ -77,22 +80,23 @@ def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
     return boxes, legend, total_thickness
 
 
-def magnetic_vector_for_layer(magnetism) -> dict[str, float]:
+def magnetic_vector_for_layer(magnetism, guide_field_angle: float = GUIDE_FIELD_ANGLE) -> dict[str, float]:
     """The in-plane moment of a :class:`LayerMagnetism`.
 
-    refl1d measures ``theta_m`` from the beam direction, with
-    ``GUIDE_FIELD_ANGLE`` pointing along the guide field H; publications
-    quote the angle *from H*, and that is what an arrow draws. refl1d also
-    allows a negative ``rho_m``, which is the same physical moment reversed, so
-    the parameter angle and the direction the moment actually points are two
+    Arrows are drawn in a fixed frame in the sample plane whose zero is
+    ``theta_m = GUIDE_FIELD_ANGLE``: the direction of the default, in-plane
+    guide field H, which publications quote angles from. refl1d also allows a
+    negative ``rho_m``, which is the same physical moment reversed, so the
+    parameter angle and the direction the moment actually points are two
     different things and both are reported:
 
-    - ``phi_param``: angle from H of the parameter as written, sign ignored;
+    - ``phi_param``: angle in that frame of the parameter as written, sign ignored;
     - ``phi``: direction the moment physically points (``phi_param`` turned by
       180 degrees when ``rho_m`` is negative) - what every arrow draws;
     - ``m``: ``abs(rho_m)``, the physical magnitude;
-    - ``m_par`` / ``m_perp``: the components the non-spin-flip and spin-flip
-      channels see.
+    - ``m_par`` / ``m_perp``: the signed part along the model's field and the
+      size of the part across it, which the non-spin-flip and spin-flip
+      channels mostly see (:func:`field_frame_components`).
 
     ``rho_m`` and ``theta_m`` are passed through so a tooltip can show the
     signed parameters the user edits next to the direction drawn.
@@ -103,14 +107,30 @@ def magnetic_vector_for_layer(magnetism) -> dict[str, float]:
     theta_m = float(magnetism.theta_m.value)
     phi_param = (theta_m - GUIDE_FIELD_ANGLE) % 360.0
     phi = phi_param if rho_m >= 0 else (phi_param + 180.0) % 360.0
+    m_par, m_perp = field_frame_components(rho_m, theta_m, guide_field_angle)
     return {
         'rho_m': rho_m,
         'theta_m': theta_m,
         'phi_param': phi_param,
         'phi': phi,
         'm': abs(rho_m),
-        'm_par': float(rho_m * np.cos(np.radians(phi_param))),
-        'm_perp': float(rho_m * np.sin(np.radians(phi_param))),
+        'm_par': float(m_par),
+        'm_perp': float(m_perp),
+    }
+
+
+def guide_field_reference(guide_field_angle: float) -> dict:
+    """Where the field reference points in the arrows' frame.
+
+    ``in_plane`` is False when the field has a component along the surface
+    normal (refl1d tilts it about the beam axis; 270 and 90 are in the
+    plane, opposite ways). ``phi`` is the in-plane direction of H: 0 along
+    the frame's zero, 180 reversed.
+    """
+    tilt = np.radians(guide_field_angle)
+    return {
+        'in_plane': bool(abs(np.cos(tilt)) <= 1e-6),
+        'phi': 0.0 if np.sin(tilt) < 0 else 180.0,
     }
 
 
@@ -134,7 +154,15 @@ def _moment_floor(sample) -> float:
     return MAGNETIC_MOMENT_FLOOR_FRACTION * max(moments, default=0.0)
 
 
-def _layer_box(layer, assembly, assembly_index: int, layer_index: int, colors: '_ColorMap', moment_floor: float) -> dict:
+def _layer_box(
+    layer,
+    assembly,
+    assembly_index: int,
+    layer_index: int,
+    colors: '_ColorMap',
+    moment_floor: float,
+    guide_field_angle: float,
+) -> dict:
     material = layer.material
     box = {
         'label': layer.name,
@@ -153,7 +181,7 @@ def _layer_box(layer, assembly, assembly_index: int, layer_index: int, colors: '
     }
     magnetism = getattr(layer, 'magnetism', None)
     if magnetism is not None:
-        vector = magnetic_vector_for_layer(magnetism)
+        vector = magnetic_vector_for_layer(magnetism, guide_field_angle)
         box.update(vector)
         box['magnetic'] = True
         box['has_moment'] = vector['m'] > moment_floor

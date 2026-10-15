@@ -50,6 +50,7 @@ class FakeLayer:
     ):
         self.name = name
         self.magnetism = magnetism
+        self.rho_m_coupled = False
         self.material = material or FakeMaterial('Air')
         self.solvent = solvent or FakeMaterial('D2O')
         self._thickness = FlaggedValueHolder(thickness)
@@ -212,6 +213,8 @@ class FakeModel:
         self.color = color
         self.scale = ValueHolder(scale)
         self.background = ValueHolder(background)
+        self.guide_field_angle = ValueHolder(270.0)
+        self.applied_field = ValueHolder(0.0)
         self.resolution_function = resolution_function
         self.sample = sample or FakeSample()
         self.user_data = user_data or {}

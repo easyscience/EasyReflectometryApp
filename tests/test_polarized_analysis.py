@@ -203,7 +203,12 @@ class TestMagneticParametersInTheTable:
 
         logic.set_name_filter_criteria('magnetic')
 
-        assert sorted(row['name'] for row in logic.parameters) == ['Model D2O rho_m', 'Model D2O theta_m']
+        assert sorted(row['name'] for row in logic.parameters) == [
+            'Model D2O rho_m',
+            'Model D2O theta_m',
+            'Model applied_field',
+            'Model guide_field_angle',
+        ]
 
     def test_they_are_not_mistaken_for_experiment_parameters(self):
         logic = ParametersLogic(_magnetic_project())
