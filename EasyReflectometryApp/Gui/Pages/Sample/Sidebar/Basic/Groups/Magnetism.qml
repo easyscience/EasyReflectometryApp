@@ -188,8 +188,10 @@ EaElements.GroupBox {
         }
 
         // The current model's field (refl1d's Aguide and H); both can be fitted.
+        // Shown only while the field acts: on a magnetic model under an engine
+        // that models magnetism, as in the Analysis parameter table.
         Row {
-            visible: magnetismGroup.supported
+            visible: magnetismGroup.supported && Globals.BackendWrapper.sampleMagneticField.model_magnetic === true
             spacing: EaStyle.Sizes.fontPixelSize
 
             EaElements.TextField {

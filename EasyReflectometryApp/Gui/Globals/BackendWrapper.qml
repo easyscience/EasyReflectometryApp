@@ -300,10 +300,10 @@ QtObject {
     // The current model's field: guide_field_angle, applied_field, in_plane, phi (where H points).
     readonly property var sampleMagneticField: {
         try {
-            return activeBackend.sample.magneticField || ({ guide_field_angle: 270, applied_field: 0, in_plane: true, phi: 0 })
+            return activeBackend.sample.magneticField || ({ guide_field_angle: 270, applied_field: 0, model_magnetic: false, in_plane: true, phi: 0 })
         } catch (e) {
             console.warn("sampleMagneticField failed:", e)
-            return ({ guide_field_angle: 270, applied_field: 0, in_plane: true, phi: 0 })
+            return ({ guide_field_angle: 270, applied_field: 0, model_magnetic: false, in_plane: true, phi: 0 })
         }
     }
     function sampleSetGuideFieldAngle(value) { activeBackend.sample.setGuideFieldAngle(value) }

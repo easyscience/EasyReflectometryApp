@@ -322,7 +322,7 @@ QtObject {
     function setLayerRhoMCoupledAtIndex(index, value) {
         console.debug(`setLayerRhoMCoupledAtIndex ${index} ${value}`)
     }
-    readonly property var magneticField: ({ guide_field_angle: 270, applied_field: 0, in_plane: true, phi: 0 })
+    readonly property var magneticField: ({ guide_field_angle: 270, applied_field: 0, model_magnetic: true, in_plane: true, phi: 0 })
     function setGuideFieldAngle(value) {
         console.debug(`setGuideFieldAngle ${value}`)
     }

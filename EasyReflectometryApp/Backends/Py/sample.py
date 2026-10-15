@@ -210,25 +210,36 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
             self.externalSampleChanged.emit()
 
-    def _emitDensityMaterialChanged(self) -> None:
+    def _emitDensityMaterialChanged(self, index: int = -1) -> None:
         """Signal fan-out for density-material edits (formula, density, the
-        sld_coupled toggle). Beyond the usual material-edit trio, these change
-        which parameters are fittable/inactive (rebuilds the Analysis table via
-        the modelsTableChanged wiring in py_backend) and can invalidate user
-        constraints referencing the material's sld/isld.
+        sld_coupled toggle, a magnetic material's moment). Beyond the usual
+        material-edit trio, these change which parameters are fittable/inactive
+        (rebuilds the Analysis table via the modelsTableChanged wiring in
+        py_backend) and can invalidate user constraints referencing the
+        material's sld/isld.
+
+        A magnetic material's edits also change the rho_m of every layer
+        coupled to it, which the Magnetism table shows: notify it as well
+        (the structure view and the curves already follow the signals above).
         """
         self.materialsTableChanged.emit()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
         self.modelsTableChanged.emit()
         self._scheduleConstraintsChanged()
+        if self._material_is_magnetic(index):
+            self.magnetismChanged.emit()
+
+    def _material_is_magnetic(self, index: int) -> bool:
+        materials = self._project_lib._materials
+        return 0 <= index < len(materials) and getattr(materials[index], 'rho_m', None) is not None
 
     @Slot(int, bool)
     def setMaterialSldCoupledAtIndex(self, index: int, coupled: bool) -> None:
         if coupled:
             self._drop_stale_sld_constraint_states(index)
         if self._material_logic.set_sld_coupled_at_index(index, coupled):
-            self._emitDensityMaterialChanged()
+            self._emitDensityMaterialChanged(index)
 
     def _drop_stale_sld_constraint_states(self, index: int) -> None:
         """Re-coupling calls MaterialDensity._setup_sld_constraints(), which
@@ -258,12 +269,12 @@ class Sample(QObject):
     @Slot(int, str)
     def setMaterialFormulaAtIndex(self, index: int, formula: str) -> None:
         if self._material_logic.set_formula_at_index(index, formula):
-            self._emitDensityMaterialChanged()
+            self._emitDensityMaterialChanged(index)
 
     @Slot(int, str)
     def setMaterialDensityAtIndex(self, index: int, new_value: str) -> None:
         if self._material_logic.set_density_at_index(index, new_value):
-            self._emitDensityMaterialChanged()
+            self._emitDensityMaterialChanged(index)
 
     # Actions
     @Slot(str)
@@ -290,8 +301,7 @@ class Sample(QObject):
     def setMaterialMagneticMomentAtIndex(self, index: int, new_value: str) -> None:
         # Coupled layers follow the moment: their rho_m, arrows and curves change too.
         if self._material_logic.set_magnetic_moment_at_index(index, new_value):
-            self._emitDensityMaterialChanged()
-            self._emitMagnetismChanged()
+            self._emitDensityMaterialChanged(index)
 
     @Slot()
     def duplicateSelectedMaterial(self) -> None:

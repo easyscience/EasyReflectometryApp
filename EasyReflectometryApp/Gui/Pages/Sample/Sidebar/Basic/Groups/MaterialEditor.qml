@@ -262,7 +262,7 @@ EaElements.GroupBox {
                     topInset: momentLabel.height
                     topPadding: topInset + padding
                     horizontalAlignment: TextInput.AlignLeft
-                    ToolTip.text: qsTr("Effective in-plane net moment in Bohr magnetons per formula unit (per atom for a one-element formula).")
+                    ToolTip.text: qsTr("Effective in-plane net moment in Bohr magnetons per formula unit (the moment per atom only for a formula unit of one atom, such as Fe).")
                     text: densityMaterialSection.isMagnetic ? densityMaterialSection.densityMaterial.magnetic_moment : ''
                     onEditingFinished: {
                         Globals.BackendWrapper.sampleSetMaterialMagneticMomentAtIndex(
@@ -287,7 +287,7 @@ EaElements.GroupBox {
                               .arg(densityMaterialSection.densityMaterial.rho_m)
                               .arg(densityMaterialSection.densityMaterial.number_density) : ''
                     ToolTip.visible: rhoMHover.hovered
-                    ToolTip.text: qsTr("Magnetic SLD (10⁻⁶ Å⁻²) = number density × moment × 2.6991·10⁻⁵ Å. Layers use it when 'ρM from material' is ticked in the Magnetism group.")
+                    ToolTip.text: qsTr("Magnetic SLD (shown in 10⁻⁶ Å⁻²) = number density (Å⁻³) × moment × 2.6991·10⁻⁵ Å × 10⁶. Layers use it when 'ρM from material' is ticked in the Magnetism group.")
                     HoverHandler {
                         id: rhoMHover
                     }

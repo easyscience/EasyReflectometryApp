@@ -31,12 +31,24 @@ def _parameter_is_writable(parameter) -> bool:
 _DENSITY_KNOB_NAMES = ('density', 'scattering_length_real', 'scattering_length_imag')
 
 
-def inactive_density_knobs(material) -> tuple[str, ...]:
+def inactive_density_knobs(material, drives_magnetism: bool = False) -> tuple[str, ...]:
     """The density knobs that stop affecting anything when the nuclear SLD
-    is decoupled. A magnetic material's density keeps driving its rho_m."""
-    if getattr(material, 'rho_m', None) is not None:
+    is decoupled. A magnetic material's density keeps driving its rho_m, but
+    only while some layer takes that rho_m (`drives_magnetism`)."""
+    if drives_magnetism and getattr(material, 'rho_m', None) is not None:
         return tuple(name for name in _DENSITY_KNOB_NAMES if name != 'density')
     return _DENSITY_KNOB_NAMES
+
+
+def coupled_material_ids(models) -> set[int]:
+    """Ids of the materials some layer takes its rho_m from (``rho_m_coupled``)."""
+    return {
+        id(layer.material)
+        for model in models or []
+        for assembly in model.sample
+        for layer in assembly.layers
+        if getattr(layer, 'rho_m_coupled', False)
+    }
 
 
 class Material:
@@ -166,8 +178,11 @@ class Material:
             # display-only — the fitter reads Parameter.free, so a knob
             # ticked before decoupling would otherwise keep entering the
             # minimizer after it stops affecting the reflectivity.
-            for knob_name in inactive_density_knobs(material):
+            drives_magnetism = id(material) in coupled_material_ids(getattr(self._project_lib, '_models', None))
+            for knob_name in inactive_density_knobs(material, drives_magnetism):
                 getattr(material, knob_name).free = False
+        # The project's own rule for magnetic materials that act on nothing.
+        self._project_lib._sync_parameter_states()
         return True
 
     def set_magnetic_moment_at_index(self, index: int, new_value: float) -> bool:

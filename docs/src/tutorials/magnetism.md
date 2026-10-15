@@ -48,15 +48,23 @@ longer editable in the table; `θM` stays the layer's own, so two layers of one 
 point different ways. Unticking keeps the current value.
 
 The moment is the effective in-plane net moment per formula unit, which is the moment per
-atom only for a one-element formula. In the `Analysis` table it is greyed out until some
-layer takes `ρM` from the material. If the material's SLD is set directly (unticked
-**SLD computed from formula and density**), its density still sets `ρM`; the data then
-constrain only density × moment, so ticking one of the two for fitting unticks the other.
+atom only for a formula unit of one atom, such as Fe (`Fe2` is one element but two atoms).
+In the `Analysis` table it is greyed out until some layer takes `ρM` from the material, and
+when the last such layer stops doing so the moment is taken out of the fit. If the
+material's SLD is set directly (unticked **SLD computed from formula and density**), its
+density still sets `ρM` while a layer takes `ρM` from it; the data then constrain only
+density × moment, so ticking one of the two for fitting unticks the other. Without such a
+layer the density sets nothing and is greyed out too.
+
+A layer whose `ρM` is given a constraint in the `Analysis` page no longer takes it from the
+material: **ρM from material** is unticked, and the constraint is kept when the layer's
+material changes.
 
 ### The guide field
 
 Below the table, **Guide field angle** and **Applied field (T)** set the field of the
-current model (refl1d's `Aguide` and `H`):
+current model (refl1d's `Aguide` and `H`). They are shown while the current model has a
+magnetic layer and the engine is `refl1d`:
 
 | Guide field angle | Field direction |
 |---|---|
@@ -68,8 +76,19 @@ current model (refl1d's `Aguide` and `H`):
 The applied field adds a Zeeman term along the field, so its effect depends on the field
 and its direction relative to the moments. Both appear in the `Analysis` parameter table,
 named after the model, and can be fitted; they are shown only while the model is magnetic
-and the engine is `refl1d`. The ORSO model language has no field, so model export warns
-when it is not the default.
+and the engine is `refl1d`, and are taken out of the fit otherwise. The ORSO model language
+has no field, so model export warns when it is not the default.
+
+### Magnetic samples from ORSO files
+
+**Load sample** reads an ORSO model's `magnetic_moment`: a material with a formula, a
+density and a moment becomes a magnetic material, and its layer is magnetic with
+**ρM from material** ticked and `θM = 270°`, since the file has no direction. Whatever the
+import could not carry over (a moment without a density, an unknown unit, an ignored
+`relative_density`, magnetic layers in a repeated stack) is listed in a warning after the
+sample loads. A magnetic sample cannot be loaded while the engine cannot model magnetism:
+the load is refused with a message naming the engine to switch to, and the project is left
+as it was.
 
 ### The moment angle slider
 

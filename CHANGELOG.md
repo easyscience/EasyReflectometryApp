@@ -16,7 +16,14 @@
   - The ρ↑/ρ↓ curves are now labelled ρ ± ρM∥: the nuclear SLD plus and minus the
     magnetic SLD along the field, which are the spin potentials only for moments
     parallel to the field.
-  - The `magnetic` parameter filter also shows material moments and the field.
+  - The `magnetic` parameter filter also shows material moments and the field. A magnetic
+    material's derived magnetic SLD is listed as `material rho_m`.
+  - Parameters that act on nothing leave the fit, not only the table: a material moment no
+    layer takes ρM from, the density of such a material with its SLD set directly, and the
+    field of a non-magnetic model. The field controls are shown only for a magnetic model.
+  - **Load sample** lists the importer's warnings after a successful load, and refuses a
+    magnetic sample under an engine without magnetism without changing the project.
+  - The Magnetism table follows density and formula edits of a magnetic material.
 - Moment direction is now drawn, not just numbered. One convention, defined once
   in the library: arrows are a top view along the surface normal, screen right is
   the guide field H, and the angle drawn is φ = θM − 270° (a negative ρM points

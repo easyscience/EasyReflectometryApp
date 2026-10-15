@@ -12,6 +12,7 @@ from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
+from .material import coupled_material_ids
 from .material import inactive_density_knobs
 
 logger = logging.getLogger(__name__)
@@ -315,7 +316,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         in the Model Editor is reflected in the Analysis parameters table.
         """
         if path is not None and len(path) >= 2:
-            param_name = path[-1].name
+            param_name = _DISPLAY_NAMES.get(path[-1].name, path[-1].name)
             # For layer parameters the path is:
             # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
@@ -372,13 +373,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         for unique_name in paths:
             owners.setdefault(unique_name, []).append(model_idx)
     # Materials some layer takes its rho_m from: only their moment acts.
-    coupled_materials = {
-        id(layer.material)
-        for model in models
-        for assembly in model.sample
-        for layer in assembly.layers
-        if getattr(layer, 'rho_m_coupled', False)
-    }
+    coupled_materials = coupled_material_ids(models)
     followed_by: dict[str, int] = {}
     for parameter in parameters:
         for leader in (getattr(parameter, 'dependency_map', None) or {}).values():
@@ -473,6 +468,12 @@ _DERIVED_DESCRIPTIONS = {
     'total_thickness': 'Σ film layer thicknesses',
 }
 
+# Table names for parameters whose own name is forced by something else. A
+# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' because the
+# calculators bind by name (a material parameter called 'rho_m' would be
+# bound to its layer's magnetic SLD slot); the table calls it what it is.
+_DISPLAY_NAMES = {'magnetic_sld': 'material rho_m'}
+
 # What the 'magnetic' name filter shows.
 MAGNETIC_PARAMETER_NAMES = ('rho_m', 'theta_m', 'magnetic_moment', 'magnetic_sld', 'guide_field_angle', 'applied_field')
 
@@ -492,7 +493,8 @@ def _inactive_note(parameter: Parameter, path, coupled_materials: set[int]):
     if path is None or len(path) < 2:
         return None
     owner = path[-2]
-    if getattr(owner, 'sld_coupled', True) is False and parameter.name in inactive_density_knobs(owner):
+    drives_magnetism = id(owner) in coupled_materials
+    if getattr(owner, 'sld_coupled', True) is False and parameter.name in inactive_density_knobs(owner, drives_magnetism):
         return _INACTIVE_KNOB_NOTE
     if parameter.name == 'magnetic_moment' and id(owner) not in coupled_materials:
         return _UNUSED_MOMENT_NOTE

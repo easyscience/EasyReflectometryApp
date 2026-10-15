@@ -74,6 +74,9 @@ class Layers:
 
     def remove_at_index(self, value: str) -> None:
         self._layers.remove_at(int(value))
+        # A removed coupled layer can leave its material's moment, or the
+        # model's field, acting on nothing; the project fixes those.
+        self._project_lib._sync_parameter_states()
 
     def add_new(self) -> None:
         if 'Si' not in [material.name for material in self._project_lib._materials]:
@@ -144,6 +147,8 @@ class Layers:
             self._layers[self.index].material = self._project_lib._materials[new_value]
             # Update layer name based on material name
             self._layers[self.index].name = self._project_lib._materials[new_value].name + ' Layer'
+            # A new material can end the layer's rho_m coupling.
+            self._project_lib._sync_parameter_states()
             return True
         return False
 
@@ -153,6 +158,8 @@ class Layers:
         if self._layers[index].material != self._project_lib._materials[new_value]:
             self._layers[index].material = self._project_lib._materials[new_value]
             self._layers[index].name = self._project_lib._materials[new_value].name + ' Layer'
+            # A new material can end the layer's rho_m coupling.
+            self._project_lib._sync_parameter_states()
             return True
         return False
 
@@ -295,21 +302,36 @@ class Layers:
         self._project_lib._sync_parameter_states()
         return True
 
+    def _current_model(self):
+        """The current model, or None when there is none to show."""
+        models = self._project_lib._models
+        index = self._project_lib.current_model_index
+        if models is None or index is None or not 0 <= index < len(models):
+            return None
+        return models[index]
+
     @property
     def field(self) -> dict:
         """The current model's guide field angle (degrees) and applied field
-        (tesla), with where its reference arrow points (:func:`guide_field_reference`)."""
-        model = self._project_lib._models[self._project_lib.current_model_index]
+        (tesla), with where its reference arrow points (:func:`guide_field_reference`),
+        and ``model_magnetic``: whether the field acts on the model at all.
+        The defaults when there is no current model."""
+        model = self._current_model()
+        if model is None:
+            return {**DEFAULT_FIELD}
         guide_field_angle = float(model.guide_field_angle.value)
         return {
             'guide_field_angle': guide_field_angle,
             'applied_field': float(model.applied_field.value),
+            'model_magnetic': bool(model.has_magnetism),
             **guide_field_reference(guide_field_angle),
         }
 
     def set_field(self, name: str, new_value: float) -> bool:
         """Set ``guide_field_angle`` or ``applied_field`` of the current model."""
-        model = self._project_lib._models[self._project_lib.current_model_index]
+        model = self._current_model()
+        if model is None:
+            return False
         return _set_parameter_value(getattr(model, name), new_value)
 
     def _ensure_calculator_magnetism(self) -> None:
@@ -346,6 +368,10 @@ class Layers:
         if not self._has_valid_layer_index(index):
             return None
         return getattr(self._layers[index], 'magnetism', None)
+
+
+# What `Layers.field` reports without a current model: refl1d's defaults.
+DEFAULT_FIELD = {'guide_field_angle': 270.0, 'applied_field': 0.0, 'model_magnetic': False, 'in_plane': True, 'phi': 0.0}
 
 
 def _set_parameter_value(parameter, new_value) -> bool:

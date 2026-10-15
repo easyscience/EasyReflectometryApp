@@ -71,7 +71,13 @@ class TestCoupling:
 class TestField:
     def test_defaults_and_reference(self, project):
         field = Layers(project).field
-        assert field == {'guide_field_angle': 270.0, 'applied_field': 0.0, 'in_plane': True, 'phi': 0.0}
+        assert field == {
+            'guide_field_angle': 270.0,
+            'applied_field': 0.0,
+            'model_magnetic': True,
+            'in_plane': True,
+            'phi': 0.0,
+        }
         assert all(type(value) in (float, bool) for value in field.values())
 
     @pytest.mark.parametrize(
@@ -115,7 +121,8 @@ class TestField:
 class TestParameterTable:
     def test_material_magnetic_sld_is_a_material_parameter(self, project):
         rows = _rows(project)
-        assert rows['Fe magnetic_sld']['group'] == 'Fe'
+        assert rows['Fe material rho_m']['group'] == 'Fe'
+        assert 'Fe magnetic_sld' not in rows
 
     def test_moment_is_inactive_until_a_layer_is_coupled(self, project):
         assert _rows(project)['Fe magnetic_moment']['kind'] == 'inactive'
@@ -148,3 +155,83 @@ class TestParameterTable:
         assert any('magnetic_moment' in name for name in names)
         assert any('guide_field_angle' in name for name in names)
         assert any('rho_m' in name for name in names)
+
+
+def _in_fit(project, parameter):
+    return any(candidate is parameter for model in project.models for candidate in model.get_fit_parameters())
+
+
+class TestInactiveMeansOutOfTheFit:
+    def test_moment_leaves_the_fit_when_the_last_layer_uncouples(self, project):
+        logic = Layers(project)
+        logic.set_rho_m_coupled_at_index(0, True)
+        iron = _film(project).material
+        iron.magnetic_moment.free = True
+        assert _in_fit(project, iron.magnetic_moment)
+
+        logic.set_rho_m_coupled_at_index(0, False)
+
+        assert _rows(project)['Fe magnetic_moment']['kind'] == 'inactive'
+        assert not _in_fit(project, iron.magnetic_moment)
+
+    def test_moment_leaves_the_fit_when_the_layer_gets_another_material(self, project):
+        logic = Layers(project)
+        logic.set_rho_m_coupled_at_index(0, True)
+        iron = _film(project).material
+        iron.magnetic_moment.free = True
+        other = next(index for index, material in enumerate(project._materials) if material is not iron)
+
+        with pytest.warns(UserWarning, match='no longer coupled'):
+            assert logic.set_material_at_index(0, other)
+
+        assert not _in_fit(project, iron.magnetic_moment)
+
+    def test_field_leaves_the_fit_when_the_model_stops_being_magnetic(self, project):
+        model = project.models[0]
+        model.applied_field.free = True
+        model.guide_field_angle.free = True
+
+        Layers(project).set_magnetic_at_index(0, False)
+
+        assert not _in_fit(project, model.applied_field)
+        assert not _in_fit(project, model.guide_field_angle)
+
+    def test_decoupled_density_without_a_coupled_layer_is_inactive(self, project):
+        from EasyReflectometryApp.Backends.Py.logic.material import Material
+
+        iron = _film(project).material
+        iron.density.free = True
+        index = list(project._materials).index(iron)
+
+        Material(project).set_sld_coupled_at_index(index, False)
+
+        assert _rows(project)['Fe density']['kind'] == 'inactive'
+        assert not _in_fit(project, iron.density)
+
+    def test_decoupled_density_of_a_coupled_material_stays_fittable(self, project):
+        from EasyReflectometryApp.Backends.Py.logic.material import Material
+
+        Layers(project).set_rho_m_coupled_at_index(0, True)
+        iron = _film(project).material
+        iron.density.free = True
+        index = list(project._materials).index(iron)
+
+        Material(project).set_sld_coupled_at_index(index, False)
+
+        assert _rows(project)['Fe density']['kind'] == 'parameter'
+        assert _in_fit(project, iron.density)
+
+
+class TestFieldWithoutAModel:
+    def test_field_reports_the_defaults(self, project):
+        logic = Layers(project)
+        project._current_model_index = 5  # out of range: nothing to show
+
+        assert logic.field == {
+            'guide_field_angle': 270.0,
+            'applied_field': 0.0,
+            'model_magnetic': False,
+            'in_plane': True,
+            'phi': 0.0,
+        }
+        assert logic.set_field('applied_field', '1.0') is False

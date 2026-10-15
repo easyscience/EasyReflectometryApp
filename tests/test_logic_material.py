@@ -208,14 +208,17 @@ def test_add_new_magnetic_material():
     assert isinstance(project._materials[0], MaterialMagnetic)
 
 
-def test_decoupling_a_magnetic_material_keeps_its_density_fittable():
+def test_decoupling_an_unused_magnetic_material_unfits_its_density():
     iron = MaterialMagnetic(name='Fe')
     iron.density.free = True
     iron.scattering_length_real.free = True
-    logic = Material(make_project(materials=make_material_collection(iron)))
+    project = make_project(materials=make_material_collection(iron))
+    logic = Material(project)
 
     assert logic.set_sld_coupled_at_index(0, False) is True
 
-    # The density still drives rho_m; the scattering lengths no longer act.
-    assert iron.density.free is True
+    # No layer takes the material's rho_m, so its density no longer acts
+    # either (a coupled layer keeps it fittable: test_magnetic_material_and_field).
+    assert iron.density.free is False
     assert iron.scattering_length_real.free is False
+    assert ('_sync_parameter_states',) in project.calls

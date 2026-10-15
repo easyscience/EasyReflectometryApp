@@ -21,7 +21,8 @@ Row {
 
     // The parameter being edited, in degrees.
     property real thetaM: 270
-    // Physical moment direction, degrees counterclockwise from H. Display only.
+    // Physical moment direction in the sample plane, degrees counterclockwise
+    // from the default in-plane field direction (theta_m = 270). Display only.
     property real phi: 0
     property bool hasMoment: true
     // Whether the slider may be moved at all.
@@ -104,7 +105,7 @@ Row {
 
     ToolTip.visible: hover.hovered
     ToolTip.text: root.hasMoment
-                  ? qsTr("Moment: %1° from H (θM %2°)").arg(root.phi.toFixed(1)).arg(root.thetaM.toFixed(1))
+                  ? qsTr("Moment: %1° in the sample plane (θM %2°)").arg(root.phi.toFixed(1)).arg(root.thetaM.toFixed(1))
                     + (root.editable ? '\n' + qsTr("Drag to set θM (%1° steps)").arg(root.snapDegrees)
                                      : '\n' + qsTr("θM follows a constraint or a running fit and cannot be dragged"))
                   : qsTr("ρM is zero: there is no direction to show")
