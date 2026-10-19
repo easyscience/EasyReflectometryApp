@@ -1,4 +1,4 @@
-# Unreleased
+# Version 1.5.0 (19 Oct 2026)
 
 - Magnetism parameterisation and guide field ([#425](https://github.com/easyscience/reflectometry-lib/issues/425), requirement 4):
   - **Add magnetic material** in the Materials group creates a material with a
