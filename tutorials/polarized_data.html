@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Polarised data &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Polarised data &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=3d139a88"></script>
+    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -379,9 +379,10 @@ to <strong>not used</strong>.</p>
 file, if a file is missing, or if nothing at all is assigned.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>One resolution function is used for the whole polarised experiment, taken from the first
-assigned channel. Differing per-channel resolution metadata in the other files is ignored;
-the dialog says so.</p>
+<p>Each channel keeps the resolution of its own file: the fit, the per-channel curves on the
+<code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page and the report all smear a channel with the resolution it was measured
+with. The model’s resolution field on the <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> page follows the first assigned
+channel; it is used for simulations and for a file without a resolution column.</p>
 </div>
 <p>If the project’s calculation engine cannot model magnetism, the dialog also notes that the
 channels will be loaded and displayed but not modelled until the sample has magnetic layers
@@ -439,7 +440,6 @@ colour.</p>
 <section id="limitations">
 <h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>One resolution function per polarised experiment, taken from the first assigned channel.</p></li>
 <li><p>Bayesian sampling of polarised experiments is not supported yet; see
 <a class="reference internal" href="bayesian.html"><span class="std std-doc">Bayesian analysis</span></a>.</p></li>
 </ul>

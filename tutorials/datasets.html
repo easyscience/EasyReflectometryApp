@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Demo datasets &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Demo datasets &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=3d139a88"></script>
+    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -325,13 +325,13 @@ document.write(`
                   
   <section id="demo-datasets">
 <h1>Demo datasets<a class="headerlink" href="#demo-datasets" title="Link to this heading">#</a></h1>
-<p>The repository ships four simulated neutron reflectometry datasets for trying out the
-constraint features described in <a class="reference internal" href="model_def.html"><span class="std std-doc">material and model setup</span></a>. They live in
+<p>The repository ships six simulated neutron reflectometry files for trying out the
+constraint and multiple-contrast features described in <a class="reference internal" href="model_def.html"><span class="std std-doc">material and model setup</span></a>. They live in
 <a class="reference external" href="https://github.com/easyScience/EasyReflectometryApp/tree/master/examples/datasets"><code class="docutils literal notranslate"><span class="pre">examples/datasets</span></code></a>,
 together with a
 <a class="reference external" href="https://github.com/easyScience/EasyReflectometryApp/blob/master/examples/datasets/README.md">full write-up</a>
 of each demo and the script that regenerates them.</p>
-<p>All four are ORSO <code class="docutils literal notranslate"><span class="pre">.ort</span></code> files simulated from a <strong>known structure</strong> with 4 % noise and 5 %
+<p>All six are ORSO <code class="docutils literal notranslate"><span class="pre">.ort</span></code> files simulated from a <strong>known structure</strong> with 4 % noise and 5 %
 <code class="docutils literal notranslate"><span class="pre">dQ/Q</span></code> resolution, so every demo has a right answer to compare the fit against. The ground
 truth is recorded in each file’s header, and each header also carries the sample structure
 in the ORSO model language, so the files can be opened in two ways:</p>
@@ -361,6 +361,12 @@ also works with a hand-built sample.</p></li>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dppc_monolayer.ort</span></code></p></td>
 <td><p>A DPPC monolayer at the air/D2O interface - the surfactant recipes (equal head/tail area per molecule, solvent roughness).</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">film_contrasts.ort</span></code></p></td>
+<td><p>Three contrasts (D2O, H2O, CMSi) of a film on silicon in one file. Each dataset carries its exact slab model, so <strong>Load sample from file</strong> builds the D2O model. It demonstrates <strong>Add contrast</strong>, pairing experiments with models, per-contrast scale and background, and a joint fit, and in a variant <strong>Link contrasts</strong> for a contrast built as a separate model. Start here for multiple contrasts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dppc_contrasts.ort</span></code></p></td>
+<td><p>Three contrasts of one DPPC monolayer in one file (d-DPPC on D2O, d-DPPC on air-contrast-matched water, h-DPPC on D2O). It demonstrates <strong>Add contrast</strong>, pairing experiments with models, and a joint fit that separates head hydration from head thickness, which no single contrast can do.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -369,7 +375,10 @@ also works with a hand-built sample.</p></li>
 <p>For <code class="docutils literal notranslate"><span class="pre">ni_ti_multilayer.ort</span></code> the loaded stack arrives flattened (8 × [Ti | Ni] becomes 16
 layers in one assembly); rebuild it as a <code class="docutils literal notranslate"><span class="pre">Repeating</span> <span class="pre">Multi-layer</span></code> by hand for the
 constant-period demo. For <code class="docutils literal notranslate"><span class="pre">dppc_monolayer.ort</span></code> the loaded stack is the slab equivalent of
-the surfactant; replace it with a <code class="docutils literal notranslate"><span class="pre">Surfactant</span> <span class="pre">layer</span></code> assembly for the surfactant recipes.</p>
+the surfactant; replace it with a <code class="docutils literal notranslate"><span class="pre">Surfactant</span> <span class="pre">layer</span></code> assembly for the surfactant recipes.
+<code class="docutils literal notranslate"><span class="pre">dppc_contrasts.ort</span></code> has no sample model in its header (the import builds plain slabs
+only, not a solvated monolayer): build the reference contrast by hand and derive the
+other two with <strong>Add contrast</strong>.</p>
 </div>
 </section>
 

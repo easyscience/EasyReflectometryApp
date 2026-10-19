@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Loading experimental data &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Loading experimental data &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=3d139a88"></script>
+    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -323,6 +323,8 @@ document.write(`
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution-of-the-data">Resolution of the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#several-files-of-one-contrast">Several files of one contrast</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
 </ul>
             </nav>
@@ -355,6 +357,29 @@ Data is loaded in the <code class="docutils literal notranslate"><span class="pr
 <li><p><strong>B</strong>: Set the level where data merges into the experimental background.</p></li>
 <li><p><strong>C</strong>: Instrumental resolution that percentage varies as a function of Q.</p></li>
 </ul>
+</section>
+<section id="resolution-of-the-data">
+<h2>Resolution of the data<a class="headerlink" href="#resolution-of-the-data" title="Link to this heading">#</a></h2>
+<p>A file with a fourth column (<code class="docutils literal notranslate"><span class="pre">sQz</span></code>, the q-resolution of each point) keeps that resolution:
+the fit, the calculated curve and residuals on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page, the Bayesian sampling
+and band, and the report all smear each dataset with the resolution it was measured with.
+This holds for every dataset, also when several datasets share one model (other angles,
+other contrasts) and for each channel of a polarised experiment.</p>
+<p>The resolution field above (<strong>C</strong>) belongs to the model. It is taken from the first dataset
+loaded onto the model (it shows <code class="docutils literal notranslate"><span class="pre">Spline</span></code> for a measured resolution), and it is used for
+simulations on the <code class="docutils literal notranslate"><span class="pre">Sample</span></code> page and for datasets without a resolution column, which are
+smeared with the model’s percentage.</p>
+</section>
+<section id="several-files-of-one-contrast">
+<h2>Several files of one contrast<a class="headerlink" href="#several-files-of-one-contrast" title="Link to this heading">#</a></h2>
+<p>A contrast is often measured as several curves, one per incident angle or wavelength band.
+Load the first file, keep its experiment selected, and press
+<code class="docutils literal notranslate"><span class="pre">Add</span> <span class="pre">file(s)</span> <span class="pre">to</span> <span class="pre">the</span> <span class="pre">selected</span> <span class="pre">experiment</span></code> to merge the others into it. The points are
+sorted by q and every point keeps its own resolution, so overlapping q ranges measured
+with different widths are fitted correctly. A file without a resolution column added to
+measured ones is given the model’s percentage resolution (5 % when the model holds a
+measured one), and the app says so. The button is disabled for a polarised experiment,
+whose channels are separate datasets.</p>
 </section>
 <section id="polarised-data">
 <h2>Polarised data<a class="headerlink" href="#polarised-data" title="Link to this heading">#</a></h2>
@@ -411,6 +436,8 @@ how to assign them. See <a class="reference internal" href="polarized_data.html"
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-data">Load data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#instrumental-parameters">Instrumental parameters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution-of-the-data">Resolution of the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#several-files-of-one-contrast">Several files of one contrast</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#polarised-data">Polarised data</a></li>
 </ul>
   </nav></div>

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Material and model setup &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Material and model setup &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=3d139a88"></script>
+    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -323,7 +323,9 @@ document.write(`
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-controls">Basic controls</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#material-editor">Material editor</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#density-materials">Density materials</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-creation-and-editing">Model creation and editing</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#contrasts">Contrasts</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-editor">Layer editor</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetism">Magnetism</a></li>
 </ul>
@@ -332,7 +334,7 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#physics-constraints">Physics constraints</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#single-constraints">Single constraints</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-constraints">Model constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#link-contrasts">Link contrasts</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#trying-the-constraints-out">Trying the constraints out</a></li>
 </ul>
 </li>
@@ -370,6 +372,45 @@ The materials are added by the real and imaginary components of the scattering l
 <li><p><strong>C</strong>: Changes the ordering of materials.</p></li>
 </ul>
 </section>
+<section id="density-materials">
+<h3>Density materials<a class="headerlink" href="#density-materials" title="Link to this heading">#</a></h3>
+<p>A material can also be defined by its <strong>chemical formula and mass density</strong> instead of a
+numeric SLD. Such <em>density materials</em> enter a project when a sample is loaded from an ORSO
+model that defines a material this way (<code class="docutils literal notranslate"><span class="pre">Load</span> <span class="pre">a</span> <span class="pre">sample</span></code>), and they are marked with a <strong>ρ</strong>
+badge next to their row number in the Material editor table.</p>
+<p>Selecting a ρ row reveals a detail panel below the table with the material’s chemical
+formula, its mass density (in g/cm³) and the checkbox <strong>SLD computed from formula and
+density</strong>:</p>
+<!-- TODO: screenshot of the density material panel -> _images/sample_material_density.png -->
+<ul class="simple">
+<li><p><strong>Checked</strong> (the default): the SLD is physics, not an input - it is computed as
+<code class="docutils literal notranslate"><span class="pre">SLD</span> <span class="pre">=</span> <span class="pre">Nᴀ</span> <span class="pre">·</span> <span class="pre">ρ</span> <span class="pre">·</span> <span class="pre">b</span> <span class="pre">/</span> <span class="pre">M</span></code> from the density ρ, the formula’s coherent neutron scattering
+length <em>b</em> and molecular weight <em>M</em>. The SLD/iSLD cells in the table are therefore
+read-only, and on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page the material’s <code class="docutils literal notranslate"><span class="pre">sld</span></code>/<code class="docutils literal notranslate"><span class="pre">isld</span></code> parameters are shown
+greyed as dependent while <strong><code class="docutils literal notranslate"><span class="pre">density</span></code> is the parameter to fit</strong>. Editing the formula
+updates the scattering length and molecular weight (an invalid formula is rejected and
+the field snaps back).</p></li>
+<li><p><strong>Unchecked</strong>: <code class="docutils literal notranslate"><span class="pre">sld</span></code>/<code class="docutils literal notranslate"><span class="pre">isld</span></code> become ordinary independent parameters - editable here and
+fittable on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page exactly like a plain material’s (they arrive fixed, so
+tick their <code class="docutils literal notranslate"><span class="pre">Fit</span></code> box). The <code class="docutils literal notranslate"><span class="pre">density</span></code> and scattering-length rows are greyed with the
+note <code class="docutils literal notranslate"><span class="pre">unused</span> <span class="pre">(SLD</span> <span class="pre">is</span> <span class="pre">fitted</span> <span class="pre">directly)</span></code>, because they no longer affect the
+reflectivity - they cannot be fitted or edited until the box is checked again.</p></li>
+</ul>
+<p>The molecular weight never appears in the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> table: it is a constant of the
+chemical formula (recomputed whenever the formula is edited), not a fittable parameter -
+fitting it alongside density would be degenerate, since only their ratio enters the SLD.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Re-checking the box restores the coupling by <strong>recalculating</strong> SLD/iSLD from the current
+formula and density - manually entered or fitted SLD values are discarded.</p>
+</div>
+<p>The choice is per material and is saved with the project; projects saved before this
+feature load with the coupling enabled. Note that toggling the coupling is not undoable.
+If you add a constraint on <code class="docutils literal notranslate"><span class="pre">sld</span></code>/<code class="docutils literal notranslate"><span class="pre">isld</span></code> while unchecked and then re-check the box, that
+constraint is silently discarded - re-checking always recomputes SLD/iSLD from the
+formula and density. The <code class="docutils literal notranslate"><span class="pre">Active</span> <span class="pre">Constraints</span></code> table refreshes after a toggle, but it does
+not flag rows that the toggle invalidated, so review it yourself after switching modes.</p>
+</section>
 <section id="model-creation-and-editing">
 <h3>Model creation and editing<a class="headerlink" href="#model-creation-and-editing" title="Link to this heading">#</a></h3>
 <p>For creating new models, the <code class="docutils literal notranslate"><span class="pre">Models</span> <span class="pre">selector</span></code> tab is used, and then for setting the assemblies in the model the <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">editor</span></code> is used.</p>
@@ -383,6 +424,49 @@ The materials are added by the real and imaginary components of the scattering l
 <li><p><strong>3</strong>: Removing the specific assembly.</p></li>
 <li><p><strong>4</strong>: Adding more asseblies.</p></li>
 </ul>
+</section>
+<section id="contrasts">
+<h3>Contrasts<a class="headerlink" href="#contrasts" title="Link to this heading">#</a></h3>
+<p>A <em>contrast</em> is the same sample measured under another scattering length density
+condition: the film in D2O and in H2O, or a monolayer with deuterated and with
+hydrogenated tails. Each contrast is a model of its own, with its own scale,
+background and resolution, while the structure is common to all of them. Fitted
+together, the contrasts determine what no single one of them can.</p>
+<p>To create one, select the reference model in the <code class="docutils literal notranslate"><span class="pre">Models</span> <span class="pre">selector</span></code> and press
+<strong>Add contrast of the selected model…</strong>. The dialog asks for the new model’s name and
+lists what the contrast can change:</p>
+<!-- TODO: screenshot of the Add contrast dialog -> _images/sample_add_contrast.png -->
+<ul class="simple">
+<li><p>every material the model uses, with a drop-down to <strong>replace</strong> it by another material
+from the <code class="docutils literal notranslate"><span class="pre">Material</span> <span class="pre">editor</span></code> (<code class="docutils literal notranslate"><span class="pre">keep</span></code> leaves it as it is). Add the replacement material,
+e.g. <code class="docutils literal notranslate"><span class="pre">H2O</span></code>, to the <code class="docutils literal notranslate"><span class="pre">Material</span> <span class="pre">editor</span></code> first. Replacing a material replaces it
+everywhere the model uses it: a water used both as the subphase and as the solvent of
+a hydrated head group changes in both places;</p></li>
+<li><p>every layer or density material defined by a chemical formula, with its formula to
+<strong>re-formulate</strong> it, e.g. <code class="docutils literal notranslate"><span class="pre">C32H64</span></code> instead of <code class="docutils literal notranslate"><span class="pre">C32D64</span></code> for hydrogenated tails. The
+material a surfactant layer builds from its formula is changed this way, not
+replaced.</p></li>
+</ul>
+<p>Press <strong>OK</strong>: the new model is added and becomes the selected one, so select the
+reference again before adding the next contrast.</p>
+<p>What the contrast does not change is shared with the reference:</p>
+<ul class="simple">
+<li><p>an assembly that none of the replaced materials or formulas touch is <strong>one assembly</strong>
+in both models. It is marked <strong>⇄</strong> next to its number in the <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">editor</span></code> (the
+tooltip names the other models), and editing it edits every model sharing it;</p></li>
+<li><p>an assembly that a replacement touches is <strong>copied</strong>, and every parameter of the copy
+follows the reference’s, except those of the replacement. A subphase in H2O keeps
+the roughness of the D2O one; a hydrated head group keeps the thickness, area per
+molecule and solvent fraction of the reference. Edit these in the reference model.</p></li>
+</ul>
+<p>On the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page a parameter shared by several models is listed once, marked
+<strong>⇄</strong>, with the models in its tooltip. To let it differ in one contrast, select it and
+use <strong>Detach in</strong> below the table: that model gets its own copy of the assembly, with
+every other parameter still following the shared one.</p>
+<p>Pair each experiment with its contrast in the <code class="docutils literal notranslate"><span class="pre">Model</span></code> column of the experiments table,
+on the <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> or the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page. On the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page, the <strong>Fit</strong> checkbox
+of each experiment chooses which contrasts the next fit includes. Which model each contrast was derived from is saved with the project and
+listed in the report.</p>
 </section>
 <section id="layer-editor">
 <h3>Layer editor<a class="headerlink" href="#layer-editor" title="Link to this heading">#</a></h3>
@@ -428,7 +512,8 @@ the calculation engine, and to constrain the parameters of the model.</p>
 same selector is available on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page. Only <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> can model magnetic layers,
 so selecting <code class="docutils literal notranslate"><span class="pre">refnx</span></code> while the sample has magnetic layers is refused - see
 <a class="reference internal" href="magnetism.html"><span class="std std-doc">magnetic layers</span></a>.</p>
-<p>Below these sit three constraint groups, from the most specific to the most general.</p>
+<p>Below these sit three constraint groups, from the most specific to the most general:
+<code class="docutils literal notranslate"><span class="pre">Physics</span> <span class="pre">constraints</span></code>, <code class="docutils literal notranslate"><span class="pre">Single</span> <span class="pre">constraints</span></code> and <code class="docutils literal notranslate"><span class="pre">Link</span> <span class="pre">contrasts</span></code>.</p>
 <section id="physics-constraints">
 <h3>Physics constraints<a class="headerlink" href="#physics-constraints" title="Link to this heading">#</a></h3>
 <p>The <code class="docutils literal notranslate"><span class="pre">Physics</span> <span class="pre">constraints</span></code> group applies physically motivated constraints to an assembly with
@@ -502,14 +587,49 @@ plain equality, <code class="docutils literal notranslate"><span class="pre">≤
 <code class="docutils literal notranslate"><span class="pre">bound</span></code> for an upper bound and <code class="docutils literal notranslate"><span class="pre">value</span></code> for a fixed value - and each row can be removed
 individually.</p>
 </section>
-<section id="model-constraints">
-<h3>Model constraints<a class="headerlink" href="#model-constraints" title="Link to this heading">#</a></h3>
-<p>The <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">constraints</span></code> group ties whole models together rather than single parameters:
-select two or more models and press <strong>Constrain models parameters</strong> to constrain all of
-their matching parameters at once. This is the tool for co-refining several contrasts that
-share a structure. The resulting constraints are listed in the <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">Constraints</span></code> table
-below the selector and can be removed there.</p>
-<!-- TODO: screenshot of the Model constraints group -> _images/sample_model_constraints.png -->
+<section id="link-contrasts">
+<h3>Link contrasts<a class="headerlink" href="#link-contrasts" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">Link</span> <span class="pre">contrasts</span></code> group ties whole models together rather than single parameters. It
+is for contrasts that already exist as separate models: built by hand, loaded from
+separate files, or kept from a project saved before <strong>Add contrast</strong> existed. For a new
+contrast, <strong>Add contrast of the selected model…</strong> (see <em>Contrasts</em> above) is simpler:
+it shares the structure from the start.</p>
+<!-- TODO: screenshot of the Link contrasts group -> _images/sample_link_contrasts.png -->
+<ol class="arabic simple">
+<li><p>Tick two or more models in the table. The ticked model highest in the list is the
+reference; the others follow it.</p></li>
+<li><p>Leave <strong>Also tie material SLDs and densities</strong> unticked when the models are contrasts,
+i.e. differ in their materials. Ticked, it ties every material’s SLD, density and
+scattering lengths to the reference’s too, including the water that makes the
+contrast.</p></li>
+<li><p>Press <strong>Link selected models</strong>. The line below the button reports how many
+parameters were tied, and lists any it could not tie, with the reason.</p></li>
+</ol>
+<p>Parameters are matched by their position in the model, so linking needs the models to
+have the same layout: the same assemblies with the same layers, and, layer by layer,
+materials of the same kind (a density material and a plain-SLD material do not match).
+Models that do not match are reported, e.g.
+<code class="docutils literal notranslate"><span class="pre">'Film</span> <span class="pre">in</span> <span class="pre">CMSi'</span> <span class="pre">and</span> <span class="pre">'Film</span> <span class="pre">in</span> <span class="pre">D2O'</span> <span class="pre">differ</span> <span class="pre">in</span> <span class="pre">layout</span> <span class="pre">at</span> <span class="pre">sample/2/layers/0/material/density</span></code>,
+and nothing is tied. When several models are ticked, either all of them are linked or,
+if one cannot be, none.</p>
+<p>What linking ties, and what it leaves alone:</p>
+<ul class="simple">
+<li><p>each model keeps its own <strong>scale</strong> and <strong>background</strong>;</p></li>
+<li><p>thicknesses, roughnesses and the other structural parameters of corresponding layers
+are tied;</p></li>
+<li><p>a material both models use is already one set of parameters and needs no tie. A
+material is shared only when both models’ layers use the same entry of the
+<code class="docutils literal notranslate"><span class="pre">Material</span> <span class="pre">editor</span></code>. A model made with the duplicate button has its own copies of the
+materials, under the same names: to share the film SLD with the reference, pick its
+layers’ materials again in the <code class="docutils literal notranslate"><span class="pre">Layer</span> <span class="pre">editor</span></code>;</p></li>
+<li><p>a material that differs between the models (the water) keeps its own SLD, unless
+<strong>Also tie material SLDs and densities</strong> is ticked;</p></li>
+<li><p>a parameter that already follows the reference’s is left as it is; one that follows
+any other parameter is not re-tied, and is listed.</p></li>
+</ul>
+<p>Each tie is listed in the <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">Constraints</span></code> table below, and with the other constraints
+in the <code class="docutils literal notranslate"><span class="pre">Active</span> <span class="pre">Constraints</span></code> table. Removing a row frees that parameter and restores the
+value and bounds it had before the link. Links are saved with the project.</p>
 </section>
 <section id="trying-the-constraints-out">
 <h3>Trying the constraints out<a class="headerlink" href="#trying-the-constraints-out" title="Link to this heading">#</a></h3>
@@ -566,7 +686,9 @@ features - see <a class="reference internal" href="datasets.html"><span class="s
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-controls">Basic controls</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#material-editor">Material editor</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#density-materials">Density materials</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-creation-and-editing">Model creation and editing</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#contrasts">Contrasts</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#layer-editor">Layer editor</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetism">Magnetism</a></li>
 </ul>
@@ -575,7 +697,7 @@ features - see <a class="reference internal" href="datasets.html"><span class="s
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#physics-constraints">Physics constraints</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#single-constraints">Single constraints</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-constraints">Model constraints</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#link-contrasts">Link contrasts</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#trying-the-constraints-out">Trying the constraints out</a></li>
 </ul>
 </li>

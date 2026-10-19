@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Magnetic layers &#8212; EasyReflectometry Dev Docs 1.4.0 documentation</title>
+    <title>Magnetic layers &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=3d139a88"></script>
+    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.4.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -322,11 +322,19 @@ document.write(`
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-magnetism-group">The Magnetism group</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#m-from-a-magnetic-material">ρM from a magnetic material</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-guide-field">The guide field</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetic-samples-from-orso-files">Magnetic samples from ORSO files</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-moment-angle-slider">The moment angle slider</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#switching-the-calculation-engine">Switching the calculation engine</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fitting-m-and-m">Fitting ρM and θM</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetic-depth-profiles">Magnetic depth profiles</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-way-the-moments-point">Which way the moments point</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#on-the-structure-tab">On the Structure tab</a></li>
+</ul>
+</li>
 </ul>
             </nav>
         </div>
@@ -383,9 +391,91 @@ example <code class="docutils literal notranslate"><span class="pre">Magnetism:<
 <p><code class="docutils literal notranslate"><span class="pre">ρM</span></code> and <code class="docutils literal notranslate"><span class="pre">θM</span></code> are only editable once <strong>Magn.</strong> is ticked.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><code class="docutils literal notranslate"><span class="pre">θM</span> <span class="pre">=</span> <span class="pre">270°</span></code> aligns the moment with the guide field, which produces no spin-flip
-scattering. This is the value to start from for a simple saturated film.</p>
+<p>With the default in-plane guide field (270°), <code class="docutils literal notranslate"><span class="pre">θM</span> <span class="pre">=</span> <span class="pre">270°</span></code> aligns the moment with the
+field, which produces no spin-flip scattering. This is the value to start from for a
+simple saturated film.</p>
 </div>
+<section id="m-from-a-magnetic-material">
+<h3>ρM from a magnetic material<a class="headerlink" href="#m-from-a-magnetic-material" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ρM</span></code> can also come from the layer’s material instead of being typed. <strong>Add magnetic
+material</strong> in the <strong>Materials</strong> group creates a material with a formula, a mass density
+and a <strong>Moment</strong> in Bohr magnetons per formula unit (bulk iron to start with: Fe,
+7.874 g/cm³, 2.2 µB). The material editor shows the resulting <code class="docutils literal notranslate"><span class="pre">ρM</span></code> and the number density
+<code class="docutils literal notranslate"><span class="pre">N</span></code>: <code class="docutils literal notranslate"><span class="pre">ρM</span> <span class="pre">=</span> <span class="pre">N</span> <span class="pre">×</span> <span class="pre">moment</span> <span class="pre">×</span> <span class="pre">2.6991·10⁻⁵</span> <span class="pre">Å</span></code>.</p>
+<p>Give a layer that material, make it magnetic, select its row and tick <strong>ρM from material</strong>
+below the table. The layer’s <code class="docutils literal notranslate"><span class="pre">ρM</span></code> then follows the material’s moment and density and is no
+longer editable in the table; <code class="docutils literal notranslate"><span class="pre">θM</span></code> stays the layer’s own, so two layers of one material can
+point different ways. Unticking keeps the current value.</p>
+<p>The moment is the effective in-plane net moment per formula unit, which is the moment per
+atom only for a formula unit of one atom, such as Fe (<code class="docutils literal notranslate"><span class="pre">Fe2</span></code> is one element but two atoms).
+In the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> table it is greyed out until some layer takes <code class="docutils literal notranslate"><span class="pre">ρM</span></code> from the material, and
+when the last such layer stops doing so the moment is taken out of the fit. If the
+material’s SLD is set directly (unticked <strong>SLD computed from formula and density</strong>), its
+density still sets <code class="docutils literal notranslate"><span class="pre">ρM</span></code> while a layer takes <code class="docutils literal notranslate"><span class="pre">ρM</span></code> from it; the data then constrain only
+density × moment, so ticking one of the two for fitting unticks the other. Without such a
+layer the density sets nothing and is greyed out too.</p>
+<p>A layer whose <code class="docutils literal notranslate"><span class="pre">ρM</span></code> is given a constraint in the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page no longer takes it from the
+material: <strong>ρM from material</strong> is unticked, and the constraint is kept when the layer’s
+material changes.</p>
+</section>
+<section id="the-guide-field">
+<h3>The guide field<a class="headerlink" href="#the-guide-field" title="Link to this heading">#</a></h3>
+<p>Below the table, <strong>Guide field angle</strong> and <strong>Applied field (T)</strong> set the field of the
+current model (refl1d’s <code class="docutils literal notranslate"><span class="pre">Aguide</span></code> and <code class="docutils literal notranslate"><span class="pre">H</span></code>). They are shown while the current model has a
+magnetic layer and the engine is <code class="docutils literal notranslate"><span class="pre">refl1d</span></code>:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Guide field angle</p></th>
+<th class="head"><p>Field direction</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>270° or −90° (default)</p></td>
+<td><p>in the sample plane</p></td>
+</tr>
+<tr class="row-odd"><td><p>90°</p></td>
+<td><p>in the sample plane, reversed</p></td>
+</tr>
+<tr class="row-even"><td><p>0° or 180°</p></td>
+<td><p>along the surface normal</p></td>
+</tr>
+<tr class="row-odd"><td><p>anything else</p></td>
+<td><p>tilted out of the sample plane</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The applied field adds a Zeeman term along the field, so its effect depends on the field
+and its direction relative to the moments. Both appear in the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> parameter table,
+named after the model, and can be fitted; they are shown only while the model is magnetic
+and the engine is <code class="docutils literal notranslate"><span class="pre">refl1d</span></code>, and are taken out of the fit otherwise. The ORSO model language
+has no field, so model export warns when it is not the default.</p>
+</section>
+<section id="magnetic-samples-from-orso-files">
+<h3>Magnetic samples from ORSO files<a class="headerlink" href="#magnetic-samples-from-orso-files" title="Link to this heading">#</a></h3>
+<p><strong>Load sample</strong> reads an ORSO model’s <code class="docutils literal notranslate"><span class="pre">magnetic_moment</span></code>: a material with a formula, a
+density and a moment becomes a magnetic material, and its layer is magnetic with
+<strong>ρM from material</strong> ticked and <code class="docutils literal notranslate"><span class="pre">θM</span> <span class="pre">=</span> <span class="pre">270°</span></code>, since the file has no direction. Whatever the
+import could not carry over (a moment without a density, an unknown unit, an ignored
+<code class="docutils literal notranslate"><span class="pre">relative_density</span></code>, magnetic layers in a repeated stack) is listed in a warning after the
+sample loads. A magnetic sample cannot be loaded while the engine cannot model magnetism:
+the load is refused with a message naming the engine to switch to, and the project is left
+as it was.</p>
+</section>
+<section id="the-moment-angle-slider">
+<h3>The moment angle slider<a class="headerlink" href="#the-moment-angle-slider" title="Link to this heading">#</a></h3>
+<p>Selecting a magnetic row shows a slider below the table, spanning the whole <code class="docutils literal notranslate"><span class="pre">0-360°</span></code>
+range of <code class="docutils literal notranslate"><span class="pre">θM</span></code>, with the guide field reference <strong>H →</strong> and the resulting arrow beside it -
+the same arrow the Structure tab draws. Its
+tooltip gives the angle both ways: <code class="docutils literal notranslate"><span class="pre">φ</span></code> from <strong>H</strong>, and the <code class="docutils literal notranslate"><span class="pre">θM</span></code> the table edits.</p>
+<p>Dragging the slider sets <code class="docutils literal notranslate"><span class="pre">θM</span></code>, snapped to 5°; the text field remains the precise input.
+The slider is read-only - and says so in its tooltip - while a fit is running, or when
+<code class="docutils literal notranslate"><span class="pre">θM</span></code> follows a constraint, because then the parameter is not the user’s to set.</p>
+<p>The slider edits <code class="docutils literal notranslate"><span class="pre">θM</span></code> itself, exactly as the table column does. The arrow beside it shows
+<code class="docutils literal notranslate"><span class="pre">φ</span></code>, the direction the moment physically points, so with a <strong>negative <code class="docutils literal notranslate"><span class="pre">ρM</span></code></strong> the arrow
+points opposite the angle on the slider - the moment is reversed while the parameter
+stays where it was put.</p>
+</section>
 <section id="switching-the-calculation-engine">
 <h3>Switching the calculation engine<a class="headerlink" href="#switching-the-calculation-engine" title="Link to this heading">#</a></h3>
 <p>Ticking <strong>Magn.</strong> while the project uses an engine that cannot model magnetism opens the
@@ -405,7 +495,8 @@ while the sample still has magnetic layers is refused, with a message on both pa
 <p><code class="docutils literal notranslate"><span class="pre">ρM</span></code> and <code class="docutils literal notranslate"><span class="pre">θM</span></code> appear in the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> parameter table like any other layer parameter,
 named after their assembly and model - for example <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">Fe</span> <span class="pre">rho_m</span></code>. They come with default
 limits, a fit checkbox and can be used in constraints. The parameter name filter accepts
-<code class="docutils literal notranslate"><span class="pre">magnetic</span></code> as a keyword to show only the magnetic parameters.</p>
+<code class="docutils literal notranslate"><span class="pre">magnetic</span></code> as a keyword to show only the magnetic parameters: <code class="docutils literal notranslate"><span class="pre">ρM</span></code>, <code class="docutils literal notranslate"><span class="pre">θM</span></code>, the material
+moments and the field.</p>
 </section>
 <section id="magnetic-depth-profiles">
 <h2>Magnetic depth profiles<a class="headerlink" href="#magnetic-depth-profiles" title="Link to this heading">#</a></h2>
@@ -414,9 +505,12 @@ controls, below <strong>Magnetism</strong>. The same switches are repeated in <c
 <code class="docutils literal notranslate"><span class="pre">Advanced</span></code> › <code class="docutils literal notranslate"><span class="pre">Plot</span> <span class="pre">control</span></code>, and the two share one selection.</p>
 <!-- TODO: screenshot of the Magnetic profile group -> _images/sample_magnetic_profile.png -->
 <ul class="simple">
-<li><p><strong>Show ρ↑ and ρ↓</strong> - adds the spin-up and spin-down potentials
-<code class="docutils literal notranslate"><span class="pre">ρ</span> <span class="pre">±</span> <span class="pre">ρM·cos(θM</span> <span class="pre">−</span> <span class="pre">A)</span></code> for each magnetic model to the SLD chart, dashed in the model’s
-colour. For non-magnetic layers the two curves collapse onto the nuclear SLD.</p></li>
+<li><p><strong>Show ρ ± ρM∥</strong> - adds the nuclear SLD plus and minus the magnetic SLD along the
+field for each magnetic model to the SLD chart, dashed in the model’s colour. These are
+the potentials of the two spin states only when every moment is parallel to the field
+and there is no applied field; a moment across the field mixes the spin states instead.
+For non-magnetic layers, and for moments across the field, the two curves collapse onto
+the nuclear SLD.</p></li>
 <li><p><strong>Show ρM</strong> - the magnetic SLD profile on its own.</p></li>
 <li><p><strong>Show θM</strong> - the in-plane moment angle, on its own right-hand axis. <code class="docutils literal notranslate"><span class="pre">θM</span></code> is only defined
 where there is a moment, so the curve is drawn in pieces rather than joined across the
@@ -430,12 +524,82 @@ on, so <code class="docutils literal notranslate"><span class="pre">ρ</span> <s
 sidebar are unchanged.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> calculator cannot repeat slabs that carry magnetism, so a magnetic model with
+a repeating multilayer has no magnetic depth profile at all - and therefore none of these
+curves. The <strong>Magnetic profile</strong> group reports the reason.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
 <p>For a magnetic sample the plain model curve is <strong>not</strong> an unpolarised average - the
 calculator returns the ↑↑ cross-section - so <code class="docutils literal notranslate"><span class="pre">R↑↑</span></code> is drawn on top of it. The sidebar says
 so as well.</p>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> reflectivity chart is unaffected by this switch: it already draws one
 calculated curve per measured spin channel when the experiment is polarised.</p>
+</section>
+<section id="which-way-the-moments-point">
+<h2>Which way the moments point<a class="headerlink" href="#which-way-the-moments-point" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">θM</span></code> is a number, and a stack of numbers does not show at a glance whether a model is
+collinear, canted or twisted. The app therefore draws the moment as an arrow, in a single
+convention shared by every view:</p>
+<ul class="simple">
+<li><p>the arrows are a <strong>top view along the surface normal</strong> - a compass laid over the sample;</p></li>
+<li><p>screen <strong>right is the default guide field H</strong> (in the sample plane at 270°), and the angle
+drawn is <code class="docutils literal notranslate"><span class="pre">φ</span></code>, measured from it counterclockwise: <code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">θM</span> <span class="pre">−</span> <span class="pre">270°</span></code>. The arrows stay in this
+frame when the field is changed; the <strong>H</strong> reference follows the field instead, pointing
+left for a reversed in-plane field and replaced by its angle when the field is tilted out
+of the sample plane;</p></li>
+<li><p>a <strong>negative <code class="docutils literal notranslate"><span class="pre">ρM</span></code></strong> is the same moment reversed, so the arrow points the opposite way
+and the tooltip carries the signed parameter;</p></li>
+<li><p>a magnetic layer whose <code class="docutils literal notranslate"><span class="pre">ρM</span></code> is below 1 % of the largest one in the model gets a <strong>hollow
+dot</strong> - “magnetic, but no moment”: the direction of a zero-length vector means nothing.
+A layer with no magnetism at all gets nothing.</p></li>
+</ul>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">θM</span></code></p></th>
+<th class="head"><p>Arrow</p></th>
+<th class="head"><p>Physics</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>270° (default)</p></td>
+<td><p>→ along <strong>H</strong></p></td>
+<td><p>collinear, no spin flip</p></td>
+</tr>
+<tr class="row-odd"><td><p>90°</p></td>
+<td><p>← against <strong>H</strong></p></td>
+<td><p>collinear reversed, no spin flip</p></td>
+</tr>
+<tr class="row-even"><td><p>0° / 180°</p></td>
+<td><p>↑ / ↓</p></td>
+<td><p>fully transverse, maximal spin flip</p></td>
+</tr>
+<tr class="row-odd"><td><p>40°</p></td>
+<td><p>↖ (<code class="docutils literal notranslate"><span class="pre">φ</span></code> = 130°)</p></td>
+<td><p>canted</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Every arrow view shows the <strong>H</strong> reference on screen. Tooltips lead with <code class="docutils literal notranslate"><span class="pre">φ</span></code>, then the
+<code class="docutils literal notranslate"><span class="pre">θM</span></code> and signed <code class="docutils literal notranslate"><span class="pre">ρM</span></code> the sidebar edits, then the part of the moment along the field and the
+size of the part across it - what the non-spin-flip and the spin-flip channels mostly see.</p>
+<p>Arrows are constant length everywhere: they encode direction only. The magnitude is the
+<code class="docutils literal notranslate"><span class="pre">ρM</span></code> curve’s job, and the exact value is in the tooltip.</p>
+<section id="on-the-structure-tab">
+<span id="moment-arrows-on-the-structure-tab"></span><h3>On the Structure tab<a class="headerlink" href="#on-the-structure-tab" title="Link to this heading">#</a></h3>
+<p>Each magnetic layer’s box gets an arrow between its name and its thickness annotation.
+This needs no switch: attaching magnetism <em>is</em> the request to see it. Boxes too short for
+a readable glyph drop the arrow and keep it in the tooltip, and the box layout of a
+non-magnetic sample is unchanged.</p>
+<p>The Structure tab draws the <strong>current model</strong>; switch models in the header to inspect
+another one. A repeating multilayer that the tab collapses to its repeat unit shows one
+arrow per drawn box - the direction of the repeat unit, which every repeat shares.</p>
+<p>Gradient layers get no arrow. A gradient has no single moment of its own, and one
+“representative” arrow would be actively misleading when its slices oppose; the <code class="docutils literal notranslate"><span class="pre">ρM(z)</span></code>
+and <code class="docutils literal notranslate"><span class="pre">θM(z)</span></code> curves remain the truth for graded structures.</p>
+</section>
 </section>
 </section>
 
@@ -485,11 +649,19 @@ calculated curve per measured spin channel when the experiment is polarised.</p>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-magnetism-group">The Magnetism group</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#m-from-a-magnetic-material">ρM from a magnetic material</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-guide-field">The guide field</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetic-samples-from-orso-files">Magnetic samples from ORSO files</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-moment-angle-slider">The moment angle slider</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#switching-the-calculation-engine">Switching the calculation engine</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fitting-m-and-m">Fitting ρM and θM</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#magnetic-depth-profiles">Magnetic depth profiles</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-way-the-moments-point">Which way the moments point</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#on-the-structure-tab">On the Structure tab</a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 
