@@ -12,8 +12,6 @@ import "./Groups" as Groups
 
 EaComponents.SideBarColumn {
 
-//    Groups.ParamNames {}
-
     Groups.Calculator {}
 
     Groups.Minimizer {}

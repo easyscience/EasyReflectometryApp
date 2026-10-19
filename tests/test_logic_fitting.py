@@ -3,6 +3,8 @@ from types import ModuleType
 from types import SimpleNamespace
 
 import numpy as np
+from easyreflectometry.fit_settings import FitSettings
+from easyscience import AvailableMinimizers
 
 from EasyReflectometryApp.Backends.Py.logic import fitting as fitting_module
 from tests.factories import make_experiment
@@ -36,6 +38,31 @@ class FakeMultiFitter:
     def __init__(self, *models):
         self.models = models
         self.easy_science_multi_fitter = FakeEasyScienceMultiFitter()
+        self.fit_datasets = []
+        self.fit_channels = []
+
+    @classmethod
+    def for_experiments(cls, experiments, objective='hybrid'):
+        """Mirror the library factory: one dataset per measured spin channel."""
+        models = []
+        datasets = []
+        channels = []
+        for experiment in experiments:
+            model = experiment.model
+            if not any(model is known for known in models):
+                models.append(model)
+            experiment_channels = getattr(experiment, 'available_channels', None)
+            if experiment_channels is None:
+                datasets.append(experiment)
+                channels.append(None)
+                continue
+            for channel in experiment_channels:
+                datasets.append(experiment[channel])
+                channels.append(channel)
+        fitter = cls(*models)
+        fitter.fit_datasets = datasets
+        fitter.fit_channels = channels
+        return fitter
 
 
 def install_fake_multifitter(monkeypatch):
@@ -53,14 +80,15 @@ def test_prepare_threaded_fit_handles_empty_experiments():
 
     result = logic.prepare_threaded_fit(StubMinimizersLogic())
 
-    assert result == (None, None, None, None, None)
+    assert result is None
     assert logic.fit_error_message == 'No experiments to fit'
     assert logic.fit_finished is True
     assert logic.show_results_dialog is True
 
 
-def test_prepare_threaded_fit_builds_masked_arrays_and_configures_minimizer(monkeypatch):
-    install_fake_multifitter(monkeypatch)
+def test_prepare_threaded_fit_asks_the_project_for_a_run_and_keeps_its_warnings():
+    import warnings
+
     model_a = make_model(name='A')
     model_b = make_model(name='B')
     experiments = {
@@ -68,40 +96,39 @@ def test_prepare_threaded_fit_builds_masked_arrays_and_configures_minimizer(monk
         2: make_experiment('Exp A', model=model_a, x=np.array([1.0, 2.0, 3.0]), y=np.array([4.0, 5.0, 6.0]), ye=np.array([1.0, 0.0, 4.0])),
     }
     project = make_project(experiments=experiments)
+    prepared = SimpleNamespace(core_fitter=SimpleNamespace(minimizer=SimpleNamespace(name='Bumps_simplex')), objective='hybrid')
+    seen = {}
+
+    def prepare_fit():
+        seen['asked'] = True
+        warnings.warn('Applied Mighell substitution to 1 zero-variance point(s) in Exp A during fitting.', UserWarning)
+        return prepared
+
+    project.prepare_fit = prepare_fit
+    experiments[5].include_in_fit = False
     logic = fitting_module.Fitting(project)
-    selected = SimpleNamespace(name='DREAM')
 
-    fitter, x_data, y_data, weights, method = logic.prepare_threaded_fit(StubMinimizersLogic(selected, 1e-4, 321))
-
-    assert fitter.switched_to is selected
-    assert fitter.tolerance == 1e-4
-    assert fitter.max_evaluations == 321
-    assert [values.tolist() for values in x_data] == [[1.0, 3.0], [5.0, 6.0]]
-    assert [values.tolist() for values in y_data] == [[4.0, 6.0], [7.0, 8.0]]
-    assert [values.tolist() for values in weights] == [[1.0, 0.5], [1 / 3, 0.25]]
-    assert method is None
+    # The library decides the scope (the included experiments) and does the zero-variance handling
+    assert logic.prepare_threaded_fit(StubMinimizersLogic()) is prepared
+    assert seen['asked']
+    assert 'Mighell substitution' in logic.fit_notes
+    assert 'Not included in this fit: Exp B.' in logic.fit_notes
 
 
-def test_on_fit_finished_and_fit_properties_cover_multi_and_single_results(monkeypatch):
+def test_on_fit_finished_keeps_the_results_for_success_and_message():
     project = make_project()
     logic = fitting_module.Fitting(project)
-    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 2)
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_finished([
         make_fit_result(success=True, chi2=4.0, n_pars=2, x=[1, 2, 3], reduced_chi2=1.1),
         make_fit_result(success=True, chi2=6.0, n_pars=2, x=[1, 2, 3, 4], reduced_chi2=1.2),
     ])
-
     assert logic.fit_finished is True
     assert logic.fit_success is True
-    assert logic.fit_n_pars == 2
-    assert logic.fit_chi2 == 2.0
 
     logic.on_fit_finished(make_fit_result(success=False, chi2=9.0, n_pars=1, x=[1, 2], reduced_chi2=4.5))
     assert logic.fit_success is False
-    assert logic.fit_n_pars == 1
-    assert logic.fit_chi2 == 4.5
 
 
 def test_last_fit_results_reflects_stored_results():
@@ -121,18 +148,75 @@ def test_last_fit_results_reflects_stored_results():
     assert len(logic.last_fit_results) == 1
 
 
-def test_fit_n_pars_uses_global_free_parameter_count_for_multi_experiment_results(monkeypatch):
+def test_statistics_are_read_from_the_projects_run_record():
     project = make_project()
     logic = fitting_module.Fitting(project)
-    monkeypatch.setattr(fitting_module, 'count_free_parameters', lambda current_project: 3)
+    assert (logic.fit_n_pars, logic.fit_chi2, logic.fit_classical_reduced_chi2, logic.fit_dataset_rows) == (0, 0.0, None, [])
 
-    logic.prepare_for_threaded_fit()
-    logic.on_fit_finished([
-        make_fit_result(success=True, chi2=4.0, n_pars=3, x=[1, 2, 3], reduced_chi2=1.1),
-        make_fit_result(success=True, chi2=6.0, n_pars=3, x=[1, 2, 3, 4], reduced_chi2=1.2),
-    ])
+    project.last_fit = SimpleNamespace(
+        n_free_parameters=2,
+        pooled={'objective_reduced_chi2': 2.0, 'classical_reduced_chi2': None},
+        inputs=((0, 'D2O', None), (1, 'Polarized', 'pp')),
+        per_dataset=(
+            {
+                'objective_n_points': 3,
+                'classical_n_points': 3,
+                'objective_chi2': 4.0,
+                'objective_chi2_per_point': 4 / 3,
+                'share_of_objective': 0.4,
+            },
+            {
+                'objective_n_points': 4,
+                'classical_n_points': 5,
+                'objective_chi2': 6.0,
+                'objective_chi2_per_point': 1.5,
+                'share_of_objective': 0.6,
+            },
+        ),
+    )
 
-    assert logic.fit_n_pars == 3
+    assert (logic.fit_n_pars, logic.fit_chi2, logic.fit_classical_reduced_chi2) == (2, 2.0, None)
+    assert [row['name'] for row in logic.fit_dataset_rows] == ['D2O', 'Polarized (pp)']
+    assert [row['share'] for row in logic.fit_dataset_rows] == [0.4, 0.6]
+    assert [(row['points'], row['measuredPoints']) for row in logic.fit_dataset_rows] == [(3, 3), (4, 5)]
+
+
+def test_a_completed_run_is_recorded_once():
+    project = make_project()
+    recorded = []
+    project.record_fit = lambda prepared, results: recorded.append((prepared, results))
+    logic = fitting_module.Fitting(project)
+    logic._prepared = 'prepared'
+
+    logic.record_on_project(['result'])
+    logic.record_on_project(['again'])  # the prepared run is used up
+
+    assert recorded == [('prepared', ['result'])]
+
+
+def test_a_failure_or_a_sampling_run_cannot_be_recorded_against_a_previous_fit():
+    project = make_project()
+    recorded = []
+    project.record_fit = lambda prepared, results: recorded.append((prepared, results))
+    logic = fitting_module.Fitting(project)
+
+    logic._prepared = 'prepared'
+    logic.on_fit_failed('boom')
+    logic.record_on_project(['result'])
+    logic._prepared = 'prepared'
+    logic.prepare_for_threaded_sample()
+    logic.record_on_project(['result'])
+
+    assert recorded == []
+
+
+def test_ordered_experiments_sorts_by_key_only():
+    project = make_project()
+    logic = fitting_module.Fitting(project)
+    first, second = object(), object()
+    project._experiments.update({1: second, 0: first})
+
+    assert logic._ordered_experiments() == [first, second]
 
 
 def test_fit_progress_updates_transient_state_and_message():
@@ -221,24 +305,6 @@ def test_fit_failure_and_cancellation_state_transitions():
     assert logic.fit_cancelled is False
 
 
-def test_start_stop_handles_success_and_fiterror():
-    project = make_project(models=[object()])
-    project.fitter = SimpleNamespace(fit_single_data_set_1d=lambda exp_data: make_fit_result(success=True, chi2=1.7, reduced_chi2=1.7))
-    logic = fitting_module.Fitting(project)
-
-    logic.start_stop()
-    assert logic.fit_finished is True
-    assert logic.show_results_dialog is True
-    assert logic.fit_chi2 == 1.7
-
-    def _raise_fit_error(exp_data):
-        raise fitting_module.FitError('fit failed')
-
-    project.fitter = SimpleNamespace(fit_single_data_set_1d=_raise_fit_error)
-    logic.start_stop()
-    assert 'fit failed' in logic.fit_error_message
-
-
 # ===================================================================
 # Bayesian sampling preparation
 # ===================================================================
@@ -249,13 +315,13 @@ def test_prepare_threaded_sample_handles_empty_experiments():
 
     result = logic.prepare_threaded_sample(StubMinimizersLogic())
 
-    assert result == (None, None)
+    assert result is None
     assert logic.fit_error_message == 'No experiments to sample'
     assert logic.fit_finished is True
     assert logic.show_results_dialog is True
 
 
-def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
+def test_prepare_threaded_sample_asks_the_project_for_an_experiment_fitter(monkeypatch):
     install_fake_multifitter(monkeypatch)
     model_a = make_model(name='A')
     experiments = {
@@ -263,122 +329,61 @@ def test_prepare_threaded_sample_builds_multifitter_and_datagroup(monkeypatch):
                            x=np.array([1.0, 2.0]), y=np.array([4.0, 5.0]), ye=np.array([0.1, 0.2])),
     }
     project = make_project(experiments=experiments)
+    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
-    # Mock the datagroup collection to avoid scipp dependency
-    monkeypatch.setattr(logic, 'collect_all_experiments_datagroup', lambda: 'fake-data-group')
+    multi_fitter = logic.prepare_threaded_sample(StubMinimizersLogic())
 
-    multi_fitter, data_group = logic.prepare_threaded_sample(StubMinimizersLogic())
-
-    assert multi_fitter is not None
+    # Built by `Project.prepare_sample` over the experiments themselves, so each
+    # dataset is sampled with its own resolution (no hand-built DataGroup).
+    assert ('prepare_sample', [experiments[0]]) in project.calls
     assert multi_fitter.models == (model_a,)
-    assert data_group == 'fake-data-group'
+    assert multi_fitter.fit_datasets == [experiments[0]]
+    # Sampled with a snapshot of the project's settings, taken before the worker starts
+    assert multi_fitter.settings == project.fit_settings
+    project.fit_settings.minimizer = AvailableMinimizers.LMFit_leastsq
+    project.fit_settings.mode = 'minimize'
+    project.fit_settings.objective = 'mighell'
+    project.fit_settings.engine_options['LMFit_leastsq'] = {'epsfcn': 1e-3}
+    assert multi_fitter.settings == FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
 
 
-def test_collect_all_experiments_datagroup_builds_sc_structs(monkeypatch):
-    # Fake scipp to avoid import issues
-    import numpy as np
+def test_sampling_covers_the_included_experiments_only(monkeypatch):
+    install_fake_multifitter(monkeypatch)
+    model_a, model_b = make_model(name='A'), make_model(name='B')
+    experiments = {0: make_experiment('Exp A', model=model_a), 1: make_experiment('Exp B', model=model_b)}
+    project = make_project(experiments=experiments)
+    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    logic = fitting_module.Fitting(project)
 
-    # We need to make scipp available; we'll mock the import within the method
-    model = make_model(name='M1')
-    experiments = {
-        0: make_experiment('Exp 1', model=model,
-                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([0.01, 0.04])),
-    }
+    experiments[0].include_in_fit = False
+    multi_fitter = logic.prepare_threaded_sample(StubMinimizersLogic())
+    assert multi_fitter.models == (model_b,)
+    assert multi_fitter.fit_datasets == [experiments[1]]
+
+    experiments[1].include_in_fit = False
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
+    assert 'tick Fit' in logic.fit_error_message
+
+    experiments[1].include_in_fit = True
+    experiments[1].model = None
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
+    assert 'no model' in logic.fit_error_message
+
+
+def test_a_project_refusal_is_reported_not_raised(monkeypatch):
+    install_fake_multifitter(monkeypatch)
+    experiments = {0: make_experiment('Exp A', model=make_model(name='A'))}
     project = make_project(experiments=experiments)
     logic = fitting_module.Fitting(project)
 
-    # Create a minimal sc.DataGroup stand-in
-    class FakeSCUnit:
-        def __init__(self, unit_str):
-            self._str = unit_str
-        def __eq__(self, other):
-            return isinstance(other, FakeSCUnit) and other._str == self._str
+    def refuse(experiments, **kwargs):
+        raise ValueError("'Exp A' cannot be sampled: no model of this project is assigned.")
 
-    class FakeSCArray:
-        _registry = []
-        def __init__(self, *, dims, values, variances=None, unit=None):
-            self.dims = dims
-            self.values = values
-            self.variances = variances
-            self.unit = unit
-            FakeSCArray._registry.append(self)
+    monkeypatch.setattr(project, 'prepare_sample', refuse)
 
-    class FakeSCDataGroup(dict):
-        def __init__(self, data=None, coords=None, attrs=None):
-            super().__init__()
-            self.data = data or {}
-            self.coords = coords or {}
-            self.attrs = attrs or {}
-        def __repr__(self):
-            return f'DataGroup({dict(self.data)})'
-
-    FakeSCArray._registry = []
-
-    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
-    monkeypatch.setattr('scipp.array', FakeSCArray)
-    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
-
-    dg = logic.collect_all_experiments_datagroup()
-
-    assert dg.coords.keys() == {'Qz_0'}
-    assert dg.data.keys() == {'R_0'}
-
-    coord = dg.coords['Qz_0']
-    assert coord.dims == ['Qz_0']
-    assert list(coord.values) == [1.0, 2.0]
-    # mcmc_sample only reads the coordinate's values; no variances are attached
-    # (xe may be empty for 2/3-column data files, which scipp would reject).
-    assert coord.variances is None
-    assert coord.unit == FakeSCUnit('1/angstrom')
-
-    measurement = dg.data['R_0']
-    assert measurement.dims == ['Qz_0']
-    assert list(measurement.values) == [0.1, 0.2]
-    assert list(measurement.variances) == [0.01, 0.04]
-
-
-def test_collect_all_experiments_datagroup_missing_ye_falls_back_to_zero_variance(monkeypatch):
-    """Data files without an uncertainty column yield empty/absent ye; the
-    DataGroup must still build (with zero variances) instead of crashing in
-    scipp, so mcmc_sample can report the missing uncertainties itself."""
-    import numpy as np
-
-    model = make_model(name='M1')
-    experiments = {
-        0: make_experiment('Exp 1', model=model,
-                           x=np.array([1.0, 2.0]), y=np.array([0.1, 0.2]), ye=np.array([])),
-    }
-    project = make_project(experiments=experiments)
-    logic = fitting_module.Fitting(project)
-
-    class FakeSCUnit:
-        def __init__(self, unit_str):
-            self._str = unit_str
-
-    class FakeSCArray:
-        def __init__(self, *, dims, values, variances=None, unit=None):
-            if variances is not None and np.shape(variances) != np.shape(values):
-                raise ValueError("The shapes of 'values' and 'variances' differ")
-            self.dims = dims
-            self.values = values
-            self.variances = variances
-            self.unit = unit
-
-    class FakeSCDataGroup(dict):
-        def __init__(self, data=None, coords=None, attrs=None):
-            super().__init__()
-            self.data = data or {}
-            self.coords = coords or {}
-            self.attrs = attrs or {}
-
-    monkeypatch.setattr('scipp.Unit', FakeSCUnit)
-    monkeypatch.setattr('scipp.array', FakeSCArray)
-    monkeypatch.setattr('scipp.DataGroup', FakeSCDataGroup)
-
-    dg = logic.collect_all_experiments_datagroup()
-
-    assert list(dg.data['R_0'].variances) == [0.0, 0.0]
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
+    assert 'cannot be sampled' in logic.fit_error_message
 
 
 def test_prepare_for_threaded_sample_sets_flags_and_message():

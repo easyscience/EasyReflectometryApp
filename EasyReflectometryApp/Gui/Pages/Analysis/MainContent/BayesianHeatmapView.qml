@@ -49,12 +49,9 @@ Rectangle {
                 onCurrentIndexChanged: updateHeatmap()
             }
 
-            EaElements.Button {
-                text: qsTr("Save")
+            BayesianSavePlotButton {
+                sourceUrl: Globals.BackendWrapper.bayesianHeatmapPlotUrl
                 enabled: Globals.BackendWrapper.bayesianHeatmapPlotUrl !== ''
-                onClicked: Globals.BackendWrapper.bayesianSavePlot(
-                    Globals.BackendWrapper.bayesianHeatmapPlotUrl
-                )
             }
         }
 

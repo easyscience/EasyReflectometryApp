@@ -1,0 +1,227 @@
+import numpy as np
+from easyreflectometry import Project as ProjectLib
+from easyreflectometry.model.model import COLORS
+from easyreflectometry.project import GUIDE_FIELD_ANGLE
+from easyreflectometry.project import MAGNETIC_MOMENT_FLOOR_FRACTION
+from easyreflectometry.special.calculations import field_frame_components
+
+# An assembly whose expanded box count would exceed this collapses to its repeat unit
+MAX_EXPANDED_BOXES_PER_ASSEMBLY = 12
+
+
+def flatten(project_lib: ProjectLib) -> tuple[list[dict], list[dict], float]:
+    """Flatten the current model's sample into drawable boxes for the Structure view.
+
+    Returns (structure, legend, total_thickness):
+    - structure: one dict per drawn box, top to bottom, with the keys
+        label            layer name, or assembly name for a gradient
+        material         material name, or 'front -> back' for a gradient
+        color            box color; color_end is the second color of a gradient, else ''
+        sld, isld        real/imaginary SLD of the material, preformatted to 2 decimals
+        thickness        layer thickness in Angstrom, as a float
+        roughness        upper roughness in Angstrom, preformatted to 1 decimal
+        assembly         assembly name, and assembly_index/layer_index to address the layer
+        kind             'layer' | 'gradient' | 'superphase' | 'subphase'
+        repetitions      n for a collapsed repeating multilayer, else 1
+      A magnetic layer carries, in addition, `magnetic` (True), `has_moment` and the
+      keys of `magnetic_vector_for_layer` (rho_m, theta_m, phi_param, phi, m, m_par,
+      m_perp). Every other box omits them entirely, so the view gates on
+      `magnetic === true` and a non-magnetic project's boxes are exactly as before.
+      Gradient boxes never carry them: a gradient has no assembly-level moment.
+    - legend: distinct {label, color} pairs in stack order
+    - total_thickness: physical total in Angstrom (collapsed repeats counted n times, caps excluded)
+    """
+    model_index = project_lib.current_model_index
+    if model_index is None or not 0 <= model_index < len(project_lib._models):
+        return [], [], 0.0
+    model = project_lib._models[model_index]
+    sample = model.sample
+    guide_field_angle = float(model.guide_field_angle.value)
+
+    colors = _ColorMap(project_lib._materials)
+    moment_floor = _moment_floor(sample)
+    boxes = []
+    total_thickness = 0.0
+
+    for assembly_index, assembly in enumerate(sample):
+        if assembly.type == 'Gradient-layer':
+            boxes.append(_gradient_box(assembly, assembly_index, colors))
+            total_thickness += boxes[-1]['thickness']
+            continue
+
+        repetitions = 1
+        if assembly.type == 'Repeating Multi-layer':
+            repetitions = int(assembly.repetitions.value)
+        collapsed = repetitions * len(assembly.layers) > MAX_EXPANDED_BOXES_PER_ASSEMBLY
+        total_thickness += repetitions * sum(layer.thickness.value for layer in assembly.layers)
+
+        for _ in range(1 if collapsed else repetitions):
+            for layer_index, layer in enumerate(assembly.layers):
+                boxes.append(_layer_box(layer, assembly, assembly_index, layer_index, colors, moment_floor, guide_field_angle))
+        if collapsed:
+            boxes[-len(assembly.layers)]['repetitions'] = repetitions
+
+    # The first/last drawn layers are the semi-infinite superphase/subphase caps and are
+    # excluded from the total. Only a plain layer is retagged: a gradient assembly at either
+    # end keeps its own kind (and its thickness), and a lone box is a superphase only.
+    if boxes:
+        for box, kind in ((boxes[0], 'superphase'), (boxes[-1], 'subphase')):
+            if box['kind'] == 'layer':
+                box['kind'] = kind
+                total_thickness -= box['thickness']
+
+    legend = []
+    seen = set()
+    for box in boxes:
+        if box['material'] not in seen:
+            seen.add(box['material'])
+            legend.append({'label': box['material'], 'color': box['color']})
+
+    return boxes, legend, total_thickness
+
+
+def magnetic_vector_for_layer(magnetism, guide_field_angle: float = GUIDE_FIELD_ANGLE) -> dict[str, float]:
+    """The in-plane moment of a :class:`LayerMagnetism`.
+
+    Arrows are drawn in a fixed frame in the sample plane whose zero is
+    ``theta_m = GUIDE_FIELD_ANGLE``: the direction of the default, in-plane
+    guide field H, which publications quote angles from. refl1d also allows a
+    negative ``rho_m``, which is the same physical moment reversed, so the
+    parameter angle and the direction the moment actually points are two
+    different things and both are reported:
+
+    - ``phi_param``: angle in that frame of the parameter as written, sign ignored;
+    - ``phi``: direction the moment physically points (``phi_param`` turned by
+      180 degrees when ``rho_m`` is negative) - what every arrow draws;
+    - ``m``: ``abs(rho_m)``, the physical magnitude;
+    - ``m_par`` / ``m_perp``: the signed part along the model's field and the
+      size of the part across it, which the non-spin-flip and spin-flip
+      channels mostly see (:func:`field_frame_components`).
+
+    ``rho_m`` and ``theta_m`` are passed through so a tooltip can show the
+    signed parameters the user edits next to the direction drawn.
+
+    All angles are in degrees.
+    """
+    rho_m = float(magnetism.rho_m.value)
+    theta_m = float(magnetism.theta_m.value)
+    phi_param = (theta_m - GUIDE_FIELD_ANGLE) % 360.0
+    phi = phi_param if rho_m >= 0 else (phi_param + 180.0) % 360.0
+    m_par, m_perp = field_frame_components(rho_m, theta_m, guide_field_angle)
+    return {
+        'rho_m': rho_m,
+        'theta_m': theta_m,
+        'phi_param': phi_param,
+        'phi': phi,
+        'm': abs(rho_m),
+        'm_par': float(m_par),
+        'm_perp': float(m_perp),
+    }
+
+
+def guide_field_reference(guide_field_angle: float) -> dict:
+    """Where the field reference points in the arrows' frame.
+
+    ``in_plane`` is False when the field has a component along the surface
+    normal (refl1d tilts it about the beam axis; 270 and 90 are in the
+    plane, opposite ways). ``phi`` is the in-plane direction of H: 0 along
+    the frame's zero, 180 reversed.
+    """
+    tilt = np.radians(guide_field_angle)
+    return {
+        'in_plane': bool(abs(np.cos(tilt)) <= 1e-6),
+        'phi': 0.0 if np.sin(tilt) < 0 else 180.0,
+    }
+
+
+def _value(quantity) -> float:
+    # Material.sld is a Parameter, but MaterialSolvated.sld is a computed plain float
+    return float(getattr(quantity, 'value', quantity))
+
+
+def _moment_floor(sample) -> float:
+    """Below this |rho_m| a layer's moment has no direction worth drawing.
+
+    The same relative floor that masks the theta_m depth curve, so a box never
+    shows an arrow while the angle curve beside it is hidden.
+    """
+    moments = [
+        abs(float(layer.magnetism.rho_m.value))
+        for assembly in sample
+        for layer in assembly.layers
+        if getattr(layer, 'magnetism', None) is not None
+    ]
+    return MAGNETIC_MOMENT_FLOOR_FRACTION * max(moments, default=0.0)
+
+
+def _layer_box(
+    layer,
+    assembly,
+    assembly_index: int,
+    layer_index: int,
+    colors: '_ColorMap',
+    moment_floor: float,
+    guide_field_angle: float,
+) -> dict:
+    material = layer.material
+    box = {
+        'label': layer.name,
+        'material': material.name,
+        'color': colors.get(material),
+        'color_end': '',
+        'sld': f'{_value(material.sld):.2f}',
+        'isld': f'{_value(material.isld):.2f}',
+        'thickness': float(layer.thickness.value),
+        'roughness': f'{layer.roughness.value:.1f}',
+        'assembly': assembly.name,
+        'assembly_index': assembly_index,
+        'layer_index': layer_index,
+        'kind': 'layer',
+        'repetitions': 1,
+    }
+    magnetism = getattr(layer, 'magnetism', None)
+    if magnetism is not None:
+        vector = magnetic_vector_for_layer(magnetism, guide_field_angle)
+        box.update(vector)
+        box['magnetic'] = True
+        box['has_moment'] = vector['m'] > moment_floor
+    return box
+
+
+def _gradient_box(assembly, assembly_index: int, colors: '_ColorMap') -> dict:
+    # A gradient assembly is drawn as one box colored front->back; its internal
+    # discretization slices use anonymous materials and are never drawn.
+    front = assembly.front_material
+    back = assembly.back_material
+    return {
+        'label': assembly.name,
+        'material': f'{front.name} → {back.name}',
+        'color': colors.get(front),
+        'color_end': colors.get(back),
+        'sld': f'{_value(front.sld):.2f}',
+        'isld': f'{_value(front.isld):.2f}',
+        'thickness': float(assembly.thickness),
+        'roughness': f'{assembly.front_layer.roughness.value:.1f}',
+        'assembly': assembly.name,
+        'assembly_index': assembly_index,
+        'layer_index': 0,
+        'kind': 'gradient',
+        'repetitions': 1,
+    }
+
+
+class _ColorMap:
+    """Material name -> palette color; project materials by table position,
+    unknown (ad-hoc) materials by first-seen order. Solvated materials are
+    keyed on their inner dry material so the solvent does not change the color."""
+
+    def __init__(self, materials):
+        self._by_name = {material.name: COLORS[i % len(COLORS)] for i, material in enumerate(materials)}
+        self._next_index = len(materials)
+
+    def get(self, material) -> str:
+        name = getattr(material, 'material', material).name
+        if name not in self._by_name:
+            self._by_name[name] = COLORS[self._next_index % len(COLORS)]
+            self._next_index += 1
+        return self._by_name[name]

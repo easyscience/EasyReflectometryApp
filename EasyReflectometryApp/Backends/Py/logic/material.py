@@ -1,7 +1,54 @@
+import logging
 from typing import Union
 
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import MaterialCollection
+from easyreflectometry.sample import MaterialDensity
+from easyreflectometry.sample import MaterialMagnetic
+
+logger = logging.getLogger(__name__)
+
+
+def _is_density_material(material) -> bool:
+    """Density materials (``MaterialDensity``) expose the ``sld_coupled``
+    toggle; duck-typed so test fakes and future material types work."""
+    return hasattr(material, 'sld_coupled')
+
+
+def _parameter_is_writable(parameter) -> bool:
+    """A coupled density material derives sld/isld from density — writing to
+    the dependent parameter would raise, so the setters refuse instead.
+    Checked per-parameter (not just `sld`): the lib guards sld and isld
+    individually since they can disagree mid-toggle."""
+    return getattr(parameter, 'independent', True)
+
+
+# A density material's fittable input knobs; cleared (free = False) when the
+# material's sld/isld are decoupled from them so an already-ticked knob
+# doesn't keep entering the fit after its row goes inactive in the GUI.
+# molecular_weight is deliberately absent: it is a DescriptorNumber (a
+# formula constant, never fittable) and has no `free` flag.
+_DENSITY_KNOB_NAMES = ('density', 'scattering_length_real', 'scattering_length_imag')
+
+
+def inactive_density_knobs(material, drives_magnetism: bool = False) -> tuple[str, ...]:
+    """The density knobs that stop affecting anything when the nuclear SLD
+    is decoupled. A magnetic material's density keeps driving its rho_m, but
+    only while some layer takes that rho_m (`drives_magnetism`)."""
+    if drives_magnetism and getattr(material, 'rho_m', None) is not None:
+        return tuple(name for name in _DENSITY_KNOB_NAMES if name != 'density')
+    return _DENSITY_KNOB_NAMES
+
+
+def coupled_material_ids(models) -> set[int]:
+    """Ids of the materials some layer takes its rho_m from (``rho_m_coupled``)."""
+    return {
+        id(layer.material)
+        for model in models or []
+        for assembly in model.sample
+        for layer in assembly.layers
+        if getattr(layer, 'rho_m_coupled', False)
+    }
 
 
 class Material:
@@ -36,7 +83,19 @@ class Material:
         self._materials.pop(int(value))
 
     def add_new(self) -> None:
-        self._materials.add_material()
+        # A material added from the GUI is a density material, so that the Material editor's
+        # detail panel (formula, density, SLD coupling) applies to it: that panel is shown only
+        # for `kind == 'density'`, and before this the GUI could not produce such a material at
+        # all — they arrived only through an ORSO sample load. Nothing is lost by the default:
+        # unchecking the coupling hands the SLD back for direct entry and fitting, which is what
+        # a plain `Material` offers. The library's defaults (Si at 2.33 g/cm3) also start the
+        # material at a physical SLD rather than the zero a plain `Material` would carry.
+        self._materials.add_material(MaterialDensity(name='Material added'))
+
+    def add_new_magnetic(self) -> None:
+        # Bulk iron (the MaterialMagnetic defaults): a physical starting point,
+        # like the Si of `add_new`. Layers take its rho_m once coupled to it.
+        self._materials.add_material(MaterialMagnetic(name='Magnetic material added'))
 
     def duplicate_selected(self) -> None:
         self._materials.duplicate_material(self.index)
@@ -66,36 +125,139 @@ class Material:
         return False
 
     def set_sld_at_current_index(self, new_value: float) -> bool:
-        if self._materials[self.index].sld.value != new_value:
-            self._materials[self.index].sld.value = new_value
+        material = self._materials[self.index]
+        if not _parameter_is_writable(material.sld):
+            return False
+        if material.sld.value != new_value:
+            material.sld.value = new_value
             return True
         return False
 
     def set_sld_at_index(self, index: int, new_value: float) -> bool:
         if not (0 <= index < len(self._materials)):
             return False
-        if self._materials[index].sld.value != new_value:
-            self._materials[index].sld.value = new_value
+        material = self._materials[index]
+        if not _parameter_is_writable(material.sld):
+            return False
+        if material.sld.value != new_value:
+            material.sld.value = new_value
             return True
         return False
 
     def set_isld_at_current_index(self, new_value: float) -> bool:
-        if self._materials[self.index].isld.value != new_value:
-            self._materials[self.index].isld.value = new_value
+        material = self._materials[self.index]
+        if not _parameter_is_writable(material.isld):
+            return False
+        if material.isld.value != new_value:
+            material.isld.value = new_value
             return True
         return False
 
     def set_isld_at_index(self, index: int, new_value: float) -> bool:
         if not (0 <= index < len(self._materials)):
             return False
-        if self._materials[index].isld.value != new_value:
-            self._materials[index].isld.value = new_value
+        material = self._materials[index]
+        if not _parameter_is_writable(material.isld):
+            return False
+        if material.isld.value != new_value:
+            material.isld.value = new_value
             return True
         return False
+
+    def set_sld_coupled_at_index(self, index: int, coupled: bool) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        material = self._materials[index]
+        if not _is_density_material(material):
+            return False
+        if bool(material.sld_coupled) == bool(coupled):
+            return False
+        material.sld_coupled = bool(coupled)
+        if not coupled:
+            # The GUI greys these rows out (kind: 'inactive') but that is
+            # display-only — the fitter reads Parameter.free, so a knob
+            # ticked before decoupling would otherwise keep entering the
+            # minimizer after it stops affecting the reflectivity.
+            drives_magnetism = id(material) in coupled_material_ids(getattr(self._project_lib, '_models', None))
+            for knob_name in inactive_density_knobs(material, drives_magnetism):
+                getattr(material, knob_name).free = False
+        # The project's own rule for magnetic materials that act on nothing.
+        self._project_lib._sync_parameter_states()
+        return True
+
+    def set_magnetic_moment_at_index(self, index: int, new_value: float) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        moment = getattr(self._materials[index], 'magnetic_moment', None)
+        if moment is None:
+            return False
+        try:
+            value = float(new_value)
+        except (TypeError, ValueError):
+            return False
+        if moment.value == value:
+            return False
+        try:
+            moment.value = value
+        except Exception:
+            logger.warning('Rejected out-of-bounds magnetic moment %r', value)
+            return False
+        return True
+
+    def set_formula_at_index(self, index: int, formula: str) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        material = self._materials[index]
+        if not _is_density_material(material):
+            return False
+        formula = formula.strip()
+        if not formula or material.chemical_structure == formula:
+            return False
+        try:
+            material.chemical_structure = formula
+        except Exception:
+            logger.warning('Rejected invalid chemical formula %r', formula)
+            return False
+        return True
+
+    def set_density_at_index(self, index: int, new_value: float) -> bool:
+        if not (0 <= index < len(self._materials)):
+            return False
+        material = self._materials[index]
+        if not _is_density_material(material):
+            return False
+        try:
+            value = float(new_value)
+        except (TypeError, ValueError):
+            return False
+        if material.density.value == value:
+            return False
+        try:
+            material.density.value = value
+        except Exception:
+            logger.warning('Rejected out-of-bounds density %r', value)
+            return False
+        return True
 
 
 def _from_materials_collection_to_list_of_dicts(materials_collection: MaterialCollection) -> list[dict[str, str]]:
     materials_list = []
     for material in materials_collection:
-        materials_list.append({'label': material.name, 'sld': str(material.sld.value), 'isld': str(material.isld.value)})
+        is_density = _is_density_material(material)
+        magnetic = getattr(material, 'magnetic_moment', None) is not None
+        materials_list.append(
+            {
+                'label': material.name,
+                'sld': str(material.sld.value),
+                'isld': str(material.isld.value),
+                'kind': 'density' if is_density else 'sld',
+                'formula': material.chemical_structure if is_density else '',
+                'density': str(material.density.value) if is_density else '',
+                'sld_coupled': bool(material.sld_coupled) if is_density else True,
+                'number_density': f'{material.number_density:.5f}' if is_density else '',
+                'magnetic': magnetic,
+                'magnetic_moment': str(material.magnetic_moment.value) if magnetic else '',
+                'rho_m': f'{material.rho_m.value:.3f}' if magnetic else '',
+            }
+        )
     return materials_list

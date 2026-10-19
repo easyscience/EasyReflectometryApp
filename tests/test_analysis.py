@@ -1,10 +1,13 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 
 from EasyReflectometryApp.Backends.Py import analysis as analysis_module
+from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
+from EasyReflectometryApp.Backends.Py.logic.parameters import Parameters as ParametersLogic
 from tests.factories import make_project
 
 
@@ -43,6 +46,21 @@ class StubMinimizersLogic:
 
     def is_bayesian_selected(self):
         return False
+
+    def requires_finite_bounds(self):
+        return False
+
+
+def _prepared(core_fitter='fake-fitter'):
+    """A prepared-run stand-in, as `Project.prepare_fit` returns it."""
+    return SimpleNamespace(
+        core_fitter=core_fitter,
+        x=['x'],
+        y=['y'],
+        weights=['w'],
+        call_kwargs=lambda **kwargs: dict(kwargs),
+        finalize=lambda results: [{'classical_chi2': 1.0}] * len(results),
+    )
 
 
 class StubWorker(QObject):
@@ -93,9 +111,7 @@ def _make_analysis(monkeypatch):
 def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore_application):
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
     fitting_changed = {'count': 0}
     analysis.fittingChanged.connect(
         lambda: fitting_changed.__setitem__('count', fitting_changed['count'] + 1)
@@ -116,7 +132,8 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     )
 
     assert worker.method_name == 'fit'
-    assert worker.kwargs == {'weights': ['w'], 'method': None}
+    assert worker.fitter == 'fake-fitter'
+    assert worker.kwargs == {'weights': ['w']}
     assert worker.start_calls == 1
     assert analysis.fittingRunning is True
     assert analysis.fitIteration == 9
@@ -135,9 +152,7 @@ def test_on_stop_fit_requests_worker_stop_and_keeps_ui_locked_until_thread_exits
     non-abortable minimizer is still mutating the shared parameters."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     worker = StubWorker.instances[-1]
@@ -162,9 +177,7 @@ def test_stale_worker_signals_are_ignored_after_new_fit_starts(monkeypatch, qcor
     """Late signals from a superseded worker must not clobber the current run."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_fit = MagicMock(
-        return_value=('fake-fitter', ['x'], ['y'], ['w'], None)
-    )
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     stale_worker = StubWorker.instances[-1]
@@ -193,6 +206,96 @@ def test_fitting_start_stop_emits_stop_signal_when_fit_is_running(monkeypatch, q
     assert received['count'] == 1
 
 
+def _param(name, min_value, max_value, fit=True, obj=None):
+    return {'name': name, 'min': min_value, 'max': max_value, 'fit': fit, 'object': obj or object()}
+
+
+def _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_leastsq'):
+    analysis = _make_analysis(monkeypatch)
+    # The checks read every parameter, not the table's filtered rows
+    analysis._parameters_logic.all_parameters = lambda: parameters
+    analysis._minimizers_logic.minimizers_available = lambda: [minimizer]
+    analysis._minimizers_logic.minimizer_current_index = lambda: 0
+    # The engine decides, not the combo label (see logic/minimizers.py)
+    analysis._minimizers_logic.requires_finite_bounds = lambda: minimizer == 'LMFit_differential_evolution'
+    analysis._minimizers_logic.selected_minimizer_enum = lambda: SimpleNamespace(name=minimizer)
+    return analysis
+
+
+def test_prefit_errors_empty_for_valid_parameters(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 0.0, 1.0), _param('b', 5.0, 5.0, fit=False)])
+
+    assert analysis._prefit_errors() == []
+
+
+def test_prefit_errors_reports_every_parameter_with_invalid_bounds(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 1.0, 1.0), _param('b', 2.0, 0.0)])
+
+    errors = analysis._prefit_errors()
+
+    assert len(errors) == 2
+    assert "'a'" in errors[0]
+    assert "'b'" in errors[1]
+
+
+def test_prefit_errors_rejects_infinite_bounds_for_differential_evolution(monkeypatch, qcore_application):
+    parameters = [_param('a', float('-inf'), 1.0), _param('b', 0.0, float('inf')), _param('c', 0.0, 1.0)]
+    analysis = _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_differential_evolution')
+
+    errors = analysis._prefit_errors()
+
+    assert len(errors) == 1
+    assert '\na,\nb\n' in errors[0]
+
+
+def test_prefit_errors_allows_infinite_bounds_for_other_minimizers(monkeypatch, qcore_application):
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', float('-inf'), float('inf'))])
+
+    assert analysis._prefit_errors() == []
+
+
+def test_finite_bounds_checks_ignore_the_table_filters(monkeypatch, qcore_application):
+    shared = object()
+    parameters = [
+        _param('a', 0.0, float('inf')),
+        # One object listed once per model (a shared layer): one parameter
+        _param('M1 b', float('-inf'), 1.0, obj=shared),
+        _param('M2 b', float('-inf'), 1.0, obj=shared),
+        _param('fixed', float('-inf'), float('inf'), fit=False),
+    ]
+    analysis = _make_analysis_for_prefit(monkeypatch, parameters, minimizer='LMFit_differential_evolution')
+    # The real table filters, over the parameters above
+    table = ParametersLogic(analysis._project_lib)
+    table.all_parameters = lambda: parameters
+    analysis._parameters_logic = table
+
+    for name_filter, variability, rows in (('', 'all', 4), ('', 'fixed', 1), ('zzz', 'free', 0)):
+        table.set_name_filter_criteria(name_filter)
+        table.set_variability_filter_criteria(variability)
+        analysis._chached_parameters = None
+        assert len(analysis.fitableParameters) == rows
+
+        assert analysis.unboundedFreeParametersCount == 2
+        errors = analysis._prefit_errors()
+        assert len(errors) == 1
+        assert '\na,\nM1 b\n' in errors[0]
+
+
+def test_fitting_start_stop_emits_prefit_check_failed_and_does_not_start(monkeypatch, qcore_application):
+    StubWorker.instances = []
+    analysis = _make_analysis_for_prefit(monkeypatch, [_param('a', 1.0, 0.0)])
+    analysis._start_threaded_fit = MagicMock()
+    received = []
+    analysis.prefitCheckFailed.connect(lambda title, message: received.append((title, message)))
+
+    analysis.fittingStartStop()
+
+    assert len(received) == 1
+    assert received[0][0] == 'Invalid Parameter Bounds'
+    assert "'a'" in received[0][1]
+    analysis._start_threaded_fit.assert_not_called()
+
+
 def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_application):
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
@@ -212,27 +315,26 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
 
 
-def test_on_fit_finished_records_results_on_project_fitter(monkeypatch, qcore_application):
-    """The canonical project fitter must learn the fit results.
-
-    Otherwise ``project.fitter.reduced_chi`` stays None and the HTML summary's
-    goodness-of-fit shows 'N/A' even though the Analysis section has a value.
-    """
+def test_a_completed_run_is_recorded_and_a_failed_one_is_not(monkeypatch, qcore_application):
+    """The project's run record is what the results dialog and the HTML summary read: a
+    failed or cancelled run must not replace the description of the last completed one."""
     from tests.factories import FakeFitResult
 
     analysis = _make_analysis(monkeypatch)
-    analysis._fitting_logic = Fitting(make_project())
+    project = make_project()
+    recorded = []
+    project.record_fit = lambda prepared, results: recorded.append((prepared, results))
+    analysis._fitting_logic = Fitting(project)
     analysis._clearCacheAndEmitParametersChanged = MagicMock()
-
-    fitter = MagicMock()
-    analysis._project_lib.fitter = fitter
+    prepared = _prepared()
+    analysis._fitting_logic._prepared = prepared
 
     results = [FakeFitResult(chi2=20.0, n_pars=4, x=list(range(14)))]
     analysis._on_fit_finished(results)
+    analysis._fitting_logic._prepared = _prepared()
+    analysis._on_fit_failed('boom')
 
-    fitter.record_fit_results.assert_called_once()
-    (recorded,) = fitter.record_fit_results.call_args.args
-    assert recorded == results
+    assert recorded == [(prepared, results)]
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +367,7 @@ def test_start_threaded_sample_forwards_bayesian_kwargs(monkeypatch, qcore_appli
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
     # Set non-default Bayesian hyper-params
     analysis._bayesian_logic.samples = 5000
@@ -278,7 +380,7 @@ def test_start_threaded_sample_forwards_bayesian_kwargs(monkeypatch, qcore_appli
 
     worker = StubWorker.instances[-1]
     assert worker.method_name == 'mcmc_sample'
-    assert worker.args == ('data-group',)
+    assert worker.args == ()  # no DataGroup: the fitter samples its own experiments
     assert worker.kwargs == {
         'samples': 5000,
         'burn': 1000,
@@ -295,7 +397,7 @@ def test_start_threaded_sample_uses_defaults_when_not_set(monkeypatch, qcore_app
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
 
     analysis._start_threaded_sample()
@@ -315,7 +417,7 @@ def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_a
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
 
     analysis._start_threaded_sample()
@@ -338,11 +440,11 @@ def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcor
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
-        return_value=('multi-fitter', 'data-group')
+        return_value='multi-fitter'
     )
 
-    # Mock prefitCheck to avoid complex real checks
-    analysis.prefitCheck = MagicMock(return_value=True)
+    # Mock the pre-fit check to avoid complex real checks
+    analysis._prefit_errors = MagicMock(return_value=[])
 
     # fittingStartStop should detect Bayesian mode and dispatch to sample
     analysis.fittingStartStop()
@@ -360,11 +462,11 @@ def test_start_threaded_sample_error_emits_fit_failed(monkeypatch, qcore_applica
     """When prepare_threaded_sample returns None, fitFailed signal is emitted."""
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
-    analysis._fitting_logic.prepare_threaded_sample = MagicMock(return_value=(None, None))
+    analysis._fitting_logic.prepare_threaded_sample = MagicMock(return_value=None)
     # Make prepare_threaded_sample return None and set error message (as real code does)
     def _prepare_and_fail(*args, **kwargs):
         analysis._fitting_logic._fit_error_message = 'No experiments to sample'
-        return None, None
+        return None
 
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(side_effect=_prepare_and_fail)
 
@@ -388,3 +490,85 @@ def test_bayesian_initializer_property_round_trip(monkeypatch, qcore_application
 
     analysis.setBayesianInitializer('cov')
     assert analysis.bayesianInitializer == 'cov'
+
+def test_model_index_for_experiment_paired_with_a_removed_model(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 1)
+    project._models.add_model()
+    project._experiments[0].model = project._models[-1]
+    assert analysis.modelIndexForExperiment == len(project._models) - 1
+
+    project._experiments[0].model = object()
+
+    assert analysis.modelIndexForExperiment == -1
+    assert analysis.experimentsModelIndices == [-1]
+
+
+def _make_analysis_with_experiments(monkeypatch, count):
+    """An Analysis with the real experiment logic over `count` named experiments."""
+    project = make_project(experiments={i: SimpleNamespace(name=f'E{i}', model=None, include_in_fit=True) for i in range(count)})
+    monkeypatch.setattr(analysis_module, 'ParametersLogic', StubParametersLogic)
+    monkeypatch.setattr(analysis_module, 'CalculatorsLogic', StubCalculatorsLogic)
+    monkeypatch.setattr(analysis_module, 'MinimizersLogic', StubMinimizersLogic)
+    monkeypatch.setattr(analysis_module, 'FitterWorker', StubWorker)
+    analysis = analysis_module.Analysis(project, selection=ExperimentSelection())
+    analysis._clearCacheAndEmitParametersChanged = MagicMock()
+    return analysis, project
+
+
+def test_selection_starts_with_the_first_experiment(monkeypatch, qcore_application):
+    analysis, _project = _make_analysis_with_experiments(monkeypatch, 3)
+
+    assert analysis.selectedExperimentIndices == [0]
+
+
+def test_set_selected_experiments_makes_the_first_one_current(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    emitted = []
+    analysis.experimentsChanged.connect(lambda: emitted.append('experiments'))
+
+    analysis.setSelectedExperimentIndices([2, 1, 9])
+
+    assert analysis.selectedExperimentIndices == [2, 1]
+    assert project._current_experiment_index == 2
+    assert emitted == ['experiments']
+
+    analysis.setSelectedExperimentIndices([2, 1])  # unchanged
+    assert emitted == ['experiments']
+
+
+def test_removing_an_experiment_shifts_the_selection(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 4)
+    analysis.setSelectedExperimentIndices([1, 3])
+
+    analysis.removeExperiment(0)
+
+    assert analysis.selectedExperimentIndices == [0, 2]
+    assert project._current_experiment_index == 0
+
+
+def test_removing_the_selected_experiment_drops_it(monkeypatch, qcore_application):
+    analysis, _project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([0, 2])
+
+    analysis.removeExperiment(2)
+
+    assert analysis.selectedExperimentIndices == [0]
+
+
+def test_prune_drops_experiments_removed_elsewhere(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([1, 2])
+    del project._experiments[2]  # e.g. removed with its model
+
+    assert analysis.prune_selected_experiments() is True
+    assert analysis.selectedExperimentIndices == [1]
+    assert project._current_experiment_index == 1
+
+
+def test_reset_selects_only_the_current_experiment(monkeypatch, qcore_application):
+    analysis, project = _make_analysis_with_experiments(monkeypatch, 3)
+    analysis.setSelectedExperimentIndices([0, 1, 2])
+    project._current_experiment_index = 1
+
+    assert analysis.reset_selected_experiments() is True
+    assert analysis.selectedExperimentIndices == [1]

@@ -3,6 +3,20 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+
+    // Calculation engine (project-wide setting, also shown on the Sample page)
+    property var calculationEngines: ['refnx', 'refl1d']
+    property int calculationEngineIndex: 0
+    property var calculationEnginesSupportingMagnetism: ['refl1d']
+    signal calculationEngineChanged()
+    signal magnetismNeedsEngine(int index, string engine)
+    function setCalculationEngineIndex(value) {
+        console.debug(`setCalculationEngineIndex ${value}`)
+    }
+    function enableMagnetismWithEngineAtIndex(index, engine) {
+        console.debug(`enableMagnetismWithEngineAtIndex ${index} ${engine}`)
+    }
+
     // Signals to match the Python backend
     signal constraintsChanged
     // MATERIALS
@@ -13,17 +27,29 @@ QtObject {
         {
             'label': 'label 1',
             'sld': '1.23456',
-            'isld': '-1.23456'
+            'isld': '-1.23456',
+            'kind': 'sld',
+            'formula': '',
+            'density': '',
+            'sld_coupled': true
         },
         {
             'label': 'label 2',
             'sld': '2.34567',
-            'isld': '-2.34567'
+            'isld': '-2.34567',
+            'kind': 'sld',
+            'formula': '',
+            'density': '',
+            'sld_coupled': true
         },
         {
-            'label': 'label 3',
+            'label': 'SiO2 density',
             'sld': '3.45678',
-            'isld': '-3.45678'
+            'isld': '-3.45678',
+            'kind': 'density',
+            'formula': 'SiO2',
+            'density': '2.196',
+            'sld_coupled': true
         },
     ]
     readonly property var materialNames: materials.map(function (item) { return item.label })
@@ -40,6 +66,15 @@ QtObject {
     }
     function setCurrentMaterialISld(value) {
         console.debug(`setCurrentMaterialISld ${value}`)
+    }
+    function setMaterialSldCoupledAtIndex(index, value) {
+        console.debug(`setMaterialSldCoupledAtIndex ${index} ${value}`)
+    }
+    function setMaterialFormulaAtIndex(index, value) {
+        console.debug(`setMaterialFormulaAtIndex ${index} ${value}`)
+    }
+    function setMaterialDensityAtIndex(index, value) {
+        console.debug(`setMaterialDensityAtIndex ${index} ${value}`)
     }
 
 
@@ -224,6 +259,24 @@ QtObject {
         },
     ]
 
+    // Structure view: same contract and value types as Backends/Py/logic/structure.py —
+    // thickness/indices/repetitions are numbers, everything else strings
+    readonly property var structure: [
+        { 'label': 'Air', 'material': 'Air', 'color': '#0173B2', 'color_end': '', 'sld': '0.00', 'isld': '0.00', 'thickness': 0.0, 'roughness': '0.0', 'assembly': 'Superphase', 'assembly_index': 0, 'layer_index': 0, 'kind': 'superphase', 'repetitions': 1 },
+        { 'label': 'TypeA', 'material': 'TypeA', 'color': '#DE8F05', 'color_end': '', 'sld': '1.00', 'isld': '0.01', 'thickness': 2.5, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 0, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'TypeB', 'material': 'TypeB', 'color': '#029E73', 'color_end': '', 'sld': '2.07', 'isld': '0.00', 'thickness': 5.0, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 1, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'TypeA', 'material': 'TypeA', 'color': '#DE8F05', 'color_end': '', 'sld': '1.00', 'isld': '0.01', 'thickness': 2.5, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 0, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'TypeB', 'material': 'TypeB', 'color': '#029E73', 'color_end': '', 'sld': '2.07', 'isld': '0.00', 'thickness': 5.0, 'roughness': '1.0', 'assembly': 'Multi-layer', 'assembly_index': 1, 'layer_index': 1, 'kind': 'layer', 'repetitions': 1 },
+        { 'label': 'Substrate', 'material': 'Si', 'color': '#D55E00', 'color_end': '', 'sld': '2.07', 'isld': '0.00', 'thickness': 0.0, 'roughness': '1.0', 'assembly': 'Substrate', 'assembly_index': 2, 'layer_index': 0, 'kind': 'subphase', 'repetitions': 1 },
+    ]
+    readonly property var structureLegend: [
+        { 'label': 'Air', 'color': '#0173B2' },
+        { 'label': 'TypeA', 'color': '#DE8F05' },
+        { 'label': 'TypeB', 'color': '#029E73' },
+        { 'label': 'Si', 'color': '#D55E00' },
+    ]
+    readonly property real structureTotalThickness: 15.0
+
     // Setters
     function setCurrentLayerIndex(value){
         console.debug(`setCurrentLayerIndex ${value}`)
@@ -248,6 +301,39 @@ QtObject {
     }
     function setCurrentLayerSolvation(value) {
         console.debug(`setCurrentLayerSolvation ${value}`)
+    }
+
+    // Layer magnetism (polarized analysis)
+    readonly property bool magnetismSupported: true
+    readonly property var layersMagnetism: [
+        { 'label': 'label 1', 'magnetic': 'True', 'rho_m': '5.0', 'theta_m': '40.0', 'phi': '130.0', 'editable': 'True' },
+        { 'label': 'label 2', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
+        { 'label': 'label 3', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
+    ]
+    function setLayerMagneticAtIndex(index, value) {
+        console.debug(`setLayerMagneticAtIndex ${index} ${value}`)
+    }
+    function setLayerRhoMAtIndex(index, value) {
+        console.debug(`setLayerRhoMAtIndex ${index} ${value}`)
+    }
+    function setLayerThetaMAtIndex(index, value) {
+        console.debug(`setLayerThetaMAtIndex ${index} ${value}`)
+    }
+    function setLayerRhoMCoupledAtIndex(index, value) {
+        console.debug(`setLayerRhoMCoupledAtIndex ${index} ${value}`)
+    }
+    readonly property var magneticField: ({ guide_field_angle: 270, applied_field: 0, model_magnetic: true, in_plane: true, phi: 0 })
+    function setGuideFieldAngle(value) {
+        console.debug(`setGuideFieldAngle ${value}`)
+    }
+    function setAppliedField(value) {
+        console.debug(`setAppliedField ${value}`)
+    }
+    function addNewMagneticMaterial() {
+        console.debug(`addNewMagneticMaterial`)
+    }
+    function setMaterialMagneticMomentAtIndex(index, value) {
+        console.debug(`setMaterialMagneticMomentAtIndex ${index} ${value}`)
     }
 
     // Table functions
@@ -364,6 +450,48 @@ QtObject {
             constraintsChanged()
         }
     }
+
+    // Inequality constraints (BUMPS-only fit penalties)
+    readonly property int inequalityConstraintsCount: 0
+    readonly property var violatedInequalityConstraints: []
+    function setInequalityConstraintEnabled(index, enabled) { console.debug(`setInequalityConstraintEnabled ${index} ${enabled}`) }
+
+    // Physics-constraint recipes
+    property var physicsConstraintRecipes: [
+        { id: 'conformal_roughness', assemblyIndex: 1, assemblyName: 'Multi-layer 1', assemblyType: 'Multi-layer',
+          title: 'Conformal roughness', description: 'Every interface of the assembly shares the roughness of its first layer.',
+          available: true, active: false, toggleable: true, reason: '', requires: [] },
+        { id: 'constant_period', assemblyIndex: 1, assemblyName: 'Multi-layer 1', assemblyType: 'Multi-layer',
+          title: 'Constant period Λ', description: 'The summed thickness of the layers stays constant.',
+          available: true, active: true, toggleable: true, reason: '', requires: [] },
+        { id: 'equal_apm', assemblyIndex: 2, assemblyName: 'Surfactant', assemblyType: 'Surfactant Layer',
+          title: 'Equal head/tail area per molecule', description: 'The head layer takes the area per molecule of the tail layer.',
+          available: true, active: false, toggleable: true, reason: '', requires: [] },
+        { id: 'solvent_roughness', assemblyIndex: 2, assemblyName: 'Surfactant', assemblyType: 'Surfactant Layer',
+          title: 'Solvent roughness follows the surfactant', description: 'The roughness of the layer below follows the tail roughness.',
+          available: false, active: false, toggleable: false, reason: 'Requires conformal roughness on the surfactant layer.', requires: ['conformal_roughness'] }
+    ]
+    function _setRecipeActive(assemblyIndex, recipeId, active) {
+        var recipes = physicsConstraintRecipes.slice()
+        for (let i = 0; i < recipes.length; i++) {
+            if (recipes[i].assemblyIndex !== assemblyIndex) {
+                continue
+            }
+            if (recipes[i].id === recipeId) {
+                recipes[i] = Object.assign({}, recipes[i], { active: active })
+            } else if (!active && recipes[i].requires.indexOf(recipeId) !== -1) {
+                // Mirror the Py backend's cascade: removing a recipe also
+                // removes the recipes that require it (e.g. solvent roughness
+                // needs conformal roughness).
+                recipes[i] = Object.assign({}, recipes[i], { active: false })
+            }
+        }
+        physicsConstraintRecipes = recipes
+        constraintsChanged()
+        return { success: true, message: '' }
+    }
+    function applyPhysicsConstraint(assemblyIndex, recipeId) { return _setRecipeActive(assemblyIndex, recipeId, true) }
+    function removePhysicsConstraint(assemblyIndex, recipeId) { return _setRecipeActive(assemblyIndex, recipeId, false) }
 
     // Q Range
     property double q_min: 4.

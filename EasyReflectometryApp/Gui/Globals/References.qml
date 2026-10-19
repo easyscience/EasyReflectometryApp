@@ -49,6 +49,9 @@ QtObject {
                 'basic': {
                     'popups': {
                         'loadExperimentFileDialog': null,
+                        'appendExperimentFilesDialog': null,
+                        'loadPolarizedExperimentFilesDialog': null,
+                        'polarizedChannelAssignmentDialog': null,
                     }
                 }
             }

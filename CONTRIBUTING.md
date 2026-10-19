@@ -1,58 +1,71 @@
 # Development workflow
 
-All development in `EasyReflectometryApp` is done on the `develop` branch of the git repository. 
-It is advised that this branch will have the most up to date version of `EasyReflectometryApp`. 
-However, this may include bugs so for production use the [latest release](https://github.com/easyScience/EasyReflectometryApp/releases) is advised. 
+All development of `EasyReflectometryApp` happens on the `develop` branch of the git repository.
+This branch holds the most up-to-date version of the application, which may include bugs; for production use, the [latest release](https://github.com/easyScience/EasyReflectometryApp/releases/latest) is advised.
+Released versions are on the `master` branch.
 
-Development installation instructions are given in the [installation documentation](./INSTALLATION.md).
+Installation instructions for development are given in the [installation documentation](./INSTALLATION.md#development-installation).
 
-## Feature/Bug fix contributions
+## Related repositories
 
-**Note that some features may require contribution to both `EasyReflectometryApp` and [`EasyReflectometryLib`](https://github.com/easyScience/EasyReflectometryLib/).**
-If you are interested in contributing a feature or bug fix to `EasyReflectometryApp`, then please fork the Github repository and clone this fork to your local machine and add the upstream repo. 
+Many features need changes in more than one repository:
+
+- [`reflectometry-lib`](https://github.com/easyscience/reflectometry-lib) (the `easyreflectometry` package): models, data loading, calculators and fitting.
+- [`core`](https://github.com/easyscience/core) (the `easyscience` package): parameters, constraints and minimizers.
+- [`gui-components`](https://github.com/easyscience/gui-components) (the `EasyApplication` package): shared QML components and styling.
+
+The app depends on the `develop` branch of `reflectometry-lib` (see `pyproject.toml`).
+When a change spans repositories, install local checkouts of them in editable mode, and open a pull request in each repository.
+Merge the library change first, so the app's CI, which installs the library from GitHub, can pass.
+
+## Feature and bug-fix contributions
+
+To contribute a feature or bug fix, fork the GitHub repository, clone your fork to your local machine and add the upstream repository:
 
 ```
 git clone git@github.com:<your-github-username>/EasyReflectometryApp.git
+cd EasyReflectometryApp
 git remote add upstream https://github.com/easyScience/EasyReflectometryApp.git
 ```
 
-With the repository cloned, change to the `develop` branch
+Create a feature branch from the up-to-date `develop` branch:
 
 ```
-git checkout -b develop origin/develop
+git fetch upstream
+git switch -c my-feature-branch upstream/develop
 ```
 
-From this branch, you should create a feature branch to make the changes/contributions. 
+Before opening a pull request:
 
-```
-git branch my-feature-branch
-git checkout my-feature-branch
-```
+- Run the test suite, which CI also runs on Windows, macOS and Linux with Python 3.12 and 3.13:
+  ```
+  python -m pytest tests
+  ```
+- Add or update tests for the behaviour you changed.
+- Check the code style with [ruff](https://docs.astral.sh/ruff/) (`pip install ruff`), configured in `pyproject.toml`:
+  ```
+  ruff check EasyReflectometryApp tests
+  ```
+- Add a line describing the change to the `Unreleased` section of [CHANGELOG.md](./CHANGELOG.md).
+- Update the user documentation in `docs/` if the change is visible to users.
 
-Once you have completed the feature and commited your changes, please open a pull request to the original `EasyReflectometryApp` repository and wait for a review. 
+Then push the branch to your fork and open a pull request against `develop` of the upstream repository.
+Every push also builds the installers; a branch's builds are attached to a draft prerelease named after the branch, so they can be tested before merging.
 
 ## Release workflow
 
-Periodically, or after the additional of major new features, there will be stable releases of `EasyReflectometryApp`. 
-These should be produced firstly by:
-1. Bumping the version number in the `develop` branch appropriately and updating the [CHANGELOG.md](./CHANGELOG.md). 
-    The files where the version numbers should be changed are: 
-    - `pyproject.toml`
-    - `README.md`
-    - `INSTALLATION.md`
+Periodically, or after major new features, a stable release of `EasyReflectometryApp` is made:
 
-    This should be allowed to build on Github and the resulting application tested. 
-2. Then a branch should be taken from `develop` for the release candidate, named `<version-number>rc`. If there has been changes to `EasyReflectometryLib:main`, the `pyproject.toml` should be changed to use the `main` branch rather than `develop` of `EasyReflectometryLib`. Then a lock file for the poetry package management should be produced and commited to the repository using
+1. On `develop`, bump the version and update the release information:
+    - `version` in the `[project]` section of `pyproject.toml`;
+    - `release_date` in the `[release]` section of `pyproject.toml` (shown on the app's Home page);
+    - in [CHANGELOG.md](./CHANGELOG.md), rename the `Unreleased` section to `Version <version-number> (<date>)`.
 
-    ```
-    poetry lock
-    git add -f poetry.lock pyproject.toml
-    git commit -m 'Lock package versions'
-    ```
-
-3. Once the `<version-number>rc` Github builds have been completed, these should also be tested. 
-4. Then a pull request can be opened to merge the `<version-number>rc` branch into the `main` branch and tested, at this stage the CHANGELOG.md information for the given release should be copy-and-pasted into the PR.
-5. Once this pull request is merged, the final version will be built from `main` and the `<version-number>rc` branch can be removed (locally).
-6. The final `main` branch action will then run to build the release version of EasyReflectometry, this will produce a release in the [releases](https://github.com/easyScience/EasyReflectometryApp/releases) section of the Github repository. 
-7. Once is it there, the release should be tagged and renamed, this is achieved by selecting the 'edit' button (the pencil). The tag should be given as `v<version-number>` and the name of the release should be `Version <version-number> (<date>)` and currently (until new tutorials are produced) the tutorial should be removed from the release.
-8. Finally, the release should be published.  
+    If the release needs a released version of `reflectometry-lib`, change its dependency in `pyproject.toml` from the `develop` branch to that version.
+    Let CI build the installers for `develop` and test them.
+2. Open a pull request from `develop` to `master`, and paste the CHANGELOG section of the release into its description.
+3. Once the pull request is merged, CI builds the installers from `master` and uploads them to a draft prerelease tagged `v<version-number>` and titled `Version <version-number> (<build date>)`. The release description is taken from [RELEASE.md](./RELEASE.md).
+4. Test the installers from the draft release.
+5. Edit the draft release: add the CHANGELOG section of the release to its description, untick _Set as a pre-release_, and publish it.
+6. Publish the documentation: the release's tag is created by CI, which does not trigger other workflows, so run the _Build Documentation and Push to gh-pages Branch_ workflow (`documentation-build.yml`) by hand (Actions tab, _Run workflow_) on the release tag `v<version-number>`. Check the published site at <https://easyscience.github.io/EasyReflectometryApp/>.
+7. Start a new, empty `Unreleased` section in CHANGELOG.md on `develop`.

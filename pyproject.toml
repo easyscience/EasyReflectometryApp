@@ -4,7 +4,7 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'EasyReflectometryApp'
-version = '1.4.0'
+version = '1.5.0'
 description = "Making reflectometry data analysis and modelling easy."
 authors = [
     {name = "Andrew R. McCluskey"}, 

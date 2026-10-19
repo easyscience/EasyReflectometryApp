@@ -1,60 +1,49 @@
 # EasyReflectometry
 
-**EasyReflectometry** is a scientific software for modelling and analysis of reflectometry data. Currently, **EasyReflectometry** covers single contrast measurements of layered structures.
+**EasyReflectometry** is scientific software for modelling and analysing reflectometry data from layered structures. It handles single and multiple contrasts, unpolarised and polarised measurements, and both classical fitting and Bayesian sampling.
 
-![EasyReflectometry Screenshot](./resources/images/er_analysis_dark.png) 
+![EasyReflectometry Screenshot](./resources/images/er_analysis_dark.png)
 
 ## What is EasyReflectometry for?
 
-**EasyReflectometry** allows simulation of reflectometry profiles based on layered structures and the refinements of the structural parameters. For refinement, the program uses a number of fitting engines (minimizers).
+**EasyReflectometry** simulates reflectometry profiles of layered structures and refines their structural parameters against measured data. Refinement uses one of several fitting engines (minimizers), or Bayesian sampling when the uncertainty of each parameter is wanted.
 
-**EasyReflectometry** offers a graphical user interface for the analysis of reflectometry data, built on _external_ reflectometry packages such as [refnx](https://refnx.readthedocs.io/en/latest/) and [refl1d](https://refl1d.readthedocs.io/en/latest/). 
-This allows **EasyReflectometry** to cover different functionality aspects within a signle, intuitive, and user-friendly interface.  
-The reflectomety packages are included with the installation so there is no need to download andn compile any additional components. 
-
-## Example of usage
-
-https://github.com/EasyScience/EasyReflectometryApp/wiki/Testing-in-Hand
+**EasyReflectometry** offers a graphical user interface built on established reflectometry packages, [refnx](https://refnx.readthedocs.io/en/latest/) and [refl1d](https://refl1d.readthedocs.io/en/latest/), through the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library.
+This brings their functionality together in a single, intuitive interface.
+The calculation engines are included in the installer, so nothing else has to be downloaded or compiled.
 
 ## Main features
 
-**EasyReflectometry** is open source and cross-platform, with support for Windows, macOS and Linux (Ubuntu).
+**EasyReflectometry** is open source and cross-platform, with support for Windows, macOS (Apple Silicon) and Linux (Ubuntu).
 
-The intuitive tabbed interface allows for a clear and defined data modelling and analysis workflow. 
-There are also built-in step-by-step user guides and video tutorials for new users.
+The tabbed interface guides a clear modelling and analysis workflow: Project, Sample, Experiment, Analysis and Summary.
 
-Current main features of **EasyReflectometry**:
+- **Sample models**: materials defined by their scattering length density (SLD), layers, repeating multilayers, and _items_ such as surfactant layers with chemically consistent constraints.
+- **Data import**: text files and [ORSO](https://www.reflectometry.org/) `.ort` files. A file with a q-resolution column keeps the resolution of every point, and several files of one contrast (other angles or wavelength bands) can be merged into one experiment.
+- **Multiple contrasts**: contrasts share one structure, and all of them are refined together.
+- **Magnetism and polarisation**: a magnetic SLD and in-plane moment angle per layer, refined with refl1d. Polarised data is imported as one file per spin channel, with spin-asymmetry views and simultaneous refinement of all channels against a single model.
+- **Fitting**: [lmfit](https://lmfit.github.io/lmfit-py), [bumps](https://github.com/bumps/bumps) and [DFO-LS](https://github.com/numericalalgorithmsgroup/dfols) minimizers, with adjustable fit settings, parameter constraints and links between contrasts.
+- **Bayesian analysis**: Markov chain Monte Carlo (MCMC) sampling with bumps DREAM, with posterior bands on the reflectivity and SLD charts and per-parameter distributions.
+- **Reports**: interactive HTML and PDF reports of the model, data and fit results.
+- **Projects**: saving and loading of complete projects.
 
-- Support for the analysis of a single contrast of reflectometry data.
-- Creation of materials to be used in structure from scattering length density.
-- The ability to define repeating multi-layers of materials and refine these structures using [refnx](https://refnx.readthedocs.io/en/latest/) or [refl1d](https://refl1d.readthedocs.io/en/latest/). 
-- Growing support for flexible _item_ types, including chemically consistent models.
-- Ability to corefine multiple contrasts of reflectometry data.
-- Multiple minimization engines: [lmfit](https://lmfit.github.io/lmfit-py), [bumps](https://github.com/bumps/bumps) and [DFO-LS](https://github.com/numericalalgorithmsgroup/dfols) (including the differential evolution method).
-- Interactive HTML and standard PDF report generation.
-- Undo/redo for both parameter changes and fitting.
-- Saving and loading of projects.
+Planned improvements are listed in the [roadmap](./ROADMAP.md) and the [issue tracker](https://github.com/easyScience/EasyReflectometryApp/issues).
 
-Planned improvements / new functionality for **EasyReflectometry**:
+## Documentation
 
-- Support for magnetic structures and polarised reflectometry measurements.
-- Support for mixed model reflectometry datasets.
-- Reading of q-dependent resolution from a file.
+The [user documentation](https://easyscience.github.io/EasyReflectometryApp/) has step-by-step tutorials on loading data, defining models, fitting, polarised data, magnetism and Bayesian analysis.
 
-Full details of the future plans for EasyReflectometry is available in the [roadmap](./ROADMAP.md).
-
-## Getting Started
+## Getting started
 
 ### Downloading
 
-[Download](https://github.com/easyScience/EasyReflectometryApp/releases) the official **EasyReflectometry installer** for your operating system.
+[Download](https://github.com/easyScience/EasyReflectometryApp/releases/latest) the **EasyReflectometry installer** for your operating system. See [INSTALLATION.md](./INSTALLATION.md) for details and for installation from source.
 
 ### Installing
 
-Run **EasyReflectometry installer** and follow the instructions.
+Unzip the downloaded archive, run the **EasyReflectometry installer** and follow the instructions.
 
-macOS: If you see the message _EasyReflectometrySetup.app can't be opened because it is from an unidentified developer_, do the following:
-In the **Finder**, locate the **EasyReflectometry installer app**, then _control-click_ the app icon, then choose _Open_ from the shortcut menu and finally click _Open_.
+macOS: the installer is not notarised by Apple, so macOS may refuse to open it as coming from an unidentified developer. Try to open it once, then open **System Settings** → **Privacy & Security**, scroll to the message about the installer and click **Open Anyway**. On macOS 14 and older, _control-click_ the installer in the **Finder**, choose _Open_ and confirm with _Open_.
 
 ### Uninstalling
 
@@ -62,6 +51,6 @@ Run **MaintenanceTool** from the **EasyReflectometry** installation directory, s
 
 ## Get in touch
 
-<!---For general questions or comments, please contact us at [support@EasyReflectometry.org](mailto:support@EasyReflectometry.org).--->
+For bug reports and feature requests, please use the [issue tracker](https://github.com/easyScience/EasyReflectometryApp/issues).
 
-For bug reports and feature requests, please use [Issue Tracker](https://github.com/easyScience/EasyReflectometryApp/issues) instead.
+Contributions are welcome; see [CONTRIBUTING.md](./CONTRIBUTING.md).

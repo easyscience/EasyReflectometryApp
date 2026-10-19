@@ -14,9 +14,32 @@ EaElements.GroupBox {
 
     property bool expressionValid: false
     property string validationMessage: ""
+    property string validationWarning: ""
     property string expressionPreview: ""
     property string lastConstraintType: ""
     property bool validationDirty: false
+
+    // Alias of the model's derived total film thickness (empty when absent).
+    readonly property string totalThicknessAlias: {
+        const params = Globals.BackendWrapper.sampleConstraintParametersMetadata || []
+        for (let i = 0; i < params.length; i++) {
+            if (params[i].kind === 'derived' && params[i].alias && params[i].alias.indexOf('total_thickness') !== -1) {
+                return params[i].alias
+            }
+        }
+        return ""
+    }
+
+    function typeTag(type) {
+        switch (type) {
+        case 'inequality': return qsTr("≤ ≥")
+        case 'recipe': return qsTr("physics")
+        case 'lower_bound':
+        case 'upper_bound': return qsTr("bound")
+        case 'static': return qsTr("value")
+        default: return qsTr("expr")
+        }
+    }
 
     function currentRelationValue() {
         if (relationalOperator.currentIndex === -1 || typeof relationalOperator.currentValue === 'undefined') {
@@ -27,6 +50,7 @@ EaElements.GroupBox {
 
     function resetValidation() {
         validationMessage = ""
+        validationWarning = ""
         expressionPreview = ""
         lastConstraintType = ""
         expressionValid = false
@@ -68,11 +92,13 @@ EaElements.GroupBox {
             if (result && result.valid) {
                 expressionValid = true
                 validationMessage = ""
+                validationWarning = result.warning || ""
                 expressionPreview = result.preview || expr
                 lastConstraintType = result.type || 'expression'
             } else {
                 expressionValid = false
                 expressionPreview = ""
+                validationWarning = ""
                 lastConstraintType = ""
                 validationMessage = result && result.message ? result.message : qsTr("Expression is not valid.")
                 // Debug: show available parameters when validation fails
@@ -132,9 +158,33 @@ EaElements.GroupBox {
 
         EaElements.Label {
             width: parent.width
-            text: qsTr("Create numeric or symbolic relationships between parameters.")
+            text: qsTr("Create numeric or symbolic relationships between parameters. '=' ties the parameter to the expression; '≤' / '≥' against other parameters become inequality constraints enforced by the BUMPS minimizers during fitting.")
             wrapMode: Text.Wrap
             color: EaStyle.Colors.themeForegroundMinor
+        }
+
+        // Engine badge: inequalities exist but the selected minimizer cannot enforce them
+        EaElements.Label {
+            id: engineBadge
+            width: parent.width
+            visible: Globals.BackendWrapper.sampleInequalityConstraintsCount > 0 &&
+                     (!Globals.BackendWrapper.analysisMinimizerSupportsInequalities ||
+                      Globals.BackendWrapper.analysisInequalityConstraintsWarning.length > 0)
+            text: !Globals.BackendWrapper.analysisMinimizerSupportsInequalities
+                  ? qsTr("⚠ Inequality constraints need a BUMPS minimizer (Analysis › Minimization method). Fits are refused until you switch the minimizer or remove them.")
+                  : Globals.BackendWrapper.analysisInequalityConstraintsWarning
+            wrapMode: Text.Wrap
+            color: EaStyle.Colors.themeAccent
+        }
+
+        // Start-point feasibility: fits are refused while any inequality is violated
+        EaElements.Label {
+            width: parent.width
+            visible: Globals.BackendWrapper.sampleViolatedInequalityConstraints.length > 0
+            text: qsTr("⚠ Current values violate: %1. Fits will not start until they hold.").arg(
+                      Globals.BackendWrapper.sampleViolatedInequalityConstraints.join('; '))
+            wrapMode: Text.Wrap
+            color: EaStyle.Colors.themeAccent
         }
 
         Row {
@@ -156,13 +206,35 @@ EaElements.GroupBox {
                 width: EaStyle.Sizes.fontPixelSize * 4
                 valueRole: "value"
                 textRole: "text"
-                displayText: currentIndex === -1 ? qsTr("=") : currentText
+                displayText: {
+                    if (currentIndex === -1) {
+                        return qsTr("=")
+                    }
+                    const entry = model && model[currentIndex]
+                    return entry && entry.text ? entry.text : qsTr("=")
+                }
                 model: Globals.BackendWrapper.sampleRelationOperators
                 onCurrentIndexChanged: constraintsGroup.scheduleValidation()
                 Component.onCompleted: {
                     if (model && model.length > 0) {
                         currentIndex = 0
                     }
+                }
+
+                // The backend model is a QVariantList of {value, text} maps. The
+                // default EasyApp ComboBox delegate resolves the text via JS-array
+                // indexing or per-key roles, and a Python QVariantList supports
+                // neither — every row would render empty (TypeError on 'split').
+                // Index the model directly instead, like parameterInsert below.
+                delegate: EaElements.MenuItem {
+                    width: relationalOperator.width
+                    height: EaStyle.Sizes.comboBoxHeight
+                    text: {
+                        const entry = relationalOperator.model[index]
+                        return entry && entry.text ? entry.text : ''
+                    }
+                    highlighted: relationalOperator.highlightedIndex === index
+                    hoverEnabled: relationalOperator.hoverEnabled
                 }
             }
         }
@@ -214,12 +286,41 @@ EaElements.GroupBox {
             }
         }
 
+        // Quick action: insert the model's derived total film thickness alias
+        EaElements.SideBarButton {
+            visible: constraintsGroup.totalThicknessAlias.length > 0
+            wide: true
+            fontIcon: "layer-group"
+            text: qsTr("Insert total film thickness")
+            ToolTip.text: qsTr("Read-only sum of all layer thicknesses between superphase and subphase; usable in '=' and inequality expressions.")
+            onClicked: constraintsGroup.insertAlias(constraintsGroup.totalThicknessAlias)
+        }
+
         EaElements.Label {
             id: previewLabel
             width: parent.width
             visible: constraintsGroup.expressionValid && constraintsGroup.expressionPreview.length > 0
-            text: qsTr("Preview: %1 %2").arg(constraintsGroup.currentRelationValue()).arg(constraintsGroup.expressionPreview)
+            text: {
+                const relation = constraintsGroup.currentRelationValue()
+                const shown = relation === '>' ? '≥' : (relation === '<' ? '≤' : relation)
+                const base = qsTr("Preview: %1 %2").arg(shown).arg(constraintsGroup.expressionPreview)
+                if (constraintsGroup.lastConstraintType !== 'inequality') {
+                    return base
+                }
+                // e.g. '90 - t_B': the 90 is read in the dependent's unit (Å vs nm footgun)
+                const literalHint = /(^|[^\w.])\d/.test(expressionEditor.text)
+                                  ? qsTr("; numeric literals read in the dependent parameter's unit") : ""
+                return base + qsTr("  (inequality — enforced by BUMPS minimizers%1)").arg(literalHint)
+            }
             color: EaStyle.Colors.themeForegroundMinor
+            wrapMode: Text.Wrap
+        }
+
+        EaElements.Label {
+            width: parent.width
+            visible: constraintsGroup.expressionValid && constraintsGroup.validationWarning.length > 0
+            text: constraintsGroup.validationWarning
+            color: EaStyle.Colors.themeAccent
             wrapMode: Text.Wrap
         }
 
@@ -291,14 +392,20 @@ EaElements.GroupBox {
                     }
 
                     EaComponents.TableViewLabel {
+                        width: EaStyle.Sizes.fontPixelSize * 4
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Type")
+                    }
+
+                    EaComponents.TableViewLabel {
                         id: dependentNameHeaderColumn
-                        width: EaStyle.Sizes.fontPixelSize * 12
+                        width: EaStyle.Sizes.fontPixelSize * 10
                         horizontalAlignment: Text.AlignHCenter
                         text: qsTr("Parameter")
                     }
 
                     EaComponents.TableViewLabel {
-                        width: EaStyle.Sizes.fontPixelSize * 19
+                        width: EaStyle.Sizes.fontPixelSize * 17
                         horizontalAlignment: Text.AlignHCenter
                         text: qsTr("Expression")
                     }
@@ -320,8 +427,44 @@ EaElements.GroupBox {
                     }
 
                     EaComponents.TableViewLabel {
+                        id: typeColumn
+                        width: EaStyle.Sizes.fontPixelSize * 4
+                        horizontalAlignment: Text.AlignHCenter
+                        text: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            return constraint ? constraintsGroup.typeTag(constraint.type) : ""
+                        }
+                        color: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            if (constraint && constraint.type === 'inequality' && constraint.satisfied === false) {
+                                return EaStyle.Colors.themeAccent
+                            }
+                            return EaStyle.Colors.themeForegroundMinor
+                        }
+                        ToolTip.visible: hovered && Globals.BackendWrapper.sampleConstraintsList[index] !== undefined
+                        ToolTip.text: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            if (!constraint) return ""
+                            if (constraint.type === 'inequality') {
+                                return constraint.satisfied === false
+                                        ? qsTr("Inequality constraint — currently violated")
+                                        : qsTr("Inequality constraint (BUMPS penalty)")
+                            }
+                            if (constraint.type === 'recipe') {
+                                // A manual tie matching a recipe's pattern is grouped
+                                // under the recipe row; listing the members shows
+                                // exactly which parameters this row stands for.
+                                const members = constraint.members && constraint.members.length
+                                              ? "\n" + constraint.members.join(", ") : ""
+                                return qsTr("Physics constraint: %1 tied parameter(s)").arg(constraint.count || 0) + members
+                            }
+                            return qsTr("Equality constraint")
+                        }
+                    }
+
+                    EaComponents.TableViewLabel {
                         id: dependentNameColumn
-                        width: EaStyle.Sizes.fontPixelSize * 12
+                        width: EaStyle.Sizes.fontPixelSize * 10
                         horizontalAlignment: Text.AlignLeft
                         text: {
                             const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
@@ -332,7 +475,7 @@ EaElements.GroupBox {
 
                     EaComponents.TableViewLabel {
                         id: expressionColumn
-                        width: EaStyle.Sizes.fontPixelSize * 15
+                        width: EaStyle.Sizes.fontPixelSize * 13
                         horizontalAlignment: Text.AlignLeft
                         text: {
                             const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
@@ -341,6 +484,11 @@ EaElements.GroupBox {
                             }
                             const prefix = constraint.relation ? constraint.relation + ' ' : ''
                             return prefix + constraint.expression
+                        }
+                        color: {
+                            const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
+                            return (constraint && constraint.type === 'inequality' && constraint.satisfied === false)
+                                    ? EaStyle.Colors.themeAccent : EaStyle.Colors.themeForeground
                         }
                         elide: Text.ElideRight
                         ToolTip.visible: hovered && Globals.BackendWrapper.sampleConstraintsList[index] && Globals.BackendWrapper.sampleConstraintsList[index].rawExpression

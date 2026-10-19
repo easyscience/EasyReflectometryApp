@@ -32,6 +32,51 @@ def _patch_tree_types(monkeypatch):
     monkeypatch.setattr(parameters_module, 'ModelBase', FakeNode)
 
 
+def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive(monkeypatch):
+    _patch_tree_types(monkeypatch)
+
+    density = make_parameter(name='density', unique_name='density', value=2.33, free=True, enabled=True)
+    # molecular_weight is intentionally absent: in the lib it is a
+    # DescriptorNumber (a formula constant), so the Parameter tree walk
+    # never yields it. The scattering length stands in as the second knob.
+    b_real = make_parameter(name='scattering_length_real', unique_name='b_real', value=4.15, free=False, enabled=True)
+    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+
+    def build_model(sld_coupled):
+        model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
+        layer = FakeNode('Layer', 'm1_layer', thickness=thickness)
+        assembly = FakeNode('LayerA', 'm1_asm', layers=[layer])
+        model.sample = [assembly]
+        # Density-material knobs live under the material node, which carries
+        # the sld_coupled toggle (duck-typed stand-in for MaterialDensity).
+        material = FakeNode('SiDensity', 'm1_mat', density=density, scattering_length_real=b_real)
+        material.sld_coupled = sld_coupled
+        model.material = material
+        return model
+
+    decoupled = parameters_module._from_parameters_to_list_of_dicts(
+        [density, b_real, thickness], make_model_collection(build_model(sld_coupled=False))
+    )
+    rows = {entry['display_name']: entry for entry in decoupled}
+    for label in ('SiDensity density', 'SiDensity scattering_length_real'):
+        assert rows[label]['kind'] == 'inactive'
+        assert rows[label]['fit'] is False
+        assert rows[label]['readOnly'] is True
+        assert rows[label]['enabled'] is True  # greyed, never filtered out
+        assert rows[label]['dependency'] == 'unused (SLD is fitted directly)'
+    # Non-knob parameters are untouched.
+    assert rows['M1 LayerA thickness']['kind'] == 'parameter'
+    assert rows['M1 LayerA thickness']['fit'] is True
+
+    coupled = parameters_module._from_parameters_to_list_of_dicts(
+        [density, b_real, thickness], make_model_collection(build_model(sld_coupled=True))
+    )
+    rows = {entry['display_name']: entry for entry in coupled}
+    assert rows['SiDensity density']['kind'] == 'parameter'
+    assert rows['SiDensity density']['fit'] is True
+    assert rows['SiDensity scattering_length_real']['kind'] == 'parameter'
+
+
 def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_shared_params(monkeypatch):
     _patch_tree_types(monkeypatch)
 
@@ -70,17 +115,18 @@ def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_share
 
     result = parameters_module._from_parameters_to_list_of_dicts([thickness, scale, dependent], models)
 
+    # The thickness is one object in both models: one row, named for both, and marked shared
     assert [entry['display_name'] for entry in result] == [
-        'M1 LayerA thickness',
+        'M1+M2 LayerA thickness',
         'Instrument scale',
         'Instrument background',
-        'M2 LayerA thickness',
     ]
     assert result[1]['dependency'] == ''
     assert result[2]['dependency'] == '2*Instrument scale'
     assert result[2]['enabled'] is False
-    assert result[0]['alias'] == 'm1_layera_thickness'
-    assert result[3]['alias'] == 'm2_layera_thickness'
+    assert result[0]['alias'] == 'm1_m2_layera_thickness'
+    assert result[0]['sharedBy'] == ['M1', 'M2'] and result[0]['sharedByIndices'] == [0, 1]
+    assert result[2]['sharedBy'] == [] and result[1]['followedBy'] == 0
 
 
 def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
@@ -167,9 +213,21 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
 
     metadata = logic.constraint_metadata()
     assert metadata == [
-        {'alias': 'hidden_background', 'displayName': 'Hidden background', 'group': 'Experiment', 'independent': True},
-        {'alias': 'instrument_scale', 'displayName': 'Instrument scale', 'group': 'Instrument', 'independent': True},
-        {'alias': 'layer_thickness', 'displayName': 'Layer thickness', 'group': 'Layer', 'independent': False},
+        {
+            'alias': 'hidden_background',
+            'displayName': 'Hidden background',
+            'group': 'Experiment',
+            'independent': True,
+            'kind': 'parameter',
+        },
+        {
+            'alias': 'instrument_scale',
+            'displayName': 'Instrument scale',
+            'group': 'Instrument',
+            'independent': True,
+            'kind': 'parameter',
+        },
+        {'alias': 'layer_thickness', 'displayName': 'Layer thickness', 'group': 'Layer', 'independent': False, 'kind': 'parameter'},
     ]
 
     logic.set_variability_filter_criteria('all')
@@ -182,6 +240,29 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
     assert free_parameter.min == 0.2
     assert free_parameter.max == 3.2
     assert free_parameter.free is False
+
+
+def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
+    """An inactive density knob must not be tickable into the fit through
+    any caller, QML checkbox or not — same class of bug the Select-All skip
+    fixed for the fittables table."""
+    project = make_project()
+    logic = parameters_module.Parameters(project)
+    inactive_parameter = make_parameter(name='Density', unique_name='density', value=2.33, free=False)
+    mocked_parameters = [
+        {
+            'display_name': 'SiDensity density',
+            'unique_name': 'density',
+            'kind': 'inactive',
+            'enabled': True,
+            'object': inactive_parameter,
+        },
+    ]
+    monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
+
+    logic.set_current_index(0)
+    assert logic.set_current_parameter_fit(True) is False
+    assert inactive_parameter.free is False
 
 
 def test_add_constraint_supports_arithmetic_and_constant_dependencies():

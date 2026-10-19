@@ -100,6 +100,38 @@ QtObject {
         return null
     }
 
+    // Project load warning signal - what a loaded project could not restore as saved
+    signal projectLoadWarning(string message)
+
+    property var _projectLoadWarningConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectLoadWarning) {
+            activeBackend.project.projectLoadWarning.connect(projectLoadWarning)
+        }
+        return null
+    }
+
+    // Project save signals - forwarded from backend
+    readonly property string projectLastSaved: activeBackend.project.lastSaved ?? ''
+    readonly property bool projectHasUnsavedChanges: activeBackend.project.hasUnsavedChanges ?? false
+
+    signal projectSaved(string path)
+
+    property var _projectSavedConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectSaved) {
+            activeBackend.project.projectSaved.connect(projectSaved)
+        }
+        return null
+    }
+
+    signal projectSaveError(string message)
+
+    property var _projectSaveErrorConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.projectSaveError) {
+            activeBackend.project.projectSaveError.connect(projectSaveError)
+        }
+        return null
+    }
+
 
     ///////////////
     // Sample page
@@ -118,8 +150,13 @@ QtObject {
     function sampleSetMaterialSldAtIndex(index, value) { activeBackend.sample.setMaterialSldAtIndex(index, value) }
     function sampleSetCurrentMaterialISld(value) { activeBackend.sample.setCurrentMaterialISld(value) }
     function sampleSetMaterialISldAtIndex(index, value) { activeBackend.sample.setMaterialISldAtIndex(index, value) }
+    function sampleSetMaterialSldCoupledAtIndex(index, value) { activeBackend.sample.setMaterialSldCoupledAtIndex(index, value) }
+    function sampleSetMaterialFormulaAtIndex(index, value) { activeBackend.sample.setMaterialFormulaAtIndex(index, value) }
+    function sampleSetMaterialDensityAtIndex(index, value) { activeBackend.sample.setMaterialDensityAtIndex(index, value) }
     function sampleRemoveMaterial(value) { activeBackend.sample.removeMaterial(value) }
     function sampleAddNewMaterial() { activeBackend.sample.addNewMaterial() }
+    function sampleAddNewMagneticMaterial() { activeBackend.sample.addNewMagneticMaterial() }
+    function sampleSetMaterialMagneticMomentAtIndex(index, value) { activeBackend.sample.setMaterialMagneticMomentAtIndex(index, value) }
     function sampleDuplicateSelectedMaterial() { activeBackend.sample.duplicateSelectedMaterial() }
     function sampleMoveSelectedMaterialUp() { activeBackend.sample.moveSelectedMaterialUp() }
     function sampleMoveSelectedMaterialDown() { activeBackend.sample.moveSelectedMaterialDown() }
@@ -134,11 +171,53 @@ QtObject {
 
     function sampleSetCurrentModelName(value) { activeBackend.sample.setCurrentModelName(value) }
     function sampleSetModelNameAtIndex(index, value) { activeBackend.sample.setModelNameAtIndex(index, value) }
-    function sampleRemoveModel(value) { activeBackend.sample.removeModel(value) }
+    // `rebindTo`: the model the removed model's experiments move to, or -1 to remove them too
+    function sampleRemoveModel(index, rebindTo) { activeBackend.sample.removeModel(index, rebindTo) }
+    function sampleContrastCandidates(index) { return activeBackend.sample.contrastCandidates?.(index) ?? [] }
+    function sampleAddContrast(referenceIndex, name, choices) { return activeBackend.sample.addContrast(referenceIndex, name, choices) }
+    function sampleDetachParameter(uniqueName, modelIndex) { return activeBackend.sample.detachParameter(uniqueName, modelIndex) }
+    function sampleExperimentsUsingModel(index) { return activeBackend.sample.experimentsUsingModel?.(index) ?? [] }
     function sampleAddNewModel() { activeBackend.sample.addNewModel() }
     function sampleDuplicateSelectedModel() { activeBackend.sample.duplicateSelectedModel() }
     function sampleMoveSelectedModelUp() { activeBackend.sample.moveSelectedModelUp() }
     function sampleMoveSelectedModelDown() { activeBackend.sample.moveSelectedModelDown() }
+
+    // Calculation engine (project-wide; also exposed on the Analysis page)
+    readonly property var sampleCalculationEngines: {
+        try {
+            return activeBackend.sample.calculationEngines || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property int sampleCalculationEngineIndex: {
+        try {
+            return activeBackend.sample.calculationEngineIndex || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var sampleCalculationEnginesSupportingMagnetism: {
+        try {
+            return activeBackend.sample.calculationEnginesSupportingMagnetism || []
+        } catch (e) {
+            return []
+        }
+    }
+    function sampleSetCalculationEngineIndex(value) {
+        try {
+            activeBackend.sample.setCalculationEngineIndex(value)
+        } catch (e) {
+            console.warn("sampleSetCalculationEngineIndex failed:", e)
+        }
+    }
+    function sampleEnableMagnetismWithEngineAtIndex(index, engine) {
+        try {
+            activeBackend.sample.enableMagnetismWithEngineAtIndex(index, engine)
+        } catch (e) {
+            console.warn("sampleEnableMagnetismWithEngineAtIndex failed:", e)
+        }
+    }
 
     // Sample
     readonly property var sampleAssemblies: activeBackend.sample.assemblies
@@ -163,6 +242,11 @@ QtObject {
     function sampleSetCurrentAssemblyConstrainAPM(value) { activeBackend.sample.setCurrentAssemblyConstrainAPM(value) }
     function sampleSetCurrentAssemblyConformalRoughness(value) { activeBackend.sample.setCurrentAssemblyConformalRoughness(value) }
     function sampleSetCurrentAssemblyRepeatedLayerReptitions(value) { activeBackend.sample.setCurrentAssemblyRepeatedLayerReptitions(value) }
+
+    // Structure view (flattened whole-stack representation)
+    readonly property var sampleStructure: activeBackend.sample.structure
+    readonly property var sampleStructureLegend: activeBackend.sample.structureLegend
+    readonly property real sampleStructureTotalThickness: activeBackend.sample.structureTotalThickness
 
     // Layer
     readonly property var sampleLayers: activeBackend.sample.layers
@@ -192,6 +276,39 @@ QtObject {
     function sampleSetCurrentLayerSolvation(value) { activeBackend.sample.setCurrentLayerSolvation(value) }
     function sampleSetLayerSolvationAtIndex(index, value) { activeBackend.sample.setLayerSolvationAtIndex(index, value) }
 
+    // Layer magnetism (polarized analysis). Only the refl1d calculator can
+    // model magnetic layers, so the editor is gated on sampleMagnetismSupported.
+    readonly property bool sampleMagnetismSupported: {
+        try {
+            return activeBackend.sample.magnetismSupported || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var sampleLayersMagnetism: {
+        try {
+            return activeBackend.sample.layersMagnetism || []
+        } catch (e) {
+            console.warn("sampleLayersMagnetism failed:", e)
+            return []
+        }
+    }
+    function sampleSetLayerMagneticAtIndex(index, value) { activeBackend.sample.setLayerMagneticAtIndex(index, value) }
+    function sampleSetLayerRhoMAtIndex(index, value) { activeBackend.sample.setLayerRhoMAtIndex(index, value) }
+    function sampleSetLayerThetaMAtIndex(index, value) { activeBackend.sample.setLayerThetaMAtIndex(index, value) }
+    function sampleSetLayerRhoMCoupledAtIndex(index, value) { activeBackend.sample.setLayerRhoMCoupledAtIndex(index, value) }
+    // The current model's field: guide_field_angle, applied_field, in_plane, phi (where H points).
+    readonly property var sampleMagneticField: {
+        try {
+            return activeBackend.sample.magneticField || ({ guide_field_angle: 270, applied_field: 0, model_magnetic: false, in_plane: true, phi: 0 })
+        } catch (e) {
+            console.warn("sampleMagneticField failed:", e)
+            return ({ guide_field_angle: 270, applied_field: 0, model_magnetic: false, in_plane: true, phi: 0 })
+        }
+    }
+    function sampleSetGuideFieldAngle(value) { activeBackend.sample.setGuideFieldAngle(value) }
+    function sampleSetAppliedField(value) { activeBackend.sample.setAppliedField(value) }
+
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
@@ -204,7 +321,17 @@ QtObject {
     function sampleValidateConstraintExpression(index, relation, expression) { return activeBackend.sample.validateConstraintExpression(index, relation, expression) }
     function sampleAddConstraint(index, relation, expression) { return activeBackend.sample.addConstraint(index, relation, expression) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
-    function sampleConstrainModelsParameters(modelIndices) { activeBackend.sample.constrainModelsParameters(modelIndices) }
+    function sampleConstrainModelsParameters(modelIndices, tieMaterials) { return activeBackend.sample.constrainModelsParameters(modelIndices, tieMaterials) }
+
+    // Inequality constraints (BUMPS-only fit penalties) and physics-constraint recipes
+    readonly property int sampleInequalityConstraintsCount: activeBackend.sample.inequalityConstraintsCount
+    readonly property var sampleViolatedInequalityConstraints: activeBackend.sample.violatedInequalityConstraints
+    readonly property var samplePhysicsConstraintRecipes: activeBackend.sample.physicsConstraintRecipes
+    // Note: the backends also expose setInequalityConstraintEnabled(index, enabled)
+    // (disable-without-delete); wrap it here once the constraints table grows a
+    // per-row enable control.
+    function sampleApplyPhysicsConstraint(assemblyIndex, recipeId) { return activeBackend.sample.applyPhysicsConstraint(assemblyIndex, recipeId) }
+    function sampleRemovePhysicsConstraint(assemblyIndex, recipeId) { return activeBackend.sample.removePhysicsConstraint(assemblyIndex, recipeId) }
 
     // Q range
     readonly property var sampleQMin: activeBackend.sample.q_min
@@ -226,12 +353,44 @@ QtObject {
     readonly property var experimentResolution: activeBackend.experiment.resolution
     function experimentSetResolution(value) { activeBackend.experiment.setResolution(value) }
     function experimentLoad(value) { activeBackend.experiment.load(value) }
+    // More curves of the selected experiment's contrast, merged into it (each point keeps its resolution)
+    function experimentAppendToCurrent(value) { activeBackend.experiment.appendToCurrent(value) }
+    // Polarized experiment import (one file per spin channel)
+    function experimentSuggestPolarizedChannels(value) { return activeBackend.experiment.suggestPolarizedChannels(value) }
+    // Returns '' on success, or the reason the import was rejected. The backend
+    // validates the rows itself and raises, which would otherwise surface only
+    // as an uncaught slot exception.
+    function experimentLoadPolarized(value) {
+        try {
+            activeBackend.experiment.loadPolarized(value)
+        } catch (e) {
+            console.warn("experimentLoadPolarized failed:", e)
+            return (e && e.message) ? e.message : qsTr("The polarized experiment could not be loaded.")
+        }
+        return ''
+    }
 
 
     ///////////////
     // Analysis page
     ///////////////
     readonly property var analysisExperimentsAvailable: activeBackend.analysis.experimentsAvailable
+    readonly property var analysisExperimentsPolarized: {
+        try {
+            return activeBackend.analysis.experimentsPolarized || []
+        } catch (e) {
+            return []
+        }
+    }
+    // Measured spin channels per experiment (0 when unpolarized), shown next to
+    // the polarization badge in the experiment lists.
+    readonly property var analysisExperimentsChannelCount: {
+        try {
+            return activeBackend.analysis.experimentsChannelCount || []
+        } catch (e) {
+            return []
+        }
+    }
     readonly property int analysisExperimentsCurrentIndex: activeBackend.analysis.experimentCurrentIndex
     function analysisSetExperimentsCurrentIndex(value) { activeBackend.analysis.setExperimentCurrentIndex(value) }
     function analysisRemoveExperiment(value) { activeBackend.analysis.removeExperiment(value) }
@@ -261,7 +420,11 @@ QtObject {
         }
     }
 
-    function analysisSetModelOnExperiment(value) { activeBackend.analysis.setModelOnExperiment(value) }
+    function analysisSetModelOnExperiment(index, modelIndex) { activeBackend.analysis.setModelOnExperiment(index, modelIndex) }
+    // Per experiment: its model's index (-1 when it has none) and whether the next fit includes it
+    readonly property var analysisExperimentsModelIndices: activeBackend.analysis.experimentsModelIndices ?? []
+    readonly property var analysisExperimentsIncludedInFit: activeBackend.analysis.experimentsIncludedInFit ?? []
+    function analysisSetExperimentIncludedInFit(index, included) { activeBackend.analysis.setExperimentIncludedInFit(index, included) }
     readonly property var analysisModelForExperiment: activeBackend.analysis.modelIndexForExperiment
     readonly property var modelNamesForExperiment: activeBackend.analysis.modelNamesForExperiment
     readonly property var modelColorsForExperiment: activeBackend.analysis.modelColorsForExperiment
@@ -282,11 +445,21 @@ QtObject {
     function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
     function analysisSetExperimentNameAtIndex(index, value) { activeBackend.analysis.setExperimentNameAtIndex(index, value) }
 
-    // Minimizer
+    // Minimizer (undefined tolerance / budget: the engine default)
     readonly property var analysisMinimizerTolerance: activeBackend.analysis.minimizerTolerance
     function analysisSetMinimizerTolerance(value) { activeBackend.analysis.setMinimizerTolerance(value) }
+    function analysisResetMinimizerTolerance() { activeBackend.analysis.resetMinimizerTolerance() }
     readonly property var analysisMinimizerMaxIterations: activeBackend.analysis.minimizerMaxIterations
     function analysisSetMinimizerMaxIterations(value) { activeBackend.analysis.setMinimizerMaxIterations(value) }
+    function analysisResetMinimizerMaxIterations() { activeBackend.analysis.resetMinimizerMaxIterations() }
+    readonly property var analysisFitObjectives: activeBackend.analysis.fitObjectives
+    readonly property string analysisFitObjective: activeBackend.analysis.fitObjective
+    function analysisSetFitObjective(value) { activeBackend.analysis.setFitObjective(value) }
+    readonly property var analysisMinimizerOptions: activeBackend.analysis.minimizerOptions
+    function analysisSetMinimizerOption(name, text) { activeBackend.analysis.setMinimizerOption(name, text) }
+    readonly property bool analysisMinimizerRequiresFiniteBounds: activeBackend.analysis.minimizerRequiresFiniteBounds
+    readonly property int analysisUnboundedFreeParametersCount: activeBackend.analysis.unboundedFreeParametersCount
+    function analysisShowFreeParameters() { activeBackend.analysis.showFreeParameters() }
 
     // Fitting
     readonly property string analysisFittingStatus: activeBackend.analysis.fittingStatus
@@ -311,6 +484,9 @@ QtObject {
 
     // Bayesian sampling
     readonly property bool analysisIsBayesianSelected: activeBackend.analysis.isBayesianSelected
+    readonly property bool analysisMinimizerSupportsInequalities: activeBackend.analysis.minimizerSupportsInequalities
+    readonly property string analysisInequalityConstraintsWarning: activeBackend.analysis.inequalityConstraintsWarning
+    readonly property bool analysisFitInfeasible: activeBackend.analysis.fitInfeasible
 
     readonly property int bayesianSamples: activeBackend.analysis.bayesianSamples
     readonly property int bayesianBurnIn: activeBackend.analysis.bayesianBurnIn
@@ -339,7 +515,8 @@ QtObject {
     readonly property var bayesianHeatmapData: activeBackend.analysis.bayesianHeatmapData
     readonly property string bayesianHeatmapPlotUrl: activeBackend.analysis.bayesianHeatmapPlotUrl
     function bayesianComputeHeatmap(x, y) { activeBackend.analysis.computeBayesianHeatmap(x, y) }
-    function bayesianSavePlot(sourceUrl)  { activeBackend.analysis.saveBayesianPlot(sourceUrl) }
+    function bayesianSavePlot(sourceUrl, destinationUrl) { return activeBackend.analysis.saveBayesianPlot(sourceUrl, destinationUrl) }
+    function bayesianPlotSuggestedFileUrl(sourceUrl) { return activeBackend.analysis.bayesianPlotSuggestedFileUrl(sourceUrl) }
 
     // Phase 2: SLD posterior predictive
     readonly property var posteriorPredictiveSldZ: activeBackend.plotting.posteriorPredictiveSldZ
@@ -354,6 +531,16 @@ QtObject {
     property var _fitFailedConnection: {
         if (activeBackend && activeBackend.analysis && activeBackend.analysis.fitFailed) {
             activeBackend.analysis.fitFailed.connect(analysisFitFailed)
+        }
+        return null
+    }
+
+    // Pre-fit check failure signal - forwarded from backend (fit was refused before starting)
+    signal analysisPrefitCheckFailed(string title, string message)
+
+    property var _prefitCheckFailedConnection: {
+        if (activeBackend && activeBackend.analysis && activeBackend.analysis.prefitCheckFailed) {
+            activeBackend.analysis.prefitCheckFailed.connect(analysisPrefitCheckFailed)
         }
         return null
     }
@@ -537,6 +724,32 @@ QtObject {
             return []
         }
     }
+    // One-call series fills (false = backend cannot fill, caller falls back
+    // to an append() loop — e.g. the mock backend).
+    function plottingFillSampleSeriesForModel(series, index) {
+        try {
+            activeBackend.plotting.fillSampleSeriesForModel(series, index)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingFillSldSeriesForModel(series, index) {
+        try {
+            activeBackend.plotting.fillSldSeriesForModel(series, index)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingFillMagneticSldSegmentSeries(series, index, curve, segment) {
+        try {
+            activeBackend.plotting.fillMagneticSldSegmentSeries(series, index, curve, segment)
+            return true
+        } catch (e) {
+            return false
+        }
+    }
     function plottingGetModelColor(index) {
         try {
             return activeBackend.plotting.getModelColor(index)
@@ -558,6 +771,12 @@ QtObject {
     signal posteriorPredictiveDataChanged()
     // Signal for posterior predictive SLD (Bayesian) overlay data updates
     signal posteriorPredictiveSldDataChanged()
+    // Magnetic display state changed: which magnetic curves are drawn (SLD
+    // chart), whether the sample chart splits a model into its spin
+    // cross-sections, or whether any model is magnetic at all
+    signal magneticProfileChanged()
+    // Spin-asymmetry availability or content changed
+    signal spinAsymmetryChanged()
 
     // Connect to backend signal (called from Component.onCompleted in QML items)
     function connectSamplePageDataChanged() {
@@ -578,6 +797,12 @@ QtObject {
         }
         if (activeBackend && activeBackend.plotting && activeBackend.plotting.posteriorPredictiveSldDataChanged) {
             activeBackend.plotting.posteriorPredictiveSldDataChanged.connect(posteriorPredictiveSldDataChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.magneticProfileChanged) {
+            activeBackend.plotting.magneticProfileChanged.connect(magneticProfileChanged)
+        }
+        if (activeBackend && activeBackend.plotting && activeBackend.plotting.spinAsymmetryChanged) {
+            activeBackend.plotting.spinAsymmetryChanged.connect(spinAsymmetryChanged)
         }
     }
 
@@ -602,6 +827,16 @@ QtObject {
             return []
         }
     }
+    // Same list, but a polarized experiment appears once per visible spin
+    // channel — for charts that draw per-channel series.
+    readonly property var plottingIndividualExperimentChannelDataList: {
+        try {
+            return activeBackend.plottingIndividualExperimentChannelDataList || []
+        } catch (e) {
+            console.warn("plottingIndividualExperimentChannelDataList failed:", e)
+            return []
+        }
+    }
     function plottingGetExperimentDataPoints(index) {
         try {
             return activeBackend.plottingGetExperimentDataPoints(index)
@@ -610,19 +845,249 @@ QtObject {
             return []
         }
     }
-    function plottingGetAnalysisDataPoints(index) {
+    // `channel` is optional: pass a spin channel ('pp'/'pm'/'mp'/'mm') to get
+    // that cross-section of a polarized experiment, '' for the ordinary curve.
+    function plottingGetAnalysisDataPoints(index, channel) {
         try {
-            return activeBackend.plottingGetAnalysisDataPoints(index)
+            return activeBackend.plottingGetAnalysisDataPoints(index, channel || "")
         } catch (e) {
             console.warn("plottingGetAnalysisDataPoints failed:", e)
             return []
         }
     }
-    function plottingGetResidualDataPoints(index) {
+    function plottingGetResidualDataPoints(index, channel) {
         try {
-            return activeBackend.plottingGetResidualDataPoints(index)
+            return activeBackend.plottingGetResidualDataPoints(index, channel || "")
         } catch (e) {
             console.warn("plottingGetResidualDataPoints failed:", e)
+            return []
+        }
+    }
+    // True when the analysis/residual charts must draw one series per channel.
+    readonly property bool plottingAnalysisUsesChannelSeries: {
+        try {
+            return activeBackend.plottingAnalysisUsesChannelSeries || false
+        } catch (e) {
+            return false
+        }
+    }
+
+    // Polarized experiment (spin channel) plotting support
+    readonly property bool plottingCurrentExperimentIsPolarized: {
+        try {
+            return activeBackend.plotting.currentExperimentIsPolarized || false
+        } catch (e) {
+            console.warn("plottingCurrentExperimentIsPolarized failed:", e)
+            return false
+        }
+    }
+    readonly property var plottingExperimentChannelList: {
+        try {
+            return activeBackend.plotting.experimentChannelList || []
+        } catch (e) {
+            console.warn("plottingExperimentChannelList failed:", e)
+            return []
+        }
+    }
+    function plottingGetExperimentChannels(index) {
+        try {
+            return activeBackend.plottingGetExperimentChannels(index)
+        } catch (e) {
+            console.warn("plottingGetExperimentChannels failed:", e)
+            return []
+        }
+    }
+    function plottingGetExperimentChannelDataPoints(index, channel) {
+        try {
+            return activeBackend.plottingGetExperimentChannelDataPoints(index, channel)
+        } catch (e) {
+            console.warn("plottingGetExperimentChannelDataPoints failed:", e)
+            return []
+        }
+    }
+    function plottingSetChannelVisible(channel, visible) {
+        try {
+            activeBackend.plottingSetChannelVisible(channel, visible)
+        } catch (e) {
+            console.warn("plottingSetChannelVisible failed:", e)
+        }
+    }
+
+    // Magnetic depth profiles on the shared SLD chart (Sample and Analysis)
+    readonly property bool plottingAnyModelHasMagnetism: {
+        try {
+            return activeBackend.plotting.anyModelHasMagnetism || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property var plottingVisibleSldCurves: {
+        try {
+            return activeBackend.plotting.visibleSldCurves || []
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property string plottingMagneticProfileError: {
+        try {
+            return activeBackend.plotting.magneticProfileError || ''
+        } catch (e) {
+            return ''
+        }
+    }
+    readonly property var plottingSldThetaMinY: {
+        try {
+            return activeBackend.plotting.sldThetaMinY
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSldThetaMaxY: {
+        try {
+            return activeBackend.plotting.sldThetaMaxY
+        } catch (e) {
+            return 360
+        }
+    }
+    function plottingModelHasMagnetism(index) {
+        try {
+            return activeBackend.plottingModelHasMagnetism(index)
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingGetMagneticSldDataPointsForModel(index, curve) {
+        try {
+            return activeBackend.plottingGetMagneticSldDataPointsForModel(index, curve)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldDataPointsForModel failed:", e)
+            return []
+        }
+    }
+    function plottingGetMagneticSldSegmentsForModel(index, curve) {
+        try {
+            return activeBackend.plottingGetMagneticSldSegmentsForModel(index, curve)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldSegmentsForModel failed:", e)
+            return []
+        }
+    }
+    function plottingGetMagneticSldSegment(index, curve, segment) {
+        try {
+            return activeBackend.plottingGetMagneticSldSegment(index, curve, segment)
+        } catch (e) {
+            console.warn("plottingGetMagneticSldSegment failed:", e)
+            return []
+        }
+    }
+    function plottingSldCurveVisible(curve) {
+        try {
+            return activeBackend.plottingSldCurveVisible(curve)
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingSetSldCurveVisible(curve, visible) {
+        try {
+            activeBackend.plottingSetSldCurveVisible(curve, visible)
+        } catch (e) {
+            console.warn("plottingSetSldCurveVisible failed:", e)
+        }
+    }
+
+    // Model spin cross-sections on the sample page reflectivity chart
+    readonly property bool plottingShowModelChannels: {
+        try {
+            return activeBackend.plotting.showModelChannels || false
+        } catch (e) {
+            return false
+        }
+    }
+    function plottingSetShowModelChannels(visible) {
+        try {
+            activeBackend.plotting.setShowModelChannels(visible)
+        } catch (e) {
+            console.warn("plottingSetShowModelChannels failed:", e)
+        }
+    }
+    function plottingFillSampleChannelSeriesForModel(series, index, channel) {
+        try {
+            activeBackend.plotting.fillSampleChannelSeriesForModel(series, index, channel)
+        } catch (e) {
+            console.warn("plottingFillSampleChannelSeriesForModel failed:", e)
+        }
+    }
+
+    // Spin asymmetry
+    readonly property bool plottingSpinAsymmetryAvailable: {
+        try {
+            return activeBackend.plotting.spinAsymmetryAvailable || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property bool plottingSpinAsymmetryCalculatedAvailable: {
+        try {
+            return activeBackend.plotting.spinAsymmetryCalculatedAvailable || false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property int plottingSpinAsymmetryMaskedPoints: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaskedPoints || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property int plottingSpinAsymmetryOutOfOverlapPoints: {
+        try {
+            return activeBackend.plotting.spinAsymmetryOutOfOverlapPoints || 0
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSpinAsymmetryMinX: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMinX
+        } catch (e) {
+            return 0
+        }
+    }
+    readonly property var plottingSpinAsymmetryMaxX: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaxX
+        } catch (e) {
+            return 1
+        }
+    }
+    readonly property var plottingSpinAsymmetryMinY: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMinY
+        } catch (e) {
+            return -1
+        }
+    }
+    readonly property var plottingSpinAsymmetryMaxY: {
+        try {
+            return activeBackend.plotting.spinAsymmetryMaxY
+        } catch (e) {
+            return 1
+        }
+    }
+    function plottingGetSpinAsymmetryPoints(index) {
+        try {
+            return activeBackend.plottingGetSpinAsymmetryPoints(index)
+        } catch (e) {
+            console.warn("plottingGetSpinAsymmetryPoints failed:", e)
+            return []
+        }
+    }
+    function plottingGetSpinAsymmetryCalculatedPoints(index) {
+        try {
+            return activeBackend.plottingGetSpinAsymmetryCalculatedPoints(index)
+        } catch (e) {
+            console.warn("plottingGetSpinAsymmetryCalculatedPoints failed:", e)
             return []
         }
     }

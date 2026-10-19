@@ -32,3 +32,27 @@ The advanced control is then for changing the calculation engine and setting the
 - **B**: Setting the minimisation method for minimising variables.
 - **C**: Specifying the tolerance of the set minimiser.
 - **D**: Setting the maximum number of iterations(evaluations) for the minimiser to run.
+
+The calculation engine (**A**) is also available on the `Model` page, in its advanced
+controls; both selectors change the same project setting. Note that only `refl1d` can model
+magnetic layers, so a sample with magnetism cannot be calculated with `refnx` - see
+[magnetic layers](./magnetism.md).
+
+The first entry of the minimiser list (**B**), `BUMPS-DREAM (Bayesian)`, does not minimise
+but samples the posterior distribution of the fitted parameters; it replaces **C** and **D**
+with its own sampling settings. See [Bayesian analysis](./bayesian.md).
+
+## Residuals
+The lower panel of the `Analysis` page has three tabs: `SLD`, `Residuals` and, for a
+polarised experiment that measured both non-spin-flip channels, `Spin asymmetry`.
+
+The `Residuals` tab plots the weighted residual `(M-E)/σ` against `q` - the difference
+between the model and the experiment, in units of the measured uncertainty. A good fit
+scatters evenly around zero with no structure left in it; a systematic wave or a drift means
+the model is missing something. The tab has the same legend, hover, zoom, pan and reset
+controls as the other charts, and its q-axis follows the logarithmic setting of the
+reflectivity chart.
+
+With several experiments, or with a polarised experiment, the tab draws one residual curve
+per visible measured series. A spin channel the model cannot calculate contributes no
+residuals.

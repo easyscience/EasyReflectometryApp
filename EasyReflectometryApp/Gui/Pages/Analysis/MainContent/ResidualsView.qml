@@ -161,7 +161,7 @@ Rectangle {
             color: Globals.Variables.experimentColor(
                 Globals.BackendWrapper.analysisExperimentsCurrentIndex
             )
-            visible: !isMultiExperimentMode
+            visible: !useDynamicSeries
             onHovered: (point, state) => showMainTooltip(chartView, dataToolTip, point, state)
         }
 
@@ -253,14 +253,14 @@ Rectangle {
 
                 // Single experiment
                 EaElements.Label {
-                    visible: !isMultiExperimentMode
+                    visible: !useDynamicSeries
                     text: '━  ' + qsTr('Residual')
                     color: singleResidualSerie.color
                 }
 
                 // Multi-experiment
                 Repeater {
-                    model: isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentDataList : []
+                    model: useDynamicSeries ? seriesDataList : []
                     delegate: Row {
                         spacing: EaStyle.Sizes.fontPixelSize * 0.3
 
@@ -397,11 +397,37 @@ Rectangle {
         catch (e) { return false }
     }
 
+    // A polarized experiment has one residual curve per spin channel, so it
+    // uses the same per-series path as a multi-experiment selection.
+    property bool usesChannelSeries: Globals.BackendWrapper.plottingAnalysisUsesChannelSeries
+    readonly property bool useDynamicSeries: isMultiExperimentMode || usesChannelSeries
+
+    // One row per experiment, or per visible channel when polarized.
+    readonly property var seriesDataList: {
+        try {
+            return usesChannelSeries
+                ? Globals.BackendWrapper.plottingIndividualExperimentChannelDataList
+                : Globals.BackendWrapper.plottingIndividualExperimentDataList
+        } catch (e) {
+            console.warn("ResidualsView.seriesDataList failed:", e)
+            return []
+        }
+    }
+
+    onUseDynamicSeriesChanged: refreshResidualChart()
+
     // Re-populate charts when backend signals a data/range refresh
     Connections {
         target: Globals.BackendWrapper.activeBackend?.plotting ?? null
         enabled: target !== null
         function onSampleChartRangesChanged() {
+            refreshResidualChart()
+        }
+        // Showing/hiding a spin channel changes which residual curves exist.
+        function onChannelSelectionChanged() {
+            refreshResidualChart()
+        }
+        function onExperimentChannelsChanged() {
             refreshResidualChart()
         }
     }
@@ -419,7 +445,7 @@ Rectangle {
         zeroLine.append(Globals.BackendWrapper.plottingResidualMinX, 0)
         zeroLine.append(Globals.BackendWrapper.plottingResidualMaxX, 0)
 
-        if (isMultiExperimentMode) {
+        if (useDynamicSeries) {
             _refreshMultiExperiment()
         } else {
             _refreshSingleExperiment()
@@ -453,7 +479,7 @@ Rectangle {
             }
         } else {
             // Linear mode: use static series
-            singleResidualSerie.visible = !isMultiExperimentMode
+            singleResidualSerie.visible = !useDynamicSeries
             singleResidualSerie.clear()
             for (let i = 0; i < points.length; i++) {
                 singleResidualSerie.append(points[i].x, points[i].y)
@@ -473,7 +499,7 @@ Rectangle {
         }
 
         var xAxisToUse = chartView.currentXAxis()
-        const experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
+        const experimentDataList = seriesDataList
         for (let i = 0; i < experimentDataList.length; i++) {
             const expData = experimentDataList[i]
             if (!expData.hasData) continue
@@ -486,7 +512,7 @@ Rectangle {
             serie.useOpenGL = EaGlobals.Vars.useOpenGL
             serie.hovered.connect((point, state) => showMainTooltip(chartView, dataToolTip, point, state))
 
-            const points = Globals.BackendWrapper.plottingGetResidualDataPoints(expData.index)
+            const points = Globals.BackendWrapper.plottingGetResidualDataPoints(expData.index, expData.channel || "")
             for (let j = 0; j < points.length; j++) {
                 serie.append(points[j].x, points[j].y)
             }

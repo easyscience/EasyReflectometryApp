@@ -59,6 +59,13 @@ Column {
             topPadding: topInset + padding
             width: EaStyle.Sizes.fontPixelSize * 10
             model: Globals.BackendWrapper.summaryPlotExportFormats
+            // PICKLE is not an image: it writes the matplotlib figure itself,
+            // so say what the user gets before they pick it.
+            ToolTip.text: currentValue === 'PICKLE'
+                ? qsTr('Matplotlib figure object, reloadable with pickle.load() for further editing')
+                : qsTr('Image format of the saved figure')
+            ToolTip.visible: hovered
+            ToolTip.delay: 500
             EaElements.Label {
                 id: plotFormatLabel
                 text: qsTr('Format')

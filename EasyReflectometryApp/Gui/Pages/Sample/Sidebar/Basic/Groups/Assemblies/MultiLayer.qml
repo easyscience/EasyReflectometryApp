@@ -58,21 +58,21 @@ EaElements.GroupColumn {
 
             EaComponents.TableViewComboBox{
                 readonly property int rowIndex: index
-                property string currentAssemblyName: Globals.BackendWrapper.sampleCurrentAssemblyName
+                // Track the row's own material so the combo re-syncs whenever the layer
+                // list is refreshed (e.g. a model switch), even if the assembly name and
+                // the materials list are unchanged.
+                readonly property string layerMaterial: {
+                    const layer = Globals.BackendWrapper.sampleLayers[index]
+                    return layer ? String(layer.material) : ""
+                }
                 horizontalAlignment: Text.AlignLeft
                 model: Globals.BackendWrapper.sampleMaterialNames
                 onActivated: function(comboIndex) {
                     Globals.BackendWrapper.sampleSetLayerMaterialAtIndex(rowIndex, comboIndex)
                 }
-                onModelChanged: {
-                    currentIndex = indexOfValue(Globals.BackendWrapper.sampleLayers[index].material)
-                }
-                onCurrentAssemblyNameChanged: {
-                    currentIndex = indexOfValue(Globals.BackendWrapper.sampleLayers[index].material)
-                }
-                Component.onCompleted: {
-                    currentIndex = indexOfValue(Globals.BackendWrapper.sampleLayers[index].material)
-                }
+                onModelChanged: currentIndex = indexOfValue(layerMaterial)
+                onLayerMaterialChanged: currentIndex = indexOfValue(layerMaterial)
+                Component.onCompleted: currentIndex = indexOfValue(layerMaterial)
             }
 
             EaComponents.TableViewTextInput {

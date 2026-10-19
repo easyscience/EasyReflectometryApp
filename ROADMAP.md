@@ -28,8 +28,8 @@ gantt
     ESS Start of User Operation :milestone, m3, 2026-11, 2min
 
     section Hard Condensed Matter
-    Magnetism support :c1, after m1, 40w
-    Spin asymmetry and polarisation analysis :c2, after m2, 30w
+    Magnetism support :done, c1, after m1, 40w
+    Spin asymmetry and polarisation analysis :done, c2, after m2, 30w
 
     section Item Library
     # Bilayer item :d1, 2024-01, 8w
@@ -121,7 +121,10 @@ This would involve significant EasyCore work, in addition to the development of 
 
 ### Magnetism support 
 
-This will begin with enabling the magnetism functionality available in `refl1d`, concurrent to which the graphical user interface will be designed with input from the relevant user communities. 
+**Delivered.** Magnetic layers can be defined on the Model page and refined with `refl1d`;
+see the [magnetism tutorial](./docs/src/tutorials/magnetism.md).
+
+This began with enabling the magnetism functionality available in `refl1d`, concurrent to which the graphical user interface will be designed with input from the relevant user communities. 
 
 - [Discuss with user community and document requirements for magnetism](https://github.com/easyScience/EasyReflectometryApp/issues/113)
 - [Expose magnetisation in EasyReflectometryLib](https://github.com/easyScience/EasyReflectometryLib/issues/21)
@@ -129,6 +132,10 @@ This will begin with enabling the magnetism functionality available in `refl1d`,
 - [Create compatibility functions between magnetisation in calculators](https://github.com/easyScience/EasyReflectometryLib/issues/17)
 
 ### Spin asymmetry and polarisation analysis 
+
+**Delivered.** Polarised experiments are imported one file per spin channel, displayed per channel,
+fitted together and shown as spin asymmetry; see the
+[polarised data tutorial](./docs/src/tutorials/polarized_data.md).
 
 Enabling the analysis of difference between different spin flipper state
 

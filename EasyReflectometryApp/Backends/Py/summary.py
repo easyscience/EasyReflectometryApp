@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # © 2026 Contributors to the EasyApp project <https://github.com/easyscience/EasyApp>
 
+import logging
+from html import escape
+
+from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -10,6 +14,8 @@ from PySide6.QtCore import Slot
 
 from .helpers import IO
 from .logic.summary import Summary as SummaryLogic
+
+logger = logging.getLogger(__name__)
 
 
 class Summary(QObject):
@@ -63,11 +69,20 @@ class Summary(QObject):
 
     @Property('QVariant', notify=plotFileNameChanged)
     def plotExportFormats(self):
-        return ['PDF', 'PNG', 'SVG']
+        return ['PDF', 'PNG', 'SVG', 'PICKLE']
 
     @Property(str, notify=summaryChanged)
     def asHtml(self):
-        return self._logic.as_html
+        # QML reads this property, so an exception here escapes into Qt's C++
+        # signal delivery and aborts the process with no traceback (an access
+        # violation on Windows). Report the failure in the report itself
+        # instead: a broken summary must not take the application down.
+        try:
+            return self._logic.as_html
+        except Exception as exception:  # noqa: BLE001 - never let the report kill the app
+            console.error(f'Failed to compile the HTML summary: {exception}')
+            logger.exception('Failed to compile the HTML summary')
+            return f'<html><body><h3>The summary could not be generated</h3><p>{escape(str(exception))}</p></body></html>'
 
     @Property('QVariant', notify=summaryChanged)
     def exportFormats(self):

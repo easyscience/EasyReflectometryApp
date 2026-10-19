@@ -30,11 +30,25 @@ EaElements.GroupBox {
             Component.onCompleted: Globals.References.pages.analysis.sidebar.basic.popups.startFittingButton = this
         }
 
+        // Inequality constraints that the selected engine cannot enforce, or that
+        // the current values violate: the fit will be refused, say so up front.
+        EaElements.Label {
+            visible: Globals.BackendWrapper.sampleInequalityConstraintsCount > 0 &&
+                     (!Globals.BackendWrapper.analysisMinimizerSupportsInequalities ||
+                      Globals.BackendWrapper.sampleViolatedInequalityConstraints.length > 0)
+            width: parent.width
+            text: !Globals.BackendWrapper.analysisMinimizerSupportsInequalities
+                  ? qsTr("⚠ Inequality constraints need a BUMPS minimizer.")
+                  : qsTr("⚠ Current values violate an inequality constraint.")
+            color: EaStyle.Colors.themeAccent
+            wrapMode: Text.WordWrap
+        }
+
         // Progress message shown during fitting or sampling
         EaElements.Label {
             visible: Globals.BackendWrapper.analysisFitProgressMessage !== ''
             text: Globals.BackendWrapper.analysisFitProgressMessage
-            color: EaStyle.Colors.themeForegroundMinor
+            color: Globals.BackendWrapper.analysisFitInfeasible ? EaStyle.Colors.themeAccent : EaStyle.Colors.themeForegroundMinor
             wrapMode: Text.WordWrap
         }
 

@@ -1,5 +1,4 @@
 from EasyApplication.Logic.Logging import LoggerLevelHandler
-from EasyApplication.Logic.Logging import console
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -9,11 +8,63 @@ from PySide6.QtCore import Slot
 from .analysis import Analysis
 from .experiment import Experiment
 from .home import Home
+from .logic.experiment_selection import ExperimentSelection
 from .plotting_1d import Plotting1d
 from .project import Project
 from .sample import Sample
 from .status import Status
 from .summary import Summary
+
+# Signals whose emission changes what `Project.save()` would write to disk. Every one of them
+# marks the project dirty (see `_connect_dirty_tracking`). The inventory is explicit rather than
+# derived from a naming convention because the `external*` relays do not cover every mutation:
+# a material rename emits only `materialsTableChanged`, reordering layers or editing a repeated
+# assembly's repetitions emits only `externalRefreshPlot`, and the free/fixed checkbox emits only
+# `parametersChanged`. Missing one of those means the close prompt does not fire and the user
+# loses work, so anything doubtful belongs in this list rather than out of it.
+#
+# `Project`'s own signals are absent on purpose: its setters call `markDirty` directly, because
+# create, load and reset fan out through those same signal names and must end up clean.
+DIRTYING_SIGNALS = {
+    '_sample': (
+        'externalSampleChanged',
+        'externalRefreshPlot',
+        'materialsTableChanged',
+        'modelsTableChanged',
+        'constraintsChanged',
+        'calculationEngineChanged',  # stored as 'calculator' in the project file
+        'qRangeChanged',
+    ),
+    '_experiment': (
+        'externalExperimentChanged',
+        'experimentLoaded',
+        'qRangeUpdated',
+    ),
+    '_analysis': (
+        'externalCalculatorChanged',
+        'externalExperimentChanged',
+        'externalFittingChanged',  # a finished fit rewrites parameter values
+        'externalMinimizerChanged',  # stored in 'fit_settings' in the project file
+        'externalFitSettingsChanged',  # tolerance, budget, objective, options: also 'fit_settings'
+        'externalParametersChanged',
+        'parametersChanged',
+    ),
+}
+
+# `external*` signals deliberately left out of dirty tracking, with the reason. Together with
+# DIRTYING_SIGNALS this must account for every `external*` signal on every backend part;
+# tests/test_py_backend.py fails if a new one appears in neither, so it cannot silently skip
+# dirty tracking.
+NON_DIRTYING_EXTERNAL_SIGNALS = {
+    '_project': (
+        # Project lifecycle, not project content: create/load/reset end in a clean project and
+        # the setters mark dirty themselves.
+        'externalCreatedChanged',
+        'externalNameChanged',
+        'externalProjectLoaded',
+        'externalProjectReset',
+    ),
+}
 
 
 class PyBackend(QObject):
@@ -24,24 +75,25 @@ class PyBackend(QObject):
         super().__init__(parent)
 
         self._project_lib = ProjectLib()
+        # Selected experiments and visible spin channels: one owner, read by Analysis and Plotting1d.
+        self._experiment_selection = ExperimentSelection()
 
         # Page and Status bar backend parts
         self._home = Home()
         self._project = Project(self._project_lib)
         self._sample = Sample(self._project_lib)
         self._experiment = Experiment(self._project_lib)
-        self._analysis = Analysis(self._project_lib, parent=self)
+        self._analysis = Analysis(self._project_lib, parent=self, selection=self._experiment_selection)
         self._summary = Summary(self._project_lib)
         self._status = Status(self._project_lib)
 
         # Plotting backend part
-        self._plotting_1d = Plotting1d(self._project_lib, parent=self)
+        self._plotting_1d = Plotting1d(self._project_lib, parent=self, selection=self._experiment_selection)
 
         self._logger = LoggerLevelHandler(self)
 
         # Wire cross-cutting references before connecting signals
         self._status._status_logic.set_minimizers_logic(self._analysis._minimizers_logic)
-        self._analysis.set_plotting(self._plotting_1d)
 
         # Must be last to ensure all backend parts are created
         self._connect_backend_parts()
@@ -99,18 +151,9 @@ class PyBackend(QObject):
     @Slot('QVariantList')
     def analysisSetSelectedExperimentIndices(self, indices) -> None:
         """Set multiple selected experiment indices."""
-        console.debug(f'PyBackend.analysisSetSelectedExperimentIndices called with: {indices}')
-        console.debug(f'Type of indices: {type(indices)}')
-
         # Convert QVariantList to Python list if needed
         python_indices = list(indices) if hasattr(indices, '__iter__') else []
-        console.debug(f'Converted to Python list: {python_indices}')
-
-        if hasattr(self._analysis, 'setSelectedExperimentIndices'):
-            self._analysis.setSelectedExperimentIndices(python_indices)
-            console.debug('Successfully called analysis.setSelectedExperimentIndices')
-        else:
-            console.debug('ERROR: analysis.setSelectedExperimentIndices method not found')
+        self._analysis.setSelectedExperimentIndices(python_indices)
 
         # Emit our local signal to notify QML properties
         self.multiExperimentSelectionChanged.emit()
@@ -126,20 +169,93 @@ class PyBackend(QObject):
         """Return list of individual experiment data for multi-experiment plotting."""
         return self._plotting_1d.individualExperimentDataList
 
+    @Property('QVariantList', notify=multiExperimentSelectionChanged)
+    def plottingIndividualExperimentChannelDataList(self) -> list:
+        """Multi-experiment data with polarized experiments split per visible spin channel."""
+        return self._plotting_1d.individualExperimentChannelDataList
+
     @Slot(int, result='QVariantList')
     def plottingGetExperimentDataPoints(self, experiment_index: int) -> list:
         """Get data points for a specific experiment for plotting."""
         return self._plotting_1d.getExperimentDataPoints(experiment_index)
 
     @Slot(int, result='QVariantList')
-    def plottingGetAnalysisDataPoints(self, experiment_index: int) -> list:
-        """Get measured and calculated data points for a specific experiment for analysis plotting."""
-        return self._plotting_1d.getAnalysisDataPoints(experiment_index)
+    @Slot(int, str, result='QVariantList')
+    def plottingGetAnalysisDataPoints(self, experiment_index: int, channel: str = '') -> list:
+        """Get measured and calculated data points for a specific experiment for analysis plotting.
+
+        `channel` picks one spin channel of a polarized experiment.
+        """
+        return self._plotting_1d.getAnalysisDataPoints(experiment_index, channel)
 
     @Slot(int, result='QVariantList')
-    def plottingGetResidualDataPoints(self, experiment_index: int) -> list:
+    @Slot(int, str, result='QVariantList')
+    def plottingGetResidualDataPoints(self, experiment_index: int, channel: str = '') -> list:
         """Get residual data points for a specific experiment for residual plotting."""
-        return self._plotting_1d.getResidualDataPoints(experiment_index)
+        return self._plotting_1d.getResidualDataPoints(experiment_index, channel)
+
+    @Property(bool, notify=multiExperimentSelectionChanged)
+    def plottingAnalysisUsesChannelSeries(self) -> bool:
+        """Whether the analysis/residual charts must draw one series per spin channel."""
+        return self._plotting_1d.analysisUsesChannelSeries
+
+    # Polarized experiment support
+    @Slot(int, str, result='QVariantList')
+    def plottingGetExperimentChannelDataPoints(self, experiment_index: int, channel: str) -> list:
+        """Get data points of one spin channel of a polarized experiment."""
+        return self._plotting_1d.getExperimentChannelDataPoints(experiment_index, channel)
+
+    @Slot(int, result='QVariantList')
+    def plottingGetExperimentChannels(self, experiment_index: int) -> list:
+        """Measured spin channels of an experiment ({channel, label, color, visible} rows)."""
+        return self._plotting_1d.getExperimentChannels(experiment_index)
+
+    @Slot(str, bool)
+    def plottingSetChannelVisible(self, channel: str, visible: bool) -> None:
+        """Show or hide one spin channel on the charts."""
+        self._plotting_1d.setChannelVisible(channel, visible)
+
+    ######### Magnetic depth profiles (SLD chart, both pages)
+    @Slot(int, result=bool)
+    def plottingModelHasMagnetism(self, model_index: int) -> bool:
+        """Whether one model carries magnetism."""
+        return self._plotting_1d.modelHasMagnetism(model_index)
+
+    @Slot(int, str, result='QVariantList')
+    def plottingGetMagneticSldDataPointsForModel(self, model_index: int, curve: str) -> list:
+        """Points of one magnetic profile curve ('spin_up', 'spin_down', 'rho_m', 'theta_m')."""
+        return self._plotting_1d.getMagneticSldDataPointsForModel(model_index, curve)
+
+    @Slot(int, str, result='QVariantList')
+    def plottingGetMagneticSldSegmentsForModel(self, model_index: int, curve: str) -> list:
+        """The contiguous pieces of one magnetic profile curve."""
+        return self._plotting_1d.getMagneticSldSegmentsForModel(model_index, curve)
+
+    @Slot(int, str, int, result='QVariantList')
+    def plottingGetMagneticSldSegment(self, model_index: int, curve: str, segment: int) -> list:
+        """Points of one piece of a magnetic profile curve."""
+        return self._plotting_1d.getMagneticSldSegment(model_index, curve, segment)
+
+    @Slot(str, result=bool)
+    def plottingSldCurveVisible(self, curve: str) -> bool:
+        """Whether one magnetic profile curve is shown."""
+        return self._plotting_1d.sldCurveVisible(curve)
+
+    @Slot(str, bool)
+    def plottingSetSldCurveVisible(self, curve: str, visible: bool) -> None:
+        """Show or hide one magnetic profile curve on both SLD tabs."""
+        self._plotting_1d.setSldCurveVisible(curve, visible)
+
+    ######### Spin asymmetry
+    @Slot(int, result='QVariantList')
+    def plottingGetSpinAsymmetryPoints(self, experiment_index: int) -> list:
+        """Measured spin-asymmetry points with error bounds."""
+        return self._plotting_1d.getSpinAsymmetryPoints(experiment_index)
+
+    @Slot(int, result='QVariantList')
+    def plottingGetSpinAsymmetryCalculatedPoints(self, experiment_index: int) -> list:
+        """Calculated spin-asymmetry points ([] without a magnetic model)."""
+        return self._plotting_1d.getSpinAsymmetryCalculatedPoints(experiment_index)
 
     ######### Connections to relay info between the backend parts
     def _connect_backend_parts(self) -> None:
@@ -147,9 +263,23 @@ class PyBackend(QObject):
         self._connect_sample_page()
         self._connect_experiment_page()
         self._connect_analysis_page()
+        self._connect_dirty_tracking()
+
+    def _connect_dirty_tracking(self) -> None:
+        """Route every content-changing signal to the project's unsaved-changes flag."""
+        for part_name, signal_names in DIRTYING_SIGNALS.items():
+            part = getattr(self, part_name)
+            for signal_name in signal_names:
+                getattr(part, signal_name).connect(self._project.markDirty)
 
     ######### Forming connections between the backend parts
     def _connect_project_page(self) -> None:
+        # The GUI's constraint rows live in the Sample backend; they are written into the project
+        # before every save and rebuilt after every load/reset (see Sample.store_constraint_metadata).
+        self._project.add_pre_save_hook(self._sample.store_constraint_metadata)
+        self._project.add_post_load_hook(self._sample.reload_constraint_states)
+        # A loaded or reset project starts with only its current experiment selected.
+        self._project.add_post_load_hook(self._analysis.reset_selected_experiments)
         self._project.externalNameChanged.connect(self._relay_project_page_name)
         self._project.externalCreatedChanged.connect(self._relay_project_page_created)
         self._project.externalProjectLoaded.connect(self._relay_project_page_project_changed)
@@ -159,32 +289,78 @@ class PyBackend(QObject):
         self._project.externalCreatedChanged.connect(self._analysis.clearBayesianResults)
         self._project.externalProjectLoaded.connect(self._analysis.clearBayesianResults)
         self._project.externalProjectReset.connect(self._analysis.clearBayesianResults)
+        # A loaded or reset project brings its own minimizer and fit settings.
+        self._project.externalProjectLoaded.connect(self._analysis.onProjectLoaded)
+        self._project.externalProjectReset.connect(self._analysis.onProjectLoaded)
 
     def _connect_sample_page(self) -> None:
+        # Removing a model can remove its experiments. Connected first, so that every
+        # handler below already sees a selection without them.
+        self._sample.experimentsRekeyed.connect(self._analysis.follow_rekeyed_experiments)
+        self._sample.modelsTableChanged.connect(self._analysis.prune_selected_experiments)
         self._sample.externalSampleChanged.connect(self._relay_sample_page_sample_changed)
+        # Enabling magnetism can switch the project's calculation engine; the
+        # Analysis page's selector and every calculated curve must follow.
+        self._sample.calculationEngineChanged.connect(self._analysis.calculatorChanged)
+        self._sample.calculationEngineChanged.connect(self._analysis.externalCalculatorChanged)
         self._sample.externalRefreshPlot.connect(self._refresh_plots)
         self._sample.modelsTableChanged.connect(self._analysis._clearCacheAndEmitParametersChanged)
         self._sample.modelsTableChanged.connect(self._analysis.experimentsChanged)
         # Connect sample changes to multi-experiment selection signal
         self._sample.modelsTableChanged.connect(self.multiExperimentSelectionChanged)
+        # Structure view: refresh on any change to the stack. Signals overlap on some
+        # paths (harmless); assembliesTableChanged is the only signal a repetitions
+        # edit emits, modelsTableChanged the only one removeModel emits — keep both.
+        for signal in (
+            self._sample.layersChange,
+            self._sample.assembliesTableChanged,
+            self._sample.materialsTableChanged,
+            self._sample.modelsIndexChanged,
+            self._sample.modelsTableChanged,
+            self._sample.externalSampleChanged,
+        ):
+            signal.connect(self._sample._clearStructureCacheAndEmit)
+        # Adding/removing/toggling an inequality constraint changes the
+        # engine-support notices shown on the Analysis and Sample pages.
+        self._sample.constraintsChanged.connect(self._analysis.inequalityContextChanged)
 
     def _connect_experiment_page(self) -> None:
         self._experiment.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._experiment.externalExperimentChanged.connect(self._refresh_plots)
+        # Loading/removing an experiment can change whether the current one is
+        # polarized and which channels it has.
+        self._experiment.externalExperimentChanged.connect(self._plotting_1d.notifyExperimentChannelsChanged)
+        # A freshly imported experiment becomes the current (and only selected)
+        # one, so the charts show what was just loaded.
+        self._experiment.experimentLoaded.connect(self._analysis.selectExperimentAtIndex)
         if hasattr(self._experiment, 'qRangeUpdated') and hasattr(self._sample, 'qRangeChanged'):
             self._experiment.qRangeUpdated.connect(self._sample.qRangeChanged)
 
     def _connect_analysis_page(self) -> None:
+        # Bayesian results drawn on the charts.
+        self._analysis.posteriorPredictiveReady.connect(self._plotting_1d.set_posterior_predictive)
+        self._analysis.posteriorPredictiveSldReady.connect(self._plotting_1d.set_posterior_predictive_sld)
+        self._analysis.posteriorPredictiveCleared.connect(self._plotting_1d.clear_posterior_predictive)
+        self._analysis.posteriorPredictiveCleared.connect(self._plotting_1d.clear_posterior_predictive_sld)
         self._analysis.externalMinimizerChanged.connect(self._relay_analysis_page)
         self._analysis.externalCalculatorChanged.connect(self._relay_analysis_page)
         self._analysis.externalParametersChanged.connect(self._relay_analysis_page)
         self._analysis.externalParametersChanged.connect(self._refresh_plots)
         self._analysis.externalFittingChanged.connect(self._refresh_plots)
+        self._analysis.externalFittingChanged.connect(self._sample.magnetismChanged)
+
         # A finished fit updates the goodness-of-fit; refresh the Summary tab's
         # HTML binding so it stops showing the stale pre-fit value.
         self._analysis.externalFittingChanged.connect(self._summary.summaryChanged)
+        # The fit path never emits a Sample signal; refresh the Structure view post-fit
+        self._analysis.externalParametersChanged.connect(self._sample._clearStructureCacheAndEmit)
+        self._analysis.externalFittingChanged.connect(self._sample._clearStructureCacheAndEmit)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
+        # Selecting another experiment changes the polarization state and the
+        # channel list QML binds to, and with it whether spin asymmetry exists.
+        self._analysis.experimentsChanged.connect(self._plotting_1d.notifyExperimentChannelsChanged)
+        self._analysis.experimentsChanged.connect(self._plotting_1d.notifySpinAsymmetryChanged)
         # Update status bar when parameters change (e.g. fit checkbox toggle, post-fit)
         self._analysis.parametersChanged.connect(self._status.statusChanged)
         # Connect multi-experiment selection changes
@@ -200,6 +376,9 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
 
     def _relay_project_page_project_changed(self):
+        # Also reached by an ORSO sample import, which can replace models and their experiments
+        # without a project load, so the selection may hold experiments that are gone.
+        self._analysis.prune_selected_experiments()
         # Clear layers cache first so that subsequent signal handlers
         # (e.g. ComboBox onModelChanged / onCurrentAssemblyNameChanged in
         # MultiLayer.qml) read up-to-date layer data.
@@ -215,15 +394,18 @@ class PyBackend(QObject):
         self._analysis.experimentsChanged.emit()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
-        self._plotting_1d.reset_data()
+        # _refresh_plots drops the plot caches itself before recomputing.
         self._refresh_plots()
 
     def _relay_sample_page_sample_changed(self):
-        self._plotting_1d.reset_data()
+        # Non-plot consequences of a sample edit only. Every edit that changes
+        # a curve also emits externalRefreshPlot (handled by _refresh_plots,
+        # which invalidates and recomputes everything once); when this relay
+        # also dropped the plot caches and re-notified the magnetic/spin
+        # asymmetry charts, each edit computed every refl1d curve twice.
         self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()
         self._summary.summaryChanged.emit()
-        self._plotting_1d.samplePageResetAxes.emit()
 
     def _relay_experiment_page_experiment_changed(self):
         self._analysis.experimentsChanged.emit()
@@ -237,8 +419,19 @@ class PyBackend(QObject):
         self._experiment.experimentChanged.emit()
         self._summary.summaryChanged.emit()
         self._plotting_1d.samplePageResetAxes.emit()
+        # Switching the calculator changes whether magnetism can be modelled at
+        # all, which gates the Sample page's magnetism editor.
+        self._sample.magnetismChanged.emit()
 
     def _refresh_plots(self):
+        # The single invalidate-and-recompute pass: drop every plot cache
+        # first, then notify each chart exactly once.
+        self._plotting_1d.reset_data()
+        # The magnetic profile and the spin asymmetry follow both the sample
+        # (a layer became magnetic, a parameter moved) and the data, so they are
+        # refreshed wherever the ordinary plots are.
+        self._plotting_1d.notifyMagneticProfileChanged()
+        self._plotting_1d.notifySpinAsymmetryChanged()
         self._plotting_1d.sampleChartRangesChanged.emit()
         self._plotting_1d.sldChartRangesChanged.emit()
         self._plotting_1d.experimentChartRangesChanged.emit()

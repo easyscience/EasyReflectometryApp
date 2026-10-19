@@ -33,11 +33,8 @@ Rectangle {
                 font: EaStyle.Fonts.headingFont
             }
 
-            EaElements.Button {
-                text: qsTr("Save")
-                onClicked: Globals.BackendWrapper.bayesianSavePlot(
-                    Globals.BackendWrapper.bayesianCornerPlotUrl
-                )
+            BayesianSavePlotButton {
+                sourceUrl: Globals.BackendWrapper.bayesianCornerPlotUrl
             }
         }
 

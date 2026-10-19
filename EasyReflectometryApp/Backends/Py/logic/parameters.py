@@ -12,6 +12,8 @@ from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
+from .material import coupled_material_ids
+from .material import inactive_density_knobs
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,10 @@ class Parameters:
             return not _is_experiment_parameter(parameter)
         if normalized == 'experiment':
             return _is_experiment_parameter(parameter)
+        if normalized in {'magnetic', 'magnetism'}:
+            # The magnetic parameters are named after the physics, so the word
+            # rarely appears in their text; match them explicitly.
+            return any(name in searchable_text for name in MAGNETIC_PARAMETER_NAMES)
         if normalized in {'cell', 'atom_site'}:
             return normalized in searchable_text
         if normalized == 'b_iso':
@@ -105,6 +111,7 @@ class Parameters:
                     'display_name': parameter['display_name'],
                     'group': parameter.get('group', ''),
                     'independent': parameter['independent'],
+                    'kind': parameter.get('kind', 'parameter'),
                     'object': parameter['object'],
                 }
             )
@@ -123,6 +130,7 @@ class Parameters:
                     'displayName': entry['display_name'],
                     'group': entry.get('group', ''),
                     'independent': entry['independent'],
+                    'kind': entry.get('kind', 'parameter'),
                 }
             )
         metadata.sort(key=lambda item: item['displayName'])
@@ -153,6 +161,13 @@ class Parameters:
         enabled_params = self._get_enabled_parameters()
         if 0 <= self._current_index < len(enabled_params):
             return enabled_params[self._current_index]
+        return None
+
+    def _get_current_parameter_entry(self) -> dict[str, Any] | None:
+        """Get the current row (with 'kind'/'object') from the enabled rows."""
+        enabled_entries = [p for p in self.parameters if p.get('enabled', True)]
+        if 0 <= self._current_index < len(enabled_entries):
+            return enabled_entries[self._current_index]
         return None
 
     def set_current_parameter_value(self, new_value: str) -> bool:
@@ -207,11 +222,22 @@ class Parameters:
         return False
 
     def set_current_parameter_fit(self, new_value: bool) -> bool:
-        parameter = self._get_current_parameter()
-        if parameter is None:
+        entry = self._get_current_parameter_entry()
+        if entry is None:
             return False
+        if entry.get('kind') == 'inactive':
+            # Same class of bug the Select-All skip fixed: an inactive
+            # density knob no longer affects the reflectivity and must not
+            # be tickable into the fit through any caller, QML or not.
+            return False
+        parameter = entry['object']
         if bool(new_value) != parameter.free:
             parameter.free = bool(new_value)
+            # The data only constrain the product of these two: freeing one
+            # fixes the other (see `_exclusive_partner`).
+            partner = entry.get('exclusive_with')
+            if parameter.free and partner is not None:
+                partner.free = False
             return True
         return False
 
@@ -264,6 +290,9 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     # Layer parameter names that need model prefix
     LAYER_PARAMS = {'thickness', 'roughness'}
+    # Magnetism sits one level below the layer (Layer -> LayerMagnetism -> param),
+    # but belongs to the layer just as much, so it is named the same way.
+    MAGNETISM_PARAMS = {'rho_m', 'theta_m'}
 
     def _make_alias(name: str) -> str:
         base = re.sub(r'[^0-9A-Za-z]+', '_', name).strip('_').lower()
@@ -287,12 +316,17 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         in the Model Editor is reflected in the Analysis parameters table.
         """
         if path is not None and len(path) >= 2:
-            param_name = path[-1].name
+            param_name = _DISPLAY_NAMES.get(path[-1].name, path[-1].name)
             # For layer parameters the path is:
             # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
             if _is_layer_parameter(param) and len(path) >= 4:
                 parent_name = path[-4].name
+            elif _is_magnetism_parameter(param) and len(path) >= 5:
+                # ... -> Assembly -> LayerCollection -> Layer -> LayerMagnetism -> param:
+                # one level deeper, so the assembly is path[-5]. Without this the
+                # group would read 'EasyLayerMagnetism', which names nothing.
+                parent_name = path[-5].name
             else:
                 parent_name = path[-2].name
             return f'{parent_name} {param_name}', parent_name
@@ -319,14 +353,36 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         """Check if parameter is a layer parameter (thickness or roughness)."""
         return param.name.lower() in LAYER_PARAMS
 
+    def _is_magnetism_parameter(param: Parameter) -> bool:
+        """Check if parameter is a layer magnetism parameter (rho_m or theta_m)."""
+        return param.name.lower() in MAGNETISM_PARAMS
+
+    def _is_per_layer_parameter(param: Parameter) -> bool:
+        """Per-layer parameters exist once per model and carry the model prefix."""
+        return _is_layer_parameter(param) or _is_magnetism_parameter(param)
+
     parameter_list = []
 
+    # The models each parameter belongs to (several when contrasts share an object), and
+    # how many parameters of other models follow it (equality ties between contrasts).
+    # Object paths replace the global_object.map graph, which the new
+    # easyscience core no longer populates with parent->child edges.
+    model_paths = [_build_param_object_paths(model) for model in models]
+    owners: dict[str, list[int]] = {}
+    for model_idx, paths in enumerate(model_paths):
+        for unique_name in paths:
+            owners.setdefault(unique_name, []).append(model_idx)
+    # Materials some layer takes its rho_m from: only their moment acts.
+    coupled_materials = coupled_material_ids(models)
+    followed_by: dict[str, int] = {}
+    for parameter in parameters:
+        for leader in (getattr(parameter, 'dependency_map', None) or {}).values():
+            leader_name = getattr(leader, 'unique_name', None)
+            if not set(owners.get(parameter.unique_name, [])) & set(owners.get(leader_name, [])):
+                followed_by[leader_name] = followed_by.get(leader_name, 0) + 1
+
     # Process parameters for each model
-    for model_idx, model in enumerate(models):
-        model_prefix = get_original_name(model)
-        # Object paths replace the global_object.map graph, which the new
-        # easyscience core no longer populates with parent->child edges.
-        paths = _build_param_object_paths(model)
+    for model_idx, paths in enumerate(model_paths):
 
         for parameter in parameters:
             # Skip parameters not in this model's tree
@@ -334,23 +390,34 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             if path is None:
                 continue
 
-            # For non-layer parameters, skip if already processed (they're shared across models)
-            is_layer_param = _is_layer_parameter(parameter)
-            if not is_layer_param:
-                if parameter.unique_name in processed_unique_names:
-                    continue
-                processed_unique_names.add(parameter.unique_name)
+            # Each parameter once, whichever models share it
+            is_layer_param = _is_per_layer_parameter(parameter)
+            if parameter.unique_name in processed_unique_names:
+                continue
+            processed_unique_names.add(parameter.unique_name)
+            shared_by = owners.get(parameter.unique_name, [model_idx])
 
             display_name, group_name = _get_parameter_display_data(parameter, path)
 
-            # Add model prefix only to layer parameters (thickness, roughness)
+            # Add model prefix only to layer parameters (thickness, roughness); a layer shared
+            # by several models carries all their names.
             if is_layer_param:
-                prefixed_display_name = f'{model_prefix} {display_name}'
+                owner_names = [get_original_name(models[index]) for index in shared_by]
+                prefixed_display_name = f"{'+'.join(owner_names)} {display_name}"
             else:
                 prefixed_display_name = display_name
 
             alias = _make_alias(prefixed_display_name or parameter.name)
             param_value = float(parameter.value)
+            is_derived = _is_derived_parameter(parameter, models[model_idx])
+            # A density material's input knobs (density, mw, scattering
+            # lengths) stop affecting the reflectivity once the material's
+            # sld/isld are decoupled, and a material's moment does nothing
+            # while no layer is coupled to it — shown greyed with a note, never
+            # hidden (enabled must stay True: _parameter_matches_filters drops
+            # enabled=False rows from the list entirely).
+            inactive_note = _inactive_note(parameter, path, coupled_materials)
+            is_inactive = inactive_note is not None
             parameter_list.append(
                 {
                     'name': prefixed_display_name,
@@ -359,19 +426,106 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'alias': alias,
                     'unique_name': parameter.unique_name,
                     'value': param_value,
-                    'error': float(parameter.variance),
+                    # None means the minimizer produced no error bars (e.g. lmfit's
+                    # gradient-free methods); the GUI renders it as 'n/a', distinct
+                    # from a numeric zero which is shown as an empty cell.
+                    'error': float(parameter.error) if parameter.error is not None else None,
                     'max': float(parameter.max),
                     'min': float(parameter.min),
                     'units': parameter.unit,
-                    'fit': parameter.free,
+                    'fit': False if (is_derived or is_inactive) else parameter.free,
                     'independent': parameter.independent,
-                    'dependency': _get_dependency_expression(parameter, paths),
+                    'dependency': (
+                        inactive_note
+                        if is_inactive
+                        else _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
+                        if is_derived
+                        else _get_dependency_expression(parameter, paths)
+                    ),
+                    # Derived "calculation" parameters (e.g. the model's total film
+                    # thickness) are computed from the layers: shown read-only, never
+                    # fitted, but usable as aliases in constraint expressions.
+                    'kind': 'derived' if is_derived else 'inactive' if is_inactive else 'parameter',
+                    'readOnly': is_derived or is_inactive,
                     'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
+                    # Models it belongs to when several (one object shared), and how many
+                    # parameters of other models follow it
+                    'sharedBy': [get_original_name(models[index]) for index in shared_by] if len(shared_by) > 1 else [],
+                    'sharedByIndices': shared_by if len(shared_by) > 1 else [],
+                    # A shared layer parameter can be given to one model alone (its assembly is
+                    # copied); a material's cannot: materials belong to the project's palette.
+                    'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
+                    'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
+                    'exclusive_with': _exclusive_partner(parameter, path),
                 }
             )
 
     return parameter_list
+
+
+_DERIVED_DESCRIPTIONS = {
+    'total_thickness': 'Σ film layer thicknesses',
+}
+
+# Table names for parameters whose own name is forced by something else. A
+# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' because the
+# calculators bind by name (a material parameter called 'rho_m' would be
+# bound to its layer's magnetic SLD slot); the table calls it what it is.
+_DISPLAY_NAMES = {'magnetic_sld': 'material rho_m'}
+
+# What the 'magnetic' name filter shows.
+MAGNETIC_PARAMETER_NAMES = ('rho_m', 'theta_m', 'magnetic_moment', 'magnetic_sld', 'guide_field_angle', 'applied_field')
+
+_INACTIVE_KNOB_NOTE = 'unused (SLD is fitted directly)'
+_UNUSED_MOMENT_NOTE = 'unused (no layer takes ρM from this material)'
+
+
+def _inactive_note(parameter: Parameter, path, coupled_materials: set[int]):
+    """Why a parameter has no effect, or None when it has.
+
+    A density material's knob is unused once its sld/isld are decoupled
+    (duck-typed on the owner's ``sld_coupled``: only ``MaterialDensity``
+    carries it); a magnetic material's moment is unused while no layer takes
+    its rho_m. molecular_weight never appears here: it is a DescriptorNumber,
+    so the Parameter tree walk never yields it.
+    """
+    if path is None or len(path) < 2:
+        return None
+    owner = path[-2]
+    drives_magnetism = id(owner) in coupled_materials
+    if getattr(owner, 'sld_coupled', True) is False and parameter.name in inactive_density_knobs(owner, drives_magnetism):
+        return _INACTIVE_KNOB_NOTE
+    if parameter.name == 'magnetic_moment' and id(owner) not in coupled_materials:
+        return _UNUSED_MOMENT_NOTE
+    return None
+
+
+def _exclusive_partner(parameter: Parameter, path):
+    """The parameter that must not be free together with this one, or None.
+
+    With its nuclear SLD decoupled, a magnetic material's density enters only
+    its rho_m, together with the moment: the data constrain their product,
+    so fitting both is degenerate.
+    """
+    if path is None or len(path) < 2:
+        return None
+    owner = path[-2]
+    if getattr(owner, 'magnetic_moment', None) is None or owner.sld_coupled:
+        return None
+    partners = {'density': owner.magnetic_moment, 'magnetic_moment': owner.density}
+    return partners.get(parameter.name)
+
+
+def _is_derived_parameter(parameter: Parameter, model) -> bool:
+    """True for the model-owned computed parameters (currently ``Model.total_thickness``)."""
+    derived = getattr(type(model), 'total_thickness', None)
+    if derived is None:
+        return False
+    try:
+        return model.total_thickness is parameter
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _build_param_object_paths(model) -> dict:

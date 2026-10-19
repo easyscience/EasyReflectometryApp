@@ -55,6 +55,23 @@ EaElements.StatusBar {
     }
 
     EaElements.StatusBarItem {
+        visible: Globals.BackendWrapper.projectLastSaved !== ''
+        keyIcon: 'save'
+        keyText: qsTr('Saved')
+        // The backend reports an ISO-8601 stamp so that the time is rendered in the user's locale.
+        // Minute resolution: some locales' short time format carries seconds, which is more
+        // precision than a save stamp needs.
+        valueText: {
+            if (Globals.BackendWrapper.projectLastSaved === '') {
+                return ''
+            }
+            const format = Qt.locale().timeFormat(Locale.ShortFormat).replace(/[:.]?s+/g, '')
+            return Qt.formatTime(new Date(Globals.BackendWrapper.projectLastSaved), format)
+        }
+        ToolTip.text: qsTr('Time of the last successful save')
+    }
+
+    EaElements.StatusBarItem {
         visible: Globals.BackendWrapper.analysisFittingRunning
         keyIcon: 'play-circle'
         keyText: qsTr('Fit')

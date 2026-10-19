@@ -14,6 +14,13 @@ EaComponents.SideBarColumn {
     }
     Groups.PlotControl{
     }
+    Groups.CalculationEngine {
+        collapsed: true
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+    }
+    Groups.PhysicsConstraints{
+        enabled: Globals.BackendWrapper.analysisIsFitFinished
+    }
     Groups.Constraints{
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }

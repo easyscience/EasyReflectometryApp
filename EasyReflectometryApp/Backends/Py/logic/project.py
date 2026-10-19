@@ -1,15 +1,27 @@
+import hashlib
+import json
 from copy import copy
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 from easyreflectometry import Project as ProjectLib
+
+from .minimizers import apply_app_defaults
 
 
 class Project:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         self._last_q_range_changed = False
+        # Called before the project is serialized, so state kept outside the library (e.g. the
+        # GUI's constraint rows) can be written into it first.
+        self._pre_save_hooks: list[Callable[[], None]] = []
+        # Called once a project has been loaded or reset, before anything reads or fingerprints
+        # it, so such state can be rebuilt from the new project.
+        self._post_load_hooks: list[Callable[[], None]] = []
         self._project_lib.default_model()
+        apply_app_defaults(self._project_lib)
         self._update_enablement_of_fixed_layers_for_model(0)
 
     @property
@@ -19,6 +31,11 @@ class Project:
     @property
     def path(self) -> str:
         return str(self._project_lib.path)
+
+    @property
+    def path_json(self) -> str:
+        """Path of the project file itself, as named in save feedback and error messages."""
+        return str(self._project_lib.path_json)
 
     @property
     def root_path(self) -> str:
@@ -118,15 +135,47 @@ class Project:
         info['location'] = self._project_lib.path
         return info
 
+    def add_pre_save_hook(self, hook: Callable[[], None]) -> None:
+        self._pre_save_hooks.append(hook)
+
+    def _run_pre_save_hooks(self) -> None:
+        for hook in self._pre_save_hooks:
+            hook()
+
+    def add_post_load_hook(self, hook: Callable[[], None]) -> None:
+        self._post_load_hooks.append(hook)
+
+    def _run_post_load_hooks(self) -> None:
+        for hook in self._post_load_hooks:
+            hook()
+
+    def content_fingerprint(self) -> str:
+        """A digest of exactly what `save()` would write.
+
+        Used to tell a real edit from a signal that merely looks like one: selecting another
+        model or assembly emits the same signals as editing them, but does not change this.
+        Costs one serialization (under 10 ms with an experiment loaded), so callers keep it to
+        the moment a project might turn from clean to edited, not to every signal.
+
+        :raises Exception: whatever `as_dict` raises; a caller that cannot fingerprint the
+            project must treat it as changed.
+        """
+        self._run_pre_save_hooks()
+        content = self._project_lib.as_dict(include_materials_not_in_model=True)
+        return hashlib.sha256(json.dumps(content, sort_keys=True).encode('utf-8')).hexdigest()
+
     def create(self) -> None:
         self._project_lib.create()
+        self._run_pre_save_hooks()
         self._project_lib.save_as_json()
 
     def save(self) -> None:
+        self._run_pre_save_hooks()
         self._project_lib.save_as_json(overwrite=True)
 
     def load(self, path: str) -> None:
         self._project_lib.load_from_json(path)
+        self._run_post_load_hooks()
 
     def load_experiment(self, path: str) -> bool:
         self._project_lib.load_experiment_for_model_at_index(path, self._project_lib._current_model_index)
@@ -136,6 +185,23 @@ class Project:
         self._project_lib.load_new_experiment(path)
         return self._sync_q_max_with_loaded_experiments()
 
+    def append_to_current_experiment(self, path: str) -> bool:
+        """Merge another measured curve of the same contrast into the current experiment.
+
+        Every point keeps the resolution it was measured with, see
+        ``Project.append_to_experiment_at_index``; a polarized experiment and a
+        file holding several datasets are refused there with ``ValueError``.
+
+        :return: True if q_max was changed, False otherwise.
+        """
+        experiments = self._project_lib._experiments
+        keys = sorted(experiments.keys()) if hasattr(experiments, 'keys') else list(range(len(experiments)))
+        position = self._project_lib._current_experiment_index
+        if not 0 <= position < len(keys):
+            raise IndexError('Select the experiment to add the file(s) to.')
+        self._project_lib.append_to_experiment_at_index(keys[position], path)
+        return self._sync_q_max_with_loaded_experiments()
+
     def count_datasets_in_file(self, path: str) -> int:
         return self._project_lib.count_datasets_in_file(path)
 
@@ -143,6 +209,33 @@ class Project:
         loaded_count = self._project_lib.load_all_experiments_from_file(path)
         q_max_changed = self._sync_q_max_with_loaded_experiments()
         return loaded_count, q_max_changed
+
+    def suggest_polarized_channel_assignment(self, paths: list[str]) -> dict[str, str]:
+        """Suggested spin channel per file, as channel-value strings ('' when undetected)."""
+        suggestion = self._project_lib.suggest_polarized_channel_assignment(paths)
+        return {path: (channel.value if channel is not None else '') for path, channel in suggestion.items()}
+
+    def load_polarized_experiment(self, channel_to_path: dict[str, str]) -> tuple[int, bool]:
+        """Load one polarized experiment from a channel → file mapping.
+
+        :return: (list position of the new experiment, whether q_max changed).
+        """
+        key = self._project_lib.load_polarized_experiment(channel_to_path)
+        q_max_changed = self._sync_q_max_with_loaded_experiments()
+        return self._position_of_experiment(key), q_max_changed
+
+    def _position_of_experiment(self, key) -> int:
+        """Position of an experiment key in the ordered experiment list (-1 if unknown).
+
+        The UI addresses experiments by list position, which only matches the
+        storage key while the keys are contiguous.
+        """
+        experiments = self._project_lib._experiments
+        try:
+            keys = sorted(experiments.keys()) if hasattr(experiments, 'keys') else list(range(len(experiments)))
+            return keys.index(key)
+        except (AttributeError, TypeError, ValueError):
+            return -1
 
     def _sync_q_max_with_loaded_experiments(self) -> bool:
         """Set model q_max to the largest q value found in loaded experiments.
@@ -160,7 +253,15 @@ class Project:
             experiment_iterable = experiments
 
         q_max_candidates = []
+        datasets = []
         for experiment in experiment_iterable:
+            channels = getattr(experiment, 'channels', None)
+            if channels is not None:
+                # A polarized experiment: one dataset per spin channel.
+                datasets.extend(channels.values())
+            else:
+                datasets.append(experiment)
+        for experiment in datasets:
             x_values = getattr(experiment, 'x', None)
             if x_values is None:
                 continue
@@ -201,3 +302,11 @@ class Project:
     def reset(self) -> None:
         self._project_lib.reset()
         self._project_lib.default_model()
+        # A loaded project keeps its own minimizer; only a new one gets the app's.
+        apply_app_defaults(self._project_lib)
+        self._run_post_load_hooks()
+
+    @property
+    def load_report(self) -> list[str]:
+        """Warnings about the last loaded project file, e.g. an unavailable minimizer."""
+        return list(self._project_lib.load_report)

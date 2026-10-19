@@ -161,6 +161,15 @@ def runPyInstaller():
                 CONFIG.build_dir,  # Where to put all the temporary work files, .log, .pyz and etc. (default: ./build)
                 '--collect-all',
                 'reportlab.graphics.barcode',
+                # arviz packages load bundled data files (e.g. example_data/data_local.json) at import time
+                '--collect-data',
+                'arviz',
+                '--collect-data',
+                'arviz_base',
+                '--collect-data',
+                'arviz_stats',
+                '--collect-data',
+                'arviz_plots',
                 *excludedModules(),  # Exclude modules
                 *addedData(),  # Add data
                 appIcon(),  # Application icon

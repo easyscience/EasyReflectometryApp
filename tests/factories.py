@@ -1,6 +1,10 @@
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+
+from easyreflectometry import Project as RealProject
+from easyreflectometry.fit_settings import FitSettings
 
 
 class ValueHolder:
@@ -9,9 +13,11 @@ class ValueHolder:
 
 
 class FlaggedValueHolder(ValueHolder):
-    def __init__(self, value, enabled=True):
+    def __init__(self, value, enabled=True, independent=True):
         super().__init__(value)
         self.enabled = enabled
+        # As on a real Parameter: False once the value follows a constraint.
+        self.independent = independent
 
 
 class FakeMaterial:
@@ -19,6 +25,14 @@ class FakeMaterial:
         self.name = name
         self.sld = ValueHolder(sld)
         self.isld = ValueHolder(isld)
+
+
+class FakeLayerMagnetism:
+    """Mirrors LayerMagnetism: rho_m/theta_m as fittable value holders."""
+
+    def __init__(self, rho_m=0.0, theta_m=270.0):
+        self.rho_m = FlaggedValueHolder(rho_m)
+        self.theta_m = FlaggedValueHolder(theta_m)
 
 
 class FakeLayer:
@@ -32,8 +46,11 @@ class FakeLayer:
         area_per_molecule=0.1,
         solvent_fraction=0.2,
         molecular_formula='formula',
+        magnetism=None,
     ):
         self.name = name
+        self.magnetism = magnetism
+        self.rho_m_coupled = False
         self.material = material or FakeMaterial('Air')
         self.solvent = solvent or FakeMaterial('D2O')
         self._thickness = FlaggedValueHolder(thickness)
@@ -119,6 +136,26 @@ class FakeRepeatingMultilayer(FakeAssembly):
         self.repetitions = ValueHolder(repetitions)
 
 
+class FakeSolvatedMaterial:
+    """Mirrors MaterialSolvated: display name '<material> in <solvent>', inner dry
+    `.material`, and sld/isld as computed plain floats (not ValueHolders)."""
+
+    def __init__(self, material, solvent_name='D2O', sld=1.0, isld=0.0):
+        self.material = material
+        self.name = f'{material.name} in {solvent_name}'
+        self.sld = sld
+        self.isld = isld
+
+
+class FakeGradientLayer(FakeAssembly):
+    def __init__(self, name='Gradient', front_material=None, back_material=None, thickness=2.0):
+        super().__init__(name=name, assembly_type='Gradient-layer')
+        self.front_material = front_material or FakeMaterial('Air')
+        self.back_material = back_material or FakeMaterial('D2O')
+        self.thickness = thickness  # plain float, like the real GradientLayer
+        self.front_layer = self.layers[0]
+
+
 class FakeSurfactantLayer(FakeAssembly):
     def __init__(self, name='Surfactant Layer', layers=None):
         super().__init__(name=name, assembly_type='Surfactant Layer', layers=layers or [FakeLayer(), FakeLayer()])
@@ -176,6 +213,8 @@ class FakeModel:
         self.color = color
         self.scale = ValueHolder(scale)
         self.background = ValueHolder(background)
+        self.guide_field_angle = ValueHolder(270.0)
+        self.applied_field = ValueHolder(0.0)
         self.resolution_function = resolution_function
         self.sample = sample or FakeSample()
         self.user_data = user_data or {}
@@ -250,6 +289,7 @@ class FakeExperiment:
         self.y = [] if y is None else y
         self.ye = [] if ye is None else ye
         self.xe = [] if xe is None else xe
+        self.include_in_fit = True
 
 
 class FakeMinimizerValue:
@@ -286,6 +326,11 @@ class FakeParameter:
         self.dependency_expression = dependency_expression
         self.dependency_map = dependency_map or {}
 
+    @property
+    def error(self):
+        # Mirrors easyscience's Parameter: the error is the square root of the variance.
+        return math.sqrt(self.variance)
+
     def make_dependent_on(self, dependency_expression, dependency_map):
         self.independent = False
         self.dependency_expression = dependency_expression
@@ -303,6 +348,45 @@ class FakeFitResult:
 
 
 class FakeProject:
+    # Experiment keys and pairing are the library's own bookkeeping: it only touches
+    # `_experiments`, `_models` and the current indices, so the fake reuses it.
+    remove_experiment = RealProject.remove_experiment
+    model_index_for_experiment = RealProject.model_index_for_experiment
+    _model_index_for_experiment = RealProject._model_index_for_experiment
+    _model_index = RealProject._model_index
+    set_model_for_experiment = RealProject.set_model_for_experiment
+    experiments_for_model = RealProject.experiments_for_model
+
+    @property
+    def experiments(self):
+        return self._experiments
+
+    @experiments.setter
+    def experiments(self, value):
+        self._experiments = value
+
+    def prepare_sample(self, experiments=None, *, skip_invalid=False):
+        """As the library: a `for_experiments` fitter with a snapshot of the fit settings.
+
+        `MultiFitter` is looked up at call time, so a test's fake fitting module applies.
+        """
+        import copy
+
+        from easyreflectometry.fitting import MultiFitter
+
+        self.calls.append(('prepare_sample', list(experiments or [])))
+        fitter = MultiFitter.for_experiments(list(experiments))
+        fitter.settings = copy.deepcopy(self.fit_settings)
+        fitter.skipped = []
+        return fitter
+
+    def move_model(self, index, new_index):
+        # As the library: the current model stays the current one wherever it moves
+        self.calls.append(('move_model', index, new_index))
+        current = self._models[self.current_model_index]
+        self._models.insert(new_index, self._models.pop(index))
+        self.current_model_index = next(i for i, model in enumerate(self._models) if model is current)
+
     @property
     def calculator(self):
         return self._calculator_name
@@ -332,8 +416,10 @@ class FakeProject:
         self._materials = materials or FakeMaterialCollection()
         self.current_material_index = 0
         self._experiments = experiments or {}
-        self.experiments = self._experiments
+        self._with_experiments = bool(self._experiments)
         self._current_experiment_index = 0
+        self._last_fit = None
+        self.last_fit = None
         self._models = models or FakeModelCollection()
         self.models = self._models
         self.current_model_index = 0
@@ -341,17 +427,37 @@ class FakeProject:
         self.current_layer_index = 0
         self._calculator = FakeCalculatorController(calculator_interfaces or ['refnx', 'refl1d'])
         self._calculator_name = calculator_name
+        # Engine capability, as the real Project reports it.
+        self.calculators_supporting_magnetism = [
+            name for name in (calculator_interfaces or ['refnx', 'refl1d']) if name == 'refl1d'
+        ]
+        self.models_have_magnetism = False
+        self.calculator_supports_magnetism = calculator_name == 'refl1d'
         self.minimizer = FakeMinimizerValue(minimizer_name)
+        self.fit_settings = FitSettings()
+        self.load_report = []
         self._fitter = None
         self.fitter = None
         self._info = {'name': 'Demo Project', 'short_description': 'Demo Description', 'modified': '2026-03-19'}
         self.created = False
         self.path = Path('C:/tmp/demo-project')
+        self.path_json = self.path / 'project.json'
         self.q_min = 0.01
         self.q_max = 0.5
         self.q_resolution = 200
         self.parameters = []
+        # Inequality-constraint API of the real Project (BUMPS fit penalties).
+        self.inequality_constraints = []
         self.calls = []
+
+    def _sync_parameter_states(self):
+        self.calls.append(('_sync_parameter_states',))
+
+    def violated_inequality_constraints(self):
+        return [spec for spec in self.inequality_constraints if getattr(spec, 'violated', False)]
+
+    def build_constraints_factory(self):
+        return None
 
     def default_model(self):
         self.calls.append(('default_model',))
@@ -394,11 +500,27 @@ class FakeProject:
         self.calls.append(('replace_models_from_orso', sample))
         self.models[:] = [sample]
 
-    def experimental_data_for_model_at_index(self, index):
-        self.calls.append(('experimental_data_for_model_at_index', index))
+    def experimental_data_for_model_at_index(self, index, channel=None):
+        self.calls.append(('experimental_data_for_model_at_index', index, channel))
         if index >= len(self.models):
             raise IndexError(index)
         return object()
+
+    def suggest_polarized_channel_assignment(self, paths):
+        self.calls.append(('suggest_polarized_channel_assignment', tuple(paths)))
+        # Simple deterministic stub: uu/dd tokens resolve, everything else does not.
+        suggestion = {}
+        for path in paths:
+            if '_uu' in path:
+                suggestion[path] = SimpleNamespace(value='pp')
+            elif '_dd' in path:
+                suggestion[path] = SimpleNamespace(value='mm')
+            else:
+                suggestion[path] = None
+        return suggestion
+
+    def load_polarized_experiment(self, channel_to_path):
+        self.calls.append(('load_polarized_experiment', dict(channel_to_path)))
 
     def set_path_project_parent(self, path):
         self.calls.append(('set_path_project_parent', path))

@@ -57,8 +57,16 @@ EaElements.GroupBox {
             delegate: EaComponents.TableViewDelegate {
 
                 EaComponents.TableViewLabel {
-                    text: index + 1
+                    // Density materials carry a ρ badge: their SLD is derived from
+                    // formula & density, and selecting the row opens the density
+                    // detail panel below the table.
+                    readonly property bool density: Globals.BackendWrapper.sampleMaterials[index].kind === 'density'
+                    text: (index + 1) + (density ? ' ρ' : '')
                     color: EaStyle.Colors.themeForegroundMinor
+                    ToolTip.text: density ?
+                                      qsTr("Density material (%1) — select the row to edit formula, density and SLD coupling below")
+                                          .arg(Globals.BackendWrapper.sampleMaterials[index].formula) :
+                                      ''
                 }
 
                 EaComponents.TableViewTextInput {
@@ -67,11 +75,28 @@ EaElements.GroupBox {
                 }
 
                 EaComponents.TableViewTextInput {
+                    // A coupled density material derives SLD from formula & density.
+                    readonly property bool sldLocked: Globals.BackendWrapper.sampleMaterials[index].kind === 'density' &&
+                                                      Globals.BackendWrapper.sampleMaterials[index].sld_coupled
+                    // readOnly rather than enabled:false: a disabled item receives no
+                    // hover events, so its ToolTip could never explain the lock.
+                    readOnly: sldLocked
+                    ToolTip.text: sldLocked ?
+                                      qsTr("Derived from formula and density — uncheck 'SLD computed from formula and density' below to edit") :
+                                      ''
                     text: Number(Globals.BackendWrapper.sampleMaterials[index].sld).toFixed(3)
                     onEditingFinished: Globals.BackendWrapper.sampleSetMaterialSldAtIndex(index, text)
                 }
 
                 EaComponents.TableViewTextInput {
+                    readonly property bool sldLocked: Globals.BackendWrapper.sampleMaterials[index].kind === 'density' &&
+                                                      Globals.BackendWrapper.sampleMaterials[index].sld_coupled
+                    // readOnly rather than enabled:false: a disabled item receives no
+                    // hover events, so its ToolTip could never explain the lock.
+                    readOnly: sldLocked
+                    ToolTip.text: sldLocked ?
+                                      qsTr("Derived from formula and density — uncheck 'SLD computed from formula and density' below to edit") :
+                                      ''
                     text: Number(Globals.BackendWrapper.sampleMaterials[index].isld).toFixed(3)
                     onEditingFinished: Globals.BackendWrapper.sampleSetMaterialISldAtIndex(index, text)
                 }
@@ -125,6 +150,170 @@ EaElements.GroupBox {
                 fontIcon: "arrow-down"
                 ToolTip.text: qsTr("Move material down")
                 onClicked: Globals.BackendWrapper.sampleMoveSelectedMaterialDown()
+            }
+        }
+
+        // A material with a magnetic moment (bulk iron to start with): layers
+        // can take their ρM from it in the Magnetism group.
+        EaElements.SideBarButton {
+            width: EaStyle.Sizes.sideBarContentWidth
+            fontIcon: "magnet"
+            text: qsTr("Add magnetic material")
+            onClicked: Globals.BackendWrapper.sampleAddNewMagneticMaterial()
+        }
+
+        // Density-material detail: formula and density are the physical inputs;
+        // the checkbox decouples sld/isld for direct entry and fitting
+        // (see SLD_CHECKBOX_PLAN.md). Visible only when the selected material
+        // is a density material.
+        Column {
+            id: densityMaterialSection
+
+            readonly property var densityMaterial:
+                Globals.BackendWrapper.sampleMaterials[Globals.BackendWrapper.sampleCurrentMaterialIndex]
+            readonly property bool isDensity:
+                densityMaterial !== undefined && densityMaterial.kind === 'density'
+            // Formula and density drive the SLD only while coupled. Once the user
+            // takes the SLD over, they are inert inputs (the Analysis table marks
+            // the matching parameters 'inactive' too), so show them read-only
+            // instead of inviting edits that change nothing.
+            readonly property bool sldCoupled:
+                isDensity ? densityMaterial.sld_coupled : true
+            // A magnetic material's density also sets its ρM, so it stays
+            // editable when the nuclear SLD is set directly.
+            readonly property bool isMagnetic: isDensity && densityMaterial.magnetic === true
+
+            visible: isDensity
+            spacing: EaStyle.Sizes.fontPixelSize * 0.5
+
+            EaElements.Label {
+                color: EaStyle.Colors.themeForegroundMinor
+                text: !densityMaterialSection.isDensity ? '' :
+                      densityMaterialSection.isMagnetic ?
+                          qsTr("Magnetic material '%1'").arg(densityMaterialSection.densityMaterial.label) :
+                          qsTr("Density material '%1'").arg(densityMaterialSection.densityMaterial.label)
+            }
+
+            Row {
+                spacing: EaStyle.Sizes.fontPixelSize
+
+                EaElements.TextField {
+                    id: formulaField
+                    width: (EaStyle.Sizes.sideBarContentWidth - parent.spacing) / 2
+                    topInset: formulaLabel.height
+                    topPadding: topInset + padding
+                    horizontalAlignment: TextInput.AlignLeft
+                    readOnly: !densityMaterialSection.sldCoupled
+                    ToolTip.text: densityMaterialSection.sldCoupled ?
+                                      '' :
+                                      qsTr("Unused while SLD is set directly — check 'SLD computed from formula and density' below to edit")
+                    text: densityMaterialSection.isDensity ? densityMaterialSection.densityMaterial.formula : ''
+                    onEditingFinished: {
+                        Globals.BackendWrapper.sampleSetMaterialFormulaAtIndex(
+                                    Globals.BackendWrapper.sampleCurrentMaterialIndex, text)
+                        // Typing broke the declarative binding; re-establish it so
+                        // the field follows the backend (which may have rejected an
+                        // invalid formula) and later selection changes.
+                        text = Qt.binding(function () {
+                            return densityMaterialSection.isDensity ?
+                                        densityMaterialSection.densityMaterial.formula : ''
+                        })
+                    }
+                    EaElements.Label {
+                        id: formulaLabel
+                        text: qsTr('Chemical formula')
+                    }
+                }
+
+                EaElements.TextField {
+                    id: densityField
+                    width: formulaField.width
+                    topInset: densityLabel.height
+                    topPadding: topInset + padding
+                    horizontalAlignment: TextInput.AlignLeft
+                    readOnly: !densityMaterialSection.sldCoupled && !densityMaterialSection.isMagnetic
+                    ToolTip.text: densityMaterialSection.sldCoupled ? '' :
+                                  densityMaterialSection.isMagnetic ?
+                                      qsTr("Sets ρM only while SLD is set directly") :
+                                      qsTr("Unused while SLD is set directly — check 'SLD computed from formula and density' below to edit")
+                    text: densityMaterialSection.isDensity ? densityMaterialSection.densityMaterial.density : ''
+                    onEditingFinished: {
+                        Globals.BackendWrapper.sampleSetMaterialDensityAtIndex(
+                                    Globals.BackendWrapper.sampleCurrentMaterialIndex, text)
+                        text = Qt.binding(function () {
+                            return densityMaterialSection.isDensity ?
+                                        densityMaterialSection.densityMaterial.density : ''
+                        })
+                    }
+                    EaElements.Label {
+                        id: densityLabel
+                        text: qsTr('Density (g/cm³)')
+                    }
+                }
+            }
+
+            Row {
+                visible: densityMaterialSection.isMagnetic
+                spacing: EaStyle.Sizes.fontPixelSize
+
+                EaElements.TextField {
+                    id: momentField
+                    width: (EaStyle.Sizes.sideBarContentWidth - parent.spacing) / 2
+                    topInset: momentLabel.height
+                    topPadding: topInset + padding
+                    horizontalAlignment: TextInput.AlignLeft
+                    ToolTip.text: qsTr("Effective in-plane net moment in Bohr magnetons per formula unit (the moment per atom only for a formula unit of one atom, such as Fe).")
+                    text: densityMaterialSection.isMagnetic ? densityMaterialSection.densityMaterial.magnetic_moment : ''
+                    onEditingFinished: {
+                        Globals.BackendWrapper.sampleSetMaterialMagneticMomentAtIndex(
+                                    Globals.BackendWrapper.sampleCurrentMaterialIndex, text)
+                        text = Qt.binding(function () {
+                            return densityMaterialSection.isMagnetic ?
+                                        densityMaterialSection.densityMaterial.magnetic_moment : ''
+                        })
+                    }
+                    EaElements.Label {
+                        id: momentLabel
+                        text: qsTr('Moment (µB/f.u.)')
+                    }
+                }
+
+                EaElements.Label {
+                    anchors.bottom: momentField.bottom
+                    anchors.bottomMargin: momentField.padding
+                    color: EaStyle.Colors.themeForegroundMinor
+                    text: densityMaterialSection.isMagnetic ?
+                              qsTr("ρM %1 · N %2 Å⁻³")
+                              .arg(densityMaterialSection.densityMaterial.rho_m)
+                              .arg(densityMaterialSection.densityMaterial.number_density) : ''
+                    ToolTip.visible: rhoMHover.hovered
+                    ToolTip.text: qsTr("Magnetic SLD (shown in 10⁻⁶ Å⁻²) = number density (Å⁻³) × moment × 2.6991·10⁻⁵ Å × 10⁶. Layers use it when 'ρM from material' is ticked in the Magnetism group.")
+                    HoverHandler {
+                        id: rhoMHover
+                    }
+                }
+            }
+
+            EaElements.CheckBox {
+                text: qsTr("SLD computed from formula and density")
+                checked: densityMaterialSection.isDensity ?
+                             densityMaterialSection.densityMaterial.sld_coupled : true
+                ToolTip.text: qsTr("When re-enabled, SLD/iSLD are recalculated from the formula and density; manually entered or fitted SLD values, and any constraint on SLD/iSLD, are discarded.")
+                // toggled() also fires on the programmatic `checked` rebind below
+                // (materialsTableChanged from our own backend call, or a row
+                // selection change) — this only stays a no-op loop because
+                // set_sld_coupled_at_index() in the backend refuses to re-emit
+                // when the state already matches. Don't drop that guard.
+                onToggled: {
+                    Globals.BackendWrapper.sampleSetMaterialSldCoupledAtIndex(
+                                Globals.BackendWrapper.sampleCurrentMaterialIndex, checked)
+                    // The click already moved the box and broke the binding;
+                    // follow the backend's state instead of assuming.
+                    checked = Qt.binding(function () {
+                        return densityMaterialSection.isDensity ?
+                                    densityMaterialSection.densityMaterial.sld_coupled : true
+                    })
+                }
             }
         }
     }

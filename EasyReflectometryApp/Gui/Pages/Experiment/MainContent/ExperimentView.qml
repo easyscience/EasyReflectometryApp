@@ -94,6 +94,9 @@ Rectangle {
             if (isMultiExperimentMode) {
                 // Multi-experiment mode: recreate all multi-experiment series
                 updateMultiExperimentSeries()
+            } else if (isPolarizedMode) {
+                // Polarized experiment: recreate per-channel series
+                updateChannelSeries()
             } else if (useLogQAxis) {
                 // Single experiment, log mode: recreate log mode series
                 recreateForLogMode()
@@ -125,6 +128,142 @@ Rectangle {
                 return Globals.BackendWrapper.plottingIsMultiExperimentMode || false
             } catch (e) {
                 return false
+            }
+        }
+
+        // Polarized experiment (spin channel) support: one series set per
+        // visible channel of the current experiment.
+        property var channelSeries: []
+        property bool isPolarizedMode: {
+            try {
+                return (Globals.BackendWrapper.plottingCurrentExperimentIsPolarized && !isMultiExperimentMode) || false
+            } catch (e) {
+                return false
+            }
+        }
+
+        onIsPolarizedModeChanged: updateChannelSeries()
+
+        Connections {
+            target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+            enabled: target !== null
+            function onChannelSelectionChanged() {
+                if (chartView.isPolarizedMode) {
+                    chartView.updateChannelSeries()
+                } else if (chartView.isMultiExperimentMode) {
+                    // Multi-experiment mode draws one series per visible channel
+                    // of each polarized experiment; rebuild them too.
+                    chartView.updateMultiExperimentSeries()
+                }
+            }
+
+            // The current experiment (or its channel list) changed. The
+            // per-channel series are QML-owned, so a backend refresh does not
+            // touch them: switching between two polarized experiments would
+            // otherwise keep the previous one's points on screen.
+            function onExperimentChannelsChanged() {
+                if (chartView.isPolarizedMode) {
+                    chartView.updateChannelSeries()
+                } else if (chartView.isMultiExperimentMode) {
+                    chartView.updateMultiExperimentSeries()
+                } else {
+                    chartView.clearChannelSeries()
+                }
+            }
+        }
+
+        Connections {
+            target: Globals.BackendWrapper.activeBackend?.experiment ?? null
+            enabled: target !== null
+            function onExperimentChanged() {
+                if (chartView.isPolarizedMode) {
+                    chartView.updateChannelSeries()
+                }
+            }
+        }
+
+        function clearChannelSeries() {
+            for (var i = 0; i < channelSeries.length; i++) {
+                var seriesSet = channelSeries[i]
+                if (seriesSet.measuredSerie) {
+                    chartView.removeSeries(seriesSet.measuredSerie)
+                }
+                if (seriesSet.errorUpperSerie) {
+                    chartView.removeSeries(seriesSet.errorUpperSerie)
+                }
+                if (seriesSet.errorLowerSerie) {
+                    chartView.removeSeries(seriesSet.errorLowerSerie)
+                }
+            }
+            channelSeries = []
+        }
+
+        function updateChannelSeries() {
+            clearChannelSeries()
+
+            if (!isPolarizedMode) {
+                // Back to the regular display (single or multi experiment).
+                updateMultiExperimentSeries()
+                return
+            }
+
+            // Hide the default single-experiment series.
+            measured.visible = false
+            if (measuredScatterSerie) measuredScatterSerie.visible = false
+            errorUpper.visible = false
+            errorLower.visible = false
+
+            var expIndex = Globals.BackendWrapper.analysisExperimentsCurrentIndex
+            var channels = Globals.BackendWrapper.plottingGetExperimentChannels(expIndex)
+            for (var i = 0; i < channels.length; i++) {
+                if (channels[i].visible) {
+                    createChannelSeries(expIndex, channels[i])
+                }
+            }
+        }
+
+        function createChannelSeries(expIndex, channelRow) {
+            var xAxis = currentXAxis()
+            var name = `${channelRow.label} ${channelRow.channel}`
+
+            var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                       `${name} - Data`,
+                                                       xAxis, chartView.axisY,
+                                                       channelRow.color, Globals.Variables.experimentMarkerStyle)
+
+            var errorColor = Qt.darker(channelRow.color, 1.3)
+
+            var errorUpperSerie = chartView.createSeries(ChartView.SeriesTypeLine,
+                                                         `${name} - Error Upper`,
+                                                         xAxis, chartView.axisY)
+            errorUpperSerie.color = errorColor
+            errorUpperSerie.width = 1
+            errorUpperSerie.style = Qt.DashLine
+            errorUpperSerie.useOpenGL = chartView.useOpenGL
+
+            var errorLowerSerie = chartView.createSeries(ChartView.SeriesTypeLine,
+                                                         `${name} - Error Lower`,
+                                                         xAxis, chartView.axisY)
+            errorLowerSerie.color = errorColor
+            errorLowerSerie.width = 1
+            errorLowerSerie.style = Qt.DashLine
+            errorLowerSerie.useOpenGL = chartView.useOpenGL
+
+            var seriesSet = {
+                measuredSerie: measuredSerie,
+                errorUpperSerie: errorUpperSerie,
+                errorLowerSerie: errorLowerSerie,
+                channel: channelRow.channel,
+                color: channelRow.color
+            }
+            channelSeries.push(seriesSet)
+
+            var dataPoints = Globals.BackendWrapper.plottingGetExperimentChannelDataPoints(expIndex, channelRow.channel)
+            for (var j = 0; j < dataPoints.length; j++) {
+                var point = dataPoints[j]
+                seriesSet.measuredSerie.append(point.x, point.y)
+                seriesSet.errorUpperSerie.append(point.x, point.errorUpper)
+                seriesSet.errorLowerSerie.append(point.x, point.errorLower)
             }
         }
         property bool useStaggeredPlotting: {
@@ -307,6 +446,9 @@ Rectangle {
             if (isMultiExperimentMode) {
                 // Multi-experiment mode: recreate all multi-experiment series with the correct axis
                 updateMultiExperimentSeries()
+            } else if (isPolarizedMode) {
+                // Polarized experiment: recreate per-channel series on the correct axis
+                updateChannelSeries()
             } else if (useLogQAxis) {
                 // Single experiment, log mode: create dynamic series on log axis
                 measured.visible = false
@@ -398,6 +540,12 @@ Rectangle {
             clearMultiExperimentSeries()
 
             if (!isMultiExperimentMode) {
+                if (isPolarizedMode) {
+                    // Polarized experiment: one series set per visible spin channel.
+                    updateChannelSeries()
+                    return
+                }
+                clearChannelSeries()
                 // Show default series for single experiment
                 measured.visible = false
                 if (!measuredScatterSerie) {
@@ -417,8 +565,9 @@ Rectangle {
                 return
             }
 
-            // Get experiment data list
-            var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentDataList
+            // Get experiment data list; polarized experiments are expanded
+            // into one entry per visible spin channel.
+            var experimentDataList = Globals.BackendWrapper.plottingIndividualExperimentChannelDataList
             // If no data available yet, keep default series visible as fallback
             if (experimentDataList.length === 0) {
                 console.log("No experiment data available - keeping default series visible")
@@ -440,17 +589,20 @@ Rectangle {
                 return
             }
 
-            // Hide default series in multi-experiment mode (only after we have data)
+            // Hide default and per-channel series in multi-experiment mode
+            // (only after we have data)
+            clearChannelSeries()
             measured.visible = false
             if (measuredScatterSerie) measuredScatterSerie.visible = false
             errorUpper.visible = false
             errorLower.visible = false
 
-            // Create series for each experiment
+            // Create series for each experiment; a polarized experiment
+            // contributes one entry per visible spin channel.
             for (var i = 0; i < experimentDataList.length; i++) {
                 var expData = experimentDataList[i]
                 if (expData.hasData) {
-                    createExperimentSeries(expData.index, expData.name, expData.color)
+                    createExperimentSeries(expData.index, expData.name, expData.color, expData.channel ?? "")
                 }
             }
         }
@@ -472,7 +624,7 @@ Rectangle {
             multiExperimentSeries = []
         }
 
-        function createExperimentSeries(expIndex, expName, color) {
+        function createExperimentSeries(expIndex, expName, color, channel) {
             // console.log(` Creating series for experiment ${expIndex}: ${expName} (${color})`)
 
             var xAxis = currentXAxis()
@@ -509,7 +661,8 @@ Rectangle {
                 errorLowerSerie: errorLowerSerie,
                 expIndex: expIndex,
                 expName: expName,
-                color: color
+                color: color,
+                channel: channel ?? ""
             }
             multiExperimentSeries.push(seriesSet)
 
@@ -518,8 +671,11 @@ Rectangle {
         }
 
         function populateExperimentSeries(seriesSet) {
-            // Get data points from backend
-            var dataPoints = Globals.BackendWrapper.plottingGetExperimentDataPoints(seriesSet.expIndex)
+            // Get data points from backend: the requested spin channel for a
+            // polarized experiment, the plain experiment data otherwise.
+            var dataPoints = seriesSet.channel
+                ? Globals.BackendWrapper.plottingGetExperimentChannelDataPoints(seriesSet.expIndex, seriesSet.channel)
+                : Globals.BackendWrapper.plottingGetExperimentDataPoints(seriesSet.expIndex)
 
             // Clear existing points
             seriesSet.measuredSerie.clear()
@@ -529,7 +685,11 @@ Rectangle {
             // Calculate staggering offset if enabled
             var yOffset = 0
             if (useStaggeredPlotting && isMultiExperimentMode && multiExperimentSeries.length > 1) {
-                var experimentIndex = seriesSet.expIndex
+                // Offset by the series' own position, not by the experiment
+                // index: the spin channels of one polarized experiment share an
+                // index and would otherwise be stacked on top of each other.
+                var seriesPosition = multiExperimentSeries.indexOf(seriesSet)
+                var experimentIndex = seriesPosition >= 0 ? seriesPosition : seriesSet.expIndex
                 var totalExperiments = multiExperimentSeries.length
 
                 // Find the individual experiment's data range
@@ -660,16 +820,51 @@ Rectangle {
 
                 // Single experiment legend
                 EaElements.Label {
-                    visible: !chartView.isMultiExperimentMode
+                    visible: !chartView.isMultiExperimentMode && !chartView.isPolarizedMode
                     text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + '  I (Measured)'
                     color: chartView.calcSerie.color
                 }
                 EaElements.Label {
-                    visible: !chartView.isMultiExperimentMode
+                    visible: !chartView.isMultiExperimentMode && !chartView.isPolarizedMode
                     text: Globals.Variables.lineStyleSymbol(chartView.measSerie.style) + ' Error'
                     color: chartView.measSerie.color
                 }
-                
+
+                // Polarized experiment legend: one entry per visible spin channel
+                Column {
+                    visible: chartView.isPolarizedMode
+                    spacing: EaStyle.Sizes.fontPixelSize * 0.2
+
+                    EaElements.Label {
+                        text: qsTr("Spin channels:")
+                        font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
+                        font.bold: true
+                        color: EaStyle.Colors.themeForeground
+                    }
+
+                    Repeater {
+                        model: chartView.isPolarizedMode ? Globals.BackendWrapper.plottingExperimentChannelList : []
+                        delegate: Row {
+                            visible: modelData.visible
+                            spacing: EaStyle.Sizes.fontPixelSize * 0.3
+
+                            Rectangle {
+                                width: EaStyle.Sizes.fontPixelSize * 0.8
+                                height: 3
+                                color: modelData.color || "#1f77b4"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            EaElements.Label {
+                                text: `${modelData.label} ${modelData.channel}`
+                                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.8
+                                color: EaStyle.Colors.themeForeground
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+                }
+
                 // Multi-experiment legend
                 Column {
                     visible: chartView.isMultiExperimentMode
@@ -683,7 +878,7 @@ Rectangle {
                     }
 
                     Repeater {
-                        model: chartView.isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentDataList : []
+                        model: chartView.isMultiExperimentMode ? Globals.BackendWrapper.plottingIndividualExperimentChannelDataList : []
                         delegate: Row {
                             spacing: EaStyle.Sizes.fontPixelSize * 0.3
 

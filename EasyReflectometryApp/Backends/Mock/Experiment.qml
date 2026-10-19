@@ -22,4 +22,38 @@ QtObject {
     function load(path) {
         console.debug(`Loading experiment from ${path}`)
     }
+
+    function appendToCurrent(paths) {
+        console.debug(`Adding ${paths} to the current experiment`)
+    }
+
+    // Filename-token suggestion, so the assignment dialog can be exercised
+    // against the mock backend as well.
+    function suggestPolarizedChannels(paths) {
+        console.debug(`Suggesting polarized channels for ${paths}`)
+        const list = Array.isArray(paths) ? paths : String(paths).split(',')
+        const tokens = {uu: 'pp', pp: 'pp', dd: 'mm', mm: 'mm', ud: 'pm', pm: 'pm', du: 'mp', mp: 'mp'}
+        return list.filter(path => path !== '').map(path => {
+            const name = String(path).split(/[\\/]/).pop()
+            let channel = ''
+            for (const token in tokens) {
+                if (name.toLowerCase().indexOf('_' + token) !== -1) {
+                    channel = tokens[token]
+                    break
+                }
+            }
+            return {path: path, name: name, channel: channel}
+        })
+    }
+
+    function loadPolarized(assignments) {
+        console.debug(`Loading polarized experiment from ${assignments.length} file(s)`)
+    }
+
+    // Emitted with a user-facing message when an import is rejected.
+    signal loadFailed(string message)
+    // Emitted with a user-facing message when an import succeeded with a caveat.
+    signal loadWarning(string message)
+    // Emitted with the list position of a newly imported experiment.
+    signal experimentLoaded(int index)
 }
