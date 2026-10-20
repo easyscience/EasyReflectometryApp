@@ -101,15 +101,15 @@ jobs:
           python ${{ env.SCRIPTS_PATH }}/MakeInstaller.py
           ${{ env.BRANCH_NAME }} ${{ matrix.os }}
 
-#      - name: Sign, notarize and staple offline app installer (macOS)
-#        if: |
-#          runner.os == 'macOS' && github.event_name == 'push' &&
-#          (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop')
-#        run: >
-#          python ${{ env.SCRIPTS_PATH }}/SignAppInstaller.py
-#          ${{ env.BRANCH_NAME }} ${{ matrix.os }}
-#          ${{ secrets.APPLE_CERT_DATA }} ${{ secrets.APPLE_CERT_PASSWORD }}
-#          ${{ secrets.APPLE_NOTARY_USER }} ${{ secrets.APPLE_NOTARY_PASSWORD }}
+      - name: Sign, notarize and staple offline app installer (macOS)
+        if: |
+          runner.os == 'macOS' && github.event_name == 'push' &&
+          (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop')
+        run: >
+          python ${{ env.SCRIPTS_PATH }}/SignAppInstaller.py
+          ${{ env.BRANCH_NAME }} ${{ matrix.os }}
+          ${{ secrets.APPLE_CERT_DATA }} ${{ secrets.APPLE_CERT_PASSWORD }}
+          ${{ secrets.APPLE_NOTARY_USER }} ${{ secrets.APPLE_NOTARY_PASSWORD }}
 
       # - name: Setup SM_CLIENT_CERT_FILE from base64 secret data
       #   if: runner.os == 'Windows'
