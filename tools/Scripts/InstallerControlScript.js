@@ -21,8 +21,11 @@ var MAINTENANCE_TOOL_NAME = "MaintenanceTool"
 
 // State is kept here, not on the Controller: QtIFW calls the page callbacks as
 // plain functions (`method.call(arguments)`), so `this` is not the Controller.
-// Folders whose existing installation the user has already been asked about.
-var askedAboutTargetDir = {}
+// The folder last checked, so the question is asked once each time the path
+// becomes an installation folder, not again for the same text. A folder the
+// user declined is asked about again when they return to it: QtIFW would
+// otherwise refuse it on Next.
+var lastCheckedTargetDir = null
 var targetDirLineEditConnected = false
 
 // The maintenance tool of an installation in `dir`, where QtIFW looks for it.
@@ -76,16 +79,20 @@ Controller.prototype.TargetDirectoryPageCallback = function () {
     lineEdit.textChanged.connect(onTargetDirChanged)
     targetDirLineEditConnected = true
   }
+  // Entering the page (also after Back) always checks the folder shown.
+  lastCheckedTargetDir = null
   onTargetDirChanged(lineEdit.text)
 }
 
 function onTargetDirChanged(text) {
   var dir = installer.fromNativeSeparators(String(text).trim())
-  // Ask once per folder: typing on past a matching path must not ask again.
-  if (!containsInstallation(dir) || askedAboutTargetDir[dir]) {
+  if (dir === lastCheckedTargetDir) {
     return
   }
-  askedAboutTargetDir[dir] = true
+  lastCheckedTargetDir = dir
+  if (!containsInstallation(dir)) {
+    return
+  }
 
   var productName = installer.value("ProductName")
   var answer = QMessageBox.question(
