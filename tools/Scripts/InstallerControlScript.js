@@ -3,9 +3,6 @@
 // © 2021-2025 Contributors to the EasyReflectometry project <https://github.com/easyScience/EasyReflectometryApp>
 
 function Controller() {
-  // Folders whose existing installation the user has already been asked about.
-  this.askedAboutTargetDir = {}
-  this.targetDirLineEditConnected = false
 }
 
 // ---------------------------------------------------------------------------
@@ -21,6 +18,12 @@ function Controller() {
 
 // Must match MaintenanceToolName in config.xml (tools/Scripts/MakeInstaller.py).
 var MAINTENANCE_TOOL_NAME = "MaintenanceTool"
+
+// State is kept here, not on the Controller: QtIFW calls the page callbacks as
+// plain functions (`method.call(arguments)`), so `this` is not the Controller.
+// Folders whose existing installation the user has already been asked about.
+var askedAboutTargetDir = {}
+var targetDirLineEditConnected = false
 
 // The maintenance tool of an installation in `dir`, where QtIFW looks for it.
 function maintenanceToolPath(dir) {
@@ -69,20 +72,20 @@ Controller.prototype.TargetDirectoryPageCallback = function () {
   }
   var lineEdit = page.TargetDirectoryLineEdit
   // The callback runs every time the page is entered (also after Back).
-  if (!this.targetDirLineEditConnected) {
-    lineEdit.textChanged.connect(this, this.onTargetDirChanged)
-    this.targetDirLineEditConnected = true
+  if (!targetDirLineEditConnected) {
+    lineEdit.textChanged.connect(onTargetDirChanged)
+    targetDirLineEditConnected = true
   }
-  this.onTargetDirChanged(lineEdit.text)
+  onTargetDirChanged(lineEdit.text)
 }
 
-Controller.prototype.onTargetDirChanged = function (text) {
+function onTargetDirChanged(text) {
   var dir = installer.fromNativeSeparators(String(text).trim())
   // Ask once per folder: typing on past a matching path must not ask again.
-  if (!containsInstallation(dir) || this.askedAboutTargetDir[dir]) {
+  if (!containsInstallation(dir) || askedAboutTargetDir[dir]) {
     return
   }
-  this.askedAboutTargetDir[dir] = true
+  askedAboutTargetDir[dir] = true
 
   var productName = installer.value("ProductName")
   var answer = QMessageBox.question(
@@ -106,10 +109,10 @@ Controller.prototype.onTargetDirChanged = function (text) {
       QMessageBox.Ok
     )
   }
-  this.setTargetDir(versionedTargetDir(dir))
+  setTargetDir(versionedTargetDir(dir))
 }
 
-Controller.prototype.setTargetDir = function (dir) {
+function setTargetDir(dir) {
   var page = gui.pageWidgetByObjectName("TargetDirectoryPage")
   if (page != null) {
     page.TargetDirectoryLineEdit.setText(installer.toNativeSeparators(dir))
