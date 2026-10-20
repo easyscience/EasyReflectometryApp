@@ -103,8 +103,6 @@ jobs:
 
       - name: Sign, notarize and staple offline app installer (macOS)
         if: |
-          # runner.os == 'macOS' && github.event_name == 'push' &&
-          # (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop')
           runner.os == 'macOS' && github.event_name == 'push'
         run: >
           python ${{ env.SCRIPTS_PATH }}/SignAppInstaller.py
