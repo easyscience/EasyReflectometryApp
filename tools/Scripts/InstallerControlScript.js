@@ -3,6 +3,117 @@
 // © 2021-2025 Contributors to the EasyReflectometry project <https://github.com/easyScience/EasyReflectometryApp>
 
 function Controller() {
+  // Folders whose existing installation the user has already been asked about.
+  this.askedAboutTargetDir = {}
+  this.targetDirLineEditConnected = false
+}
+
+// ---------------------------------------------------------------------------
+// Installing over an existing installation (issue #358)
+//
+// QtIFW refuses a target folder that already holds a MaintenanceTool ("The
+// directory you selected already exists and contains an installation") and has
+// no setting to allow it. Instead, as soon as such a folder is chosen, offer to
+// remove the earlier version with its own MaintenanceTool ("purge" uninstalls
+// all components and deletes the folder) and install into the same folder; if
+// the user declines, or the removal fails, propose a versioned folder instead.
+// ---------------------------------------------------------------------------
+
+// Must match MaintenanceToolName in config.xml (tools/Scripts/MakeInstaller.py).
+var MAINTENANCE_TOOL_NAME = "MaintenanceTool"
+
+// The maintenance tool of an installation in `dir`, where QtIFW looks for it.
+function maintenanceToolPath(dir) {
+  var os = installer.value("os")
+  if (os === "mac") {
+    return dir + "/" + MAINTENANCE_TOOL_NAME + ".app/Contents/MacOS/" + MAINTENANCE_TOOL_NAME
+  }
+  if (os === "win") {
+    return dir + "/" + MAINTENANCE_TOOL_NAME + ".exe"
+  }
+  return dir + "/" + MAINTENANCE_TOOL_NAME
+}
+
+function containsInstallation(dir) {
+  return dir !== "" && installer.fileExists(maintenanceToolPath(dir))
+}
+
+// A folder next to `dir` that does not exist yet, named after this version.
+function versionedTargetDir(dir) {
+  var version = installer.value("ProductVersion")
+  var base = version ? dir + "-" + version : dir + "-new"
+  var candidate = base
+  var counter = 2
+  while (installer.fileExists(candidate)) {
+    candidate = base + "-" + counter
+    counter += 1
+  }
+  return candidate
+}
+
+// Runs the earlier version's own maintenance tool; true if it is gone afterwards.
+function removeInstallation(dir) {
+  var tool = maintenanceToolPath(dir)
+  console.log("* removing the existing installation with: " + tool + " purge")
+  installer.execute(tool, ["purge", "--confirm-command", "--accept-messages"])
+  return !containsInstallation(dir)
+}
+
+Controller.prototype.TargetDirectoryPageCallback = function () {
+  if (!installer.isInstaller() || installer.isCommandLineInstance()) {
+    return
+  }
+  var page = gui.currentPageWidget()
+  if (page == null) {
+    return
+  }
+  var lineEdit = page.TargetDirectoryLineEdit
+  // The callback runs every time the page is entered (also after Back).
+  if (!this.targetDirLineEditConnected) {
+    lineEdit.textChanged.connect(this, this.onTargetDirChanged)
+    this.targetDirLineEditConnected = true
+  }
+  this.onTargetDirChanged(lineEdit.text)
+}
+
+Controller.prototype.onTargetDirChanged = function (text) {
+  var dir = installer.fromNativeSeparators(String(text).trim())
+  // Ask once per folder: typing on past a matching path must not ask again.
+  if (!containsInstallation(dir) || this.askedAboutTargetDir[dir]) {
+    return
+  }
+  this.askedAboutTargetDir[dir] = true
+
+  var productName = installer.value("ProductName")
+  var answer = QMessageBox.question(
+    "ExistingInstallation",
+    "Existing installation",
+    "An earlier version of " + productName + " is installed in\n" + installer.toNativeSeparators(dir) + "\n\n" +
+      "Remove it and install this version in its place?\n\n" +
+      "Choose No to install this version into a separate folder and keep the earlier one.",
+    QMessageBox.Yes | QMessageBox.No,
+    QMessageBox.Yes
+  )
+  if (answer === QMessageBox.Yes) {
+    if (removeInstallation(dir)) {
+      return // the folder is free now: install into it
+    }
+    QMessageBox.warning(
+      "ExistingInstallationNotRemoved",
+      "Existing installation",
+      "The earlier version could not be removed. Close " + productName + " if it is running, or remove it " +
+        "with the MaintenanceTool in its folder.\n\nThis version will be installed into a separate folder instead.",
+      QMessageBox.Ok
+    )
+  }
+  this.setTargetDir(versionedTargetDir(dir))
+}
+
+Controller.prototype.setTargetDir = function (dir) {
+  var page = gui.pageWidgetByObjectName("TargetDirectoryPage")
+  if (page != null) {
+    page.TargetDirectoryLineEdit.setText(installer.toNativeSeparators(dir))
+  }
 }
 
 Controller.prototype.IntroductionPageCallback = function () {
