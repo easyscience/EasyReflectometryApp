@@ -57,12 +57,44 @@ function versionedTargetDir(dir) {
   return candidate
 }
 
+// How long to wait for the earlier version's files to disappear after purge.
+var REMOVAL_TIMEOUT_SECONDS = 30
+
+// Blocks for about one second (the script engine has no timers).
+function waitOneSecond() {
+  if (installer.value("os") === "win") {
+    installer.execute("ping", ["-n", "2", "127.0.0.1"])
+  } else {
+    installer.execute("sleep", ["1"])
+  }
+}
+
 // Runs the earlier version's own maintenance tool; true if it is gone afterwards.
+//
+// On Windows a running program cannot delete itself, so purge leaves a
+// detached script (uninstall.vbs) that deletes MaintenanceTool.exe once per
+// second after the tool has exited, and then the installation folder. Right
+// after purge returns, MaintenanceTool.exe still exists: wait for the folder
+// to go, or the new installation could be written into a folder that the
+// script then deletes, and QtIFW would still refuse it on Next.
 function removeInstallation(dir) {
   var tool = maintenanceToolPath(dir)
   console.log("* removing the existing installation with: " + tool + " purge")
   installer.execute(tool, ["purge", "--confirm-command", "--accept-messages"])
-  return !containsInstallation(dir)
+  for (var waited = 0; waited < REMOVAL_TIMEOUT_SECONDS; waited++) {
+    if (!installer.fileExists(dir)) {
+      break
+    }
+    // Elsewhere the folder may stay (with files the uninstaller did not own);
+    // there, the maintenance tool is deleted before purge returns.
+    if (installer.value("os") !== "win" && !containsInstallation(dir)) {
+      break
+    }
+    waitOneSecond()
+  }
+  var removed = !containsInstallation(dir)
+  console.log("* existing installation " + (removed ? "removed" : "still present") + " in " + dir)
+  return removed
 }
 
 Controller.prototype.TargetDirectoryPageCallback = function () {
