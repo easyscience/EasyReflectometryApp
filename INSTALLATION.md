@@ -15,6 +15,16 @@ Download them from the [latest release](https://github.com/EasyScience/EasyRefle
 Unzip the archive and run the installer inside it. On Linux, make the installer executable first (`chmod +x <installer>`).
 On macOS, see the note on unidentified developers in the [README](./README.md#installing).
 
+### Upgrading from an earlier version
+
+When the chosen folder already holds an earlier version, the installer asks whether to remove it first.
+Choose _Yes_ to replace the earlier version with the new one in the same folder.
+Choose _No_ to keep the earlier version; the new one is then installed into a separate folder named after its version, such as `EasyReflectometryApp-1.6.0`.
+Close EasyReflectometry before upgrading; an earlier version that is still running cannot be removed.
+
+Installers of version 1.5.0 and older cannot install over an existing installation, and stop with the message _"The directory you selected already exists and contains an installation"_.
+With those, remove the earlier version first: run **MaintenanceTool** from its installation folder, select _Remove all components_ and follow the instructions. Alternatively, choose a different installation folder.
+
 If no installer works on your system, install from source as described below.
 
 ## Installation from source

@@ -1,3 +1,12 @@
+# Unreleased
+
+- Installing over an earlier version ([#358](https://github.com/easyscience/EasyReflectometryApp/issues/358)):
+  the installer no longer stops with "The directory you selected already exists
+  and contains an installation". When the chosen folder holds an earlier
+  version, it offers to remove that version with its own MaintenanceTool and
+  install in its place; declining, or a failed removal, sets a separate folder
+  named after the new version instead (e.g. `EasyReflectometryApp-1.6.0`).
+
 # Version 1.5.0 (19 Oct 2026)
 
 - Magnetism parameterisation and guide field ([#425](https://github.com/easyscience/reflectometry-lib/issues/425), requirement 4):
