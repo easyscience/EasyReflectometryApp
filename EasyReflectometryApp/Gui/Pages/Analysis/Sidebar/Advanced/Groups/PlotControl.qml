@@ -15,7 +15,7 @@ EaElements.GroupBox {
     collapsed: true
 
     EaElements.GroupColumn {
-        Gui.PlotControlRefLines {}
+        Gui.PlotControlCommon {}
 
         // Magnetic profile switches for the SLD tab, next to the other chart
         // controls. Absent while no model is magnetic.

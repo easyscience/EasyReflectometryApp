@@ -437,9 +437,8 @@ QtObject {
     readonly property int analysisMinimizerCurrentIndex: activeBackend.analysis.minimizerCurrentIndex
     function analysisSetMinimizerCurrentIndex(value) { activeBackend.analysis.setMinimizerCurrentIndex(value) }
 
-    readonly property var analysisFitableParameters: activeBackend.analysis.enabledParameters
-    readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
     readonly property var analysisEnabledParameters: activeBackend.analysis.enabledParameters
+    readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
 
     function analysisSetCurrentParameterIndex(value) { activeBackend.analysis.setCurrentParameterIndex(value) }
     function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
@@ -618,8 +617,6 @@ QtObject {
     readonly property var plottingResidualMaxX: activeBackend.plotting.residualMaxX
     readonly property var plottingResidualMinY: activeBackend.plotting.residualMinY
     readonly property var plottingResidualMaxY: activeBackend.plotting.residualMaxY
-
-    readonly property var calcSerieColor: activeBackend.plotting.calcSerieColor
 
     // Plot mode properties
     readonly property bool plottingPlotRQ4: activeBackend.plotting.plotRQ4

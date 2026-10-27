@@ -94,10 +94,6 @@ class Parameters:
             # The magnetic parameters are named after the physics, so the word
             # rarely appears in their text; match them explicitly.
             return any(name in searchable_text for name in MAGNETIC_PARAMETER_NAMES)
-        if normalized in {'cell', 'atom_site'}:
-            return normalized in searchable_text
-        if normalized == 'b_iso':
-            return 'b_iso' in searchable_text or 'adp' in searchable_text
 
         return normalized in searchable_text
 
@@ -251,31 +247,6 @@ class Parameters:
 
     def constraint_arithmetic(self) -> List[str]:
         return ['', '*', '/', '+', '-']
-
-    def add_constraint(
-        self, dependent_idx: int, relational_operator: str, value: float, arithmetic_operator: str, independent_idx: int
-    ) -> None:
-        independent = self._project_lib.parameters[independent_idx]
-        dependent = self._project_lib.parameters[dependent_idx]
-
-        if arithmetic_operator != '' and independent_idx > -1:
-            dependent.make_dependent_on(
-                dependency_expression='a' + arithmetic_operator + 'b', dependency_map={'a': independent, 'b': float(value)}
-            )
-        elif arithmetic_operator == '' and independent_idx == -1:
-            relational_operator = relational_operator.replace('=', '==')
-            relational_operator = relational_operator.replace('&lt', '>')
-            relational_operator = relational_operator.replace('&gt', '<')
-
-            dependent.make_dependent_on(dependency_expression='a', dependency_map={'a': float(value)})
-        else:
-            logger.warning('Failed to add constraint: Unsupported type')
-            return
-
-        logger.debug(
-            'Added constraint: %s, %s, %s, %s, %s',
-            dependent_idx, relational_operator, value, arithmetic_operator, independent_idx,
-        )
 
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:

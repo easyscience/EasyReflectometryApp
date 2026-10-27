@@ -210,15 +210,6 @@ def test_a_failure_or_a_sampling_run_cannot_be_recorded_against_a_previous_fit()
     assert recorded == []
 
 
-def test_ordered_experiments_sorts_by_key_only():
-    project = make_project()
-    logic = fitting_module.Fitting(project)
-    first, second = object(), object()
-    project._experiments.update({1: second, 0: first})
-
-    assert logic._ordered_experiments() == [first, second]
-
-
 def test_fit_progress_updates_transient_state_and_message():
     project = make_project()
     logic = fitting_module.Fitting(project)

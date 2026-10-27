@@ -58,37 +58,45 @@ def experiment_channel_values(experiment) -> list[str]:
     return [channel.value for channel in channels]
 
 
+def ordered_experiment_items(project_lib: ProjectLib) -> list[tuple[object, object]]:
+    """Experiments as ``(key, experiment)`` pairs, in the order the UI lists them.
+
+    The UI addresses experiments by list position; this is the one place that
+    order is defined. Supports mapping-like storage without assuming contiguous
+    integer keys.
+    """
+    experiments = project_lib._experiments
+    if not experiments:
+        return []
+
+    if hasattr(experiments, 'items'):
+        items = list(experiments.items())
+        try:
+            items.sort(key=lambda item: item[0])
+        except TypeError:
+            pass
+        return items
+
+    return list(enumerate(experiments))
+
+
+def ordered_experiments(project_lib: ProjectLib) -> list:
+    """Experiment objects in the order of :func:`ordered_experiment_items`."""
+    return [experiment for _, experiment in ordered_experiment_items(project_lib)]
+
+
 class Experiments:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
 
-    def _ordered_experiment_items(self) -> list[tuple[object, object]]:
-        """Return experiments as ordered ``(key, experiment)`` pairs.
-
-        Supports mapping-like storage without assuming contiguous integer keys.
-        """
-        experiments = self._project_lib._experiments
-        if not experiments:
-            return []
-
-        if hasattr(experiments, 'items'):
-            items = list(experiments.items())
-            try:
-                items.sort(key=lambda item: item[0])
-            except TypeError:
-                pass
-            return items
-
-        return list(enumerate(experiments))
-
     def _experiment_at_index(self, index: int):
-        items = self._ordered_experiment_items()
+        items = ordered_experiment_items(self._project_lib)
         if 0 <= index < len(items):
             return items[index][1]
         return None
 
     def _experiment_key_at_index(self, index: int):
-        items = self._ordered_experiment_items()
+        items = ordered_experiment_items(self._project_lib)
         if 0 <= index < len(items):
             return items[index][0]
         return None
@@ -96,7 +104,7 @@ class Experiments:
     def available(self) -> list[str]:
         experiments_name = []
         try:
-            for _, exp in self._ordered_experiment_items():
+            for _, exp in ordered_experiment_items(self._project_lib):
                 experiments_name.append(exp.name)
         except IndexError:
             pass
@@ -105,12 +113,12 @@ class Experiments:
     def polarized_flags(self) -> list[bool]:
         """Per-experiment flag: True when the experiment carries per-channel (polarized) data."""
         return [
-            getattr(exp, 'available_channels', None) is not None for _, exp in self._ordered_experiment_items()
+            getattr(exp, 'available_channels', None) is not None for _, exp in ordered_experiment_items(self._project_lib)
         ]
 
     def channel_counts(self) -> list[int]:
         """Per-experiment number of measured spin channels (0 when unpolarized)."""
-        return [len(experiment_channel_values(exp)) for _, exp in self._ordered_experiment_items()]
+        return [len(experiment_channel_values(exp)) for _, exp in ordered_experiment_items(self._project_lib)]
 
     def current_index(self) -> int:
         return self._project_lib._current_experiment_index
@@ -134,7 +142,7 @@ class Experiments:
     def model_indices(self) -> list[int]:
         """Per experiment, the index of its model (-1 when it has none)."""
         indices = []
-        for key, _ in self._ordered_experiment_items():
+        for key, _ in ordered_experiment_items(self._project_lib):
             index = self._project_lib.model_index_for_experiment(key)
             indices.append(-1 if index is None else index)
         return indices
@@ -157,7 +165,7 @@ class Experiments:
 
     def included_in_fit(self) -> list[bool]:
         """Per experiment, whether the next fit includes it."""
-        return [experiment.include_in_fit for _, experiment in self._ordered_experiment_items()]
+        return [experiment.include_in_fit for _, experiment in ordered_experiment_items(self._project_lib)]
 
     def set_included_in_fit(self, index: int, included: bool) -> bool:
         experiment = self._experiment_at_index(index)

@@ -1,5 +1,3 @@
-import logging
-
 from EasyReflectometryApp.Backends.Py.logic import parameters as parameters_module
 from tests.factories import FakeParameter
 from tests.factories import make_model
@@ -265,22 +263,6 @@ def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
     assert inactive_parameter.free is False
 
 
-def test_add_constraint_supports_arithmetic_and_constant_dependencies():
-    independent = make_parameter(name='Scale', unique_name='scale', value=2.0)
-    dependent = make_parameter(name='Background', unique_name='background', value=0.5)
-    project = make_project()
-    project.parameters = [independent, dependent]
-    logic = parameters_module.Parameters(project)
-
-    logic.add_constraint(1, '=', 3.0, '*', 0)
-    assert dependent.dependency_expression == 'a*b'
-    assert dependent.dependency_map == {'a': independent, 'b': 3.0}
-
-    logic.add_constraint(1, '=', 7.0, '', -1)
-    assert dependent.dependency_expression == 'a'
-    assert dependent.dependency_map == {'a': 7.0}
-
-
 def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks(monkeypatch):
     _patch_tree_types(monkeypatch)
 
@@ -349,17 +331,12 @@ def test_parameters_special_filters_and_invalid_variability_normalization(monkey
     logic.set_name_filter_criteria('experiment')
     assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale']
 
-    logic.set_name_filter_criteria('cell')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Cell length a']
-
+    # Any other word is a plain text match.
     logic.set_name_filter_criteria('atom_site')
     assert [entry['display_name'] for entry in logic.parameters] == ['Atom site x']
 
-    logic.set_name_filter_criteria('b_iso')
-    assert [entry['display_name'] for entry in logic.parameters] == ['adp b_iso']
 
-
-def test_parameter_current_selection_edge_cases_and_unsupported_constraint(monkeypatch, caplog):
+def test_parameter_current_selection_edge_cases(monkeypatch):
     project = make_project()
     logic = parameters_module.Parameters(project)
     parameter = make_parameter(name='Scale', unique_name='scale', value=1.0, free=True)
@@ -389,11 +366,3 @@ def test_parameter_current_selection_edge_cases_and_unsupported_constraint(monke
 
     logic.set_current_index(0)
     assert logic.set_current_parameter_fit(True) is False
-
-    dependent = make_parameter(name='Background', unique_name='background', value=0.5)
-    project.parameters = [parameter, dependent]
-    with caplog.at_level(logging.WARNING, logger='EasyReflectometryApp.Backends.Py.logic.parameters'):
-        logic.add_constraint(1, '=', 2.0, '', 0)
-
-    assert 'Unsupported type' in caplog.text
-    assert dependent.independent is True

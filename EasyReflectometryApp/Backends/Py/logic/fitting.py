@@ -8,6 +8,8 @@ from typing import cast
 from easyreflectometry import Project as ProjectLib
 from easyscience.fitting import FitResults
 
+from .experiments import ordered_experiments
+
 if TYPE_CHECKING:
     from easyreflectometry.fitting import MultiFitter
     from easyreflectometry.fitting import PreparedFit
@@ -225,37 +227,20 @@ class Fitting:
         self.clear_fit_progress()
         self._fit_running_message = 'Fitting...'
 
-    def _ordered_experiments(self) -> list:
-        """Return experiments as an ordered list of experiment objects.
-
-        Handles mapping-like storage without assuming contiguous integer keys.
-        """
-        experiments = self._project_lib._experiments
-        if not experiments:
-            return []
-
-        if hasattr(experiments, 'items'):
-            items = list(experiments.items())
-            try:
-                items.sort(key=lambda item: item[0])
-            except TypeError:
-                pass
-            return [experiment for _, experiment in items]
-
-        return list(experiments)
-
     _POLARIZED_SAMPLE_MESSAGE = (
         'Bayesian sampling of polarized experiments is not supported yet.'
     )
 
     def _has_polarized_experiments(self, experiments: Optional[list] = None) -> bool:
         """Whether any of `experiments` (by default every loaded one) carries per-channel data."""
-        experiments = self._ordered_experiments() if experiments is None else experiments
+        experiments = ordered_experiments(self._project_lib) if experiments is None else experiments
         return any(getattr(experiment, 'available_channels', None) is not None for experiment in experiments)
 
     def _included_experiments(self) -> list:
         """The experiments whose Fit box is ticked, in order."""
-        return [experiment for experiment in self._ordered_experiments() if getattr(experiment, 'include_in_fit', True)]
+        return [
+            experiment for experiment in ordered_experiments(self._project_lib) if getattr(experiment, 'include_in_fit', True)
+        ]
 
     # ------------------------------------------------------------------
     # Inequality constraints (BUMPS penalties)
@@ -324,7 +309,7 @@ class Fitting:
         self._prepared = None
         self._fit_notes = []
         try:
-            experiments = self._ordered_experiments()
+            experiments = ordered_experiments(self._project_lib)
             if not experiments:
                 self._fail_before_start('No experiments to fit')
                 return None
@@ -369,10 +354,10 @@ class Fitting:
         return notes
 
     def _experiment_names(self) -> list[str]:
-        return [experiment.name for experiment in self._ordered_experiments()]
+        return [experiment.name for experiment in ordered_experiments(self._project_lib)]
 
     def _inclusion(self) -> list[bool]:
-        return [experiment.include_in_fit for experiment in self._ordered_experiments()]
+        return [experiment.include_in_fit for experiment in ordered_experiments(self._project_lib)]
 
     def _fail_before_start(self, message: str) -> None:
         self._fit_error_message = message
@@ -452,7 +437,7 @@ class Fitting:
         try:
             # `prepare_sample` refuses the same cases (FitScopeError, reported
             # below); these checks stay for the GUI wording ("tick Fit ...").
-            if not self._ordered_experiments():
+            if not ordered_experiments(self._project_lib):
                 self._fail_before_start('No experiments to sample')
                 return None
             experiments = self._included_experiments()

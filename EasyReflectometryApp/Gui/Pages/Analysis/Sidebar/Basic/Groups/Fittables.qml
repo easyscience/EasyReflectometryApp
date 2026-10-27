@@ -19,6 +19,8 @@ EaElements.GroupBox {
     collapsible: false
     last: true
     readonly property var backend: Globals.BackendWrapper
+    // The row the slider and the Detach controls act on (undefined when there is none).
+    readonly property var currentParameter: backend.analysisEnabledParameters[backend.analysisCurrentParameterIndex]
 
     Column {
         id: fittables
@@ -210,7 +212,7 @@ EaElements.GroupBox {
             // Table model
             // We only use the length of the model object defined in backend logic and
             // directly access that model in every row using the TableView index property.
-            model: Globals.BackendWrapper.analysisFitableParameters.length //Globals.Proxies.main_fittables_data.length
+            model: Globals.BackendWrapper.analysisEnabledParameters.length
             // Table model
 
             Component.onCompleted: {
@@ -278,6 +280,16 @@ EaElements.GroupBox {
 
             // Table content row
             delegate: EaComponents.TableViewDelegate {
+                id: parameterRow
+                // Read through the id: TableViewParameter has its own `parameter`,
+                // `value`, `fit`, ... properties that would shadow bare names.
+                readonly property var param: Globals.BackendWrapper.analysisEnabledParameters[index]
+                // Derived (computed, read-only) parameters carry an ƒ badge. Inactive
+                // rows are a decoupled density material's unused knobs.
+                readonly property bool derived: param.kind === 'derived'
+                readonly property bool inactive: param.kind === 'inactive'
+                readonly property bool editable: isEditable(param)
+
                 enabled: !Globals.BackendWrapper.analysisFittingRunning
 
                 mouseArea.onPressed: {
@@ -295,31 +307,24 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     width: EaStyle.Sizes.fontPixelSize * 5
-                    // Derived (computed, read-only) parameters carry an ƒ badge; the
-                    // tooltip explains what they are computed from. Inactive rows are
-                    // a decoupled density material's unused knobs.
-                    readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
-                    readonly property bool inactive: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'inactive'
                     // ⇄: one parameter of several models (contrasts sharing a layer or material)
-                    readonly property var sharedBy: Globals.BackendWrapper.analysisFitableParameters[index].sharedBy ?? []
-                    readonly property int followedBy: Globals.BackendWrapper.analysisFitableParameters[index].followedBy ?? 0
-                    text: (derived ? 'ƒ ' : '') + (sharedBy.length > 1 ? '⇄ ' : '') + Globals.BackendWrapper.analysisFitableParameters[index].name
+                    readonly property var sharedBy: parameterRow.param.sharedBy ?? []
+                    readonly property int followedBy: parameterRow.param.followedBy ?? 0
+                    text: (parameterRow.derived ? 'ƒ ' : '') + (sharedBy.length > 1 ? '⇄ ' : '') + parameterRow.param.name
                     textFormat: Text.PlainText
-                    color: !inactive &&
-                           (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                           Globals.BackendWrapper.analysisFitableParameters[index].independent  : true) ?
-                           EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
+                    color: parameterRow.editable ? EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
                     // The embedded TableViewLabel tooltip only appears while the
                     // text is elided, so a hover on a truncated name (e.g.
-                    // 'Ni on Si L... roughness') reveals the full name.
-                    ToolTip.text: derived
+                    // 'Ni on Si L... roughness') reveals the full name. Derived and
+                    // inactive rows also say what they are computed from.
+                    ToolTip.text: parameterRow.derived
                                   ? qsTr("%1 — derived, read-only: %2")
                                         .arg(text)
-                                        .arg(Globals.BackendWrapper.analysisFitableParameters[index].dependency || '')
-                                  : inactive
+                                        .arg(parameterRow.param.dependency || '')
+                                  : parameterRow.inactive
                                   ? qsTr("%1 — %2")
                                         .arg(text)
-                                        .arg(Globals.BackendWrapper.analysisFitableParameters[index].dependency || '')
+                                        .arg(parameterRow.param.dependency || '')
                                   : text
                                     + (sharedBy.length > 1 ? qsTr("\nOne parameter of %1: changing it changes all of them.").arg(sharedBy.join(', ')) : '')
                                     + (followedBy > 0 ? qsTr("\nFollowed by %1 parameter(s) of other models.").arg(followedBy) : '')
@@ -327,11 +332,9 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewParameter {
                     id: valueColumn
-                    enabled: Globals.BackendWrapper.analysisFitableParameters[index].kind !== 'inactive' &&
-                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                             Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
+                    enabled: parameterRow.editable
                     selected: index === Globals.BackendWrapper.analysisCurrentParameterIndex
-                    text: EaLogic.Utils.toMaxPrecision(Globals.BackendWrapper.analysisFitableParameters[index].value, 3)
+                    text: EaLogic.Utils.toMaxPrecision(parameterRow.param.value, 3)
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing (manual) 'value' field of fittable on Analysis page ***")
@@ -343,7 +346,7 @@ EaElements.GroupBox {
 
                 EaComponents.TableViewLabel {
                     text: {
-                        const unit = Globals.BackendWrapper.analysisFitableParameters[index].units
+                        const unit = parameterRow.param.units
                         if (unit !== undefined && unit !== 'dimensionless') {
                             if (unit.endsWith('Å^2')) {
                                 '10⁻⁶Å⁻²'
@@ -361,10 +364,7 @@ EaElements.GroupBox {
                     // A constrained (dependent) parameter derives its value from another
                     // parameter, so it has no error of its own to report; an inactive
                     // knob's error is stale (the parameter no longer enters the fit).
-                    text: Globals.BackendWrapper.analysisFitableParameters[index].kind !== 'inactive' &&
-                          (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                           Globals.BackendWrapper.analysisFitableParameters[index].independent : true) ?
-                           formatError(Globals.BackendWrapper.analysisFitableParameters[index].error) : ''
+                    text: parameterRow.editable ? formatError(parameterRow.param.error) : ''
                     color: EaStyle.Colors.themeForegroundDisabled
                 }
 
@@ -373,40 +373,32 @@ EaElements.GroupBox {
                 // operands, so they are an envelope, not limits anyone set or that
                 // anything enforces. Showing them next to editable bounds only
                 // invites reading them as physical limits, so leave the cells empty.
+                // Locked rows: derived (computed bounds) and inactive (a decoupled
+                // density material's unused knobs — bounds are real but unused).
                 EaComponents.TableViewParameter {
-                    // Locked rows: derived (computed bounds) and inactive (a decoupled
-                    // density material's unused knobs — bounds are real but unused).
-                    readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
-                    readonly property bool inactive: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'inactive'
-                    enabled: !derived && !inactive &&
-                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
-                    text: derived ? '' :
-                          EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].min).replace('Infinity', 'inf')
+                    enabled: !parameterRow.derived && parameterRow.editable
+                    text: parameterRow.derived ? '' :
+                          EaLogic.Utils.toDefaultPrecision(parameterRow.param.min).replace('Infinity', 'inf')
                     // Missing bound of a free parameter while the minimizer needs finite ones
                     warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
-                            Globals.BackendWrapper.analysisFitableParameters[index].fit &&
-                            !isFinite(Globals.BackendWrapper.analysisFitableParameters[index].min)
+                            parameterRow.param.fit &&
+                            !isFinite(parameterRow.param.min)
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'min' field of fittable on Analysis page ***")
                         const value = (text === '' ? '-inf' : text)
-                        Globals.BackendWrapper.analysisSetCurrentParameterMin(text)
+                        Globals.BackendWrapper.analysisSetCurrentParameterMin(value)
                         }
                 }
 
                 EaComponents.TableViewParameter {
-                    readonly property bool derived: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'derived'
-                    readonly property bool inactive: Globals.BackendWrapper.analysisFitableParameters[index].kind === 'inactive'
-                    enabled: !derived && !inactive &&
-                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
-                    text: derived ? '' :
-                          EaLogic.Utils.toDefaultPrecision(Globals.BackendWrapper.analysisFitableParameters[index].max).replace('Infinity', 'inf')
+                    enabled: !parameterRow.derived && parameterRow.editable
+                    text: parameterRow.derived ? '' :
+                          EaLogic.Utils.toDefaultPrecision(parameterRow.param.max).replace('Infinity', 'inf')
                     // Missing bound of a free parameter while the minimizer needs finite ones
                     warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
-                            Globals.BackendWrapper.analysisFitableParameters[index].fit &&
-                            !isFinite(Globals.BackendWrapper.analysisFitableParameters[index].max)
+                            parameterRow.param.fit &&
+                            !isFinite(parameterRow.param.max)
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'max' field of fittable on Analysis page ***")
@@ -421,10 +413,8 @@ EaElements.GroupBox {
                     // independent, but fitting it would silently do nothing (it no
                     // longer affects the reflectivity while SLD is fitted directly).
                     enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length &&
-                             Globals.BackendWrapper.analysisFitableParameters[index].kind !== 'inactive' &&
-                             (Globals.BackendWrapper.analysisFitableParameters[index].independent !== undefined ?
-                              Globals.BackendWrapper.analysisFitableParameters[index].independent : true)
-                    checked: Globals.BackendWrapper.analysisFitableParameters[index].fit
+                             parameterRow.editable
+                    checked: parameterRow.param.fit
                     onToggled: {
                         console.debug("*** Editing 'fit' field of fittable on Analysis page ***")
                         // Ensure this row is selected before toggling the fit value
@@ -441,7 +431,7 @@ EaElements.GroupBox {
 
         Item {
             id: fitAllContainer
-            visible: Globals.BackendWrapper.analysisFitableParameters.length
+            visible: Globals.BackendWrapper.analysisEnabledParameters.length
             width: tableView.width
             height: EaStyle.Sizes.tableRowHeight
 
@@ -461,7 +451,7 @@ EaElements.GroupBox {
                 anchors.left: parent.left
                 anchors.leftMargin: Math.max(tableView.width - fittables.fitColumnWidth, 0)
                 enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length &&
-                         Globals.BackendWrapper.analysisFitableParameters.length
+                         Globals.BackendWrapper.analysisEnabledParameters.length
                 checked: allFittablesSelected()
                 onToggled: {
                     setAllFittablesFit(checked)
@@ -471,30 +461,20 @@ EaElements.GroupBox {
 
         // Parameter change slider
         Row {
-            visible: Globals.BackendWrapper.analysisFitableParameters.length
+            visible: Globals.BackendWrapper.analysisEnabledParameters.length
 
             spacing: EaStyle.Sizes.fontPixelSize
 
             EaElements.TextField {
                 readOnly: true
                 width: EaStyle.Sizes.fontPixelSize * 6
-                text: {
-                    const par_index = Globals.BackendWrapper.analysisCurrentParameterIndex
-                    const params = Globals.BackendWrapper.analysisFitableParameters
-                    const value = params[par_index] !== undefined ? params[par_index].value : 0
-                    const error = params[par_index] !== undefined ? params[par_index].error : 0
-                    return EaLogic.Utils.toDefaultPrecision(slider.from)
-                }
+                text: EaLogic.Utils.toDefaultPrecision(slider.from)
             }
 
             EaElements.Slider {
                 id: slider
 
-                enabled: !Globals.BackendWrapper.analysisFittingRunning &&
-                         Globals.BackendWrapper.analysisFitableParameters.length > 0 &&
-                         Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].kind !== 'inactive' &&
-                         (Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].independent !== undefined ?
-                          Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex].independent : true)
+                enabled: !Globals.BackendWrapper.analysisFittingRunning && isEditable(currentParameter)
                 width: tableView.width - EaStyle.Sizes.fontPixelSize * 14
 
                 stepSize: (to - from) / 20
@@ -528,7 +508,7 @@ EaElements.GroupBox {
         // A parameter several models share (one object): give one of them its own copy.
         Row {
             id: detachRow
-            readonly property var current: Globals.BackendWrapper.analysisFitableParameters[Globals.BackendWrapper.analysisCurrentParameterIndex]
+            readonly property var current: currentParameter
             readonly property var sharedBy: current?.sharedBy ?? []
             visible: current?.detachable ?? false
             spacing: EaStyle.Sizes.fontPixelSize * 0.5
@@ -564,36 +544,35 @@ EaElements.GroupBox {
 
     // Logic
 
+    // Dependent (constrained) rows take their value from another parameter, and
+    // inactive rows (a decoupled density material's unused knobs) are
+    // independent but never enter the fit: neither can be edited or fitted.
+    function isEditable(parameter) {
+        return parameter !== undefined && parameter.kind !== 'inactive' && (parameter.independent ?? true)
+    }
+
     function updateSliderValue() {
-        if (!backend.analysisFitableParameters.length) {
+        if (currentParameter === undefined) {
             return
         }
-        const currentIndex = backend.analysisCurrentParameterIndex
-        if (currentIndex < 0 || currentIndex >= backend.analysisFitableParameters.length) {
-            return
-        }
-        const value = backend.analysisFitableParameters[currentIndex].value
-        fittables.parameterSlider.value = EaLogic.Utils.toDefaultPrecision(value)
+        fittables.parameterSlider.value = EaLogic.Utils.toDefaultPrecision(currentParameter.value)
     }
 
     function updateSliderLimits() {
-        if (!backend.analysisFitableParameters.length) {
+        const parameter = currentParameter
+        if (parameter === undefined) {
             return
         }
-        const currentIndex = backend.analysisCurrentParameterIndex
-        if (currentIndex < 0 || currentIndex >= backend.analysisFitableParameters.length) {
-            return
-        }
-        var from = backend.analysisFitableParameters[currentIndex].value * 0.9
-        var to = backend.analysisFitableParameters[currentIndex].value * 1.1
+        var from = parameter.value * 0.9
+        var to = parameter.value * 1.1
         if (from === 0 && to === 0) {
             to = 0.1
         }
-        if (backend.analysisFitableParameters[currentIndex].max < to) {
-            to = backend.analysisFitableParameters[currentIndex].max
+        if (parameter.max < to) {
+            to = parameter.max
         }
-        if (backend.analysisFitableParameters[currentIndex].min > from) {
-            from = backend.analysisFitableParameters[currentIndex].min
+        if (parameter.min > from) {
+            from = parameter.min
         }
         fittables.parameterSlider.from = EaLogic.Utils.toDefaultPrecision(from)
         fittables.parameterSlider.to = EaLogic.Utils.toDefaultPrecision(to)
@@ -611,16 +590,13 @@ EaElements.GroupBox {
     }
 
     function allFittablesSelected() {
-        const params = backend.analysisFitableParameters
+        const params = backend.analysisEnabledParameters
         if (!params || !params.length) {
             return false
         }
         for (let i = 0; i < params.length; i++) {
             const parameter = params[i]
-            const independent = parameter.independent !== undefined ? parameter.independent : true
-            // Inactive rows (a decoupled density material's unused knobs) are
-            // independent but never fittable — skip them like dependent rows.
-            if (!independent || parameter.kind === 'inactive') {
+            if (!isEditable(parameter)) {
                 continue
             }
             if (!parameter.fit) {
@@ -631,7 +607,7 @@ EaElements.GroupBox {
     }
 
     function setAllFittablesFit(enable) {
-        const params = backend.analysisFitableParameters
+        const params = backend.analysisEnabledParameters
         if (!params || !params.length) {
             return
         }
@@ -642,8 +618,7 @@ EaElements.GroupBox {
         try {
             for (let i = 0; i < params.length; i++) {
                 const parameter = params[i]
-                const independent = parameter.independent !== undefined ? parameter.independent : true
-                if (!independent || parameter.kind === 'inactive') {
+                if (!isEditable(parameter)) {
                     continue
                 }
                 if (!!parameter.fit === targetFit) {

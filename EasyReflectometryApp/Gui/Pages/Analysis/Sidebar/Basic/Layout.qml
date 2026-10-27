@@ -17,15 +17,6 @@ EaComponents.SideBarColumn {
     Groups.Experiments{
         enabled: true
     }
-//        enabled: Globals.BackendWrapper.analysisIsFitFinished
-//    }
-
-//    EaElements.GroupBox {
-//        collapsible: false
-//        last: true
-
-//        Loader { source: 'Experiments.qml' }
-//    }
 
     Groups.Fittables{}
 }
