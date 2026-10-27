@@ -12,7 +12,7 @@ from tests.factories import make_project
 from tests.factories import make_sample
 
 
-def test_from_layers_collection_to_list_of_dicts_respects_assembly_enablement(monkeypatch):
+def test_from_layers_collection_to_list_of_dicts_mirrors_parameter_enablement(monkeypatch):
     monkeypatch.setattr(layers_module, 'LayerAreaPerMolecule', FakeLayerAreaPerMolecule)
     layer = FakeLayerAreaPerMolecule(
         name='Headgroup',
@@ -25,18 +25,22 @@ def test_from_layers_collection_to_list_of_dicts_respects_assembly_enablement(mo
         molecular_formula='C12H25',
     )
 
-    regular = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer), 'regular')
-    superphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer), 'superphase')
-    subphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer), 'subphase')
-
+    regular = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
     assert regular[0]['thickness_enabled'] == 'True'
     assert regular[0]['roughness_enabled'] == 'True'
     assert regular[0]['formula'] == 'C12H25'
     assert regular[0]['apm'] == '44.0'
     assert regular[0]['solvent'] == 'Water'
     assert regular[0]['solvation'] == '0.35'
+
+    layer.thickness.enabled = False
+    layer.roughness.enabled = False
+    superphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
     assert superphase[0]['thickness_enabled'] == 'False'
     assert superphase[0]['roughness_enabled'] == 'False'
+
+    layer.roughness.enabled = True
+    subphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
     assert subphase[0]['thickness_enabled'] == 'False'
     assert subphase[0]['roughness_enabled'] == 'True'
 
@@ -81,7 +85,6 @@ def test_layers_move_duplicate_and_setters_update_current_layer(monkeypatch):
     project.current_layer_index = 1
     logic = layers_module.Layers(project)
 
-    assert logic._assembly_type == 'regular'
     assert logic.set_name_at_current_index('Renamed') is True
     assert logic.set_thickness_at_current_index(25.0) is True
     assert logic.set_roughness_at_current_index(5.0) is True

@@ -108,9 +108,11 @@ class Project:
     def _update_enablement_of_fixed_layers_for_model(self, index: int) -> None:
         """Re-derive superphase/subphase layer enablement from assembly position.
 
-        Enablement is position-based (superphase = first assembly, subphase =
-        last), so it must be recomputed whenever assemblies are added, removed,
-        or reordered. This method is idempotent: it first re-enables every layer,
+        Enablement is position-based (superphase = first layer of the first
+        assembly, subphase = last layer of the last assembly), so it must be
+        recomputed whenever assemblies, or the layers inside them, are added,
+        removed, duplicated or reordered. The layer table reads the resulting
+        flags. This method is idempotent: it first re-enables every layer,
         then disables the fixed superphase/subphase parameters. A full reset is
         safe because this is the only code path that disables layer enablement
         (issue #329).
