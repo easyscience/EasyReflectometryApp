@@ -774,6 +774,7 @@ class Sample(QObject):
     @Slot(str)
     def removeLayer(self, value: str) -> None:
         self._layers_logic.remove_at_index(value)
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._detach_unreachable_constraints()
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
@@ -782,6 +783,7 @@ class Sample(QObject):
     @Slot()
     def addNewLayer(self) -> None:
         self._layers_logic.add_new()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -789,6 +791,7 @@ class Sample(QObject):
     @Slot()
     def duplicateSelectedLayer(self) -> None:
         self._layers_logic.duplicate_selected()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -796,12 +799,14 @@ class Sample(QObject):
     @Slot()
     def moveSelectedLayerUp(self) -> None:
         self._layers_logic.move_selected_up()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
 
     @Slot()
     def moveSelectedLayerDown(self) -> None:
         self._layers_logic.move_selected_down()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
 

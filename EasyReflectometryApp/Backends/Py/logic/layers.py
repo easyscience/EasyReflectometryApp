@@ -41,18 +41,6 @@ class Layers:
         return self._sample[self._project_lib.current_assembly_index].layers
 
     @property
-    def _assembly_type(self) -> str:
-        """Determine if current assembly is superphase, subphase, or regular."""
-        current_index = self._project_lib.current_assembly_index
-        total_assemblies = len(self._sample)
-        if current_index == 0:
-            return 'superphase'
-        elif current_index == total_assemblies - 1:
-            return 'subphase'
-        else:
-            return 'regular'
-
-    @property
     def index(self) -> int:
         return self._project_lib.current_layer_index
 
@@ -66,7 +54,7 @@ class Layers:
 
     @property
     def layers(self) -> list[dict[str, str]]:
-        return _from_layers_collection_to_list_of_dicts(self._layers, self._assembly_type)
+        return _from_layers_collection_to_list_of_dicts(self._layers)
 
     @property
     def layers_names(self) -> list[str]:
@@ -393,28 +381,18 @@ def _set_parameter_value(parameter, new_value) -> bool:
     return True
 
 
-def _from_layers_collection_to_list_of_dicts(
-    layers_collection: LayerCollection, assembly_type: str = 'regular'
-) -> list[dict[str, str]]:
+def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection) -> list[dict[str, str]]:
     """Convert layers collection to list of dicts.
 
-    :param layers_collection: The collection of layers.
-    :param assembly_type: Type of assembly - 'superphase', 'subphase', or 'regular'.
-        - superphase: Neither thickness nor roughness should be editable
-        - subphase: Only roughness should be editable
-        - regular: Both thickness and roughness should be editable
-    """
-    # Determine enabled states based on assembly type
-    if assembly_type == 'superphase':
-        thickness_enabled = 'False'
-        roughness_enabled = 'False'
-    elif assembly_type == 'subphase':
-        thickness_enabled = 'False'
-        roughness_enabled = 'True'
-    else:  # regular
-        thickness_enabled = 'True'
-        roughness_enabled = 'True'
+    Editability of thickness and roughness mirrors each parameter's ``enabled``
+    flag, which ``Project._update_enablement_of_fixed_layers_for_model`` keeps
+    in step with the superphase (first layer of the first assembly) and the
+    subphase (last layer of the last assembly). Reading the flag rather than
+    re-deriving it from the assembly position keeps the table and the
+    parameters in agreement (issue #329).
 
+    :param layers_collection: The collection of layers.
+    """
     layers_list = []
     for layer in layers_collection:
         layers_list.append(
@@ -428,8 +406,10 @@ def _from_layers_collection_to_list_of_dicts(
                 'solvent': 'solvent',
                 'solvation': '0.2',
                 'apm_enabled': 'True',
-                'thickness_enabled': thickness_enabled,
-                'roughness_enabled': roughness_enabled,
+                # `enabled` is set on a parameter only once enablement has run
+                # over it; until then it counts as enabled, as in the library.
+                'thickness_enabled': str(bool(getattr(layer.thickness, 'enabled', True))),
+                'roughness_enabled': str(bool(getattr(layer.roughness, 'enabled', True))),
             }
         )
         if isinstance(layer, LayerAreaPerMolecule):
