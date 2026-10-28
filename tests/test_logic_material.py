@@ -161,7 +161,7 @@ def test_material_logic_add_duplicate_move_and_remove():
     logic.move_selected_down()
     assert project.current_material_index == 1
 
-    logic.remove_at_index('3')
+    logic.remove_at_index(3)
     assert len(project._materials) == 3
 
 

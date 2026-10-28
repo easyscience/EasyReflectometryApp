@@ -20,9 +20,9 @@ EaElements.GroupColumn {
             editable: true
             from: 1
             to: 9999
-            value: Globals.BackendWrapper.sampleCurrentAssemblyRepeatedLayerReptitions
+            value: Globals.BackendWrapper.sampleCurrentAssemblyRepeatedLayerRepetitions
             onValueChanged: {
-                Globals.BackendWrapper.sampleSetCurrentAssemblyRepeatedLayerReptitions(value)
+                Globals.BackendWrapper.sampleSetCurrentAssemblyRepeatedLayerRepetitions(value)
             }
         }
 

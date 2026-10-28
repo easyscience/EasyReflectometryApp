@@ -35,7 +35,7 @@ def test_remove_selected_assembly_refreshes_cached_layers_and_clamps_layer_index
     assert backend.currentAssemblyType == 'Surfactant Layer'
     assert backend.currentLayerIndex == 1
 
-    backend.removeAssembly('1')
+    backend.removeAssembly(1)
 
     assert backend.currentAssemblyIndex == 1
     assert backend.currentAssemblyType == 'Multi-layer'
@@ -99,7 +99,7 @@ def test_set_current_model_index_refreshes_layers_and_selection(qcore_applicatio
     assert [layer['material'] for layer in backend.layers] == ['Si']
 
     fired = []
-    for name in ('assembliesIndexChanged', 'layersIndexChanged', 'layersChange'):
+    for name in ('assembliesIndexChanged', 'layersIndexChanged', 'layersChanged'):
         getattr(backend, name).connect(lambda name=name: fired.append(name))
 
     backend.setCurrentModelIndex(1)
@@ -108,7 +108,7 @@ def test_set_current_model_index_refreshes_layers_and_selection(qcore_applicatio
     assert backend.currentAssemblyIndex == 0
     assert backend.currentLayerIndex == 0
     assert [layer['material'] for layer in backend.layers] == ['D2O']
-    assert set(fired) == {'assembliesIndexChanged', 'layersIndexChanged', 'layersChange'}
+    assert set(fired) == {'assembliesIndexChanged', 'layersIndexChanged', 'layersChanged'}
 
 
 def test_magnetism_edits_invalidate_the_structure_cache(qcore_application):

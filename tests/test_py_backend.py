@@ -48,7 +48,7 @@ class StubSample(QObject):
     modelsIndexChanged = Signal()
     assembliesTableChanged = Signal()
     assembliesIndexChanged = Signal()
-    layersChange = Signal()
+    layersChanged = Signal()
     structureChanged = Signal()
     qRangeChanged = Signal()
     magnetismChanged = Signal()
@@ -510,7 +510,7 @@ def test_backend_wires_structure_refresh_to_sample_and_analysis_signals(monkeypa
     backend = _make_backend(monkeypatch)
 
     for signal in (
-        backend._sample.layersChange,
+        backend._sample.layersChanged,
         backend._sample.assembliesTableChanged,
         backend._sample.materialsTableChanged,
         backend._sample.modelsIndexChanged,

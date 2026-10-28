@@ -278,7 +278,7 @@ def test_a_model_left_out_of_the_fit_does_not_block_it(project_and_sample):
     excluded_film.max = np.inf
     names = analysis._minimizers_logic.minimizers_available()
     analysis.setMinimizerCurrentIndex(names.index('LMFit_differential_evolution'))
-    analysis._chached_enabled_parameters = None
+    analysis._cached_enabled_parameters = None
 
     assert analysis._prefit_errors() == []
     assert analysis.unboundedFreeParametersCount == 0

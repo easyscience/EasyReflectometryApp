@@ -4,7 +4,7 @@ Two layers are under test. The inventory (`DIRTYING_SIGNALS`): a mutation path w
 missing from it leaves `hasUnsavedChanges` False, so the close prompt never fires and the user's
 work is discarded silently; `test_every_external_signal_is_classified` makes that hard to do by
 accident. And the content check behind the flag: the signals over-approximate (a selection change
-emits the same ones as an edit, and the sample relays `layersChange` into `constraintsChanged`
+emits the same ones as an edit, and the sample relays `layersChanged` into `constraintsChanged`
 through a 0 ms timer, so a load's own fan-out lands after the load has finished), so the flag
 only flips when the project content actually differs from the last clean state.
 

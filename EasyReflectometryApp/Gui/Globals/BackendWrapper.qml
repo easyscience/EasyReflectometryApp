@@ -238,10 +238,10 @@ QtObject {
     function sampleMoveSelectedAssemblyDown() { activeBackend.sample.moveSelectedAssemblyDown() }
 
     // Assembly specific methods
-    readonly property int sampleCurrentAssemblyRepeatedLayerReptitions: activeBackend.sample.currentAssemblyRepeatedLayerReptitions
+    readonly property int sampleCurrentAssemblyRepeatedLayerRepetitions: activeBackend.sample.currentAssemblyRepeatedLayerRepetitions
     function sampleSetCurrentAssemblyConstrainAPM(value) { activeBackend.sample.setCurrentAssemblyConstrainAPM(value) }
     function sampleSetCurrentAssemblyConformalRoughness(value) { activeBackend.sample.setCurrentAssemblyConformalRoughness(value) }
-    function sampleSetCurrentAssemblyRepeatedLayerReptitions(value) { activeBackend.sample.setCurrentAssemblyRepeatedLayerReptitions(value) }
+    function sampleSetCurrentAssemblyRepeatedLayerRepetitions(value) { activeBackend.sample.setCurrentAssemblyRepeatedLayerRepetitions(value) }
 
     // Structure view (flattened whole-stack representation)
     readonly property var sampleStructure: activeBackend.sample.structure
@@ -314,7 +314,7 @@ QtObject {
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
     readonly property var sampleDepParameterNames: activeBackend.sample.dependentParameterNames
     readonly property var sampleRelationOperators: activeBackend.sample.relationOperators
-    readonly property var sampleArithmicOperators: activeBackend.sample.arithmicOperators
+    readonly property var sampleArithmeticOperators: activeBackend.sample.arithmeticOperators
     readonly property var sampleConstraintsList: activeBackend.sample.constraintsList
     readonly property var sampleConstraintParametersMetadata: activeBackend.sample.constraintParametersMetadata
 

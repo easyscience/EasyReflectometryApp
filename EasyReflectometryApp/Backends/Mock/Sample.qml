@@ -143,7 +143,7 @@ QtObject {
     property int currentAssemblyIndex: -1
     property bool constrainAPM: false
     property bool conformalRoughness: false
-    property int repeatedLayerReptitions: 1
+    property int repeatedLayerRepetitions: 1
 
     property string currentAssemblyName: 'currentAssemblyName'
     property string currentAssemblyType: 'Surfactant Layer'
@@ -200,10 +200,10 @@ QtObject {
     }
 
     // Assembly specific
-    property int currentAssemblyRepeatedLayerReptitions: 3
+    property int currentAssemblyRepeatedLayerRepetitions: 3
 
-    function setCurrentAssemblyRepeatedLayerReptitions(value) {
-        console.debug(`setCurrentAssemblyRepeatedLayerReptitions ${value}`)
+    function setCurrentAssemblyRepeatedLayerRepetitions(value) {
+        console.debug(`setCurrentAssemblyRepeatedLayerRepetitions ${value}`)
     }
 
     function setCurrentAssemblyConstrainAPM(value) {
@@ -364,7 +364,7 @@ QtObject {
         { value: '>', text: '≥' },
         { value: '<', text: '≤' }
     ]
-    readonly property var arithmicOperators: ['', '*', '/', '+', '-']
+    readonly property var arithmeticOperators: ['', '*', '/', '+', '-']
     readonly property var constraintParametersMetadata: [
         { alias: 'parameter_1', displayName: 'parameter 1', independent: true },
         { alias: 'parameter_2', displayName: 'parameter 2', independent: true },

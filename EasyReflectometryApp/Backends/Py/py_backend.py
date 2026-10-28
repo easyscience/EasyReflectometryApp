@@ -109,7 +109,7 @@ class PyBackend(QObject):
         return self._project
 
     @Property('QVariant', constant=True)
-    def sample(self) -> Project:
+    def sample(self) -> Sample:
         return self._sample
 
     @Property('QVariant', constant=True)
@@ -312,7 +312,7 @@ class PyBackend(QObject):
         # paths (harmless); assembliesTableChanged is the only signal a repetitions
         # edit emits, modelsTableChanged the only one removeModel emits — keep both.
         for signal in (
-            self._sample.layersChange,
+            self._sample.layersChanged,
             self._sample.assembliesTableChanged,
             self._sample.materialsTableChanged,
             self._sample.modelsIndexChanged,
