@@ -1,4 +1,6 @@
 from EasyReflectometryApp.Backends.Py.logic.experiments import Experiments
+from EasyReflectometryApp.Backends.Py.logic.experiments import ordered_experiment_items
+from EasyReflectometryApp.Backends.Py.logic.experiments import ordered_experiments
 from tests.factories import make_experiment
 from tests.factories import make_project
 
@@ -15,6 +17,22 @@ def test_available_orders_mapping_like_experiments_by_key():
 
     assert logic.available() == ['Earlier', 'Later']
     assert logic.model_indices() == [0, 1]
+
+
+def test_ordered_experiments_sorts_by_key_only():
+    first, second = object(), object()
+    project = make_project(experiments={1: second, 0: first})
+
+    assert ordered_experiment_items(project) == [(0, first), (1, second)]
+    assert ordered_experiments(project) == [first, second]
+
+
+def test_ordered_experiments_of_a_sequence_are_keyed_by_position():
+    first, second = object(), object()
+    project = make_project()
+    project._experiments = [first, second]
+
+    assert ordered_experiment_items(project) == [(0, first), (1, second)]
 
 
 def test_set_current_index_and_rename_current_experiment():

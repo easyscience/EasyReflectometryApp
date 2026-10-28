@@ -10,7 +10,12 @@ import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
+// The plot toggles shared by the Sample, Experiment and Analysis pages.
 Column {
+    // The scale and background lines are drawn against measured data, which
+    // the Sample page does not show.
+    property bool showReferenceLines: true
+
     spacing: EaStyle.Sizes.fontPixelSize * 0.5
 
     EaElements.CheckBox {
@@ -34,6 +39,7 @@ Column {
     }
 
     EaElements.CheckBox {
+        visible: showReferenceLines
         topPadding: 0
         checked: Globals.BackendWrapper.plottingScaleShown
         text: qsTr("Show scale line")
@@ -44,6 +50,7 @@ Column {
     }
 
     EaElements.CheckBox {
+        visible: showReferenceLines
         topPadding: 0
         checked: Globals.BackendWrapper.plottingBkgShown
         text: qsTr("Show background line")

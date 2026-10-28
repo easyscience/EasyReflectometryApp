@@ -7,7 +7,7 @@ MagnetizationAngleSlider MagnetizationAngleSlider.qml
 MagnetizationArrow MagnetizationArrow.qml
 ExperimentModelComboBox ExperimentModelComboBox.qml
 MagneticProfileControl MagneticProfileControl.qml
-PlotControlRefLines PlotControlRefLines.qml
+PlotControlCommon PlotControlCommon.qml
 SpinAsymmetryChart SpinAsymmetryChart.qml
 SideBarWithFooter SideBarWithFooter.qml
 SldChart SldChart.qml

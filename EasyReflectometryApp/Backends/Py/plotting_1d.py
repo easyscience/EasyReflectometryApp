@@ -739,11 +739,6 @@ class Plotting1d(QObject):
     def chartRefs(self):
         return self._chartRefs
 
-    @Property(str)
-    def calcSerieColor(self):
-        return '#00FF00'
-        # return self._calcSerieColor
-
     @Property(bool, notify=experimentDataChanged)
     def isMultiExperimentMode(self) -> bool:
         """Return whether multiple experiments are selected for plotting."""

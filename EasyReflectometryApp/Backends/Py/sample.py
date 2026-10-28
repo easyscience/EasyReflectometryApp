@@ -1664,7 +1664,7 @@ class Sample(QObject):
             # A tie made by a model link gets back its state from before the link.
             self._project_lib.detach(param_obj)
         else:
-            self._make_parameter_independent(param_obj)
+            self._ensure_parameter_independent(param_obj)
         self._emit_constraints_changed()
 
     def _find_parameter_object_by_unique_name(self, unique_name: str):
@@ -1862,10 +1862,6 @@ class Sample(QObject):
         # Coalesced (next event-loop turn): this runs inside a load, before the clean state is
         # recorded, and constraintsChanged marks the project dirty.
         self._scheduleConstraintsChanged()
-
-    def _make_parameter_independent(self, param_obj) -> None:
-        """Make a parameter independent, handling different parameter types."""
-        self._ensure_parameter_independent(param_obj)
 
     @Slot(int, str, str, result='QVariant')
     def validateConstraintExpression(self, dependent_index: int, relation: str, expression: str):

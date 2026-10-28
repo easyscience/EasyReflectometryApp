@@ -128,8 +128,8 @@ class TestPosteriorBand:
 
         project = two_datasets_on_one_model(tmp_path)
         analysis = analysis_module.Analysis.__new__(analysis_module.Analysis)
+        analysis._project_lib = project
         experiments = [project.experiments[0], project.experiments[1]]
-        analysis._ordered_experiments = lambda: experiments
         analysis._bayesian_logic = type('Bayes', (), {'posterior': {'draws': np.zeros((4, 1)), 'param_names': ['p']}})()
         seen = []
 

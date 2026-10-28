@@ -272,8 +272,8 @@ def test_finite_bounds_checks_ignore_the_table_filters(monkeypatch, qcore_applic
     for name_filter, variability, rows in (('', 'all', 4), ('', 'fixed', 1), ('zzz', 'free', 0)):
         table.set_name_filter_criteria(name_filter)
         table.set_variability_filter_criteria(variability)
-        analysis._chached_parameters = None
-        assert len(analysis.fitableParameters) == rows
+        analysis._chached_enabled_parameters = None
+        assert len(analysis.enabledParameters) == rows
 
         assert analysis.unboundedFreeParametersCount == 2
         errors = analysis._prefit_errors()

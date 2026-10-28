@@ -16,6 +16,7 @@ from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiment_selection import ExperimentSelection
 from .logic.experiments import Experiments as ExperimentLogic
+from .logic.experiments import ordered_experiments
 from .logic.fitting import Fitting as FittingLogic
 from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
@@ -76,7 +77,6 @@ class Analysis(QObject):
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
         self._bayesian_logic = BayesianLogic()
-        self._chached_parameters = None
         self._chached_enabled_parameters = None
         # Thread management for background fitting
         self._fitter_thread = None
@@ -87,25 +87,6 @@ class Analysis(QObject):
         # The selected experiments, shared with Plotting1d (PyBackend passes the same instance).
         self._selection = selection if selection is not None else ExperimentSelection()
         self._selection.set_indices([0], len(self._experiments_logic.available()))
-
-    def _ordered_experiments(self) -> list:
-        """Return experiments as an ordered list of experiment objects.
-
-        Handles mapping-like storage without assuming contiguous integer keys.
-        """
-        experiments = self._experiments_logic._project_lib._experiments
-        if not experiments:
-            return []
-
-        if hasattr(experiments, 'items'):
-            items = list(experiments.items())
-            try:
-                items.sort(key=lambda item: item[0])
-            except TypeError:
-                pass
-            return [experiment for _, experiment in items]
-
-        return list(experiments)
 
     ########################
     ## Fitting
@@ -698,7 +679,7 @@ class Analysis(QObject):
             logger.warning('_compute_and_publish_posterior_predictive: no posterior available')
             return
 
-        experiments = self._ordered_experiments()
+        experiments = ordered_experiments(self._project_lib)
         if not experiments:
             logger.warning('_compute_and_publish_posterior_predictive: no experiments available')
             return
@@ -1159,13 +1140,13 @@ class Analysis(QObject):
     @Property('QVariantList', notify=experimentsChanged)
     def modelNamesForExperiment(self) -> list:
         """Per experiment, its model's name ('' when it has none)."""
-        experiments = self._ordered_experiments()
+        experiments = ordered_experiments(self._project_lib)
         return [get_original_name(experiment.model) if experiment.model is not None else '' for experiment in experiments]
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelColorsForExperiment(self) -> list:
         """Per experiment, its model's colour (grey when it has none)."""
-        experiments = self._ordered_experiments()
+        experiments = ordered_experiments(self._project_lib)
         return [experiment.model.color if experiment.model is not None else NO_MODEL_COLOR for experiment in experiments]
 
     @Slot(int)
@@ -1366,12 +1347,6 @@ class Analysis(QObject):
     #############
     ## Parameters
     @Property('QVariantList', notify=parametersChanged)
-    def fitableParameters(self) -> List[dict[str]]:
-        if self._chached_parameters is None:
-            self._chached_parameters = self._parameters_logic.parameters
-        return self._chached_parameters
-
-    @Property('QVariantList', notify=parametersChanged)
     def enabledParameters(self) -> list[dict[str]]:
         if self._chached_enabled_parameters is not None:
             return self._chached_enabled_parameters
@@ -1457,7 +1432,6 @@ class Analysis(QObject):
             self._clearCacheAndEmitParametersChanged()
 
     def _clearCacheAndEmitParametersChanged(self):
-        self._chached_parameters = None
         self._chached_enabled_parameters = None
         parameters_length = len(self.enabledParameters)
         current_index = self._parameters_logic.current_index()

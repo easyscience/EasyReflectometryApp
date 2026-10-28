@@ -818,13 +818,10 @@ class TestPosteriorPredictive:
         # Should not raise
         analysis_with_posterior._compute_and_publish_posterior_predictive()
 
-    def test_noop_when_no_experiments(self, analysis_with_posterior):
-        # Make _ordered_experiments return empty via analysis-level method
-        original = analysis_with_posterior._ordered_experiments
-        analysis_with_posterior._ordered_experiments = lambda: []
+    def test_noop_when_no_experiments(self, analysis_with_posterior, monkeypatch):
+        monkeypatch.setattr(analysis_module, 'ordered_experiments', lambda project_lib: [])
         # Should not raise
         analysis_with_posterior._compute_and_publish_posterior_predictive()
-        analysis_with_posterior._ordered_experiments = original
 
     def test_noop_when_posterior_cleared(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.clear()

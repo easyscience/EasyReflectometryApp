@@ -8,6 +8,7 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.summary import Summary as SummaryLib
 
 from .experiments import CHANNEL_COLORS
+from .experiments import ordered_experiment_items
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,7 @@ class Summary:
         ax_sld.set_xlabel('$z$/A')
         ax_sld.set_ylabel('SLD($z$)/$10^{-6}$A$^{-2}$')
 
-        experiments = self._ordered_experiments()
+        experiments = ordered_experiment_items(self._project_lib)
         if experiments:
             for offset, (experiment_index, experiment) in enumerate(experiments):
                 experiment_name = experiment.name or f'Experiment {experiment_index + 1}'
@@ -258,12 +259,6 @@ class Summary:
             ax_reflectivity.legend(loc='best')
 
         return fig
-
-    def _ordered_experiments(self) -> list[tuple[int, object]]:
-        experiments = self._project_lib.experiments
-        if hasattr(experiments, 'items'):
-            return sorted(experiments.items(), key=lambda item: item[0])
-        return list(enumerate(experiments))
 
     def _inject_models_section(self, html: str) -> str:
         """Add the table of models when there are several (contrasts); the library's

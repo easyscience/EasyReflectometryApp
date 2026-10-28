@@ -7,6 +7,7 @@ from typing import Callable
 import numpy as np
 from easyreflectometry import Project as ProjectLib
 
+from .experiments import ordered_experiment_items
 from .minimizers import apply_app_defaults
 
 
@@ -196,8 +197,7 @@ class Project:
 
         :return: True if q_max was changed, False otherwise.
         """
-        experiments = self._project_lib._experiments
-        keys = sorted(experiments.keys()) if hasattr(experiments, 'keys') else list(range(len(experiments)))
+        keys = [key for key, _ in ordered_experiment_items(self._project_lib)]
         position = self._project_lib._current_experiment_index
         if not 0 <= position < len(keys):
             raise IndexError('Select the experiment to add the file(s) to.')
@@ -232,11 +232,9 @@ class Project:
         The UI addresses experiments by list position, which only matches the
         storage key while the keys are contiguous.
         """
-        experiments = self._project_lib._experiments
         try:
-            keys = sorted(experiments.keys()) if hasattr(experiments, 'keys') else list(range(len(experiments)))
-            return keys.index(key)
-        except (AttributeError, TypeError, ValueError):
+            return [k for k, _ in ordered_experiment_items(self._project_lib)].index(key)
+        except ValueError:
             return -1
 
     def _sync_q_max_with_loaded_experiments(self) -> bool:
