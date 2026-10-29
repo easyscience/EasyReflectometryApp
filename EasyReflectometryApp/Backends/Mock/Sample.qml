@@ -226,36 +226,33 @@ QtObject {
             'material': 'label 1',
             'solvent': 'label 1',
             'thickness': '1',
-            'thickness_enabled': 'True',
+            'thickness_enabled': true,
             'roughness': '1',
-            'roughness_enabled': 'True',
+            'roughness_enabled': true,
             'solvation': '1',
             'apm': '1',
-            'apm_enabled': 'True',
         },
         {
             'formula': 'formula 2',
             'material': 'label 2',
             'solvent': 'label 2',
             'thickness': ' 2',
-            'thickness_enabled': 'False',
+            'thickness_enabled': false,
             'roughness': '2',
-            'roughness_enabled': 'False',
+            'roughness_enabled': false,
             'solvation': '2',
             'apm': '2',
-            'apm_enabled': 'False',
         },
         {
             'formula': 'formula 3',
             'material': 'label 3',
             'solvent': 'label 3',
             'thickness': '3',
-            'thickness_enabled': 'False',
+            'thickness_enabled': false,
             'roughness': '3',
-            'roughness_enabled': 'False',
+            'roughness_enabled': false,
             'solvation': '3',
             'apm': '3',
-            'apm_enabled': 'False',
         },
     ]
 
@@ -306,9 +303,12 @@ QtObject {
     // Layer magnetism (polarized analysis)
     readonly property bool magnetismSupported: true
     readonly property var layersMagnetism: [
-        { 'label': 'label 1', 'magnetic': 'True', 'rho_m': '5.0', 'theta_m': '40.0', 'phi': '130.0', 'editable': 'True' },
-        { 'label': 'label 2', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
-        { 'label': 'label 3', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
+        { 'label': 'label 1', 'magnetic': true, 'rho_m': '5.0', 'theta_m': '40.0', 'phi': '130.0', 'editable': true,
+          'material_magnetic': false, 'rho_m_coupled': false },
+        { 'label': 'label 2', 'magnetic': false, 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': false,
+          'material_magnetic': false, 'rho_m_coupled': false },
+        { 'label': 'label 3', 'magnetic': false, 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': false,
+          'material_magnetic': false, 'rho_m_coupled': false },
     ]
     function setLayerMagneticAtIndex(index, value) {
         console.debug(`setLayerMagneticAtIndex ${index} ${value}`)

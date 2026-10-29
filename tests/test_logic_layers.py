@@ -26,8 +26,8 @@ def test_from_layers_collection_to_list_of_dicts_mirrors_parameter_enablement(mo
     )
 
     regular = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
-    assert regular[0]['thickness_enabled'] == 'True'
-    assert regular[0]['roughness_enabled'] == 'True'
+    assert regular[0]['thickness_enabled'] is True
+    assert regular[0]['roughness_enabled'] is True
     assert regular[0]['formula'] == 'C12H25'
     assert regular[0]['apm'] == '44.0'
     assert regular[0]['solvent'] == 'Water'
@@ -36,17 +36,24 @@ def test_from_layers_collection_to_list_of_dicts_mirrors_parameter_enablement(mo
     layer.thickness.enabled = False
     layer.roughness.enabled = False
     superphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
-    assert superphase[0]['thickness_enabled'] == 'False'
-    assert superphase[0]['roughness_enabled'] == 'False'
+    assert superphase[0]['thickness_enabled'] is False
+    assert superphase[0]['roughness_enabled'] is False
 
     layer.roughness.enabled = True
     subphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
-    assert subphase[0]['thickness_enabled'] == 'False'
-    assert subphase[0]['roughness_enabled'] == 'True'
+    assert subphase[0]['thickness_enabled'] is False
+    assert subphase[0]['roughness_enabled'] is True
 
 
-def test_layers_add_new_creates_si_material_when_missing(monkeypatch):
-    monkeypatch.setattr(layers_module, 'Material', make_material)
+def test_from_layers_collection_to_list_of_dicts_gives_plain_layers_no_apm_placeholders():
+    layer = make_layer(name='Film', material=make_material('Si'))
+
+    row = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))[0]
+
+    assert set(row) == {'label', 'roughness', 'thickness', 'material', 'thickness_enabled', 'roughness_enabled'}
+
+
+def test_layers_add_new_creates_si_material_when_missing():
     materials = make_material_collection(make_material('Air'), make_material('D2O'))
     sample = make_sample(
         make_assembly(name='Top'),
@@ -58,15 +65,17 @@ def test_layers_add_new_creates_si_material_when_missing(monkeypatch):
     project.current_assembly_index = 1
     logic = layers_module.Layers(project)
 
-    logic.add_new()
+    assert logic.add_new() is True
 
     assert [material.name for material in project._materials] == ['Air', 'D2O', 'Si']
     assert logic._layers[-1].material.name == 'Si'
     assert logic._layers[-1].name == 'Si Layer'
 
+    assert logic.add_new() is False  # Si exists now and is reused
+    assert [material.name for material in project._materials] == ['Air', 'D2O', 'Si']
 
-def test_layers_move_duplicate_and_setters_update_current_layer(monkeypatch):
-    monkeypatch.setattr(layers_module, 'Material', make_material)
+
+def test_layers_move_duplicate_and_setters_update_current_layer():
     materials = make_material_collection(make_material('Air'), make_material('Si'))
     sample = make_sample(
         make_assembly(name='Top', layers=[make_layer(name='Top Layer', material=materials[0])]),
@@ -106,7 +115,6 @@ def test_layers_move_duplicate_and_setters_update_current_layer(monkeypatch):
 
 
 def test_layers_index_based_setters_update_target_row_even_when_current_index_differs(monkeypatch):
-    monkeypatch.setattr(layers_module, 'Material', make_material)
     monkeypatch.setattr(layers_module, 'LayerAreaPerMolecule', FakeLayerAreaPerMolecule)
 
     air = make_material('Air')
@@ -168,9 +176,7 @@ def test_layers_index_based_setters_update_target_row_even_when_current_index_di
     assert logic._layers[1].solvent.name == 'Air'
 
 
-def test_layers_index_based_setters_ignore_invalid_indices(monkeypatch):
-    monkeypatch.setattr(layers_module, 'Material', make_material)
-
+def test_layers_index_based_setters_ignore_invalid_indices():
     air = make_material('Air')
     si = make_material('Si')
     materials = make_material_collection(air, si)
@@ -220,16 +226,16 @@ def test_magnetism_rows_report_the_drawn_direction():
     plain, magnetic = logic.magnetism
 
     assert magnetic['phi'] == '130.0'  # 40 deg is 130 deg from the guide field
-    assert magnetic['editable'] == 'True'
+    assert magnetic['editable'] is True
     # A non-magnetic layer has no direction and nothing to drag.
-    assert (plain['phi'], plain['editable']) == ('', '')
+    assert (plain['phi'], plain['editable']) == ('', False)
 
 
 def test_a_constrained_theta_m_is_reported_as_not_editable():
     logic, _ = _magnetism_logic(theta_m=40.0, independent=False)
 
     # The slider reads this to go read-only rather than to write a refused value.
-    assert logic.magnetism[1]['editable'] == 'False'
+    assert logic.magnetism[1]['editable'] is False
 
 
 def test_a_negative_moment_points_the_arrow_the_other_way():

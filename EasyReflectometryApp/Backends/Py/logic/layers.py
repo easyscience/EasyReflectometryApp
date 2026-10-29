@@ -6,7 +6,6 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
 from easyreflectometry.sample import LayerMagnetism
-from easyreflectometry.sample import Material
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
 
@@ -53,7 +52,7 @@ class Layers:
         return self._layers[self.index].name
 
     @property
-    def layers(self) -> list[dict[str, str]]:
+    def layers(self) -> list[dict[str, str | bool]]:
         return _from_layers_collection_to_list_of_dicts(self._layers)
 
     @property
@@ -66,14 +65,17 @@ class Layers:
         # model's field, acting on nothing; the project fixes those.
         self._project_lib._sync_parameter_states()
 
-    def add_new(self) -> None:
-        if 'Si' not in [material.name for material in self._project_lib._materials]:
-            self._project_lib._materials.add_material(Material(name='Si', sld=2.07, isld=0.0))
-        index_si = [material.name for material in self._project_lib._materials].index('Si')
+    def add_new(self) -> bool:
+        """Append a Si layer; return whether the Si material had to be added to the project."""
+        materials = self._project_lib._materials
+        count_before = len(materials)
+        # The library adds Si to the project's materials when it is missing.
+        si = materials[self._project_lib.get_index_si()]
         self._layers.add_layer()
-        self._layers[-1].material = self._project_lib._materials[index_si]
+        self._layers[-1].material = si
         # Set layer name based on material name
-        self._layers[-1].name = self._project_lib._materials[index_si].name + ' Layer'
+        self._layers[-1].name = si.name + ' Layer'
+        return len(materials) > count_before
 
     def duplicate_selected(self) -> None:
         self._layers.duplicate_layer(self.index)
@@ -217,19 +219,20 @@ class Layers:
         return bool(self._project_lib.calculator_supports_magnetism)
 
     @property
-    def magnetism(self) -> list[dict[str, str]]:
+    def magnetism(self) -> list[dict[str, str | bool]]:
         """One row per layer of the current assembly, describing its magnetism.
 
-        ``magnetic`` is 'True'/'False'; ``rho_m``/``theta_m`` carry the defaults
+        ``magnetic`` is a bool; ``rho_m``/``theta_m`` carry the defaults
         of a fresh :class:`LayerMagnetism` for non-magnetic layers so the fields
         show what attaching magnetism would start from. ``phi`` is the direction
         the moment points, in degrees from the guide field - what the compass
-        draws - and ``editable`` whether that direction can be set by dragging
-        it (a constrained ``theta_m`` follows its expression, not the pointer).
-        Both are empty for a non-magnetic layer, which has no direction.
-        ``material_magnetic`` says whether the layer's material carries a
-        moment (a ``MaterialMagnetic``), and ``rho_m_coupled`` whether the
-        layer takes ``rho_m`` from it.
+        draws - and is empty for a non-magnetic layer, which has no direction.
+        ``editable`` says whether that direction can be set by dragging it (a
+        constrained ``theta_m`` follows its expression, not the pointer); it is
+        False for a non-magnetic layer. ``material_magnetic`` says whether the
+        layer's material carries a moment (a ``MaterialMagnetic``), and
+        ``rho_m_coupled`` whether the layer takes ``rho_m`` from it; both are
+        bools.
         """
         rows = []
         for layer in self._layers:
@@ -237,13 +240,13 @@ class Layers:
             rows.append(
                 {
                     'label': layer.name,
-                    'magnetic': str(magnetism is not None),
+                    'magnetic': magnetism is not None,
                     'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
                     'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
-                    'editable': '' if magnetism is None else str(magnetism.theta_m.independent),
-                    'material_magnetic': str(getattr(layer.material, 'rho_m', None) is not None),
-                    'rho_m_coupled': str(layer.rho_m_coupled),
+                    'editable': magnetism is not None and bool(magnetism.theta_m.independent),
+                    'material_magnetic': getattr(layer.material, 'rho_m', None) is not None,
+                    'rho_m_coupled': bool(layer.rho_m_coupled),
                 }
             )
         return rows
@@ -381,7 +384,7 @@ def _set_parameter_value(parameter, new_value) -> bool:
     return True
 
 
-def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection) -> list[dict[str, str]]:
+def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection) -> list[dict[str, str | bool]]:
     """Convert layers collection to list of dicts.
 
     Editability of thickness and roughness mirrors each parameter's ``enabled``
@@ -389,7 +392,8 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
     in step with the superphase (first layer of the first assembly) and the
     subphase (last layer of the last assembly). Reading the flag rather than
     re-deriving it from the assembly position keeps the table and the
-    parameters in agreement (issue #329).
+    parameters in agreement (issue #329). Only area-per-molecule layers carry
+    ``formula``, ``apm``, ``solvent`` and ``solvation``.
 
     :param layers_collection: The collection of layers.
     """
@@ -401,15 +405,10 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
                 'roughness': str(layer.roughness.value),
                 'thickness': str(layer.thickness.value),
                 'material': layer.material.name,
-                'formula': 'formula',
-                'apm': '0.1',
-                'solvent': 'solvent',
-                'solvation': '0.2',
-                'apm_enabled': 'True',
                 # `enabled` is set on a parameter only once enablement has run
                 # over it; until then it counts as enabled, as in the library.
-                'thickness_enabled': str(bool(getattr(layer.thickness, 'enabled', True))),
-                'roughness_enabled': str(bool(getattr(layer.roughness, 'enabled', True))),
+                'thickness_enabled': bool(getattr(layer.thickness, 'enabled', True)),
+                'roughness_enabled': bool(getattr(layer.roughness, 'enabled', True)),
             }
         )
         if isinstance(layer, LayerAreaPerMolecule):

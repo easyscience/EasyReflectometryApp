@@ -12,21 +12,31 @@ from tests.factories import make_project
 from tests.factories import make_sample
 
 
-def test_from_assemblies_collection_to_list_of_dicts_includes_special_fields(monkeypatch):
-    monkeypatch.setattr(assemblies_module, 'RepeatingMultilayer', FakeRepeatingMultilayer)
-    monkeypatch.setattr(assemblies_module, 'SurfactantLayer', FakeSurfactantLayer)
-
+def test_from_assemblies_collection_to_list_of_dicts_has_the_same_keys_for_every_type():
     repeating = FakeRepeatingMultilayer(repetitions=3, name='Repeat')
     surfactant = FakeSurfactantLayer(name='Surf')
-    surfactant.constrain_area_per_molecule = 'True'
-    surfactant.conformal_roughness = 'True'
 
     result = assemblies_module._from_assemblies_collection_to_list_of_dicts([FakeMultilayer(name='Plain'), repeating, surfactant])
 
-    assert result[0]['type'] == 'Multi-layer'
-    assert result[1]['repetitions'].value == 3
-    assert result[2]['constrain_apm'] == 'True'
-    assert result[2]['conformal_roughness'] == 'True'
+    assert result == [
+        {'label': 'Plain', 'type': 'Multi-layer'},
+        {'label': 'Repeat', 'type': repeating.type},
+        {'label': 'Surf', 'type': surfactant.type},
+    ]
+
+
+def test_assemblies_add_new_reports_whether_it_created_si(monkeypatch):
+    monkeypatch.setattr(assemblies_module, 'Multilayer', FakeMultilayer)
+    materials = make_material_collection(make_material('Air'), make_material('D2O'))
+    sample = make_sample(make_assembly(name='Existing', layers=[make_layer(material=materials[0])]))
+    project = make_project(materials=materials, models=make_model_collection(make_model(sample=sample)))
+    logic = assemblies_module.Assemblies(project)
+
+    assert logic.add_new() is True
+    assert [material.name for material in project._materials] == ['Air', 'D2O', 'Si']
+
+    assert logic.add_new() is False
+    assert [material.name for material in project._materials] == ['Air', 'D2O', 'Si']
 
 
 def test_assemblies_add_new_and_type_transitions(monkeypatch):
@@ -39,7 +49,7 @@ def test_assemblies_add_new_and_type_transitions(monkeypatch):
     project = make_project(materials=materials, models=make_model_collection(model))
     logic = assemblies_module.Assemblies(project)
 
-    logic.add_new()
+    assert logic.add_new() is False  # Si exists and is reused
     assert logic._assemblies[-1].layers[0].material.name == 'Si'
 
     assert logic.set_name_at_current_index('Renamed Assembly') is True

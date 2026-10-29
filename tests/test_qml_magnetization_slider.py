@@ -62,7 +62,7 @@ def test_the_slider_follows_the_selection_the_table_already_writes():
     assert 'Globals.BackendWrapper.sampleLayersMagnetism[Globals.BackendWrapper.sampleCurrentLayerIndex]' in group_qml
     assert 'Gui.MagnetizationAngleSlider {' in group_qml
     # Gone entirely - not just greyed out - for a layer with no magnetism.
-    assert 'visible: magnetismGroup.currentRow !== null && magnetismGroup.currentRow.magnetic === "True"' in group_qml
+    assert 'visible: magnetismGroup.currentRow !== null && magnetismGroup.currentRow.magnetic === true' in group_qml
     assert 'height: visible ? implicitHeight : 0' in group_qml
 
 
@@ -71,7 +71,7 @@ def test_the_group_writes_through_the_backend_and_refuses_when_it_must_not():
 
     # The same call the theta_m column makes: one write path for one parameter.
     assert 'sampleSetLayerThetaMAtIndex' in group_qml
-    assert 'magnetismGroup.currentRow.editable === "True"' in group_qml
+    assert 'magnetismGroup.currentRow.editable === true' in group_qml
     assert '!Globals.BackendWrapper.analysisFittingRunning' in group_qml
 
 
@@ -82,7 +82,7 @@ def test_the_backend_contract_is_mirrored_in_the_wrapper_and_the_mock():
     assert 'sampleSetLayerThetaMAtIndex' in wrapper
     assert 'function setLayerThetaMAtIndex(index, value)' in mock
     assert "'phi': '130.0'" in mock
-    assert "'editable': 'True'" in mock
+    assert "'editable': true" in mock
 
 
 def test_the_dial_is_gone():

@@ -64,6 +64,8 @@ class Project:
 
     @property
     def creation_date(self) -> str:
+        # Despite its key, the library stamps 'modified' only in `Project.create()`
+        # (saving leaves it alone), so it holds the creation time.
         return self._project_lib._info['modified']
 
     @property

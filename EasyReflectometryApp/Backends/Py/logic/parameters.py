@@ -6,6 +6,8 @@ from typing import List
 from typing import Tuple
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.sample import Layer
+from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.utils import count_fixed_parameters
 from easyreflectometry.utils import count_free_parameters
 from easyscience.base_classes import ModelBase
@@ -65,9 +67,6 @@ class Parameters:
         self._current_index = 0
         return True
 
-    def is_experiment_parameter(self, parameter: dict[str, Any]) -> bool:
-        return _is_experiment_parameter(parameter)
-
     def _parameter_matches_filters(self, parameter: dict[str, Any]) -> bool:
         if not parameter.get('enabled', True):
             return False
@@ -87,9 +86,9 @@ class Parameters:
         ).lower()
 
         if normalized == 'model':
-            return not _is_experiment_parameter(parameter)
+            return not parameter['experiment']
         if normalized == 'experiment':
-            return _is_experiment_parameter(parameter)
+            return parameter['experiment']
         if normalized in {'magnetic', 'magnetism'}:
             # The magnetic parameters are named after the physics, so the word
             # rarely appears in their text; match them explicitly.
@@ -259,12 +258,6 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
     alias_registry: set[str] = set()
     processed_unique_names: set[str] = set()  # Track processed parameters to avoid duplicates
 
-    # Layer parameter names that need model prefix
-    LAYER_PARAMS = {'thickness', 'roughness'}
-    # Magnetism sits one level below the layer (Layer -> LayerMagnetism -> param),
-    # but belongs to the layer just as much, so it is named the same way.
-    MAGNETISM_PARAMS = {'rho_m', 'theta_m'}
-
     def _make_alias(name: str) -> str:
         base = re.sub(r'[^0-9A-Za-z]+', '_', name).strip('_').lower()
         if not base:
@@ -291,9 +284,9 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             # For layer parameters the path is:
             # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
-            if _is_layer_parameter(param) and len(path) >= 4:
+            if _is_layer_parameter(param, path) and len(path) >= 4:
                 parent_name = path[-4].name
-            elif _is_magnetism_parameter(param) and len(path) >= 5:
+            elif _is_magnetism_parameter(path) and len(path) >= 5:
                 # ... -> Assembly -> LayerCollection -> Layer -> LayerMagnetism -> param:
                 # one level deeper, so the assembly is path[-5]. Without this the
                 # group would read 'EasyLayerMagnetism', which names nothing.
@@ -320,17 +313,24 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         # Simple numerical dependency
         return f'= {param.value}'
 
-    def _is_layer_parameter(param: Parameter) -> bool:
-        """Check if parameter is a layer parameter (thickness or roughness)."""
-        return param.name.lower() in LAYER_PARAMS
+    def _is_layer_parameter(param: Parameter, path: list) -> bool:
+        """Check if parameter is a layer's own thickness or roughness."""
+        if len(path) < 2:
+            return False
+        owner = path[-2]
+        return isinstance(owner, Layer) and (param is owner.thickness or param is owner.roughness)
 
-    def _is_magnetism_parameter(param: Parameter) -> bool:
-        """Check if parameter is a layer magnetism parameter (rho_m or theta_m)."""
-        return param.name.lower() in MAGNETISM_PARAMS
+    def _is_magnetism_parameter(path: list) -> bool:
+        """Check if parameter belongs to a layer's magnetism (rho_m or theta_m).
 
-    def _is_per_layer_parameter(param: Parameter) -> bool:
+        Magnetism sits one level below the layer (Layer -> LayerMagnetism -> param),
+        but belongs to the layer just as much, so it is named the same way.
+        """
+        return len(path) >= 2 and isinstance(path[-2], LayerMagnetism)
+
+    def _is_per_layer_parameter(param: Parameter, path: list) -> bool:
         """Per-layer parameters exist once per model and carry the model prefix."""
-        return _is_layer_parameter(param) or _is_magnetism_parameter(param)
+        return _is_layer_parameter(param, path) or _is_magnetism_parameter(path)
 
     parameter_list = []
 
@@ -362,7 +362,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                 continue
 
             # Each parameter once, whichever models share it
-            is_layer_param = _is_per_layer_parameter(parameter)
+            is_layer_param = _is_per_layer_parameter(parameter, path)
             if parameter.unique_name in processed_unique_names:
                 continue
             processed_unique_names.add(parameter.unique_name)
@@ -428,6 +428,11 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
                     'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
+                    # Decided under the first model that owns the parameter. That is
+                    # enough while each model has its own scale and background objects
+                    # (linked contrasts tie them with dependencies, not by sharing);
+                    # if they are ever shared, test against every model in shared_by.
+                    'experiment': _is_experiment_parameter(parameter, models[model_idx]),
                     'exclusive_with': _exclusive_partner(parameter, path),
                 }
             )
@@ -550,16 +555,6 @@ def _build_param_object_paths(model) -> dict:
     return paths
 
 
-def _is_experiment_parameter(parameter: dict[str, Any]) -> bool:
-    searchable_text = ' '.join(str(parameter.get(key, '')) for key in ('name', 'display_name', 'group', 'unique_name')).lower()
-    experiment_markers = (
-        'experiment',
-        'dataset',
-        'instrument',
-        'resolution',
-        'asymmetry',
-        'background',
-        'scale',
-        'probe',
-    )
-    return any(marker in searchable_text for marker in experiment_markers)
+def _is_experiment_parameter(parameter: Parameter, model) -> bool:
+    """True for the model's instrument-side parameters (scale, background), as opposed to the sample's."""
+    return parameter is model.scale or parameter is model.background

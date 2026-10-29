@@ -43,13 +43,13 @@ class TestCoupling:
     def test_rows_report_the_material_and_the_coupling(self, project):
         logic = Layers(project)
         row = logic.magnetism[0]
-        assert (row['material_magnetic'], row['rho_m_coupled']) == ('True', 'False')
+        assert (row['material_magnetic'], row['rho_m_coupled']) == (True, False)
 
         assert logic.set_rho_m_coupled_at_index(0, True) is True
         assert logic.set_rho_m_coupled_at_index(0, True) is False
 
         row = logic.magnetism[0]
-        assert row['rho_m_coupled'] == 'True'
+        assert row['rho_m_coupled'] is True
         assert float(row['rho_m']) == pytest.approx(FE_RHO_M, abs=1e-3)
 
     def test_coupled_rho_m_cannot_be_typed(self, project):

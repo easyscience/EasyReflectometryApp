@@ -49,7 +49,7 @@ def project_and_backend(qcore_application):
 
 
 def _dependent_index(backend, text):
-    names = backend.dependentParameterNames
+    names = backend.constrainableParameterNames
     return next(i for i, name in enumerate(names) if all(part in name for part in text.split()))
 
 
@@ -207,7 +207,7 @@ class TestFitScreening:
         self._select(minimizers, 'Bumps_simplex')
         assert minimizers.supports_inequalities() and fitting.inequality_constraints_error(minimizers) is None
         assert fitting.inequality_constraints_warning(minimizers) == ''
-        minimizers.set_minimizer_current_index(0)  # Bayesian sentinel
+        minimizers.set_minimizer_current_index(0)  # the Bayesian choice
         assert minimizers.is_bayesian_selected() and minimizers.supports_inequalities()
         assert fitting.inequality_constraints_error(minimizers) is None
         assert callable(fitting.snapshot_constraints_factory())
@@ -442,7 +442,7 @@ class TestEqualityConstraintPersistence:
         assert roughness.free is False
         assert roughness.independent is False
         # Pinned, so it is not offered as the dependent of a new constraint.
-        assert not any('Film A roughness' in name for name in reloaded_backend.dependentParameterNames)
+        assert not any('Film A roughness' in name for name in reloaded_backend.constrainableParameterNames)
 
     def test_bounds_reload_with_their_values(self, project_and_backend):
         project, backend = project_and_backend
@@ -710,7 +710,7 @@ class TestStructuralEditsDetachCutOffConstraints:
 
     @staticmethod
     def _dependent_index_of(backend, parameter):
-        return next(i for i, entry in enumerate(backend._get_independent_parameter_entries()) if entry['object'] is parameter)
+        return next(i for i, entry in enumerate(backend._constrainable_parameter_entries()) if entry['object'] is parameter)
 
     @staticmethod
     def _constrain_film_a_sld_to_substrate(project, backend):
