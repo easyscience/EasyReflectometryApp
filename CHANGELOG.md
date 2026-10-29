@@ -1,11 +1,53 @@
 # Unreleased
 
-- Installing over an earlier version ([#358](https://github.com/easyscience/EasyReflectometryApp/issues/358)):
+- Installing over an earlier version:
   the installer no longer stops with "The directory you selected already exists
   and contains an installation". When the chosen folder holds an earlier
   version, it offers to remove that version with its own MaintenanceTool and
   install in its place; declining, or a failed removal, sets a separate folder
   named after the new version instead (e.g. `EasyReflectometryApp-1.6.0`).
+- Link contrasts: preview, choose and undo ties:
+  - A preview table, **Parameters to tie (n of m ticked)**, lists every parameter
+    of the following models that linking would tie, each with a tick box. Untick the
+    ones that should stay free, or tick a single material row to tie only that
+    material. **Tick all** and **Untick all** set every row; **Show the parameters
+    that cannot be tied** adds the rows linking leaves alone, with the reason
+    (`per contrast`, `not used`, `material chemistry`, ...).
+  - **Reference model** picks which of the ticked models the others follow;
+    before, it was always the ticked model highest in the list. The reference is
+    marked `(reference)` in the model table.
+  - **Also tie material SLDs and densities** now ticks the material rows of the
+    preview, so its effect is visible before linking.
+  - The preview follows the project: it is updated when the ticked models, the
+    reference or the constraints change, and keeps the user's ticks. Why models
+    cannot be linked (different layouts) is shown before **Link selected models**
+    is pressed. Adding, removing or renaming a model clears the selection.
+  - Each link is one row of the new *Model links* table (e.g.
+    `Film in CMSi → Film in D2O (5 tied)`) and one row of type `link` in
+    *Active Constraints*, instead of one row per tied parameter. Removing it
+    removes the whole link; selecting it lists its parameters under **Tied
+    parameters of link n**, where each one can be untied on its own. An untied
+    parameter gets back the value and bounds it had before the link.
+  - The *Model links* table replaces the *Model Constraints* table, which listed
+    every constraint of the project, not only the links.
+- Equality constraints: the expression placeholder shows a parameter alias
+  (`2 * model_d2o_roughness`) instead of `np.sqrt(1 / sld_ni) + 4`, and the
+  model-definition tutorial now explains aliases and what an `=` expression may
+  contain (units, plain numbers, `pi`, `e`, `sqrt`, ...).
+- Superphase and subphase stay fixed when layers change:
+  the layer table decided which thicknesses and roughnesses could be edited from
+  the assembly alone, locking every layer of the first and last assemblies, and
+  adding, removing, duplicating or moving a layer did not move the lock to the
+  new first or last layer. Now only the superphase (first layer of the first
+  assembly: thickness and roughness) and the subphase (last layer of the last
+  assembly: thickness) are locked, the table shows exactly what the fit uses,
+  and the lock is set again after every layer change.
+- Source cleanup : duplicated
+  code and dead code removed (one shared plot-control group for the Experiment,
+  Sample and Analysis pages, one definition of the experiment order), typed
+  backend slots and properties, and misspelt names corrected. No change in
+  behaviour, except that converged R̂ values in the Bayesian diagnostics are now
+  shown in green rather than the blue accent colour.
 
 # Version 1.5.0 (19 Oct 2026)
 
