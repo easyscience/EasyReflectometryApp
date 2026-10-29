@@ -57,7 +57,7 @@ class Assemblies:
         return self._assemblies[self.index].type
 
     @property
-    def assemblies(self) -> list[dict[str, str]]:
+    def assemblies(self) -> list[dict[str, str | list[str]]]:
         rows = _from_assemblies_collection_to_list_of_dicts(self._assemblies)
         # An assembly is one object in every model sharing it (contrasts): editing it edits all.
         current = self._project_lib.current_model_index
@@ -76,15 +76,19 @@ class Assemblies:
     def remove_at_index(self, index: int) -> None:
         self._assemblies.remove_assembly(index)
 
-    def add_new(self) -> None:
+    def add_new(self) -> bool:
+        """Insert an assembly with a Si layer; return whether the Si material had to be added to the project."""
         previous_length = len(self._assemblies)
         target_index = self._target_insert_index(self.index, previous_length)
         existing_ids = {id(assembly) for assembly in self._assemblies}
         self._assemblies.add_assembly()
         new_index = self._move_new_assembly_into_position(existing_ids, target_index)
+        materials_before = len(self._project_lib._materials)
+        # The library adds Si to the project's materials when it is missing.
         index_si = self._project_lib.get_index_si()
         if new_index is not None:
             self._assemblies[new_index].layers[0].material = self._project_lib._materials[index_si]
+        return len(self._project_lib._materials) > materials_before
 
     def duplicate_selected(self) -> None:
         if not self._has_valid_assembly_index(self.index):
@@ -176,6 +180,6 @@ class Assemblies:
         return False
 
 
-def _from_assemblies_collection_to_list_of_dicts(assemblies_collection: Sample) -> list[dict[str, str]]:
+def _from_assemblies_collection_to_list_of_dicts(assemblies_collection: Sample) -> list[dict[str, str | list[str]]]:
     # Repetitions and the surfactant flags have their own current-index properties.
     return [{'label': assembly.name, 'type': assembly.type} for assembly in assemblies_collection]

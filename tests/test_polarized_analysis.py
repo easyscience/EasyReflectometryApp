@@ -54,7 +54,7 @@ class TestLayerMagnetismEditing:
         rows = logic.magnetism
 
         assert len(rows) == len(logic.layers)
-        assert rows[0]['magnetic'] == 'False'
+        assert rows[0]['magnetic'] is False
         # A non-magnetic layer previews what attaching magnetism would create.
         assert float(rows[0]['rho_m']) == 0.0
         assert float(rows[0]['theta_m']) == 270.0
@@ -65,7 +65,7 @@ class TestLayerMagnetismEditing:
 
         assert logic.set_magnetic_at_index(0, True) is True
 
-        assert logic.magnetism[0]['magnetic'] == 'True'
+        assert logic.magnetism[0]['magnetic'] is True
         assert project.models[0].has_magnetism is True
         assert project._calculator().include_magnetism is True
 
@@ -76,7 +76,7 @@ class TestLayerMagnetismEditing:
 
         assert logic.set_magnetic_at_index(0, False) is True
 
-        assert logic.magnetism[0]['magnetic'] == 'False'
+        assert logic.magnetism[0]['magnetic'] is False
         assert project.models[0].has_magnetism is False
         assert project._calculator().include_magnetism is False
 
@@ -375,7 +375,7 @@ class TestSampleBackendSlots:
         backend.setLayerThetaMAtIndex(0, 45.0)
 
         assert backend.magnetismSupported is True
-        assert backend.layersMagnetism[0]['magnetic'] == 'True'
+        assert backend.layersMagnetism[0]['magnetic'] is True
         assert float(backend.layersMagnetism[0]['rho_m']) == 3.0
         assert len(changed) == 3
 
@@ -395,7 +395,7 @@ class TestSampleBackendSlots:
         assert backend.magnetismSupported is False
         assert requests == [(0, 'refl1d')]
         assert failures == []
-        assert backend.layersMagnetism[0]['magnetic'] == 'False'
+        assert backend.layersMagnetism[0]['magnetic'] is False
 
     def test_confirmed_switch_changes_the_engine_and_attaches_magnetism(self, qcore_application):
         from EasyReflectometryApp.Backends.Py.sample import Sample
@@ -408,7 +408,7 @@ class TestSampleBackendSlots:
 
         assert backend.magnetismSupported is True
         assert backend.calculationEngines[backend.calculationEngineIndex] == 'refl1d'
-        assert backend.layersMagnetism[0]['magnetic'] == 'True'
+        assert backend.layersMagnetism[0]['magnetic'] is True
         assert engine_changes == [True]
 
     def test_engine_that_cannot_carry_the_magnetism_is_refused(self, qcore_application):
@@ -425,7 +425,7 @@ class TestSampleBackendSlots:
         # The refusal goes to the engine selector's dialog, not the log.
         assert len(rejections) == 1 and 'refnx' in rejections[0]
         assert backend.calculationEngines[backend.calculationEngineIndex] == 'refl1d'
-        assert backend.layersMagnetism[0]['magnetic'] == 'True'
+        assert backend.layersMagnetism[0]['magnetic'] is True
 
 
 class _StubMinimizers:

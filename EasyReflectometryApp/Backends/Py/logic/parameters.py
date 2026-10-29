@@ -315,6 +315,8 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     def _is_layer_parameter(param: Parameter, path: list) -> bool:
         """Check if parameter is a layer's own thickness or roughness."""
+        if len(path) < 2:
+            return False
         owner = path[-2]
         return isinstance(owner, Layer) and (param is owner.thickness or param is owner.roughness)
 
@@ -324,7 +326,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         Magnetism sits one level below the layer (Layer -> LayerMagnetism -> param),
         but belongs to the layer just as much, so it is named the same way.
         """
-        return isinstance(path[-2], LayerMagnetism)
+        return len(path) >= 2 and isinstance(path[-2], LayerMagnetism)
 
     def _is_per_layer_parameter(param: Parameter, path: list) -> bool:
         """Per-layer parameters exist once per model and carry the model prefix."""
@@ -426,6 +428,10 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
                     'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
+                    # Decided under the first model that owns the parameter. That is
+                    # enough while each model has its own scale and background objects
+                    # (linked contrasts tie them with dependencies, not by sharing);
+                    # if they are ever shared, test against every model in shared_by.
                     'experiment': _is_experiment_parameter(parameter, models[model_idx]),
                     'exclusive_with': _exclusive_partner(parameter, path),
                 }

@@ -6,7 +6,6 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
 from easyreflectometry.sample import LayerMagnetism
-from easyreflectometry.sample import Material
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
 
@@ -68,15 +67,15 @@ class Layers:
 
     def add_new(self) -> bool:
         """Append a Si layer; return whether the Si material had to be added to the project."""
-        material_added = 'Si' not in [material.name for material in self._project_lib._materials]
-        if material_added:
-            self._project_lib._materials.add_material(Material(name='Si', sld=2.07, isld=0.0))
-        index_si = [material.name for material in self._project_lib._materials].index('Si')
+        materials = self._project_lib._materials
+        count_before = len(materials)
+        # The library adds Si to the project's materials when it is missing.
+        si = materials[self._project_lib.get_index_si()]
         self._layers.add_layer()
-        self._layers[-1].material = self._project_lib._materials[index_si]
+        self._layers[-1].material = si
         # Set layer name based on material name
-        self._layers[-1].name = self._project_lib._materials[index_si].name + ' Layer'
-        return material_added
+        self._layers[-1].name = si.name + ' Layer'
+        return len(materials) > count_before
 
     def duplicate_selected(self) -> None:
         self._layers.duplicate_layer(self.index)
@@ -220,19 +219,20 @@ class Layers:
         return bool(self._project_lib.calculator_supports_magnetism)
 
     @property
-    def magnetism(self) -> list[dict[str, str]]:
+    def magnetism(self) -> list[dict[str, str | bool]]:
         """One row per layer of the current assembly, describing its magnetism.
 
-        ``magnetic`` is 'True'/'False'; ``rho_m``/``theta_m`` carry the defaults
+        ``magnetic`` is a bool; ``rho_m``/``theta_m`` carry the defaults
         of a fresh :class:`LayerMagnetism` for non-magnetic layers so the fields
         show what attaching magnetism would start from. ``phi`` is the direction
         the moment points, in degrees from the guide field - what the compass
-        draws - and ``editable`` whether that direction can be set by dragging
-        it (a constrained ``theta_m`` follows its expression, not the pointer).
-        Both are empty for a non-magnetic layer, which has no direction.
-        ``material_magnetic`` says whether the layer's material carries a
-        moment (a ``MaterialMagnetic``), and ``rho_m_coupled`` whether the
-        layer takes ``rho_m`` from it.
+        draws - and is empty for a non-magnetic layer, which has no direction.
+        ``editable`` says whether that direction can be set by dragging it (a
+        constrained ``theta_m`` follows its expression, not the pointer); it is
+        False for a non-magnetic layer. ``material_magnetic`` says whether the
+        layer's material carries a moment (a ``MaterialMagnetic``), and
+        ``rho_m_coupled`` whether the layer takes ``rho_m`` from it; both are
+        bools.
         """
         rows = []
         for layer in self._layers:
@@ -240,13 +240,13 @@ class Layers:
             rows.append(
                 {
                     'label': layer.name,
-                    'magnetic': str(magnetism is not None),
+                    'magnetic': magnetism is not None,
                     'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
                     'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
-                    'editable': '' if magnetism is None else str(magnetism.theta_m.independent),
-                    'material_magnetic': str(getattr(layer.material, 'rho_m', None) is not None),
-                    'rho_m_coupled': str(layer.rho_m_coupled),
+                    'editable': magnetism is not None and bool(magnetism.theta_m.independent),
+                    'material_magnetic': getattr(layer.material, 'rho_m', None) is not None,
+                    'rho_m_coupled': bool(layer.rho_m_coupled),
                 }
             )
         return rows

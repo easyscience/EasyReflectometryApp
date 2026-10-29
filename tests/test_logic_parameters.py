@@ -267,7 +267,13 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
             'independent': True,
             'kind': 'parameter',
         },
-        {'alias': 'layer_thickness', 'displayName': 'Layer thickness', 'group': 'Layer', 'independent': False, 'kind': 'parameter'},
+        {
+            'alias': 'layer_thickness',
+            'displayName': 'Layer thickness',
+            'group': 'Layer',
+            'independent': False,
+            'kind': 'parameter',
+        },
     ]
 
     logic.set_variability_filter_criteria('all')
@@ -352,15 +358,31 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert result[6]['enabled'] is True
 
 
+def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False):
+    """A parameter row as ``all_parameters`` returns it, with only the keys the filters read."""
+    return {
+        'name': name,
+        'display_name': display_name,
+        'group': group,
+        'unique_name': unique_name,
+        'fit': fit,
+        'enabled': True,
+        'independent': True,
+        'alias': alias,
+        'object': object(),
+        'experiment': experiment,
+    }
+
+
 def test_parameters_special_filters_and_invalid_variability_normalization(monkeypatch):
     project = make_project()
     logic = parameters_module.Parameters(project)
     mocked_parameters = [
-        {'name': 'Cell length a', 'display_name': 'Cell length a', 'group': 'cell', 'unique_name': 'cell.a', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'cell_a', 'object': object(), 'experiment': False},
-        {'name': 'Atom site x', 'display_name': 'Atom site x', 'group': 'atom_site', 'unique_name': 'atom_site.x', 'fit': False, 'enabled': True, 'independent': True, 'alias': 'atom_site_x', 'object': object(), 'experiment': False},
-        {'name': 'Biso', 'display_name': 'adp b_iso', 'group': 'thermal', 'unique_name': 'b_iso', 'fit': False, 'enabled': True, 'independent': True, 'alias': 'b_iso', 'object': object(), 'experiment': False},
-        {'name': 'Instrument scale', 'display_name': 'Instrument scale', 'group': 'instrument', 'unique_name': 'scale', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'scale', 'object': object(), 'experiment': True},
-        {'name': 'Layer thickness', 'display_name': 'Layer thickness', 'group': 'layer', 'unique_name': 'layer.thickness', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'thickness', 'object': object(), 'experiment': False},
+        _filter_row('Cell length a', 'Cell length a', 'cell', 'cell.a', 'cell_a', fit=True),
+        _filter_row('Atom site x', 'Atom site x', 'atom_site', 'atom_site.x', 'atom_site_x', fit=False),
+        _filter_row('Biso', 'adp b_iso', 'thermal', 'b_iso', 'b_iso', fit=False),
+        _filter_row('Instrument scale', 'Instrument scale', 'instrument', 'scale', 'scale', fit=True, experiment=True),
+        _filter_row('Layer thickness', 'Layer thickness', 'layer', 'layer.thickness', 'thickness', fit=True),
     ]
     monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
 
@@ -368,7 +390,9 @@ def test_parameters_special_filters_and_invalid_variability_normalization(monkey
     assert logic.variability_filter_criteria == 'all'
 
     logic.set_name_filter_criteria('model')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Cell length a', 'Atom site x', 'adp b_iso', 'Layer thickness']
+    assert [entry['display_name'] for entry in logic.parameters] == [
+        'Cell length a', 'Atom site x', 'adp b_iso', 'Layer thickness',
+    ]
 
     logic.set_name_filter_criteria('experiment')
     assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale']

@@ -168,6 +168,21 @@ def test_added_layer_announces_the_si_material_only_when_it_creates_it(project_a
     assert 'Si' in [material.name for material in project._materials]
 
 
+def test_added_assembly_announces_the_si_material_only_when_it_creates_it(project_and_backend):
+    project, backend = project_and_backend
+    backend.setCurrentAssemblyIndex(1)
+    emitted = []
+    backend.materialsTableChanged.connect(lambda: emitted.append(True))
+
+    backend.addNewAssembly()  # the default project already has Si
+    assert emitted == []
+
+    next(material for material in project._materials if material.name == 'Si').name = 'Silicon'
+    backend.addNewAssembly()
+    assert emitted == [True]
+    assert 'Si' in [material.name for material in project._materials]
+
+
 def test_middle_assembly_table_is_fully_editable(project_and_backend):
     project, backend = project_and_backend
     backend.setCurrentAssemblyIndex(1)

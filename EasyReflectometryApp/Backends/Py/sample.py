@@ -477,7 +477,7 @@ class Sample(QObject):
     # Assemblies
     # # #
     @Property('QVariantList', notify=assembliesTableChanged)
-    def assemblies(self) -> list[dict[str, str]]:
+    def assemblies(self) -> list[dict[str, str | list[str]]]:
         return self._assemblies_logic.assemblies
 
     @Property(int, notify=assembliesIndexChanged)
@@ -593,7 +593,8 @@ class Sample(QObject):
 
     @Slot()
     def addNewAssembly(self) -> None:
-        self._assemblies_logic.add_new()
+        if self._assemblies_logic.add_new():
+            self.materialsTableChanged.emit()
         self._refreshCurrentAssemblySelectionState()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.assembliesTableChanged.emit()
@@ -861,7 +862,7 @@ class Sample(QObject):
         return self._layers_logic.magnetism_supported
 
     @Property('QVariantList', notify=magnetismChanged)
-    def layersMagnetism(self) -> list[dict[str, str]]:
+    def layersMagnetism(self) -> list[dict[str, str | bool]]:
         """Per-layer magnetism of the current assembly, one row per layer."""
         return self._layers_logic.magnetism
 
