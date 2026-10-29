@@ -458,20 +458,19 @@ QtObject {
         var rows = []
         for (const follower of modelIndices) {
             if (follower === reference) continue
-            rows.push({ key: `${follower}:sample/1/layers/0/thickness`, follower: follower, path: 'sample/1/layers/0/thickness',
+            rows.push({ key: `${follower}:sample/1/layers/0/thickness`, path: 'sample/1/layers/0/thickness',
                         name: 'Film thickness', action: 'tie', reason: '', selectable: true, selected: true })
-            rows.push({ key: `${follower}:sample/1/layers/0/material/sld`, follower: follower, path: 'sample/1/layers/0/material/sld',
+            rows.push({ key: `${follower}:sample/1/layers/0/material/sld`, path: 'sample/1/layers/0/material/sld',
                         name: 'Film sld', action: 'undecided', reason: 'material chemistry', selectable: true, selected: tieMaterials })
-            rows.push({ key: `${follower}:scale`, follower: follower, path: 'scale',
+            rows.push({ key: `${follower}:scale`, path: 'scale',
                         name: 'scale', action: 'skip', reason: 'per contrast', selectable: false, selected: false })
         }
         return { reference: reference, rows: rows, messages: [] }
     }
-    function linkModels(modelIndices, referenceIndex, tieMaterials, selectedKeys) {
-        console.debug(`linkModels ${modelIndices} ${referenceIndex} ${tieMaterials} ${selectedKeys}`)
-        return { tied: selectedKeys ? selectedKeys.length : 0, messages: [] }
+    function linkModels(modelIndices, referenceIndex, selectedKeys) {
+        console.debug(`linkModels ${modelIndices} ${referenceIndex} ${selectedKeys}`)
+        return { tied: selectedKeys.length, messages: [] }
     }
-    function constrainModelsParameters(modelIndices, tieMaterials) { return linkModels(modelIndices, -1, tieMaterials, null) }
     function removeLinkedParameter(uniqueName) { console.debug(`removeLinkedParameter ${uniqueName}`) }
 
     // Inequality constraints (BUMPS-only fit penalties)

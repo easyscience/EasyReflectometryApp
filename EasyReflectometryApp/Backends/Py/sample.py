@@ -22,7 +22,6 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import QTimer
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
-from PySide6.QtQml import QJSValue
 
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
@@ -1600,7 +1599,7 @@ class Sample(QObject):
         """``{id(follower parameter): index in Project.links}`` for the ties model links made
         that still hold; a follower the user constrained otherwise since is listed on its own."""
         linked: Dict[int, int] = {}
-        for link_index, record in enumerate(getattr(self._project_lib, 'links', [])):
+        for link_index, record in enumerate(self._project_lib.links):
             for follower, reference, _ in record.pairs:
                 if follows(follower, reference):
                     linked[id(follower)] = link_index
@@ -2042,15 +2041,15 @@ class Sample(QObject):
             'type': mode,
         }
 
-    @Slot('QVariantList', bool, result='QVariant')
     def constrainModelsParameters(self, model_indices: list, tie_materials: bool = False) -> dict:
-        """Tie every tieable parameter of the selected models to the first one (the lowest index).
+        """Tie the default rows of :meth:`planModelLink` to the first selected model (the lowest index).
 
         The one-step form of :meth:`linkModels`, without a reference choice or a deselection.
 
         :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
         """
-        return self.linkModels(model_indices, -1, tie_materials, None)
+        plan = self.planModelLink(model_indices, -1, tie_materials)
+        return self.linkModels(model_indices, -1, [row['key'] for row in plan['rows'] if row['selected']])
 
     def _plan_model_links(self, model_indices: list, reference_index: int) -> Tuple[int, list, list[str]]:
         """``(reference, [(follower, plan), ...], messages)`` for tying the selected models to one.
@@ -2092,7 +2091,6 @@ class Sample(QObject):
         :return: ``{'reference': index, 'rows': [...], 'messages': [...]}``.
         """
         reference, plans, messages = self._plan_model_links(model_indices, reference_index)
-        models = self._project_lib.models
         display = {id(entry['object']): entry['display_name'] for entry in self._parameters_logic.constraint_context()}
         rows = []
         for follower, plan in plans:
@@ -2101,8 +2099,6 @@ class Sample(QObject):
                 rows.append(
                     {
                         'key': self._link_row_key(follower, row.path),
-                        'follower': follower,
-                        'followerName': models[follower].name,
                         'path': row.path,
                         'name': display.get(id(row.follower), row.path),
                         'action': row.action,
@@ -2113,15 +2109,13 @@ class Sample(QObject):
                 )
         return {'reference': reference, 'rows': rows, 'messages': messages}
 
-    @Slot('QVariantList', int, bool, 'QVariant', result='QVariant')
-    def linkModels(self, model_indices: list, reference_index: int, tie_materials: bool = False, selected_keys=None) -> dict:
+    @Slot('QVariantList', int, 'QVariantList', result='QVariant')
+    def linkModels(self, model_indices: list, reference_index: int, selected_keys: list) -> dict:
         """Tie the parameters of the selected models to those of the reference model.
 
-        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``):
-        scale and background stay per model; material chemistry (SLDs, densities, scattering
-        lengths) is tied only with `tie_materials`, since contrasts usually differ in it.
-        With `selected_keys` (the ``key`` values of :meth:`planModelLink` rows), exactly the
-        listed rows are tied and every other one is skipped; ``None`` ties the default rows.
+        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``).
+        Exactly the rows listed in `selected_keys` (the ``key`` values of :meth:`planModelLink`
+        rows) are tied and every other one is skipped.
         Each link is listed as one constraint row; removing it restores the parameters.
 
         :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
@@ -2129,18 +2123,11 @@ class Sample(QObject):
         reference, plans, messages = self._plan_model_links(model_indices, reference_index)
         if messages:
             return {'tied': 0, 'messages': messages + ([self.tr('No model was linked.')] if reference >= 0 else [])}
-        if isinstance(selected_keys, QJSValue):  # a JS array handed over by QML
-            selected_keys = selected_keys.toVariant()
-        selected = None if selected_keys is None else {str(key) for key in selected_keys}
+        selected = {str(key) for key in selected_keys}
         for follower, plan in plans:
             for row in plan.rows:
-                if row.action not in ('tie', 'undecided'):
-                    continue
-                if selected is not None:
-                    ticked = self._link_row_key(follower, row.path) in selected
-                else:
-                    ticked = row.action == 'tie' or bool(tie_materials)
-                row.action = 'tie' if ticked else 'skip'
+                if row.action in ('tie', 'undecided'):
+                    row.action = 'tie' if self._link_row_key(follower, row.path) in selected else 'skip'
         plans = [(follower, plan) for follower, plan in plans if any(row.action == 'tie' for row in plan.rows)]
         if not plans:
             return {'tied': 0, 'messages': [self.tr('No parameter is selected to tie.')]}

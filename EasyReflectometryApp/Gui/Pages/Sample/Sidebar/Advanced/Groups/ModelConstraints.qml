@@ -345,7 +345,6 @@ EaElements.GroupBox {
                 const result = Globals.BackendWrapper.sampleLinkModels(
                     modelConstraintsGroup.selectedModelIndices,
                     modelConstraintsGroup.effectiveReferenceIndex,
-                    tieMaterialsCheckBox.checked,
                     modelConstraintsGroup.tickedKeys())
                 linkResult.text = result
                     ? qsTr("%1 parameter(s) tied.").arg(result.tied)
