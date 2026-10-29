@@ -75,15 +75,15 @@ class Models:
             return True
         return False
 
-    def set_scaling_at_current_index(self, new_value: str) -> bool:
-        if self._models[self.index].scale.value != float(new_value):
-            self._models[self.index].scale.value = float(new_value)
+    def set_scaling_at_current_index(self, new_value: float) -> bool:
+        if self._models[self.index].scale.value != new_value:
+            self._models[self.index].scale.value = new_value
             return True
         return False
 
-    def set_background_at_current_index(self, new_value: str) -> bool:
-        if self._models[self.index].background.value != float(new_value):
-            self._models[self.index].background.value = float(new_value)
+    def set_background_at_current_index(self, new_value: float) -> bool:
+        if self._models[self.index].background.value != new_value:
+            self._models[self.index].background.value = new_value
             return True
         return False
 

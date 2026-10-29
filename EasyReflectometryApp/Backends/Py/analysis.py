@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List
 from typing import Optional
 
+import numpy as np
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
@@ -50,6 +51,7 @@ class Analysis(QObject):
     parametersChanged = Signal()
     parametersIndexChanged = Signal()
     fittingChanged = Signal()
+    heatmapChanged = Signal()
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
     prefitCheckFailed = Signal(str, str)  # Emitted with (title, message) when a fit is refused before starting
     stopFit = Signal()  # Signal to request fitting stop
@@ -77,7 +79,7 @@ class Analysis(QObject):
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
         self._bayesian_logic = BayesianLogic()
-        self._chached_enabled_parameters = None
+        self._cached_enabled_parameters = None
         # Thread management for background fitting
         self._fitter_thread = None
         # Connect stopFit signal to slot
@@ -151,11 +153,11 @@ class Analysis(QObject):
     def fitHasPreviewUpdate(self) -> bool:
         return self._fitting_logic.fit_has_preview_update
 
-    @Property('QVariant', notify=fittingChanged)
+    @Property('QVariantMap', notify=fittingChanged)
     def fitPreviewParameterValues(self) -> dict:
         return self._fitting_logic.fit_preview_parameter_values
 
-    @Property('QVariant', notify=fittingChanged)
+    @Property('QVariantMap', notify=fittingChanged)
     def fitResults(self) -> dict:
         """Return fit results as a dict for QML consumption."""
         return {
@@ -280,6 +282,7 @@ class Analysis(QObject):
     def bayesianResultAvailable(self) -> bool:
         return self._bayesian_logic.has_result
 
+    # 'QVariant', not 'QVariantMap': None must reach QML as undefined.
     @Property('QVariant', notify=fittingChanged)
     def bayesianPosterior(self) -> dict | None:
         p = self._bayesian_logic.posterior
@@ -290,11 +293,10 @@ class Analysis(QObject):
             'nDraws': int(p['draws'].shape[0]),
         }
 
-    @Property('QVariant', notify=fittingChanged)
+    @Property('QVariantList', notify=fittingChanged)
     def bayesianMarginals(self) -> list:
         if not self._bayesian_logic.has_result:
             return []
-        import numpy as np
 
         p = self._bayesian_logic.posterior
         display_names = self._bayesian_display_name_list()
@@ -374,7 +376,7 @@ class Analysis(QObject):
             self._render_distribution_plot()
         return self._bayesian_logic.distribution_plot_url
 
-    @Property('QVariant', notify=fittingChanged)
+    @Property('QVariantMap', notify=fittingChanged)
     def bayesianDiagnostics(self) -> dict:
         """Return convergence diagnostics dict."""
         if self._bayesian_logic.has_result and not self._bayesian_logic.diagnostics:
@@ -386,8 +388,7 @@ class Analysis(QObject):
         """Return parameter names for heatmap axis dropdowns (display names)."""
         return self._bayesian_display_name_list()
 
-    heatmapChanged = Signal()
-
+    # 'QVariant', not 'QVariantMap': None must reach QML as undefined.
     @Property('QVariant', notify=heatmapChanged)
     def bayesianHeatmapData(self) -> dict | None:
         """Return 2D histogram data for the heatmap view."""
@@ -401,8 +402,6 @@ class Analysis(QObject):
     @Slot(int, int)
     def computeBayesianHeatmap(self, paramX: int, paramY: int) -> None:
         """Compute 2D histogram for the selected parameter pair."""
-        import numpy as np
-
         posterior = self._bayesian_logic.posterior
         if posterior is None:
             return
@@ -427,7 +426,7 @@ class Analysis(QObject):
     # Fitting start / stop (classical + Bayesian dispatch)
     # ------------------------------------------------------------------
 
-    @Slot(None)
+    @Slot()
     def fittingStartStop(self) -> None:
         # If already running, stop the fit
         if self._fitting_logic.running:
@@ -670,7 +669,6 @@ class Analysis(QObject):
 
     def _compute_and_publish_posterior_predictive(self) -> None:
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
-        import numpy as np
         from easyreflectometry.analysis.bayesian import posterior_predictive_reflectivity
         from easyreflectometry.analysis.bayesian import posterior_predictive_sld_profile
 
@@ -771,8 +769,6 @@ class Analysis(QObject):
         if acceptance_rate is not None:
             try:
                 if callable(acceptance_rate):
-                    import numpy as np
-
                     # BUMPS MCMCDraw.acceptance_rate() returns (generation ids, rate in percent)
                     # for the kept portion of the run.
                     _generations, rates = acceptance_rate()
@@ -790,8 +786,6 @@ class Analysis(QObject):
             draws_3d = draws
         elif state is not None and hasattr(state, 'chains'):
             try:
-                import numpy as np
-
                 _draw_counts, chains_3d, _logp_3d = state.chains()
                 # chains_3d: (n_generations, n_chains, n_params)
                 if chains_3d.shape[1] >= 2:  # at least 2 chains
@@ -807,8 +801,6 @@ class Analysis(QObject):
                 import arviz as _arviz
 
                 # Build arviz InferenceData from 3D draws (n_chains, n_draws, n_params)
-                import numpy as np
-
                 posterior_dict = {}
                 for i, name in enumerate(posterior['param_names']):
                     posterior_dict[name] = draws_3d[:, :, i]
@@ -865,7 +857,6 @@ class Analysis(QObject):
             from easyreflectometry.analysis.bayesian import plot_corner
 
             display_names = self._bayesian_display_name_list()
-            import numpy as np
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 3:
                 draws = draws.reshape(-1, draws.shape[-1])
@@ -901,7 +892,6 @@ class Analysis(QObject):
             from easyreflectometry.analysis.bayesian import plot_distribution
 
             display_names = self._bayesian_display_name_list()
-            import numpy as np
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 3:
                 draws = draws.reshape(-1, draws.shape[-1])
@@ -934,7 +924,6 @@ class Analysis(QObject):
             self._bayesian_logic.trace_plot_url = ''
             return
         try:
-            import numpy as np
             from easyreflectometry.analysis.bayesian import plot_trace
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 2:
@@ -973,7 +962,6 @@ class Analysis(QObject):
             import matplotlib
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
-            import numpy as np
 
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 3:
@@ -1348,10 +1336,10 @@ class Analysis(QObject):
     ## Parameters
     @Property('QVariantList', notify=parametersChanged)
     def enabledParameters(self) -> list[dict[str]]:
-        if self._chached_enabled_parameters is not None:
-            return self._chached_enabled_parameters
-        self._chached_enabled_parameters = self._parameters_logic.parameters
-        return self._chached_enabled_parameters
+        if self._cached_enabled_parameters is not None:
+            return self._cached_enabled_parameters
+        self._cached_enabled_parameters = self._parameters_logic.parameters
+        return self._cached_enabled_parameters
 
     @Property(str, notify=parametersChanged)
     def nameFilterCriteria(self) -> str:
@@ -1432,7 +1420,7 @@ class Analysis(QObject):
             self._clearCacheAndEmitParametersChanged()
 
     def _clearCacheAndEmitParametersChanged(self):
-        self._chached_enabled_parameters = None
+        self._cached_enabled_parameters = None
         parameters_length = len(self.enabledParameters)
         current_index = self._parameters_logic.current_index()
         if parameters_length == 0 and current_index != 0:

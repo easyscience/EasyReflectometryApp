@@ -73,8 +73,8 @@ class Assemblies:
     def assemblies_names(self) -> list[str]:
         return [element['label'] for element in self.assemblies]
 
-    def remove_at_index(self, value: str) -> None:
-        self._assemblies.remove_assembly(int(value))
+    def remove_at_index(self, index: int) -> None:
+        self._assemblies.remove_assembly(index)
 
     def add_new(self) -> None:
         previous_length = len(self._assemblies)
@@ -148,12 +148,12 @@ class Assemblies:
 
     # Only for repeating multilayer
     @property
-    def repetitions_at_current_index(self) -> str:
+    def repetitions_at_current_index(self) -> int:
         if isinstance(self._assemblies[self.index], RepeatingMultilayer):
-            return str(int(self._assemblies[self.index].repetitions.value))
-        return '1'
+            return int(self._assemblies[self.index].repetitions.value)
+        return 1
 
-    def set_repeated_layer_reptitions(self, new_value: int) -> bool:
+    def set_repeated_layer_repetitions(self, new_value: int) -> bool:
         if isinstance(self._assemblies[self.index], RepeatingMultilayer):
             if new_value != self._assemblies[self.index].repetitions.value:
                 self._assemblies[self.index].repetitions.value = new_value
@@ -161,14 +161,14 @@ class Assemblies:
         return False
 
     # # Only for surfactant layer
-    def set_constrain_apm(self, new_value: str) -> bool:
+    def set_constrain_apm(self, new_value: bool) -> bool:
         if isinstance(self._assemblies[self.index], SurfactantLayer):
             if self._assemblies[self.index].constrain_area_per_molecule != new_value:
                 self._assemblies[self.index].constrain_area_per_molecule = new_value
                 return True
         return False
 
-    def set_conformal_roughness(self, new_value: str) -> bool:
+    def set_conformal_roughness(self, new_value: bool) -> bool:
         if isinstance(self._assemblies[self.index], SurfactantLayer):
             if self._assemblies[self.index].conformal_roughness != new_value:
                 self._assemblies[self.index].conformal_roughness = new_value

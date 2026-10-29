@@ -133,7 +133,7 @@ def test_differential_evolution_needs_finite_bounds_of_free_parameters(tmp_path,
     scale = project.models[0].scale
     scale.fixed = False
     scale.max = np.inf
-    analysis._chached_enabled_parameters = None
+    analysis._cached_enabled_parameters = None
 
     analysis.setMinimizerCurrentIndex(_index(analysis._minimizers_logic, 'LMFit_differential_evolution'))
 

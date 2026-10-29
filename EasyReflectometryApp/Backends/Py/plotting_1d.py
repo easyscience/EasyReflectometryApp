@@ -735,8 +735,8 @@ class Plotting1d(QObject):
     def residualMaxY(self) -> float:
         return self._get_residual_range()[3]
 
-    @Property('QVariant', notify=chartRefsChanged)
-    def chartRefs(self):
+    @Property('QVariantMap', notify=chartRefsChanged)
+    def chartRefs(self) -> dict:
         return self._chartRefs
 
     @Property(bool, notify=experimentDataChanged)
@@ -1831,8 +1831,6 @@ class Plotting1d(QObject):
         the existing analysis series, so the posterior overlay stays in sync
         with plot-mode toggles.
         """
-        import numpy as np
-
         q = np.asarray(q, dtype=float)
         median = np.asarray(median, dtype=float)
         lower = np.asarray(lower, dtype=float)
@@ -1880,8 +1878,6 @@ class Plotting1d(QObject):
         Unlike reflectivity, SLD data is published without any chart-space
         transform, matching the existing SLD chart series convention.
         """
-        import numpy as np
-
         z = np.asarray(z, dtype=float)
         median = np.asarray(median, dtype=float)
         lower = np.asarray(lower, dtype=float)

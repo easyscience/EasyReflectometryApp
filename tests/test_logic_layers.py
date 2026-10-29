@@ -101,7 +101,7 @@ def test_layers_move_duplicate_and_setters_update_current_layer(monkeypatch):
     logic.move_selected_down()
     assert project.current_layer_index == 1
 
-    logic.remove_at_index('2')
+    logic.remove_at_index(2)
     assert len(logic._layers) == 2
 
 

@@ -60,8 +60,8 @@ class Layers:
     def layers_names(self) -> list[str]:
         return [element['label'] for element in self.layers]
 
-    def remove_at_index(self, value: str) -> None:
-        self._layers.remove_at(int(value))
+    def remove_at_index(self, index: int) -> None:
+        self._layers.remove_at(index)
         # A removed coupled layer can leave its material's moment, or the
         # model's field, acting on nothing; the project fixes those.
         self._project_lib._sync_parameter_states()

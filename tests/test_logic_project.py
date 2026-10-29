@@ -51,10 +51,10 @@ def test_project_metadata_and_q_properties_delegate():
     assert logic.description == 'Updated Description'
     assert logic.creation_date == '2026-03-19'
 
-    assert logic.set_q_min('0.02') is True
-    assert logic.set_q_min('0.02') is False
-    assert logic.set_q_max('0.7') is True
-    assert logic.set_q_resolution('400') is True
+    assert logic.set_q_min(0.02) is True
+    assert logic.set_q_min(0.02) is False
+    assert logic.set_q_max(0.7) is True
+    assert logic.set_q_resolution(400) is True
     assert logic.q_min == 0.02
     assert logic.q_max == 0.7
     assert logic.q_resolution == 400

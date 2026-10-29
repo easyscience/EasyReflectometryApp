@@ -81,7 +81,7 @@ class Sample(QObject):
     assembliesTableChanged = Signal()
     assembliesIndexChanged = Signal()
 
-    layersChange = Signal()
+    layersChanged = Signal()
     layersIndexChanged = Signal()
 
     structureChanged = Signal()
@@ -118,7 +118,7 @@ class Sample(QObject):
         self._project_logic = ProjectLogic(project_lib)
         self._parameters_logic = ParametersLogic(project_lib)
 
-        self._chached_layers = None
+        self._cached_layers = None
         self._cached_structure = None
         self._constraint_states: Dict[str, dict[str, Any]] = {}
         # Child of self (not QTimer.singleShot) so a pending notification can
@@ -136,9 +136,9 @@ class Sample(QObject):
         # Inequality rows carry a "satisfied" flag evaluated at the current
         # values, so parameter edits must refresh the constraints list too.
         # `constraintsList` is expensive (asteval of every expression, recipe
-        # ownership across all assemblies), so bursts of layersChange within one
+        # ownership across all assemblies), so bursts of layersChanged within one
         # event-loop turn are coalesced into a single constraintsChanged.
-        self.layersChange.connect(self._scheduleConstraintsChanged)
+        self.layersChanged.connect(self._scheduleConstraintsChanged)
         # The magnetism table lists the current assembly's layers, and the
         # field controls show the current model's field.
         self.assembliesIndexChanged.connect(self.magnetismChanged)
@@ -277,9 +277,9 @@ class Sample(QObject):
             self._emitDensityMaterialChanged(index)
 
     # Actions
-    @Slot(str)
-    def removeMaterial(self, value: str) -> None:
-        self._material_logic.remove_at_index(value)
+    @Slot(int)
+    def removeMaterial(self, index: int) -> None:
+        self._material_logic.remove_at_index(index)
         self._detach_unreachable_constraints()
         self.materialsTableChanged.emit()
         self.externalRefreshPlot.emit()
@@ -555,13 +555,13 @@ class Sample(QObject):
             self.externalSampleChanged.emit()
 
     # Assembly specific
-    @Property(str, notify=assembliesTableChanged)
-    def currentAssemblyRepeatedLayerReptitions(self) -> str:
+    @Property(int, notify=assembliesTableChanged)
+    def currentAssemblyRepeatedLayerRepetitions(self) -> int:
         return self._assemblies_logic.repetitions_at_current_index
 
     @Slot(int)
-    def setCurrentAssemblyRepeatedLayerReptitions(self, new_value: int) -> None:
-        if self._assemblies_logic.set_repeated_layer_reptitions(new_value):
+    def setCurrentAssemblyRepeatedLayerRepetitions(self, new_value: int) -> None:
+        if self._assemblies_logic.set_repeated_layer_repetitions(new_value):
             self.assembliesTableChanged.emit()
             self.externalRefreshPlot.emit()
 
@@ -580,9 +580,9 @@ class Sample(QObject):
             self.externalSampleChanged.emit()
 
     # Actions
-    @Slot(str)
-    def removeAssembly(self, value: str) -> None:
-        self._assemblies_logic.remove_at_index(value)
+    @Slot(int)
+    def removeAssembly(self, index: int) -> None:
+        self._assemblies_logic.remove_at_index(index)
         self._refreshCurrentAssemblySelectionState()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._detach_unreachable_constraints()
@@ -630,21 +630,21 @@ class Sample(QObject):
     def layersConnectChanges(self) -> None:
         self._clearCacheAndEmitLayersChanged()
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def layers(self) -> list[dict[str, str]]:
-        if self._chached_layers is None:
-            self._chached_layers = self._layers_logic.layers
-        return self._chached_layers
+        if self._cached_layers is None:
+            self._cached_layers = self._layers_logic.layers
+        return self._cached_layers
 
     @Property(int, notify=layersIndexChanged)
     def currentLayerIndex(self) -> int:
         return self._layers_logic.index
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def layersNames(self) -> list[str]:
         return self._layers_logic.layers_names
 
-    @Property(str, notify=layersChange)
+    @Property(str, notify=layersChanged)
     def currentLayerName(self) -> str:
         return self._layers_logic.name_at_current_index
 
@@ -655,7 +655,7 @@ class Sample(QObject):
         self.layersIndexChanged.emit()
 
     # A rename is project content and shows up in the Analysis parameter names, so it emits
-    # externalSampleChanged like the assembly rename does; layersChange alone would only reach
+    # externalSampleChanged like the assembly rename does; layersChanged alone would only reach
     # dirty tracking through the deferred constraintsChanged relay, by accident.
     @Slot(str)
     def setCurrentLayerName(self, new_value: str) -> None:
@@ -771,9 +771,9 @@ class Sample(QObject):
             self.externalSampleChanged.emit()
 
     # Actions
-    @Slot(str)
-    def removeLayer(self, value: str) -> None:
-        self._layers_logic.remove_at_index(value)
+    @Slot(int)
+    def removeLayer(self, index: int) -> None:
+        self._layers_logic.remove_at_index(index)
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._detach_unreachable_constraints()
         self._clearCacheAndEmitLayersChanged()
@@ -811,8 +811,8 @@ class Sample(QObject):
         self.externalRefreshPlot.emit()
 
     def _clearCacheAndEmitLayersChanged(self):
-        self._chached_layers = None
-        self.layersChange.emit()
+        self._cached_layers = None
+        self.layersChanged.emit()
         # The magnetism table lists the same layers, so it goes stale whenever
         # a layer is added, removed, reordered or renamed.
         self.magnetismChanged.emit()
@@ -1448,11 +1448,11 @@ class Sample(QObject):
         if '_independent' in state and state['_independent'] is not None:
             parameter._independent = state['_independent']
 
-    @Property('QVariantList', notify=layersChange)
-    def parameterNames(self) -> list[dict[str, str]]:
+    @Property('QVariantList', notify=layersChanged)
+    def parameterNames(self) -> list[str]:
         return [parameter['name'] for parameter in self._parameters_logic.parameters]
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def enabledParameterNames(self) -> list[str]:
         enabled_param_names = []
         for parameter in self._parameters_logic.parameters:
@@ -1461,7 +1461,7 @@ class Sample(QObject):
             enabled_param_names.append(parameter['name'])
         return enabled_param_names
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def dependentParameterNames(self) -> list[str]:
         dep_param_names = []
         for parameter in self._parameters_logic.parameters:
@@ -1472,16 +1472,16 @@ class Sample(QObject):
             dep_param_names.append(parameter['name'])
         return dep_param_names
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def constraintParametersMetadata(self) -> list[dict[str, Any]]:
         return self._parameters_logic.constraint_metadata()
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def relationOperators(self) -> list[dict[str, str]]:
         return self._parameters_logic.constraint_relations()
 
-    @Property('QVariantList', notify=layersChange)
-    def arithmicOperators(self) -> list[str]:
+    @Property('QVariantList', notify=layersChanged)
+    def arithmeticOperators(self) -> list[str]:
         return self._parameters_logic.constraint_arithmetic()
 
     @Property('QVariantList', notify=constraintsChanged)
@@ -1593,13 +1593,13 @@ class Sample(QObject):
     def _emit_constraints_changed(self) -> None:
         """Constraints move parameter values, so the curves and tables change too.
 
-        `layersChange` already forwards (coalesced) to `constraintsChanged`, so
+        `layersChanged` already forwards (coalesced) to `constraintsChanged`, so
         it is not emitted here as well — that would evaluate the expensive
         constraints list twice per change.
         """
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
-        self.layersChange.emit()
+        self.layersChanged.emit()
 
     @Property(int, notify=constraintsChanged)
     def inequalityConstraintsCount(self) -> int:
@@ -1623,12 +1623,6 @@ class Sample(QObject):
     @Slot(int)
     def removeConstraintByIndex(self, index: int) -> None:
         """Remove constraint by index by making the parameter independent."""
-        if not isinstance(index, int):
-            try:
-                index = int(index)
-            except (TypeError, ValueError):
-                return
-
         constraints_list = self.constraintsList
         if not 0 <= index < len(constraints_list):
             return
@@ -2055,7 +2049,7 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
 
     @Slot(int)
-    def setQElements(self, new_value: float) -> None:
+    def setQElements(self, new_value: int) -> None:
         if self._project_logic.set_q_resolution(new_value):
             self.qRangeChanged.emit()
             self.externalRefreshPlot.emit()

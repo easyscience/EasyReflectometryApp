@@ -139,6 +139,7 @@ class Summary:
         """
         calculator = model.interface()
         if channel is None:
+            # `reflectity_profile` (sic) is the calculator's own method name.
             return np.asarray(
                 calculator.reflectity_profile(x, model.unique_name, resolution_function=resolution_function)
             )

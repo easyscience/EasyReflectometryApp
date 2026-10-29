@@ -70,9 +70,9 @@ class Project:
     def q_min(self) -> float:
         return self._project_lib.q_min
 
-    def set_q_min(self, new_value: str) -> None:
-        if float(new_value) != self._project_lib.q_min:
-            self._project_lib.q_min = float(new_value)
+    def set_q_min(self, new_value: float) -> bool:
+        if new_value != self._project_lib.q_min:
+            self._project_lib.q_min = new_value
             return True
         return False
 
@@ -80,9 +80,9 @@ class Project:
     def q_max(self) -> float:
         return self._project_lib.q_max
 
-    def set_q_max(self, new_value: str) -> None:
-        if float(new_value) != self._project_lib.q_max:
-            self._project_lib.q_max = float(new_value)
+    def set_q_max(self, new_value: float) -> bool:
+        if new_value != self._project_lib.q_max:
+            self._project_lib.q_max = new_value
             return True
         return False
 
@@ -90,9 +90,9 @@ class Project:
     def q_resolution(self) -> int:
         return self._project_lib.q_resolution
 
-    def set_q_resolution(self, new_value: str) -> None:
-        if float(new_value) != self._project_lib.q_resolution:
-            self._project_lib.q_resolution = int(new_value)
+    def set_q_resolution(self, new_value: int) -> bool:
+        if new_value != self._project_lib.q_resolution:
+            self._project_lib.q_resolution = new_value
             return True
         return False
 

@@ -47,16 +47,16 @@ def test_assemblies_add_new_and_type_transitions(monkeypatch):
 
     assert logic.set_type_at_current_index('Repeating Multi-layer') is True
     assert isinstance(logic._assemblies[0], FakeRepeatingMultilayer)
-    assert logic.repetitions_at_current_index == '1'
-    assert logic.set_repeated_layer_reptitions(5) is True
-    assert logic.repetitions_at_current_index == '5'
+    assert logic.repetitions_at_current_index == 1
+    assert logic.set_repeated_layer_repetitions(5) is True
+    assert logic.repetitions_at_current_index == 5
 
     assert logic.set_type_at_current_index('Surfactant Layer') is True
     assert isinstance(logic._assemblies[0], FakeSurfactantLayer)
     assert logic._assemblies[0].layers[0].solvent.name == 'Air'
     assert logic._assemblies[0].layers[1].solvent.name == 'D2O'
-    assert logic.set_constrain_apm('True') is True
-    assert logic.set_conformal_roughness('True') is True
+    assert logic.set_constrain_apm(True) is True
+    assert logic.set_conformal_roughness(True) is True
 
 
 def test_assemblies_add_new_inserts_after_current_row_and_keeps_subphase_last(monkeypatch):
@@ -144,7 +144,7 @@ def test_assemblies_duplicate_move_and_remove(monkeypatch):
     logic.move_selected_down()
     assert project.current_assembly_index == 1
 
-    logic.remove_at_index('2')
+    logic.remove_at_index(2)
     assert len(logic._assemblies) == 2
 
 

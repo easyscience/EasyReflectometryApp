@@ -734,7 +734,7 @@ class TestStructuralEditsDetachCutOffConstraints:
         assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
         assert thickness.value == pytest.approx(60.0)
 
-        backend.removeAssembly('2')  # Film B
+        backend.removeAssembly(2)  # Film B
 
         assert thickness.independent is True
         assert thickness.value == pytest.approx(60.0)  # keeps the value the constraint gave it
@@ -750,7 +750,7 @@ class TestStructuralEditsDetachCutOffConstraints:
         project, backend = project_and_backend
         sld = self._constrain_film_a_sld_to_substrate(project, backend)
 
-        backend.removeAssembly('1')  # Film A
+        backend.removeAssembly(1)  # Film A
 
         assert sld.independent is True
         assert not hasattr(sld, sample_module.USER_CONSTRAINT_FLAG)
@@ -765,7 +765,7 @@ class TestStructuralEditsDetachCutOffConstraints:
         assert any(dependency is b2_thickness for dependency in thickness.dependency_map.values())
 
         backend.setCurrentAssemblyIndex(2)
-        backend.removeLayer('1')  # B2
+        backend.removeLayer(1)  # B2
 
         assert thickness.independent is True
         assert _equality_rows(backend) == []
@@ -810,7 +810,7 @@ class TestStructuralEditsDetachCutOffConstraints:
         film_a_thickness = _dependent_index(backend, 'Film A thickness')
         assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
 
-        backend.removeAssembly('3')  # Surf: neither end of the constraint
+        backend.removeAssembly(3)  # Surf: neither end of the constraint
 
         assert thickness.independent is False
         assert _equality_rows(backend) == [('dynamic', 'Model Film A thickness', '=', 'Model Film B thickness * 2')]

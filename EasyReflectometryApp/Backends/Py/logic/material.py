@@ -79,8 +79,8 @@ class Material:
     def material_names(self) -> list[str]:
         return [element['label'] for element in self.materials]
 
-    def remove_at_index(self, value: str) -> None:
-        self._materials.pop(int(value))
+    def remove_at_index(self, index: int) -> None:
+        self._materials.pop(index)
 
     def add_new(self) -> None:
         # A material added from the GUI is a density material, so that the Material editor's

@@ -113,7 +113,7 @@ class TestSuperphaseLayerEdits:
         backend.addNewLayer()
         successor = project.models[0].sample[0].layers[1]
 
-        backend.removeLayer('0')
+        backend.removeLayer(0)
 
         assert project.models[0].sample[0].layers[0] is successor
         assert _flags(successor) == (False, False)

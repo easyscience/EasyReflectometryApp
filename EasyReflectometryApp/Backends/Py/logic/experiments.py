@@ -123,7 +123,7 @@ class Experiments:
     def current_index(self) -> int:
         return self._project_lib._current_experiment_index
 
-    def set_current_index(self, new_value: int) -> None:
+    def set_current_index(self, new_value: int) -> bool:
         if new_value != self._project_lib._current_experiment_index:
             self._project_lib._current_experiment_index = new_value
             return True
