@@ -11,6 +11,7 @@ from asteval import Interpreter
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.constraints import USER_CONSTRAINT_FLAG
 from easyreflectometry.constraints import constrain
+from easyreflectometry.contrasts import follows
 from easyreflectometry.inequality_constraints import InequalitySpec
 from easyreflectometry.inequality_constraints import check_units
 from easyreflectometry.inequality_constraints import evaluate_spec
@@ -21,6 +22,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import QTimer
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
+from PySide6.QtQml import QJSValue
 
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
@@ -1492,6 +1494,8 @@ class Sample(QObject):
         display_by_object = {id(entry['object']): entry['display_name'] for entry in context}
         owned = self._physics_constraints_logic.owned_parameters()
         recipe_rows: dict[tuple, dict[str, Any]] = {}
+        linked = self._linked_followers()
+        link_rows: dict[int, dict[str, Any]] = {}
 
         for entry in context:
             parameter_obj = entry['object']
@@ -1521,6 +1525,32 @@ class Sample(QObject):
                         'members': [],
                     }
                 recipe_rows[key]['members'].append(entry['display_name'])
+                continue
+            link_index = linked.get(id(parameter_obj))
+            if link_index is not None:
+                # One row per model link instead of one per tied parameter.
+                if link_index not in link_rows:
+                    record = self._project_lib.links[link_index]
+                    link_rows[link_index] = {
+                        'dependentName': record.follower.name,
+                        'uniqueName': f'link:{link_index}',
+                        'linkIndex': link_index,
+                        'referenceName': record.reference.name,
+                        'expression': '',
+                        'rawExpression': '',
+                        'relation': '',
+                        'type': 'link',
+                        'enabled': True,
+                        'satisfied': True,
+                        'count': 0,
+                        'members': [],
+                        'pairs': [],
+                    }
+                link_row = link_rows[link_index]
+                link_row['members'].append(entry['display_name'])
+                link_row['pairs'].append(
+                    {'name': entry['display_name'], 'uniqueName': getattr(parameter_obj, 'unique_name', '') or ''}
+                )
                 continue
             state = self._resolve_constraint_state(parameter_obj, display_lookup, display_by_object)
             if state is None:
@@ -1555,9 +1585,26 @@ class Sample(QObject):
                 }
             )
 
+        for link_index in sorted(link_rows):
+            link_row = link_rows[link_index]
+            count = len(link_row['pairs'])
+            link_row['count'] = count
+            link_row['expression'] = f"linked to {link_row['referenceName']} ({count} tied parameter(s))"
+            link_row['rawExpression'] = link_row['expression']
+            constraints.append(link_row)
         constraints.extend(recipe_rows.values())
         constraints.extend(self._inequality_constraint_rows(display_lookup))
         return constraints
+
+    def _linked_followers(self) -> Dict[int, int]:
+        """``{id(follower parameter): index in Project.links}`` for the ties model links made
+        that still hold; a follower the user constrained otherwise since is listed on its own."""
+        linked: Dict[int, int] = {}
+        for link_index, record in enumerate(getattr(self._project_lib, 'links', [])):
+            for follower, reference, _ in record.pairs:
+                if follows(follower, reference):
+                    linked[id(follower)] = link_index
+        return linked
 
     # ----- physics-constraint recipes -----
 
@@ -1639,6 +1686,16 @@ class Sample(QObject):
                     'Removing physics constraint %s failed: %s', row.get('recipeId'), result.get('message', '')
                 )
             return
+        if row.get('type') == 'link':
+            links = self._project_lib.links
+            link_index = int(row['linkIndex'])
+            if 0 <= link_index < len(links):
+                for pair in row.get('pairs', []):
+                    self._constraint_states.pop(pair.get('uniqueName'), None)
+                # Every follower gets back its state from before the link.
+                self._project_lib.unlink(links[link_index])
+                self._emit_constraints_changed()
+            return
 
         # Resolve by unique_name (parameter identity), not display name, so two
         # parameters sharing a display name don't collide (issue #328).
@@ -1659,6 +1716,17 @@ class Sample(QObject):
             self._project_lib.detach(param_obj)
         else:
             self._ensure_parameter_independent(param_obj)
+        self._emit_constraints_changed()
+
+    @Slot(str)
+    def removeLinkedParameter(self, unique_name: str) -> None:
+        """Remove one tie of a model link (a ``pairs`` entry of a ``'link'`` row); the parameter
+        gets back its state from before the link and the rest of the link stays."""
+        param_obj = self._find_parameter_object_by_unique_name(unique_name)
+        if param_obj is None or id(param_obj) not in self._linked_followers():
+            return
+        self._constraint_states.pop(unique_name, None)
+        self._project_lib.detach(param_obj)
         self._emit_constraints_changed()
 
     def _find_parameter_object_by_unique_name(self, unique_name: str):
@@ -1976,29 +2044,107 @@ class Sample(QObject):
 
     @Slot('QVariantList', bool, result='QVariant')
     def constrainModelsParameters(self, model_indices: list, tie_materials: bool = False) -> dict:
-        """Tie the parameters of the selected models to those of the first one (the lowest index).
+        """Tie every tieable parameter of the selected models to the first one (the lowest index).
 
-        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``):
-        scale and background stay per model; material chemistry (SLDs, densities, scattering
-        lengths) is tied only with `tie_materials`, since contrasts usually differ in it.
-        Ties are listed with the other constraints; removing one restores the parameter.
+        The one-step form of :meth:`linkModels`, without a reference choice or a deselection.
 
         :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
+        """
+        return self.linkModels(model_indices, -1, tie_materials, None)
+
+    def _plan_model_links(self, model_indices: list, reference_index: int) -> Tuple[int, list, list[str]]:
+        """``(reference, [(follower, plan), ...], messages)`` for tying the selected models to one.
+
+        A `reference_index` below 0 picks the lowest selected index. Chemistry rows are left
+        ``'undecided'``, so the caller decides them; nothing is changed.
         """
         indices = sorted({int(index) for index in model_indices})
         models = self._project_lib.models
         if len(indices) < 2 or not all(0 <= index < len(models) for index in indices):
-            return {'tied': 0, 'messages': [self.tr('Select at least two models.')]}
-        reference, plans, messages = indices[0], [], []
-        materials = 'tie' if tie_materials else 'skip'
-        # One action: every follower is planned first, and linked only if all of them can be.
-        for follower in indices[1:]:
+            return -1, [], [self.tr('Select at least two models.')]
+        reference = int(reference_index)
+        if reference < 0:
+            reference = indices[0]
+        if reference not in indices:
+            return -1, [], [self.tr('The reference model must be one of the selected models.')]
+        plans, messages = [], []
+        for follower in indices:
+            if follower == reference:
+                continue
             try:
-                plans.append((follower, self._project_lib.plan_link(follower, reference, materials=materials)))
+                plans.append((follower, self._project_lib.plan_link(follower, reference)))
             except ValueError as error:
                 messages.append(str(error))
+        return reference, plans, messages
+
+    @staticmethod
+    def _link_row_key(follower: int, path: str) -> str:
+        return f'{follower}:{path}'
+
+    @Slot('QVariantList', int, bool, result='QVariant')
+    def planModelLink(self, model_indices: list, reference_index: int, tie_materials: bool = False) -> dict:
+        """What :meth:`linkModels` would tie, row by row, for the GUI to preview; nothing is changed.
+
+        Each row is one parameter of a follower model: ``selectable`` rows can be ticked or
+        unticked, ``selected`` is the default (every tieable row; chemistry rows only with
+        `tie_materials`), and the others carry the ``reason`` they cannot be tied.
+
+        :return: ``{'reference': index, 'rows': [...], 'messages': [...]}``.
+        """
+        reference, plans, messages = self._plan_model_links(model_indices, reference_index)
+        models = self._project_lib.models
+        display = {id(entry['object']): entry['display_name'] for entry in self._parameters_logic.constraint_context()}
+        rows = []
+        for follower, plan in plans:
+            for row in plan.rows:
+                selectable = row.action in ('tie', 'undecided')
+                rows.append(
+                    {
+                        'key': self._link_row_key(follower, row.path),
+                        'follower': follower,
+                        'followerName': models[follower].name,
+                        'path': row.path,
+                        'name': display.get(id(row.follower), row.path),
+                        'action': row.action,
+                        'reason': row.reason,
+                        'selectable': selectable,
+                        'selected': row.action == 'tie' or (row.action == 'undecided' and bool(tie_materials)),
+                    }
+                )
+        return {'reference': reference, 'rows': rows, 'messages': messages}
+
+    @Slot('QVariantList', int, bool, 'QVariant', result='QVariant')
+    def linkModels(self, model_indices: list, reference_index: int, tie_materials: bool = False, selected_keys=None) -> dict:
+        """Tie the parameters of the selected models to those of the reference model.
+
+        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``):
+        scale and background stay per model; material chemistry (SLDs, densities, scattering
+        lengths) is tied only with `tie_materials`, since contrasts usually differ in it.
+        With `selected_keys` (the ``key`` values of :meth:`planModelLink` rows), exactly the
+        listed rows are tied and every other one is skipped; ``None`` ties the default rows.
+        Each link is listed as one constraint row; removing it restores the parameters.
+
+        :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
+        """
+        reference, plans, messages = self._plan_model_links(model_indices, reference_index)
         if messages:
-            return {'tied': 0, 'messages': messages + [self.tr('No model was linked.')]}
+            return {'tied': 0, 'messages': messages + ([self.tr('No model was linked.')] if reference >= 0 else [])}
+        if isinstance(selected_keys, QJSValue):  # a JS array handed over by QML
+            selected_keys = selected_keys.toVariant()
+        selected = None if selected_keys is None else {str(key) for key in selected_keys}
+        for follower, plan in plans:
+            for row in plan.rows:
+                if row.action not in ('tie', 'undecided'):
+                    continue
+                if selected is not None:
+                    ticked = self._link_row_key(follower, row.path) in selected
+                else:
+                    ticked = row.action == 'tie' or bool(tie_materials)
+                row.action = 'tie' if ticked else 'skip'
+        plans = [(follower, plan) for follower, plan in plans if any(row.action == 'tie' for row in plan.rows)]
+        if not plans:
+            return {'tied': 0, 'messages': [self.tr('No parameter is selected to tie.')]}
+        # One action: every follower was planned first, and is linked only if all of them can be.
         records = []
         try:
             for _, plan in plans:
@@ -2007,6 +2153,7 @@ class Sample(QObject):
             for record in records:
                 self._project_lib.unlink(record)
             return {'tied': 0, 'messages': [str(error), self.tr('No model was linked.')]}
+        models = self._project_lib.models
         for follower, plan in plans:
             conflicts = [row for row in plan.rows if row.action == 'conflict']
             messages.extend(f"'{models[follower].name}' {row.path}: {row.reason}" for row in conflicts)

@@ -139,18 +139,137 @@ class TestLinkModels:
         assert list(film.thickness.dependency_map.values()) == [reference.sample[1].layers[0].thickness]
         assert film.material.sld.independent
 
-    def test_removing_a_linked_row_restores_the_parameter(self, project_and_sample):
+    def test_a_link_is_listed_as_one_row(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        result = sample.constrainModelsParameters([0, 1], False)
+
+        rows = sample.constraintsList
+        links = [row for row in rows if row['type'] == 'link']
+        assert len(links) == 1
+        assert links[0]['count'] == result['tied'] == len(links[0]['pairs'])
+        assert links[0]['dependentName'] == project.models[1].name
+        assert links[0]['referenceName'] == project.models[0].name
+        tied = {pair['uniqueName'] for pair in links[0]['pairs']}
+        assert not any(row.get('uniqueName') in tied for row in rows if row['type'] != 'link')
+
+    def test_removing_the_link_row_restores_every_parameter(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        film.thickness.value = 120.0
+        film.roughness.value = 4.5
+        sample.constrainModelsParameters([0, 1], False)
+        index = next(i for i, row in enumerate(sample.constraintsList) if row['type'] == 'link')
+
+        sample.removeConstraintByIndex(index)
+
+        assert film.thickness.independent and film.roughness.independent
+        assert film.thickness.value == pytest.approx(120.0)
+        assert film.roughness.value == pytest.approx(4.5)
+        assert project.links == []
+
+    def test_removing_one_tie_of_a_link_keeps_the_others(self, project_and_sample):
         project, sample = project_and_sample
         project.models.duplicate_model(0)
         film = project.models[1].sample[1].layers[0]
         film.thickness.value = 120.0
         sample.constrainModelsParameters([0, 1], False)
-        index = next(i for i, row in enumerate(sample.constraintsList) if row.get('uniqueName') == film.thickness.unique_name)
 
-        sample.removeConstraintByIndex(index)
+        sample.removeLinkedParameter(film.thickness.unique_name)
 
         assert film.thickness.independent
         assert film.thickness.value == pytest.approx(120.0)
+        assert not film.roughness.independent
+        (link,) = [row for row in sample.constraintsList if row['type'] == 'link']
+        assert film.thickness.unique_name not in {pair['uniqueName'] for pair in link['pairs']}
+
+    def test_the_plan_lists_every_row_with_its_default(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+
+        plan = sample.planModelLink([0, 1], -1, False)
+
+        assert plan['reference'] == 0 and plan['messages'] == []
+        rows = {row['path']: row for row in plan['rows']}
+        thickness = rows['sample/1/layers/0/thickness']
+        assert thickness['selectable'] and thickness['selected'] and thickness['follower'] == 1
+        sld = rows['sample/1/layers/0/material/sld']
+        assert sld['action'] == 'undecided' and sld['selectable'] and not sld['selected']
+        assert not rows['scale']['selectable'] and rows['scale']['reason'] == 'per contrast'
+        assert {row['path']: row['selected'] for row in sample.planModelLink([0, 1], -1, True)['rows']}[
+            'sample/1/layers/0/material/sld'
+        ]
+        assert film.thickness.independent  # planning changes nothing
+        assert project.links == []
+
+    def test_unticked_rows_stay_free(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        plan = sample.planModelLink([0, 1], -1, False)
+        keys = [row['key'] for row in plan['rows'] if row['selected'] and not row['path'].endswith('/thickness')]
+
+        result = sample.linkModels([0, 1], -1, False, keys)
+
+        assert result['tied'] == len(keys)
+        assert film.thickness.independent
+        assert not film.roughness.independent
+
+    def test_keys_handed_over_by_qml_are_unwrapped(self, project_and_sample):
+        import json
+
+        from PySide6.QtQml import QJSEngine
+
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        plan = sample.planModelLink([0, 1], -1, False)
+        keys = [row['key'] for row in plan['rows'] if row['path'] == 'sample/1/layers/0/roughness']
+        engine = QJSEngine()
+
+        result = sample.linkModels([0, 1], -1, False, engine.evaluate(json.dumps(keys)))
+
+        assert result['tied'] == 1
+        assert not film.roughness.independent and film.thickness.independent
+
+    def test_a_ticked_material_row_is_tied_without_tie_materials(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        plan = sample.planModelLink([0, 1], -1, False)
+        key = next(row['key'] for row in plan['rows'] if row['path'] == 'sample/1/layers/0/material/sld')
+
+        sample.linkModels([0, 1], -1, False, [key])
+
+        assert list(film.material.sld.dependency_map.values()) == [project.models[0].sample[1].layers[0].material.sld]
+        assert film.thickness.independent
+
+    def test_the_reference_model_can_be_chosen(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        first, second = (model.sample[1].layers[0] for model in project.models)
+
+        assert sample.linkModels([0, 1], 1, False, None)['tied'] > 0
+
+        assert list(first.thickness.dependency_map.values()) == [second.thickness]
+        assert second.thickness.independent
+
+    def test_the_reference_must_be_selected(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        project.models.duplicate_model(0)
+        result = sample.linkModels([0, 1], 2, False, None)
+        assert result['tied'] == 0 and 'reference' in result['messages'][0]
+        assert project.links == []
+
+    def test_nothing_ticked_links_nothing(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        result = sample.linkModels([0, 1], -1, False, [])
+        assert result['tied'] == 0 and result['messages']
+        assert project.links == []
 
     def test_different_layouts_are_reported(self, project_and_sample):
         project, sample = project_and_sample
