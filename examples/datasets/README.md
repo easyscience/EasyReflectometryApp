@@ -190,19 +190,21 @@ being added with **Add contrast**.
    `Si`, `SiO2` and `Film`, so that it shares them with the D2O model, and `CMSi`
    for the subphase.
 4. *Sample › Advanced › Link contrasts*: tick the D2O model and `Film in CMSi`,
-   leave **Also tie material SLDs and densities** unticked, and press **Link
-   selected models**: "5 parameter(s) tied." These are the oxide and film
-   thicknesses and roughnesses, and the subphase roughness. The shared materials
-   need no tie, and the CMSi SLD stays its own. The five ties are listed in the
-   *Model Constraints* table.
+   keep the D2O model as **Reference model**, and leave **Also tie material SLDs
+   and densities** unticked. The preview ticks the oxide and film thicknesses and
+   roughnesses, and the subphase roughness; the water SLD is listed unticked. The
+   shared materials need no tie, and the CMSi SLD stays its own. Press **Link
+   selected models**: "5 parameter(s) tied." The link is one row of the *Model
+   links* table, and its five ties are listed below it.
 5. Continue with steps 3 and 4 above, pairing the CMSi experiment with
    `Film in CMSi`. The fit is the same as with **Add contrast**: oxide 15.2 Å,
    film 80.0 Å, SLD 2.00, roughness 5.0 Å, scales 0.99 / 0.95 / 0.98, pooled
    reduced χ² 0.89.
-6. Remove one of the rows from the *Model Constraints* table: the parameter it
-   names is free again in `Film in CMSi`, with the value and bounds it had before
-   the link. (The oxide and film rows read alike, since a layer parameter is
-   named after its assembly, `Loaded layer`.)
+6. Select the link in *Model links* and remove one parameter from *Tied
+   parameters of link 1*: it is free again in `Film in CMSi`, with the value and
+   bounds it had before the link, and the other ties stay. (The oxide and film
+   rows read alike, since a layer parameter is named after its assembly,
+   `Loaded layer`.)
 
 
 ## 6. `dppc_contrasts.ort` — multiple contrasts of a monolayer (advanced)

@@ -34,6 +34,7 @@ EaElements.GroupBox {
         switch (type) {
         case 'inequality': return qsTr("≤ ≥")
         case 'recipe': return qsTr("physics")
+        case 'link': return qsTr("link")
         case 'lower_bound':
         case 'upper_bound': return qsTr("bound")
         case 'static': return qsTr("value")
@@ -242,7 +243,7 @@ EaElements.GroupBox {
         EaElements.TextArea {
             id: expressionEditor
             width: parent.width
-            placeholderText: qsTr("Enter expression, e.g. np.sqrt(1 / sld_ni) + 4")
+            placeholderText: qsTr("Enter expression, e.g. 2 * model_d2o_roughness")
             wrapMode: TextEdit.WrapAnywhere
             selectByMouse: true
             onTextChanged: constraintsGroup.scheduleValidation()
@@ -457,6 +458,12 @@ EaElements.GroupBox {
                                 const members = constraint.members && constraint.members.length
                                               ? "\n" + constraint.members.join(", ") : ""
                                 return qsTr("Physics constraint: %1 tied parameter(s)").arg(constraint.count || 0) + members
+                            }
+                            if (constraint.type === 'link') {
+                                // Single ties of a link are removed under "Link contrasts".
+                                const linked = constraint.members && constraint.members.length
+                                             ? "\n" + constraint.members.join(", ") : ""
+                                return qsTr("Model link: %1 tied parameter(s)").arg(constraint.count || 0) + linked
                             }
                             return qsTr("Equality constraint")
                         }

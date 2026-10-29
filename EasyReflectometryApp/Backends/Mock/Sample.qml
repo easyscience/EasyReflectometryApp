@@ -451,6 +451,28 @@ QtObject {
         }
     }
 
+    // Model links (contrasts tied to a reference model)
+    function planModelLink(modelIndices, referenceIndex, tieMaterials) {
+        console.debug(`planModelLink ${modelIndices} ${referenceIndex} ${tieMaterials}`)
+        const reference = referenceIndex >= 0 ? referenceIndex : Math.min.apply(null, modelIndices)
+        var rows = []
+        for (const follower of modelIndices) {
+            if (follower === reference) continue
+            rows.push({ key: `${follower}:sample/1/layers/0/thickness`, path: 'sample/1/layers/0/thickness',
+                        name: 'Film thickness', action: 'tie', reason: '', selectable: true, selected: true })
+            rows.push({ key: `${follower}:sample/1/layers/0/material/sld`, path: 'sample/1/layers/0/material/sld',
+                        name: 'Film sld', action: 'undecided', reason: 'material chemistry', selectable: true, selected: tieMaterials })
+            rows.push({ key: `${follower}:scale`, path: 'scale',
+                        name: 'scale', action: 'skip', reason: 'per contrast', selectable: false, selected: false })
+        }
+        return { reference: reference, rows: rows, messages: [] }
+    }
+    function linkModels(modelIndices, referenceIndex, selectedKeys) {
+        console.debug(`linkModels ${modelIndices} ${referenceIndex} ${selectedKeys}`)
+        return { tied: selectedKeys.length, messages: [] }
+    }
+    function removeLinkedParameter(uniqueName) { console.debug(`removeLinkedParameter ${uniqueName}`) }
+
     // Inequality constraints (BUMPS-only fit penalties)
     readonly property int inequalityConstraintsCount: 0
     readonly property var violatedInequalityConstraints: []

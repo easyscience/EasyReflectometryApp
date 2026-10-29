@@ -321,7 +321,9 @@ QtObject {
     function sampleValidateConstraintExpression(index, relation, expression) { return activeBackend.sample.validateConstraintExpression(index, relation, expression) }
     function sampleAddConstraint(index, relation, expression) { return activeBackend.sample.addConstraint(index, relation, expression) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
-    function sampleConstrainModelsParameters(modelIndices, tieMaterials) { return activeBackend.sample.constrainModelsParameters(modelIndices, tieMaterials) }
+    function samplePlanModelLink(modelIndices, referenceIndex, tieMaterials) { return activeBackend.sample.planModelLink(modelIndices, referenceIndex, tieMaterials) }
+    function sampleLinkModels(modelIndices, referenceIndex, selectedKeys) { return activeBackend.sample.linkModels(modelIndices, referenceIndex, selectedKeys) }
+    function sampleRemoveLinkedParameter(uniqueName) { activeBackend.sample.removeLinkedParameter(uniqueName) }
 
     // Inequality constraints (BUMPS-only fit penalties) and physics-constraint recipes
     readonly property int sampleInequalityConstraintsCount: activeBackend.sample.inequalityConstraintsCount

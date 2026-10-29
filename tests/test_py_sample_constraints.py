@@ -502,16 +502,16 @@ class TestEqualityConstraintPersistence:
         project, backend = project_and_backend
         project.models.duplicate_model(0)
         assert backend.constrainModelsParameters([0, 1])['tied']
-        # The library's ties are listed from the parameters themselves
-        linked = [row for row in backend.constraintsList if row['type'] == 'dynamic']
-        assert linked
+        # The library's ties are listed as one row per link
+        linked = [row for row in backend.constraintsList if row['type'] == 'link']
+        assert len(linked) == 1 and linked[0]['count'] > 0
 
         reloaded, reloaded_backend, _ = _save_and_reload(project, backend)
 
-        reloaded_linked = [row for row in reloaded_backend.constraintsList if row['type'] == 'dynamic']
-        assert sorted((row['dependentName'], row['expression']) for row in reloaded_linked) == sorted(
-            (row['dependentName'], row['expression']) for row in linked
-        )
+        reloaded_linked = [row for row in reloaded_backend.constraintsList if row['type'] == 'link']
+        assert [(row['dependentName'], row['expression'], sorted(row['members'])) for row in reloaded_linked] == [
+            (row['dependentName'], row['expression'], sorted(row['members'])) for row in linked
+        ]
         reloaded.models[0].sample[1].layers[0].thickness.value = 33.0
         assert reloaded.models[1].sample[1].layers[0].thickness.value == pytest.approx(33.0)
 
