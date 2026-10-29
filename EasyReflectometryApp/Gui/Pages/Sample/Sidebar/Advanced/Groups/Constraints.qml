@@ -198,7 +198,7 @@ EaElements.GroupBox {
                 width: Math.max(0, parameterRow.width - relationalOperator.width - parameterRow.spacing)
                 currentIndex: -1
                 displayText: currentIndex === -1 ? qsTr("Select dependent parameter") : currentText
-                model: Globals.BackendWrapper.sampleDepParameterNames
+                model: Globals.BackendWrapper.sampleConstrainableParameterNames
                 onCurrentIndexChanged: constraintsGroup.scheduleValidation()
             }
 

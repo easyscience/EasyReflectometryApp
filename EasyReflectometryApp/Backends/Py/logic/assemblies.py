@@ -177,22 +177,5 @@ class Assemblies:
 
 
 def _from_assemblies_collection_to_list_of_dicts(assemblies_collection: Sample) -> list[dict[str, str]]:
-    assemblies_list = []
-    for assembly in assemblies_collection:
-        assemblies_list.append(
-            {
-                'label': assembly.name,
-                'type': assembly.type,
-                'repetitions': 1,
-                'constrain_apm': 'False',
-                'conformal_roughness': 'False',
-            }
-        )
-        if isinstance(assembly, RepeatingMultilayer):
-            assemblies_list[-1]['repetitions'] = assembly.repetitions
-
-        if isinstance(assembly, SurfactantLayer):
-            assemblies_list[-1]['constrain_apm'] = assembly.constrain_area_per_molecule
-            assemblies_list[-1]['conformal_roughness'] = assembly.conformal_roughness
-
-    return assemblies_list
+    # Repetitions and the surfactant flags have their own current-index properties.
+    return [{'label': assembly.name, 'type': assembly.type} for assembly in assemblies_collection]

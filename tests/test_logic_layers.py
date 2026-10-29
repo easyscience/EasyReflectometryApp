@@ -26,8 +26,8 @@ def test_from_layers_collection_to_list_of_dicts_mirrors_parameter_enablement(mo
     )
 
     regular = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
-    assert regular[0]['thickness_enabled'] == 'True'
-    assert regular[0]['roughness_enabled'] == 'True'
+    assert regular[0]['thickness_enabled'] is True
+    assert regular[0]['roughness_enabled'] is True
     assert regular[0]['formula'] == 'C12H25'
     assert regular[0]['apm'] == '44.0'
     assert regular[0]['solvent'] == 'Water'
@@ -36,13 +36,21 @@ def test_from_layers_collection_to_list_of_dicts_mirrors_parameter_enablement(mo
     layer.thickness.enabled = False
     layer.roughness.enabled = False
     superphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
-    assert superphase[0]['thickness_enabled'] == 'False'
-    assert superphase[0]['roughness_enabled'] == 'False'
+    assert superphase[0]['thickness_enabled'] is False
+    assert superphase[0]['roughness_enabled'] is False
 
     layer.roughness.enabled = True
     subphase = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))
-    assert subphase[0]['thickness_enabled'] == 'False'
-    assert subphase[0]['roughness_enabled'] == 'True'
+    assert subphase[0]['thickness_enabled'] is False
+    assert subphase[0]['roughness_enabled'] is True
+
+
+def test_from_layers_collection_to_list_of_dicts_gives_plain_layers_no_apm_placeholders():
+    layer = make_layer(name='Film', material=make_material('Si'))
+
+    row = layers_module._from_layers_collection_to_list_of_dicts(make_layer_collection(layer))[0]
+
+    assert set(row) == {'label', 'roughness', 'thickness', 'material', 'thickness_enabled', 'roughness_enabled'}
 
 
 def test_layers_add_new_creates_si_material_when_missing(monkeypatch):
@@ -58,11 +66,14 @@ def test_layers_add_new_creates_si_material_when_missing(monkeypatch):
     project.current_assembly_index = 1
     logic = layers_module.Layers(project)
 
-    logic.add_new()
+    assert logic.add_new() is True
 
     assert [material.name for material in project._materials] == ['Air', 'D2O', 'Si']
     assert logic._layers[-1].material.name == 'Si'
     assert logic._layers[-1].name == 'Si Layer'
+
+    assert logic.add_new() is False  # Si exists now and is reused
+    assert [material.name for material in project._materials] == ['Air', 'D2O', 'Si']
 
 
 def test_layers_move_duplicate_and_setters_update_current_layer(monkeypatch):

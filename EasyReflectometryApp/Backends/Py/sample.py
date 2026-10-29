@@ -632,7 +632,7 @@ class Sample(QObject):
         self._clearCacheAndEmitLayersChanged()
 
     @Property('QVariantList', notify=layersChanged)
-    def layers(self) -> list[dict[str, str]]:
+    def layers(self) -> list[dict[str, str | bool]]:
         if self._cached_layers is None:
             self._cached_layers = self._layers_logic.layers
         return self._cached_layers
@@ -783,7 +783,8 @@ class Sample(QObject):
 
     @Slot()
     def addNewLayer(self) -> None:
-        self._layers_logic.add_new()
+        if self._layers_logic.add_new():
+            self.materialsTableChanged.emit()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
@@ -1108,11 +1109,11 @@ class Sample(QObject):
     def _format_numeric(value: float) -> str:
         return f'{value:.6g}'
 
-    def _get_independent_parameter_entries(self) -> list[dict]:
-        """Return the filtered list of independent+enabled parameter entries.
+    def _constrainable_parameter_entries(self) -> list[dict]:
+        """The parameters a new constraint can make dependent: independent and enabled.
 
-        This must match the same filtering as dependentParameterNames so that
-        the QML dropdown index maps to the correct parameter object.
+        ``constrainableParameterNames`` lists their names, so an index into the
+        QML dropdown is an index into this list.
         """
         entries = []
         for parameter in self._parameters_logic.parameters:
@@ -1129,7 +1130,7 @@ class Sample(QObject):
         relation_operator: str,
         expression: str,
     ) -> dict[str, Any]:
-        independent_entries = self._get_independent_parameter_entries()
+        independent_entries = self._constrainable_parameter_entries()
         if dependent_index < 0 or dependent_index >= len(independent_entries):
             raise ValueError('Select a dependent parameter before defining a constraint.')
 
@@ -1463,15 +1464,8 @@ class Sample(QObject):
         return enabled_param_names
 
     @Property('QVariantList', notify=layersChanged)
-    def dependentParameterNames(self) -> list[str]:
-        dep_param_names = []
-        for parameter in self._parameters_logic.parameters:
-            if not parameter['independent']:
-                continue
-            if hasattr(parameter['object'], 'enabled') and not parameter['object'].enabled:
-                continue
-            dep_param_names.append(parameter['name'])
-        return dep_param_names
+    def constrainableParameterNames(self) -> list[str]:
+        return [parameter['name'] for parameter in self._constrainable_parameter_entries()]
 
     @Property('QVariantList', notify=layersChanged)
     def constraintParametersMetadata(self) -> list[dict[str, Any]]:
@@ -1963,7 +1957,7 @@ class Sample(QObject):
                 'warning': instruction.get('warning', ''),
             }
 
-        dependent = self._get_independent_parameter_entries()[dependent_index]['object']
+        dependent = self._constrainable_parameter_entries()[dependent_index]['object']
         previous_state = self._capture_parameter_state(dependent)
         self._ensure_parameter_independent(dependent)
 

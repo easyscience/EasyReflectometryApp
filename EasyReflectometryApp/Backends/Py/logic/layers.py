@@ -53,7 +53,7 @@ class Layers:
         return self._layers[self.index].name
 
     @property
-    def layers(self) -> list[dict[str, str]]:
+    def layers(self) -> list[dict[str, str | bool]]:
         return _from_layers_collection_to_list_of_dicts(self._layers)
 
     @property
@@ -66,14 +66,17 @@ class Layers:
         # model's field, acting on nothing; the project fixes those.
         self._project_lib._sync_parameter_states()
 
-    def add_new(self) -> None:
-        if 'Si' not in [material.name for material in self._project_lib._materials]:
+    def add_new(self) -> bool:
+        """Append a Si layer; return whether the Si material had to be added to the project."""
+        material_added = 'Si' not in [material.name for material in self._project_lib._materials]
+        if material_added:
             self._project_lib._materials.add_material(Material(name='Si', sld=2.07, isld=0.0))
         index_si = [material.name for material in self._project_lib._materials].index('Si')
         self._layers.add_layer()
         self._layers[-1].material = self._project_lib._materials[index_si]
         # Set layer name based on material name
         self._layers[-1].name = self._project_lib._materials[index_si].name + ' Layer'
+        return material_added
 
     def duplicate_selected(self) -> None:
         self._layers.duplicate_layer(self.index)
@@ -381,7 +384,7 @@ def _set_parameter_value(parameter, new_value) -> bool:
     return True
 
 
-def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection) -> list[dict[str, str]]:
+def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection) -> list[dict[str, str | bool]]:
     """Convert layers collection to list of dicts.
 
     Editability of thickness and roughness mirrors each parameter's ``enabled``
@@ -389,7 +392,8 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
     in step with the superphase (first layer of the first assembly) and the
     subphase (last layer of the last assembly). Reading the flag rather than
     re-deriving it from the assembly position keeps the table and the
-    parameters in agreement (issue #329).
+    parameters in agreement (issue #329). Only area-per-molecule layers carry
+    ``formula``, ``apm``, ``solvent`` and ``solvation``.
 
     :param layers_collection: The collection of layers.
     """
@@ -401,15 +405,10 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
                 'roughness': str(layer.roughness.value),
                 'thickness': str(layer.thickness.value),
                 'material': layer.material.name,
-                'formula': 'formula',
-                'apm': '0.1',
-                'solvent': 'solvent',
-                'solvation': '0.2',
-                'apm_enabled': 'True',
                 # `enabled` is set on a parameter only once enablement has run
                 # over it; until then it counts as enabled, as in the library.
-                'thickness_enabled': str(bool(getattr(layer.thickness, 'enabled', True))),
-                'roughness_enabled': str(bool(getattr(layer.roughness, 'enabled', True))),
+                'thickness_enabled': bool(getattr(layer.thickness, 'enabled', True)),
+                'roughness_enabled': bool(getattr(layer.roughness, 'enabled', True)),
             }
         )
         if isinstance(layer, LayerAreaPerMolecule):

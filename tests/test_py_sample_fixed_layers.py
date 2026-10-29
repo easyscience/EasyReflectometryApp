@@ -49,8 +49,8 @@ def _assert_only_fixed_layers_disabled(project):
 def _assert_table_matches_parameters(project, backend):
     layers = project.models[0].sample[project.current_assembly_index].layers
     rows = backend.layers
-    assert [row['thickness_enabled'] for row in rows] == [str(_enabled(layer.thickness)) for layer in layers]
-    assert [row['roughness_enabled'] for row in rows] == [str(_enabled(layer.roughness)) for layer in layers]
+    assert [row['thickness_enabled'] for row in rows] == [bool(_enabled(layer.thickness)) for layer in layers]
+    assert [row['roughness_enabled'] for row in rows] == [bool(_enabled(layer.roughness)) for layer in layers]
 
 
 def test_table_treats_a_parameter_without_enablement_as_editable(project_and_backend):
@@ -60,7 +60,7 @@ def test_table_treats_a_parameter_without_enablement_as_editable(project_and_bac
     backend.setCurrentAssemblyIndex(1)
     backend.layersConnectChanges()
 
-    assert backend.layers[0]['thickness_enabled'] == 'True'
+    assert backend.layers[0]['thickness_enabled'] is True
 
 
 class TestSuperphaseLayerEdits:
@@ -153,11 +153,26 @@ class TestSubphaseLayerEdits:
         _assert_table_matches_parameters(project, backend)
 
 
+def test_added_layer_announces_the_si_material_only_when_it_creates_it(project_and_backend):
+    project, backend = project_and_backend
+    backend.setCurrentAssemblyIndex(1)
+    emitted = []
+    backend.materialsTableChanged.connect(lambda: emitted.append(True))
+
+    backend.addNewLayer()  # the default project already has Si
+    assert emitted == []
+
+    next(material for material in project._materials if material.name == 'Si').name = 'Silicon'
+    backend.addNewLayer()
+    assert emitted == [True]
+    assert 'Si' in [material.name for material in project._materials]
+
+
 def test_middle_assembly_table_is_fully_editable(project_and_backend):
     project, backend = project_and_backend
     backend.setCurrentAssemblyIndex(1)
     backend.addNewLayer()
 
-    assert all(row['thickness_enabled'] == 'True' for row in backend.layers)
-    assert all(row['roughness_enabled'] == 'True' for row in backend.layers)
+    assert all(row['thickness_enabled'] is True for row in backend.layers)
+    assert all(row['roughness_enabled'] is True for row in backend.layers)
     _assert_only_fixed_layers_disabled(project)

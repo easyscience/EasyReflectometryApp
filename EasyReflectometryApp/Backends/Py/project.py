@@ -75,7 +75,7 @@ class Project(QObject):
         """ISO-8601 time of the last successful save, with UTC offset, or '' if never saved.
 
         This is the time of the last save made from this session, which is deliberately not
-        the same as `creationDate` (the project's stored modification stamp). The value is
+        the same as `creationDate` (the stamp stored when the project was created). The value is
         left unformatted so that QML can render it with a locale-aware `Qt.formatTime`.
         """
         return self._last_saved
