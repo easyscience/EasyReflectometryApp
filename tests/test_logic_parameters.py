@@ -23,11 +23,22 @@ class FakeNode:
             setattr(self, key, value)
 
 
+class FakeLayerNode(FakeNode):
+    """Stand-in for a library ``Layer``: its thickness and roughness are per-layer parameters."""
+
+
+class FakeMagnetismNode(FakeNode):
+    """Stand-in for a library ``LayerMagnetism``."""
+
+
 def _patch_tree_types(monkeypatch):
     # The traversal uses module-level `Parameter`/`ModelBase` for isinstance
-    # checks; point them at the test fakes so the fake tree is walkable.
+    # checks, and `Layer`/`LayerMagnetism` to classify parameters; point them
+    # at the test fakes so the fake tree is walkable.
     monkeypatch.setattr(parameters_module, 'Parameter', FakeParameter)
     monkeypatch.setattr(parameters_module, 'ModelBase', FakeNode)
+    monkeypatch.setattr(parameters_module, 'Layer', FakeLayerNode)
+    monkeypatch.setattr(parameters_module, 'LayerMagnetism', FakeMagnetismNode)
 
 
 def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive(monkeypatch):
@@ -42,7 +53,7 @@ def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive
 
     def build_model(sld_coupled):
         model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
-        layer = FakeNode('Layer', 'm1_layer', thickness=thickness)
+        layer = FakeLayerNode('Layer', 'm1_layer', thickness=thickness, roughness=None)
         assembly = FakeNode('LayerA', 'm1_asm', layers=[layer])
         model.sample = [assembly]
         # Density-material knobs live under the material node, which carries
@@ -96,7 +107,7 @@ def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_share
             name=f'{original_name} internal', unique_name=unique_name, user_data={'original_name': original_name}
         )
         # Model -> sample -> assembly -> layers -> layer -> thickness (a layer parameter)
-        layer = FakeNode('Layer', f'{unique_name}_layer', thickness=thickness)
+        layer = FakeLayerNode('Layer', f'{unique_name}_layer', thickness=thickness, roughness=None)
         assembly = FakeNode('LayerA', f'{unique_name}_asm', layers=[layer])
         model.sample = [assembly]
         # Non-layer params (scale, background) live under a shared 'Instrument' parent
@@ -139,7 +150,7 @@ def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
     roughness = make_parameter(name='roughness', unique_name='roughness', value=3.0, free=True, enabled=True)
 
     model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
-    layer = FakeNode('Layer', 'layer', thickness=thickness, roughness=roughness)
+    layer = FakeLayerNode('Layer', 'layer', thickness=thickness, roughness=roughness)
     assembly = FakeNode(
         'Superphase', 'asm',
         back_layer=layer,   # alias, sorts before 'layers'
@@ -156,6 +167,37 @@ def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
         'M1 Superphase roughness',
     ]
     assert all(entry['group'] == 'Superphase' for entry in result)
+
+
+def test_from_parameters_to_list_of_dicts_classifies_by_owner_not_by_name(monkeypatch):
+    _patch_tree_types(monkeypatch)
+
+    scale = make_parameter(name='scale', unique_name='scale')
+    background = make_parameter(name='background', unique_name='background')
+    thickness = make_parameter(name='thickness', unique_name='thickness')
+    rho_m = make_parameter(name='rho_m', unique_name='rho_m')
+    # Named like experiment and layer parameters, but owned by a material.
+    impostor = make_parameter(name='thickness', unique_name='impostor')
+    scale_named = make_parameter(name='scale', unique_name='scale_named')
+
+    model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
+    model.scale = scale
+    model.background = background
+    magnetism = FakeMagnetismNode('EasyLayerMagnetism', 'mag', rho_m=rho_m)
+    layer = FakeLayerNode('Layer', 'layer', thickness=thickness, roughness=None, magnetism=magnetism)
+    model.sample = [FakeNode('Film', 'asm', layers=[layer])]
+    model.material = FakeNode('Background Material', 'mat', thickness=impostor, scale=scale_named)
+
+    result = parameters_module._from_parameters_to_list_of_dicts(
+        [scale, background, thickness, rho_m, impostor, scale_named], make_model_collection(model)
+    )
+    rows = {entry['unique_name']: entry for entry in result}
+
+    assert {name for name, row in rows.items() if row['experiment']} == {'scale', 'background'}
+    assert rows['thickness']['display_name'] == 'M1 Film thickness'
+    assert rows['rho_m']['display_name'] == 'M1 Film rho_m'
+    assert rows['impostor']['display_name'] == 'Background Material thickness'
+    assert rows['scale_named']['display_name'] == 'Background Material scale'
 
 
 def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch):
@@ -225,7 +267,13 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
             'independent': True,
             'kind': 'parameter',
         },
-        {'alias': 'layer_thickness', 'displayName': 'Layer thickness', 'group': 'Layer', 'independent': False, 'kind': 'parameter'},
+        {
+            'alias': 'layer_thickness',
+            'displayName': 'Layer thickness',
+            'group': 'Layer',
+            'independent': False,
+            'kind': 'parameter',
+        },
     ]
 
     logic.set_variability_filter_criteria('all')
@@ -310,15 +358,31 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert result[6]['enabled'] is True
 
 
+def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False):
+    """A parameter row as ``all_parameters`` returns it, with only the keys the filters read."""
+    return {
+        'name': name,
+        'display_name': display_name,
+        'group': group,
+        'unique_name': unique_name,
+        'fit': fit,
+        'enabled': True,
+        'independent': True,
+        'alias': alias,
+        'object': object(),
+        'experiment': experiment,
+    }
+
+
 def test_parameters_special_filters_and_invalid_variability_normalization(monkeypatch):
     project = make_project()
     logic = parameters_module.Parameters(project)
     mocked_parameters = [
-        {'name': 'Cell length a', 'display_name': 'Cell length a', 'group': 'cell', 'unique_name': 'cell.a', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'cell_a', 'object': object()},
-        {'name': 'Atom site x', 'display_name': 'Atom site x', 'group': 'atom_site', 'unique_name': 'atom_site.x', 'fit': False, 'enabled': True, 'independent': True, 'alias': 'atom_site_x', 'object': object()},
-        {'name': 'Biso', 'display_name': 'adp b_iso', 'group': 'thermal', 'unique_name': 'b_iso', 'fit': False, 'enabled': True, 'independent': True, 'alias': 'b_iso', 'object': object()},
-        {'name': 'Instrument scale', 'display_name': 'Instrument scale', 'group': 'instrument', 'unique_name': 'scale', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'scale', 'object': object()},
-        {'name': 'Layer thickness', 'display_name': 'Layer thickness', 'group': 'layer', 'unique_name': 'layer.thickness', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'thickness', 'object': object()},
+        _filter_row('Cell length a', 'Cell length a', 'cell', 'cell.a', 'cell_a', fit=True),
+        _filter_row('Atom site x', 'Atom site x', 'atom_site', 'atom_site.x', 'atom_site_x', fit=False),
+        _filter_row('Biso', 'adp b_iso', 'thermal', 'b_iso', 'b_iso', fit=False),
+        _filter_row('Instrument scale', 'Instrument scale', 'instrument', 'scale', 'scale', fit=True, experiment=True),
+        _filter_row('Layer thickness', 'Layer thickness', 'layer', 'layer.thickness', 'thickness', fit=True),
     ]
     monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
 
@@ -326,7 +390,9 @@ def test_parameters_special_filters_and_invalid_variability_normalization(monkey
     assert logic.variability_filter_criteria == 'all'
 
     logic.set_name_filter_criteria('model')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Cell length a', 'Atom site x', 'adp b_iso', 'Layer thickness']
+    assert [entry['display_name'] for entry in logic.parameters] == [
+        'Cell length a', 'Atom site x', 'adp b_iso', 'Layer thickness',
+    ]
 
     logic.set_name_filter_criteria('experiment')
     assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale']

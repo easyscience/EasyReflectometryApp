@@ -312,7 +312,7 @@ QtObject {
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
-    readonly property var sampleDepParameterNames: activeBackend.sample.dependentParameterNames
+    readonly property var sampleConstrainableParameterNames: activeBackend.sample.constrainableParameterNames
     readonly property var sampleRelationOperators: activeBackend.sample.relationOperators
     readonly property var sampleArithmeticOperators: activeBackend.sample.arithmeticOperators
     readonly property var sampleConstraintsList: activeBackend.sample.constraintsList

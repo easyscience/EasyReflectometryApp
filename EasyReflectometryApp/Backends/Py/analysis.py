@@ -13,6 +13,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
+from .logic.bayesian import VALID_INITIALIZERS
 from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiment_selection import ExperimentSelection
@@ -276,7 +277,7 @@ class Analysis(QObject):
 
     @Property('QVariantList', notify=minimizerChanged)
     def bayesianInitializerOptions(self) -> list:
-        return ['eps', 'cov', 'lhs', 'random']
+        return list(VALID_INITIALIZERS)
 
     @Property(bool, notify=fittingChanged)
     def bayesianResultAvailable(self) -> bool:
@@ -351,29 +352,17 @@ class Analysis(QObject):
 
     @Property(str, notify=fittingChanged)
     def bayesianCornerPlotUrl(self) -> str:
-        """Return a file URL for the corner plot PNG, or empty string."""
-        if not self._bayesian_logic.has_result:
-            return ''
-        if not self._bayesian_logic.corner_plot_url:
-            self._render_corner_plot()
+        """File URL of the corner plot HTML, or ''; rendered when sampling finishes, never on read."""
         return self._bayesian_logic.corner_plot_url
 
     @Property(str, notify=fittingChanged)
     def bayesianTracePlotUrl(self) -> str:
-        """Return a file URL for the trace plot PNG, or empty string."""
-        if not self._bayesian_logic.has_result:
-            return ''
-        if not self._bayesian_logic.trace_plot_url:
-            self._render_trace_plot()
+        """File URL of the trace plot HTML, or ''; rendered when sampling finishes, never on read."""
         return self._bayesian_logic.trace_plot_url
 
     @Property(str, notify=fittingChanged)
     def bayesianDistributionPlotUrl(self) -> str:
-        """Return a file URL for the interactive distribution HTML, or empty string."""
-        if not self._bayesian_logic.has_result:
-            return ''
-        if not self._bayesian_logic.distribution_plot_url:
-            self._render_distribution_plot()
+        """File URL of the distribution plot HTML, or ''; rendered when sampling finishes, never on read."""
         return self._bayesian_logic.distribution_plot_url
 
     @Property('QVariantMap', notify=fittingChanged)
@@ -659,6 +648,7 @@ class Analysis(QObject):
             self._compute_diagnostics,
             self._render_corner_plot,
             self._render_trace_plot,
+            self._render_distribution_plot,
         ):
             try:
                 step()
@@ -1384,7 +1374,7 @@ class Analysis(QObject):
             [
                 parameter
                 for parameter in self._parameters_logic.all_parameters()
-                if parameter.get('enabled', True) and not self._parameters_logic.is_experiment_parameter(parameter)
+                if parameter.get('enabled', True) and not parameter['experiment']
             ]
         )
 
@@ -1394,7 +1384,7 @@ class Analysis(QObject):
             [
                 parameter
                 for parameter in self._parameters_logic.all_parameters()
-                if parameter.get('enabled', True) and self._parameters_logic.is_experiment_parameter(parameter)
+                if parameter.get('enabled', True) and parameter['experiment']
             ]
         )
 

@@ -28,8 +28,8 @@ class Minimizers:
         self._project_lib = project_lib
         # Aliases of a listed member (same engine and method) are not offered.
         aliases = [AvailableMinimizers.__members__.get(name) for name in ('LMFit', 'Bumps', 'DFO')]
-        # Index 0 is the Bayesian sentinel (None), which requires an explicit user choice.
-        self._list_available_minimizers = [None] + [m for m in AvailableMinimizers if not any(m is alias for alias in aliases)]
+        # The GUI list is the Bayesian choice at index 0, then these: minimizer i is at index i + 1.
+        self._minimizers = [m for m in AvailableMinimizers if not any(m is alias for alias in aliases)]
 
     @property
     def _settings(self) -> FitSettings:
@@ -37,18 +37,18 @@ class Minimizers:
         return self._project_lib.fit_settings
 
     def minimizers_available(self) -> list[str]:
-        return [BAYESIAN_LABEL if m is None else m.name for m in self._list_available_minimizers]
+        return [BAYESIAN_LABEL] + [m.name for m in self._minimizers]
 
     def minimizer_current_index(self) -> int:
         if self._settings.mode == 'sample':
             return 0
         selected = self._settings.minimizer
-        for index, entry in enumerate(self._list_available_minimizers):
+        for index, entry in enumerate(self._minimizers, start=1):
             if entry is selected:
                 return index
         # An alias set directly on the project: the listed member with the same engine and method.
-        for index, entry in enumerate(self._list_available_minimizers):
-            if entry is not None and (entry.package, entry.method) == (selected.package, selected.method):
+        for index, entry in enumerate(self._minimizers, start=1):
+            if (entry.package, entry.method) == (selected.package, selected.method):
                 return index
         return 1
 
@@ -62,7 +62,7 @@ class Minimizers:
         """Whether the engine that will actually run the fit can enforce inequality constraints.
 
         Inequalities are BUMPS penalties: every ``Bumps*`` method and the DREAM
-        sampler (the Bayesian sentinel resolves to ``Bumps_simplex``) qualify;
+        sampler (the Bayesian choice runs on ``Bumps_simplex``) qualify;
         LMFit and DFO-LS do not.
         """
         if self.is_bayesian_selected():
@@ -83,15 +83,14 @@ class Minimizers:
         return not self.is_bayesian_selected() and requires_finite_bounds(self._settings.minimizer)
 
     def set_minimizer_current_index(self, new_value: int) -> bool:
-        if not 0 <= new_value < len(self._list_available_minimizers) or new_value == self.minimizer_current_index():
+        if not 0 <= new_value <= len(self._minimizers) or new_value == self.minimizer_current_index():
             return False
-        entry = self._list_available_minimizers[new_value]
-        if entry is None:
+        if new_value == 0:
             # Bayesian mode: the sampler needs a BUMPS engine.
             self._settings.minimizer = AvailableMinimizers.Bumps_simplex
             self._settings.mode = 'sample'
         else:
-            self._settings.minimizer = entry
+            self._settings.minimizer = self._minimizers[new_value - 1]
             self._settings.mode = 'minimize'
         return True
 

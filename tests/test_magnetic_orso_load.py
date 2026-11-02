@@ -83,7 +83,7 @@ class TestLoad:
         assert material_row['magnetic'] is True
         assert float(material_row['magnetic_moment']) == pytest.approx(2.2)
         row = _film_row(backend)
-        assert (row['magnetic'], row['material_magnetic'], row['rho_m_coupled']) == ('True', 'True', 'True')
+        assert (row['magnetic'], row['material_magnetic'], row['rho_m_coupled']) == (True, True, True)
         assert float(row['rho_m']) == pytest.approx(FE_RHO_M, abs=1e-3)
         assert warnings_received == []
 

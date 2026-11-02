@@ -42,6 +42,18 @@
   assembly: thickness and roughness) and the subphase (last layer of the last
   assembly: thickness) are locked, the table shows exactly what the fit uses,
   and the lock is set again after every layer change.
+- Adding a layer or an assembly to a project that has no `Si` material still
+  creates one for the new layer, and the Materials table now shows it at once
+  instead of after the next unrelated refresh.
+- Bayesian results: the marginal-distribution plot is rendered together with the
+  corner and trace plots when sampling finishes, so its tab no longer renders on
+  first open, and a plot that failed to render is not retried on every redraw.
+- Analysis parameter filters: **model** and **experiment** now go by what owns a
+  parameter. Only a model's scale and background are experiment parameters;
+  before, any parameter whose name or group contained words such as `scale` or
+  `background` (for example one of a material named "Background Material") was
+  counted as one. A parameter that is only named `thickness` or `roughness`,
+  outside a layer, is no longer labelled with its assembly's name.
 - Source cleanup : duplicated
   code and dead code removed (one shared plot-control group for the Experiment,
   Sample and Analysis pages, one definition of the experiment order), typed

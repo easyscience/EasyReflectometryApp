@@ -1,6 +1,6 @@
 """State container for Bayesian DREAM hyper-parameters and posterior results."""
 
-_VALID_INITIALIZERS = ('eps', 'cov', 'lhs', 'random')
+VALID_INITIALIZERS = ('eps', 'cov', 'lhs', 'random')
 
 
 class Bayesian:
@@ -80,11 +80,11 @@ class Bayesian:
 
     @initializer.setter
     def initializer(self, value: str) -> None:
-        if value in _VALID_INITIALIZERS:
+        if value in VALID_INITIALIZERS:
             self._initializer = value
         else:
             raise ValueError(
-                f'Unknown initializer {value!r}. Valid options: {_VALID_INITIALIZERS}'
+                f'Unknown initializer {value!r}. Valid options: {VALID_INITIALIZERS}'
             )
 
     # ------------------------------------------------------------------

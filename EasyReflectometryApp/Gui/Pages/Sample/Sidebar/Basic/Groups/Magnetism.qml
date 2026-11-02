@@ -100,7 +100,7 @@ EaElements.GroupBox {
                 // are refreshed by separate signals, so a delegate can outlive
                 // its row for one frame after a layer is removed.
                 readonly property var rowData: Globals.BackendWrapper.sampleLayersMagnetism[index] ?? null
-                readonly property bool rowIsMagnetic: rowData !== null && rowData.magnetic === "True"
+                readonly property bool rowIsMagnetic: rowData !== null && rowData.magnetic === true
 
                 EaComponents.TableViewLabel {
                     color: EaStyle.Colors.themeForegroundMinor
@@ -115,8 +115,8 @@ EaElements.GroupBox {
                 EaComponents.TableViewTextInput {
                     horizontalAlignment: Text.AlignHCenter
                     // A layer coupled to its material shows the material's ρM.
-                    enabled: rowIsMagnetic && rowData.rho_m_coupled !== "True"
-                    ToolTip.text: rowData && rowData.rho_m_coupled === "True" ?
+                    enabled: rowIsMagnetic && rowData.rho_m_coupled !== true
+                    ToolTip.text: rowData && rowData.rho_m_coupled === true ?
                                       qsTr("Taken from the material's moment — untick 'ρM from material' below to edit") : ''
                     text: rowData ? Number(rowData.rho_m).toFixed(3) : '--'
                     onEditingFinished: Globals.BackendWrapper.sampleSetLayerRhoMAtIndex(index, text)
@@ -155,14 +155,14 @@ EaElements.GroupBox {
         // holds, and the arrow the Structure view draws, side by side. Follows
         // the selection the table already writes - no second "focused row".
         Gui.MagnetizationAngleSlider {
-            visible: magnetismGroup.currentRow !== null && magnetismGroup.currentRow.magnetic === "True"
+            visible: magnetismGroup.currentRow !== null && magnetismGroup.currentRow.magnetic === true
             height: visible ? implicitHeight : 0
             phi: visible ? Number(magnetismGroup.currentRow.phi) : 0
             thetaM: visible ? Number(magnetismGroup.currentRow.theta_m) : 0
             hasMoment: visible && Number(magnetismGroup.currentRow.rho_m) !== 0
             // A constrained θM follows its expression, and a running fit owns
             // every parameter: in both cases the slider is read-only.
-            editable: visible && magnetismGroup.currentRow.editable === "True"
+            editable: visible && magnetismGroup.currentRow.editable === true
                       && !Globals.BackendWrapper.analysisFittingRunning
             onThetaMRequested: (thetaM) => Globals.BackendWrapper.sampleSetLayerThetaMAtIndex(
                                                Globals.BackendWrapper.sampleCurrentLayerIndex, thetaM)
@@ -172,10 +172,10 @@ EaElements.GroupBox {
         // material, see the Materials group); the layer keeps its own θM.
         EaElements.CheckBox {
             readonly property bool coupled: magnetismGroup.currentRow !== null
-                                            && magnetismGroup.currentRow.rho_m_coupled === "True"
+                                            && magnetismGroup.currentRow.rho_m_coupled === true
             visible: magnetismGroup.currentRow !== null
-                     && magnetismGroup.currentRow.magnetic === "True"
-                     && magnetismGroup.currentRow.material_magnetic === "True"
+                     && magnetismGroup.currentRow.magnetic === true
+                     && magnetismGroup.currentRow.material_magnetic === true
             topPadding: 0
             text: qsTr("ρM from material")
             ToolTip.text: qsTr("Take ρM from the moment of this layer's magnetic material. Unticking keeps the current value.")

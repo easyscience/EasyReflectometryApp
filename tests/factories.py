@@ -537,6 +537,9 @@ class FakeProject:
         return [material.name for material in self._materials].index('Air')
 
     def get_index_si(self):
+        # As in the library: Si is added to the materials when it is missing.
+        if 'Si' not in [material.name for material in self._materials]:
+            self._materials.add_material(FakeMaterial('Si', 2.07, 0.0))
         return [material.name for material in self._materials].index('Si')
 
     def get_index_sio2(self):

@@ -56,6 +56,30 @@ def test_selecting_writes_the_settings():
     assert logic.set_minimizer_current_index(_index(logic, 'DFO_leastsq')) is False
 
 
+def test_index_mapping_edges():
+    project = _project()
+    logic = minimizers_module.Minimizers(project)
+    last = len(logic.minimizers_available()) - 1
+    before = (project.fit_settings.mode, project.fit_settings.minimizer)
+
+    # Outside the GUI list: refused, and the settings stay as they were.
+    for out_of_range in (-1, last + 1):
+        assert logic.set_minimizer_current_index(out_of_range) is False
+        assert (project.fit_settings.mode, project.fit_settings.minimizer) == before
+
+    # The last entry is a real minimizer, one past the Bayesian choice at 0.
+    last_member = AvailableMinimizers[logic.minimizers_available()[last]]
+    assert logic.set_minimizer_current_index(last) is True
+    assert (project.fit_settings.mode, project.fit_settings.minimizer) == ('minimize', last_member)
+    assert logic.minimizer_current_index() == last
+
+    # Index 1 is the first real minimizer.
+    first_member = AvailableMinimizers[logic.minimizers_available()[1]]
+    assert logic.set_minimizer_current_index(1) is True
+    assert project.fit_settings.minimizer is first_member
+    assert logic.minimizer_current_index() == 1
+
+
 def test_generic_settings_work_before_any_fit_and_reset_to_engine_default():
     project = _project()
     logic = minimizers_module.Minimizers(project)

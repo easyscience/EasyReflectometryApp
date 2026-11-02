@@ -466,13 +466,10 @@ class TestBayesianCornerPlotUrl:
     def test_empty_when_no_posterior(self, analysis):
         assert analysis.bayesianCornerPlotUrl == ''
 
-    def test_lazy_renders_once(self, analysis_with_posterior):
-        # Pre-set a cached URL so the second access doesn't re-trigger rendering
-        analysis_with_posterior._bayesian_logic.corner_plot_url = 'file:///cached.png'
+    def test_reading_never_renders(self, analysis_with_posterior):
         with patch.object(analysis_with_posterior, '_render_corner_plot') as mock:
-            url1 = analysis_with_posterior.bayesianCornerPlotUrl
-            url2 = analysis_with_posterior.bayesianCornerPlotUrl
-            assert mock.call_count == 0  # already cached, no call needed
+            assert analysis_with_posterior.bayesianCornerPlotUrl == ''
+            mock.assert_not_called()
 
     def test_returns_cached_url(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.corner_plot_url = 'file:///cached.png'
@@ -488,13 +485,10 @@ class TestBayesianTracePlotUrl:
     def test_empty_when_no_posterior(self, analysis):
         assert analysis.bayesianTracePlotUrl == ''
 
-    def test_lazy_renders_once(self, analysis_with_posterior):
-        # Pre-set a cached URL so the second access doesn't re-trigger rendering
-        analysis_with_posterior._bayesian_logic.trace_plot_url = 'file:///cached_trace.png'
+    def test_reading_never_renders(self, analysis_with_posterior):
         with patch.object(analysis_with_posterior, '_render_trace_plot') as mock:
-            url1 = analysis_with_posterior.bayesianTracePlotUrl
-            url2 = analysis_with_posterior.bayesianTracePlotUrl
-            assert mock.call_count == 0  # already cached, no call needed
+            assert analysis_with_posterior.bayesianTracePlotUrl == ''
+            mock.assert_not_called()
 
     def test_returns_cached_url(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.trace_plot_url = 'file:///cached_trace.png'
@@ -510,12 +504,10 @@ class TestBayesianDistributionPlotUrl:
     def test_empty_when_no_posterior(self, analysis):
         assert analysis.bayesianDistributionPlotUrl == ''
 
-    def test_lazy_renders_once(self, analysis_with_posterior):
-        analysis_with_posterior._bayesian_logic.distribution_plot_url = 'file:///cached_dist.html'
+    def test_reading_never_renders(self, analysis_with_posterior):
         with patch.object(analysis_with_posterior, '_render_distribution_plot') as mock:
-            url1 = analysis_with_posterior.bayesianDistributionPlotUrl
-            url2 = analysis_with_posterior.bayesianDistributionPlotUrl
-            assert mock.call_count == 0  # already cached, no call needed
+            assert analysis_with_posterior.bayesianDistributionPlotUrl == ''
+            mock.assert_not_called()
 
     def test_returns_cached_url(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.distribution_plot_url = 'file:///cached_dist.html'
@@ -958,12 +950,15 @@ class TestOnSampleFinished:
         with patch.object(analysis, '_compute_and_publish_posterior_predictive') as mock_pp:
             with patch.object(analysis, '_compute_diagnostics') as mock_diag:
                 with patch.object(analysis, '_render_corner_plot') as mock_corner:
-                    with patch.object(analysis, '_render_trace_plot') as mock_trace:
+                    with patch.object(analysis, '_render_trace_plot') as mock_trace, patch.object(
+                        analysis, '_render_distribution_plot'
+                    ) as mock_distribution:
                         analysis._on_sample_finished([SAMPLE_POSTERIOR_2D])
                         mock_pp.assert_called_once()
                         mock_diag.assert_called_once()
                         mock_corner.assert_called_once()
                         mock_trace.assert_called_once()
+                        mock_distribution.assert_called_once()
 
     def test_emits_fitting_signals(self, analysis):
         emissions = {'fitting': 0, 'external': 0}
@@ -992,11 +987,14 @@ class TestOnSampleFinished:
         with patch.object(analysis, '_compute_and_publish_posterior_predictive', side_effect=RuntimeError('boom')):
             with patch.object(analysis, '_compute_diagnostics') as mock_diag:
                 with patch.object(analysis, '_render_corner_plot') as mock_corner:
-                    with patch.object(analysis, '_render_trace_plot') as mock_trace:
+                    with patch.object(analysis, '_render_trace_plot') as mock_trace, patch.object(
+                        analysis, '_render_distribution_plot'
+                    ) as mock_distribution:
                         analysis._on_sample_finished([SAMPLE_POSTERIOR_2D])
                         mock_diag.assert_called_once()
                         mock_corner.assert_called_once()
                         mock_trace.assert_called_once()
+                        mock_distribution.assert_called_once()
         assert analysis._bayesian_logic.posterior is SAMPLE_POSTERIOR_2D
 
 
