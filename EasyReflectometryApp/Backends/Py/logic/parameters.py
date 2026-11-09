@@ -1,6 +1,7 @@
 import logging
 import re
 from collections.abc import MutableSequence
+from dataclasses import dataclass
 from typing import Any
 from typing import List
 from typing import Tuple
@@ -249,195 +250,238 @@ class Parameters:
 
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:
-    """Convert parameters to list of dictionaries with simplified logic.
+    """Convert parameters to the rows of the Analysis parameters table.
 
-    Layer parameters (thickness, roughness) are prefixed with model identifier (e.g., M1, M2).
-    Material parameters and model parameters (scale, background) are not prefixed to avoid duplication.
+    Layer parameters (thickness, roughness, magnetism) are prefixed with the
+    model identifier (e.g. M1, M2). Material parameters and model parameters
+    (scale, background) are not prefixed to avoid duplication.
     """
-
-    alias_registry: set[str] = set()
-    processed_unique_names: set[str] = set()  # Track processed parameters to avoid duplicates
-
-    def _make_alias(name: str) -> str:
-        base = re.sub(r'[^0-9A-Za-z]+', '_', name).strip('_').lower()
-        if not base:
-            base = 'param'
-        if base[0].isdigit():
-            base = f'p_{base}'
-        alias = base
-        counter = 1
-        while alias in alias_registry or alias in RESERVED_ALIAS_NAMES:
-            alias = f'{base}_{counter}'
-            counter += 1
-        alias_registry.add(alias)
-        return alias
-
-    def _get_parameter_display_data(param: Parameter, path: list) -> Tuple[str, str]:
-        """Extract display name and group from the object path.
-
-        For layer parameters (thickness, roughness), uses the assembly name
-        from the path instead of the layer name, so that renaming an assembly
-        in the Model Editor is reflected in the Analysis parameters table.
-        """
-        if path is not None and len(path) >= 2:
-            param_name = _DISPLAY_NAMES.get(path[-1].name, path[-1].name)
-            # For layer parameters the path is:
-            # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
-            # Use the assembly name (path[-4]) instead of the layer name (path[-2])
-            if _is_layer_parameter(param, path) and len(path) >= 4:
-                parent_name = path[-4].name
-            elif _is_magnetism_parameter(path) and len(path) >= 5:
-                # ... -> Assembly -> LayerCollection -> Layer -> LayerMagnetism -> param:
-                # one level deeper, so the assembly is path[-5]. Without this the
-                # group would read 'EasyLayerMagnetism', which names nothing.
-                parent_name = path[-5].name
-            else:
-                parent_name = path[-2].name
-            return f'{parent_name} {param_name}', parent_name
-        return param.name, ''  # Fallback to parameter name without group
-
-    def _get_dependency_expression(param: Parameter, paths: dict) -> str:
-        """Get simplified dependency expression."""
-        if param.independent:
-            return ''
-
-        # Check if parameter has dependency map with 'a' key (parameter dependency)
-        if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
-            dependent_param = param.dependency_map['a']
-            if isinstance(dependent_param, Parameter):
-                dep_name, _ = _get_parameter_display_data(dependent_param, paths.get(dependent_param.unique_name))
-            else:
-                dep_name = str(dependent_param)
-            return param.dependency_expression.replace('a', dep_name)
-
-        # Simple numerical dependency
-        return f'= {param.value}'
-
-    def _is_layer_parameter(param: Parameter, path: list) -> bool:
-        """Check if parameter is a layer's own thickness or roughness."""
-        if len(path) < 2:
-            return False
-        owner = path[-2]
-        return isinstance(owner, Layer) and (param is owner.thickness or param is owner.roughness)
-
-    def _is_magnetism_parameter(path: list) -> bool:
-        """Check if parameter belongs to a layer's magnetism (rho_m or theta_m).
-
-        Magnetism sits one level below the layer (Layer -> LayerMagnetism -> param),
-        but belongs to the layer just as much, so it is named the same way.
-        """
-        return len(path) >= 2 and isinstance(path[-2], LayerMagnetism)
-
-    def _is_per_layer_parameter(param: Parameter, path: list) -> bool:
-        """Per-layer parameters exist once per model and carry the model prefix."""
-        return _is_layer_parameter(param, path) or _is_magnetism_parameter(path)
-
-    parameter_list = []
-
-    # The models each parameter belongs to (several when contrasts share an object), and
-    # how many parameters of other models follow it (equality ties between contrasts).
     # Object paths replace the global_object.map graph, which the new
     # easyscience core no longer populates with parent->child edges.
     model_paths = [_build_param_object_paths(model) for model in models]
+    owners = _owners_by_parameter(model_paths)
+    context = _RowContext(
+        models=models,
+        owners=owners,
+        followed_by=_follower_counts(parameters, owners),
+        # Materials some layer takes its rho_m from: only their moment acts.
+        coupled_materials=coupled_material_ids(models),
+        aliases=_AliasRegistry(),
+    )
+    return [
+        _build_row(parameter, model_idx, path, model_paths[model_idx], context)
+        for model_idx, parameter, path in _first_owned(parameters, model_paths)
+    ]
+
+
+@dataclass
+class _RowContext:
+    """What every row needs to know about the project as a whole."""
+
+    models: Any
+    owners: dict[str, list[int]]
+    followed_by: dict[str, int]
+    coupled_materials: set[int]
+    aliases: '_AliasRegistry'
+
+
+class _AliasRegistry:
+    """Hands out unique, identifier-safe aliases for constraint expressions."""
+
+    def __init__(self):
+        self._taken: set[str] = set(RESERVED_ALIAS_NAMES)
+
+    def make(self, name: str) -> str:
+        base = re.sub(r'[^0-9A-Za-z]+', '_', name).strip('_').lower() or 'param'
+        if base[0].isdigit():
+            base = f'p_{base}'
+        alias, counter = base, 1
+        while alias in self._taken:
+            alias, counter = f'{base}_{counter}', counter + 1
+        self._taken.add(alias)
+        return alias
+
+
+def _owners_by_parameter(model_paths: list[dict]) -> dict[str, list[int]]:
+    """The indices of the models each parameter belongs to (several when contrasts share an object)."""
     owners: dict[str, list[int]] = {}
     for model_idx, paths in enumerate(model_paths):
         for unique_name in paths:
             owners.setdefault(unique_name, []).append(model_idx)
-    # Materials some layer takes its rho_m from: only their moment acts.
-    coupled_materials = coupled_material_ids(models)
+    return owners
+
+
+def _follower_counts(parameters: List[Parameter], owners: dict[str, list[int]]) -> dict[str, int]:
+    """How many parameters of other models follow each parameter (equality ties between contrasts)."""
     followed_by: dict[str, int] = {}
     for parameter in parameters:
         for leader in (getattr(parameter, 'dependency_map', None) or {}).values():
             leader_name = getattr(leader, 'unique_name', None)
             if not set(owners.get(parameter.unique_name, [])) & set(owners.get(leader_name, [])):
                 followed_by[leader_name] = followed_by.get(leader_name, 0) + 1
+    return followed_by
 
-    # Process parameters for each model
+
+def _first_owned(parameters: List[Parameter], model_paths: list[dict]):
+    """Yield ``(model_idx, parameter, path)`` once per parameter, under the first model owning it.
+
+    Rows come grouped by model, in model order, and within a model in the
+    order of ``parameters``; parameters in no model's tree are skipped.
+    """
+    seen: set[str] = set()
     for model_idx, paths in enumerate(model_paths):
-
         for parameter in parameters:
-            # Skip parameters not in this model's tree
             path = paths.get(parameter.unique_name)
-            if path is None:
+            if path is None or parameter.unique_name in seen:
                 continue
+            seen.add(parameter.unique_name)
+            yield model_idx, parameter, path
 
-            # Each parameter once, whichever models share it
-            is_layer_param = _is_per_layer_parameter(parameter, path)
-            if parameter.unique_name in processed_unique_names:
-                continue
-            processed_unique_names.add(parameter.unique_name)
-            shared_by = owners.get(parameter.unique_name, [model_idx])
 
-            display_name, group_name = _get_parameter_display_data(parameter, path)
+def _build_row(parameter: Parameter, model_idx: int, path: list, paths: dict, context: _RowContext) -> dict[str, Any]:
+    """One table row for ``parameter``, found at ``path`` in the tree of model ``model_idx``."""
+    model = context.models[model_idx]
+    shared_by = context.owners.get(parameter.unique_name, [model_idx])
+    owner_names = [get_original_name(context.models[index]) for index in shared_by]
+    per_layer = _is_per_layer_parameter(parameter, path)
 
-            # Add model prefix only to layer parameters (thickness, roughness); a layer shared
-            # by several models carries all their names.
-            if is_layer_param:
-                owner_names = [get_original_name(models[index]) for index in shared_by]
-                prefixed_display_name = f"{'+'.join(owner_names)} {display_name}"
-            else:
-                prefixed_display_name = display_name
+    display_name, group_name = _get_parameter_display_data(parameter, path)
+    if per_layer:
+        # Only per-layer parameters carry the model prefix; a layer shared by
+        # several models carries all their names.
+        display_name = f'{"+".join(owner_names)} {display_name}'
 
-            alias = _make_alias(prefixed_display_name or parameter.name)
-            param_value = float(parameter.value)
-            is_derived = _is_derived_parameter(parameter, models[model_idx])
-            # A density material's input knobs (density, mw, scattering
-            # lengths) stop affecting the reflectivity once the material's
-            # sld/isld are decoupled, and a material's moment does nothing
-            # while no layer is coupled to it — shown greyed with a note, never
-            # hidden (enabled must stay True: _parameter_matches_filters drops
-            # enabled=False rows from the list entirely).
-            inactive_note = _inactive_note(parameter, path, coupled_materials)
-            is_inactive = inactive_note is not None
-            parameter_list.append(
-                {
-                    'name': prefixed_display_name,
-                    'display_name': prefixed_display_name,
-                    'group': group_name,
-                    'alias': alias,
-                    'unique_name': parameter.unique_name,
-                    'value': param_value,
-                    # None means the minimizer produced no error bars (e.g. lmfit's
-                    # gradient-free methods); the GUI renders it as 'n/a', distinct
-                    # from a numeric zero which is shown as an empty cell.
-                    'error': float(parameter.error) if parameter.error is not None else None,
-                    'max': float(parameter.max),
-                    'min': float(parameter.min),
-                    'units': parameter.unit,
-                    'fit': False if (is_derived or is_inactive) else parameter.free,
-                    'independent': parameter.independent,
-                    'dependency': (
-                        inactive_note
-                        if is_inactive
-                        else _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
-                        if is_derived
-                        else _get_dependency_expression(parameter, paths)
-                    ),
-                    # Derived "calculation" parameters (e.g. the model's total film
-                    # thickness) are computed from the layers: shown read-only, never
-                    # fitted, but usable as aliases in constraint expressions.
-                    'kind': 'derived' if is_derived else 'inactive' if is_inactive else 'parameter',
-                    'readOnly': is_derived or is_inactive,
-                    'enabled': parameter.enabled if hasattr(parameter, 'enabled') else True,
-                    # Models it belongs to when several (one object shared), and how many
-                    # parameters of other models follow it
-                    'sharedBy': [get_original_name(models[index]) for index in shared_by] if len(shared_by) > 1 else [],
-                    'sharedByIndices': shared_by if len(shared_by) > 1 else [],
-                    # A shared layer parameter can be given to one model alone (its assembly is
-                    # copied); a material's cannot: materials belong to the project's palette.
-                    'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
-                    'followedBy': followed_by.get(parameter.unique_name, 0),
-                    'object': parameter,  # Direct reference to the Parameter object
-                    # Decided under the first model that owns the parameter. That is
-                    # enough while each model has its own scale and background objects
-                    # (linked contrasts tie them with dependencies, not by sharing);
-                    # if they are ever shared, test against every model in shared_by.
-                    'experiment': _is_experiment_parameter(parameter, models[model_idx]),
-                    'exclusive_with': _exclusive_partner(parameter, path),
-                }
-            )
+    kind, dependency = _classify(parameter, model, path, paths, context.coupled_materials)
+    read_only = kind != 'parameter'
+    return {
+        'name': display_name,
+        'display_name': display_name,
+        'group': group_name,
+        'alias': context.aliases.make(display_name or parameter.name),
+        'unique_name': parameter.unique_name,
+        'value': float(parameter.value),
+        # None means the minimizer produced no error bars (e.g. lmfit's
+        # gradient-free methods); the GUI renders it as 'n/a', distinct
+        # from a numeric zero which is shown as an empty cell.
+        'error': float(parameter.error) if parameter.error is not None else None,
+        'max': float(parameter.max),
+        'min': float(parameter.min),
+        'units': parameter.unit,
+        'fit': False if read_only else parameter.free,
+        'independent': parameter.independent,
+        'dependency': dependency,
+        'kind': kind,
+        'readOnly': read_only,
+        'enabled': getattr(parameter, 'enabled', True),
+        **_sharing_fields(parameter, shared_by, owner_names, per_layer),
+        'followedBy': context.followed_by.get(parameter.unique_name, 0),
+        'object': parameter,  # Direct reference to the Parameter object
+        # Decided under the first model that owns the parameter. That is
+        # enough while each model has its own scale and background objects
+        # (linked contrasts tie them with dependencies, not by sharing);
+        # if they are ever shared, test against every model in shared_by.
+        'experiment': _is_experiment_parameter(parameter, model),
+        'exclusive_with': _exclusive_partner(parameter, path),
+    }
 
-    return parameter_list
+
+def _classify(parameter: Parameter, model, path: list, paths: dict, coupled_materials: set[int]) -> Tuple[str, str]:
+    """The row's ``kind`` and the text of its dependency column.
+
+    - ``derived``: a "calculation" parameter (e.g. the model's total film
+      thickness) computed from the layers: shown read-only, never fitted, but
+      usable as an alias in constraint expressions.
+    - ``inactive``: a density material's input knobs (density, mw, scattering
+      lengths) stop affecting the reflectivity once the material's sld/isld
+      are decoupled, and a material's moment does nothing while no layer is
+      coupled to it. Shown greyed with a note, never hidden (enabled must stay
+      True: ``_parameter_matches_filters`` drops enabled=False rows entirely).
+    - ``parameter``: everything else.
+    """
+    if _is_derived_parameter(parameter, model):
+        return 'derived', _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
+    inactive_note = _inactive_note(parameter, path, coupled_materials)
+    if inactive_note is not None:
+        return 'inactive', inactive_note
+    return 'parameter', _get_dependency_expression(parameter, paths)
+
+
+def _sharing_fields(parameter: Parameter, shared_by: list[int], owner_names: list[str], per_layer: bool) -> dict:
+    """The models a parameter belongs to, when several share the one object."""
+    if len(shared_by) < 2:
+        return {'sharedBy': [], 'sharedByIndices': [], 'detachable': False}
+    return {
+        'sharedBy': owner_names,
+        'sharedByIndices': shared_by,
+        # A shared layer parameter can be given to one model alone (its assembly is
+        # copied); a material's cannot: materials belong to the project's palette.
+        'detachable': per_layer and parameter.independent,
+    }
+
+
+def _get_parameter_display_data(param: Parameter, path: list) -> Tuple[str, str]:
+    """Extract display name and group from the object path.
+
+    For layer parameters (thickness, roughness), uses the assembly name
+    from the path instead of the layer name, so that renaming an assembly
+    in the Model Editor is reflected in the Analysis parameters table.
+    """
+    if path is None or len(path) < 2:
+        return param.name, ''  # Fallback to parameter name without group
+    param_name = _DISPLAY_NAMES.get(path[-1].name, path[-1].name)
+    # For layer parameters the path is:
+    # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
+    # Use the assembly name (path[-4]) instead of the layer name (path[-2])
+    if _is_layer_parameter(param, path) and len(path) >= 4:
+        parent_name = path[-4].name
+    elif _is_magnetism_parameter(path) and len(path) >= 5:
+        # ... -> Assembly -> LayerCollection -> Layer -> LayerMagnetism -> param:
+        # one level deeper, so the assembly is path[-5]. Without this the
+        # group would read 'EasyLayerMagnetism', which names nothing.
+        parent_name = path[-5].name
+    else:
+        parent_name = path[-2].name
+    return f'{parent_name} {param_name}', parent_name
+
+
+def _get_dependency_expression(param: Parameter, paths: dict) -> str:
+    """Get simplified dependency expression."""
+    if param.independent:
+        return ''
+
+    # Check if parameter has dependency map with 'a' key (parameter dependency)
+    if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
+        dependent_param = param.dependency_map['a']
+        if isinstance(dependent_param, Parameter):
+            dep_name, _ = _get_parameter_display_data(dependent_param, paths.get(dependent_param.unique_name))
+        else:
+            dep_name = str(dependent_param)
+        return param.dependency_expression.replace('a', dep_name)
+
+    # Simple numerical dependency
+    return f'= {param.value}'
+
+
+def _is_layer_parameter(param: Parameter, path: list) -> bool:
+    """Check if parameter is a layer's own thickness or roughness."""
+    if len(path) < 2:
+        return False
+    owner = path[-2]
+    return isinstance(owner, Layer) and (param is owner.thickness or param is owner.roughness)
+
+
+def _is_magnetism_parameter(path: list) -> bool:
+    """Check if parameter belongs to a layer's magnetism (rho_m or theta_m).
+
+    Magnetism sits one level below the layer (Layer -> LayerMagnetism -> param),
+    but belongs to the layer just as much, so it is named the same way.
+    """
+    return len(path) >= 2 and isinstance(path[-2], LayerMagnetism)
+
+
+def _is_per_layer_parameter(param: Parameter, path: list) -> bool:
+    """Per-layer parameters exist once per model and carry the model prefix."""
+    return _is_layer_parameter(param, path) or _is_magnetism_parameter(path)
 
 
 _DERIVED_DESCRIPTIONS = {

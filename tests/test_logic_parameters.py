@@ -1,4 +1,5 @@
 from EasyReflectometryApp.Backends.Py.logic import parameters as parameters_module
+from tests.factories import FakeModel
 from tests.factories import FakeParameter
 from tests.factories import make_model
 from tests.factories import make_model_collection
@@ -356,6 +357,184 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert aliases[4] == 'param'
     assert result[5]['dependency'] == 'external+1'
     assert result[6]['enabled'] is True
+
+
+class _FakeModelWithTotalThickness(FakeModel):
+    """FakeModel with the derived ``total_thickness`` the lib's Model exposes as a property."""
+
+    _total_thickness = None
+
+    @property
+    def total_thickness(self):
+        return self._total_thickness
+
+
+def _build_snapshot_scenario():
+    """Two contrasts covering every branch the row builder takes.
+
+    M1 and M2 share one Film assembly (so its layer is one object in both):
+    its layer is magnetic and takes rho_m from Fe, a density material with
+    a decoupled nuclear SLD. M2 also owns a Substrate whose Ni material has
+    a moment that no layer takes. Each model has its own experiment
+    parameters; M2's scale follows M1's (a tie between contrasts) and M1's
+    background is a numerical dependency.
+    """
+    p = make_parameter
+
+    fe_density = p(name='density', unique_name='fe_density', value=7.87, variance=0.04, free=True)
+    fe_moment = p(name='magnetic_moment', unique_name='fe_moment', value=2.2, free=True)
+    fe_b_real = p(name='scattering_length_real', unique_name='fe_b_real', value=9.45)
+    fe_magnetic_sld = p(name='magnetic_sld', unique_name='fe_magnetic_sld', value=5.1, unit='1/angstrom^2')
+    fe = FakeNode(
+        'Fe',
+        'fe',
+        density=fe_density,
+        magnetic_moment=fe_moment,
+        scattering_length_real=fe_b_real,
+        rho_m=fe_magnetic_sld,
+    )
+    fe.sld_coupled = False
+
+    ni_moment = p(name='magnetic_moment', unique_name='ni_moment', value=0.6, free=True)
+    ni = FakeNode('Ni', 'ni', magnetic_moment=ni_moment)
+    ni.sld_coupled = True
+
+    film_thickness = p(name='thickness', unique_name='film_thickness', value=50.0, unit='angstrom', free=True)
+    film_roughness = p(name='roughness', unique_name='film_roughness', value=3.0, unit='angstrom')
+    film_rho_m = p(name='rho_m', unique_name='film_rho_m', value=1.0)
+    film_theta_m = p(name='theta_m', unique_name='film_theta_m', value=270.0, unit='deg')
+    film_layer = FakeLayerNode(
+        'Film Layer',
+        'film_layer',
+        thickness=film_thickness,
+        roughness=film_roughness,
+        material=fe,
+        magnetism=FakeMagnetismNode('EasyLayerMagnetism', 'film_mag', rho_m=film_rho_m, theta_m=film_theta_m),
+    )
+    film_layer.rho_m_coupled = True
+    film = FakeNode('Film', 'film', layers=[film_layer])
+
+    sub_thickness = p(name='thickness', unique_name='sub_thickness', value=0.0, unit='angstrom')
+    sub_roughness = p(name='roughness', unique_name='sub_roughness', value=2.0, unit='angstrom', free=True)
+    sub_layer = FakeLayerNode('Ni Layer', 'sub_layer', thickness=sub_thickness, roughness=sub_roughness, material=ni)
+    substrate = FakeNode('Substrate', 'substrate', layers=[sub_layer])
+
+    def build_model(index, assemblies):
+        model = _FakeModelWithTotalThickness(
+            name=f'M{index} internal', unique_name=f'm{index}', user_data={'original_name': f'M{index}'}
+        )
+        model.sample = assemblies
+        model.scale = p(name='scale', unique_name=f'm{index}_scale', value=1.0, minimum=0.5, maximum=2.0, free=True)
+        model.background = p(name='background', unique_name=f'm{index}_background', value=1e-6, maximum=1.0)
+        model._total_thickness = p(name='total_thickness', unique_name=f'm{index}_total', value=50.0)
+        return model
+
+    m1 = build_model(1, [film])
+    m2 = build_model(2, [film, substrate])
+    m1.background.independent = False  # numerical dependency: '= <value>'
+    m2.scale.make_dependent_on('a', {'a': m1.scale})  # a tie between contrasts
+
+    parameters = [
+        m1.scale, m1.background, m2.scale, m2.background, m1._total_thickness, m2._total_thickness,
+        film_thickness, film_roughness, film_rho_m, film_theta_m,
+        fe_density, fe_moment, fe_b_real, fe_magnetic_sld,
+        sub_thickness, sub_roughness, ni_moment,
+    ]  # fmt: skip
+    return parameters, make_model_collection(m1, m2)
+
+
+def test_from_parameters_to_list_of_dicts_snapshot(monkeypatch):
+    """Every key of every row, for a scenario that takes each branch: the
+    guard for refactoring the row builder. ``object`` and ``exclusive_with``
+    hold live Parameters, so they are checked by identity, not by value."""
+    _patch_tree_types(monkeypatch)
+    parameters, models = _build_snapshot_scenario()
+
+    result = parameters_module._from_parameters_to_list_of_dicts(parameters, models)
+
+    by_unique_name = {parameter.unique_name: parameter for parameter in parameters}
+    for row in result:
+        assert row['object'] is by_unique_name[row['unique_name']]
+    exclusive = {row['unique_name']: getattr(row['exclusive_with'], 'unique_name', None) for row in result}
+    assert exclusive == {name: None for name in exclusive} | {
+        'fe_density': 'fe_moment',
+        'fe_moment': 'fe_density',
+    }
+
+    snapshot = [{key: value for key, value in row.items() if key not in ('object', 'exclusive_with')} for row in result]
+    assert snapshot == _EXPECTED_SNAPSHOT
+
+
+def _row(unique_name, display_name, group, alias, value, **overrides):
+    """An expected row: the defaults of a plain, unshared, fixed model parameter, plus ``overrides``."""
+    row = {
+        'name': display_name,
+        'display_name': display_name,
+        'group': group,
+        'alias': alias,
+        'unique_name': unique_name,
+        'value': value,
+        'error': 0.0,
+        'max': 100.0,
+        'min': 0.0,
+        'units': '',
+        'fit': False,
+        'independent': True,
+        'dependency': '',
+        'kind': 'parameter',
+        'readOnly': False,
+        'enabled': True,
+        'sharedBy': [],
+        'sharedByIndices': [],
+        'detachable': False,
+        'followedBy': 0,
+        'experiment': False,
+    }
+    unknown = set(overrides) - set(row)
+    assert not unknown, f'unknown row keys: {unknown}'
+    row.update(overrides)
+    return row
+
+
+_SHARED = {'sharedBy': ['M1', 'M2'], 'sharedByIndices': [0, 1]}
+_SHARED_LAYER = {**_SHARED, 'detachable': True, 'units': 'angstrom'}
+_EXPERIMENT = {'experiment': True}
+_DERIVED = {'kind': 'derived', 'readOnly': True, 'dependency': 'Σ film layer thicknesses'}
+
+# Rows come grouped by the first model that owns them, in model order.
+_EXPECTED_SNAPSHOT = [
+    # M1
+    _row('m1_scale', 'M1 internal scale', 'M1 internal', 'm1_internal_scale', 1.0,
+         min=0.5, max=2.0, fit=True, followedBy=1, **_EXPERIMENT),
+    _row('m1_background', 'M1 internal background', 'M1 internal', 'm1_internal_background', 1e-06,
+         max=1.0, independent=False, dependency='= 1e-06', **_EXPERIMENT),
+    _row('m1_total', 'M1 internal total_thickness', 'M1 internal', 'm1_internal_total_thickness', 50.0, **_DERIVED),
+    _row('film_thickness', 'M1+M2 Film thickness', 'Film', 'm1_m2_film_thickness', 50.0, fit=True, **_SHARED_LAYER),
+    _row('film_roughness', 'M1+M2 Film roughness', 'Film', 'm1_m2_film_roughness', 3.0, **_SHARED_LAYER),
+    _row('film_rho_m', 'M1+M2 Film rho_m', 'Film', 'm1_m2_film_rho_m', 1.0, **_SHARED, detachable=True),
+    _row('film_theta_m', 'M1+M2 Film theta_m', 'Film', 'm1_m2_film_theta_m', 270.0,
+         **_SHARED, detachable=True, units='deg'),
+    # Fe drives the film's rho_m, so its density stays active though its SLD is decoupled
+    _row('fe_density', 'Fe density', 'Fe', 'fe_density', 7.87, error=0.2, fit=True, **_SHARED),
+    _row('fe_moment', 'Fe magnetic_moment', 'Fe', 'fe_magnetic_moment', 2.2, fit=True, **_SHARED),
+    _row('fe_b_real', 'Fe scattering_length_real', 'Fe', 'fe_scattering_length_real', 9.45,
+         kind='inactive', readOnly=True, dependency='unused (SLD is fitted directly)', **_SHARED),
+    _row('fe_magnetic_sld', 'Fe material rho_m', 'Fe', 'fe_material_rho_m', 5.1, units='1/angstrom^2', **_SHARED),
+    # M2
+    # The leader (M1's scale) is not in M2's tree, so its display name falls
+    # back to the bare parameter name rather than 'M1 internal scale'.
+    _row('m2_scale', 'M2 internal scale', 'M2 internal', 'm2_internal_scale', 1.0,
+         min=0.5, max=2.0, fit=True, independent=False, dependency='scale', **_EXPERIMENT),
+    _row('m2_background', 'M2 internal background', 'M2 internal', 'm2_internal_background', 1e-06,
+         max=1.0, **_EXPERIMENT),
+    _row('m2_total', 'M2 internal total_thickness', 'M2 internal', 'm2_internal_total_thickness', 50.0, **_DERIVED),
+    _row('sub_thickness', 'M2 Substrate thickness', 'Substrate', 'm2_substrate_thickness', 0.0, units='angstrom'),
+    _row('sub_roughness', 'M2 Substrate roughness', 'Substrate', 'm2_substrate_roughness', 2.0,
+         units='angstrom', fit=True),
+    # Free, but no layer takes rho_m from Ni: shown inactive and unfittable
+    _row('ni_moment', 'Ni magnetic_moment', 'Ni', 'ni_magnetic_moment', 0.6,
+         kind='inactive', readOnly=True, dependency='unused (no layer takes ρM from this material)'),
+]  # fmt: skip
 
 
 def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False):
