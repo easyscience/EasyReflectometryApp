@@ -3,8 +3,8 @@ from types import ModuleType
 from types import SimpleNamespace
 
 import numpy as np
+from easyreflectometry import Minimizers as MinimizerEnum
 from easyreflectometry.fit_settings import FitSettings
-from easyscience import AvailableMinimizers
 
 from EasyReflectometryApp.Backends.Py.logic import fitting as fitting_module
 from tests.factories import make_experiment
@@ -320,7 +320,7 @@ def test_prepare_threaded_sample_asks_the_project_for_an_experiment_fitter(monke
                            x=np.array([1.0, 2.0]), y=np.array([4.0, 5.0]), ye=np.array([0.1, 0.2])),
     }
     project = make_project(experiments=experiments)
-    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    project.fit_settings = FitSettings(minimizer=MinimizerEnum.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
     multi_fitter = logic.prepare_threaded_sample(StubMinimizersLogic())
@@ -332,11 +332,11 @@ def test_prepare_threaded_sample_asks_the_project_for_an_experiment_fitter(monke
     assert multi_fitter.fit_datasets == [experiments[0]]
     # Sampled with a snapshot of the project's settings, taken before the worker starts
     assert multi_fitter.settings == project.fit_settings
-    project.fit_settings.minimizer = AvailableMinimizers.LMFit_leastsq
+    project.fit_settings.minimizer = MinimizerEnum.LMFit_leastsq
     project.fit_settings.mode = 'minimize'
     project.fit_settings.objective = 'mighell'
     project.fit_settings.engine_options['LMFit_leastsq'] = {'epsfcn': 1e-3}
-    assert multi_fitter.settings == FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    assert multi_fitter.settings == FitSettings(minimizer=MinimizerEnum.Bumps_simplex, mode='sample')
 
 
 def test_sampling_covers_the_included_experiments_only(monkeypatch):
@@ -344,7 +344,7 @@ def test_sampling_covers_the_included_experiments_only(monkeypatch):
     model_a, model_b = make_model(name='A'), make_model(name='B')
     experiments = {0: make_experiment('Exp A', model=model_a), 1: make_experiment('Exp B', model=model_b)}
     project = make_project(experiments=experiments)
-    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    project.fit_settings = FitSettings(minimizer=MinimizerEnum.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
     experiments[0].include_in_fit = False

@@ -63,7 +63,7 @@ See [Qt's Linux requirements](https://doc.qt.io/qt-6/linux-requirements.html) fo
 
 ## Development installation
 
-Development happens on the `develop` branch, which installs the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library from its `develop` branch on GitHub, so **git** must be available.
+Development happens on the `develop` branch, which installs the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library from GitHub (its `core-3.0` branch, built on easyscience 3, until that branch is merged into `develop`), so **git** must be available.
 In the cloned repository, switch to `develop` and install the app with the test dependencies and the linter, then run the test suite:
 
 ```
@@ -72,7 +72,7 @@ pip install -e ".[test]" ruff
 python -m pytest tests
 ```
 
-When a change also touches the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library or the [easyscience](https://github.com/easyscience/core) core, install local checkouts of them in editable mode, after installing the app:
+When a change also touches the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library or the [easyscience](https://github.com/easyscience/core) core, install local checkouts of them in editable mode, after installing the app (the core checkout must be easyscience 3.0.2 or later):
 
 ```
 pip install -e ../reflectometry-lib

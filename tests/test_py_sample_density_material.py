@@ -21,9 +21,9 @@ from EasyReflectometryApp.Backends.Py.sample import Sample
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 @pytest.fixture
@@ -156,7 +156,7 @@ def test_recoupling_drops_the_user_constraint_mark(backend_with_density_material
 
     assert material.isld.independent is False  # follows the density again
     assert not hasattr(material.isld, USER_CONSTRAINT_FLAG)
-    assert 'parameter_constraints' not in project.as_dict(include_materials_not_in_model=True)
+    assert 'parameter_constraints' not in project.as_dict()
 
 
 def test_constraint_on_decoupled_sld_keeps_material_decoupled_and_recoupling_works(backend_with_density_material):
@@ -208,7 +208,7 @@ def test_project_with_a_decoupled_density_material_reloads_with_its_constraint(q
     backend.store_constraint_metadata()
     project_dict = json.loads(json.dumps(project.as_dict()))
 
-    global_object.map._clear()
+    global_object.registry.clear()
     reloaded = Project()
     reloaded_backend = Sample(reloaded)
     reloaded.from_dict(project_dict)

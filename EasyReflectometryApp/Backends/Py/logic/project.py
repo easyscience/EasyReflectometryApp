@@ -166,7 +166,7 @@ class Project:
             project must treat it as changed.
         """
         self._run_pre_save_hooks()
-        content = self._project_lib.as_dict(include_materials_not_in_model=True)
+        content = self._project_lib.as_dict()
         return hashlib.sha256(json.dumps(content, sort_keys=True).encode('utf-8')).hexdigest()
 
     def create(self) -> None:

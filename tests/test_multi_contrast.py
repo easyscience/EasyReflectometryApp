@@ -20,9 +20,9 @@ Q = np.linspace(0.01, 0.25, 30)
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 @pytest.fixture

@@ -1,18 +1,18 @@
 import copy
 from typing import Any
 
+from easyreflectometry import Minimizers as MinimizerEnum
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.fit_settings import OBJECTIVES
 from easyreflectometry.fit_settings import FitSettings
 from easyreflectometry.fit_settings import option_schema
 from easyreflectometry.fit_settings import requires_finite_bounds
-from easyscience import AvailableMinimizers
 
 BAYESIAN_LABEL = 'BUMPS-DREAM (Bayesian)'
 #: The minimizer the app gives a new project (#319: a classical default, and
 #: BUMPS is the engine that honours inequality constraints). The library's
 #: own default stays LMFit for notebooks; a loaded project keeps its own.
-APP_DEFAULT_MINIMIZER = AvailableMinimizers.Bumps_simplex
+APP_DEFAULT_MINIMIZER = MinimizerEnum.Bumps_simplex
 
 
 def apply_app_defaults(project_lib: ProjectLib) -> None:
@@ -27,9 +27,9 @@ class Minimizers:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         # Aliases of a listed member (same engine and method) are not offered.
-        aliases = [AvailableMinimizers.__members__.get(name) for name in ('LMFit', 'Bumps', 'DFO')]
+        aliases = [MinimizerEnum.__members__.get(name) for name in ('LMFit', 'Bumps', 'DFO')]
         # The GUI list is the Bayesian choice at index 0, then these: minimizer i is at index i + 1.
-        self._minimizers = [m for m in AvailableMinimizers if not any(m is alias for alias in aliases)]
+        self._minimizers = [m for m in MinimizerEnum if not any(m is alias for alias in aliases)]
 
     @property
     def _settings(self) -> FitSettings:
@@ -76,7 +76,7 @@ class Minimizers:
         return self._selected_package() == 'bumps' and getattr(self.selected_minimizer_enum(), 'method', '') == 'lm'
 
     def selected_minimizer_enum(self):
-        """The ``AvailableMinimizers`` member that will run (``Bumps_simplex`` when sampling)."""
+        """The ``MinimizerEnum`` member that will run (``Bumps_simplex`` when sampling)."""
         return self._settings.minimizer
 
     def requires_finite_bounds(self) -> bool:
@@ -87,7 +87,7 @@ class Minimizers:
             return False
         if new_value == 0:
             # Bayesian mode: the sampler needs a BUMPS engine.
-            self._settings.minimizer = AvailableMinimizers.Bumps_simplex
+            self._settings.minimizer = MinimizerEnum.Bumps_simplex
             self._settings.mode = 'sample'
         else:
             self._settings.minimizer = self._minimizers[new_value - 1]

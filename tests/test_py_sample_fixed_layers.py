@@ -15,9 +15,9 @@ from EasyReflectometryApp.Backends.Py.sample import Sample
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 @pytest.fixture

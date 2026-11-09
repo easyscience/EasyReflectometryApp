@@ -9,6 +9,7 @@ from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
 
+from .helpers import is_independent
 from .structure import guide_field_reference
 from .structure import magnetic_vector_for_layer
 
@@ -244,7 +245,7 @@ class Layers:
                     'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
                     'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
-                    'editable': magnetism is not None and bool(magnetism.theta_m.independent),
+                    'editable': magnetism is not None and is_independent(magnetism.theta_m),
                     'material_magnetic': getattr(layer.material, 'rho_m', None) is not None,
                     'rho_m_coupled': bool(layer.rho_m_coupled),
                 }
@@ -367,8 +368,8 @@ DEFAULT_FIELD = {'guide_field_angle': 270.0, 'applied_field': 0.0, 'model_magnet
 
 def _set_parameter_value(parameter, new_value) -> bool:
     """Set a parameter from an edit; False for no change, bad input or a
-    dependent parameter (a coupled rho_m follows its material)."""
-    if not parameter.independent:
+    dependent or pinned parameter (a coupled rho_m follows its material)."""
+    if not is_independent(parameter):
         return False
     try:
         value = float(new_value)
@@ -379,7 +380,7 @@ def _set_parameter_value(parameter, new_value) -> bool:
     try:
         parameter.value = value
     except (ValueError, TypeError):
-        logger.exception('Failed to set %s to %s', parameter.name, value)
+        logger.exception('Failed to set %s to %s', parameter.display_name, value)
         return False
     return True
 

@@ -60,6 +60,14 @@
   backend slots and properties, and misspelt names corrected. No change in
   behaviour, except that converged R̂ values in the Bayesian diagnostics are now
   shown in green rather than the blue accent colour.
+- Built on easyreflectometry 2 and easyscience 3:
+  - Projects saved by EasyReflectometry 1.5 or earlier no longer open. Re-create
+    them, or open them with EasyReflectometry 1.5.
+  - The refl1d engine now smears the curve properly (it oversamples the
+    resolution kernel), so refl1d fits give different, more accurate results,
+    and they take longer.
+  - Removing the last magnetic layer, its assembly or its model now always
+    switches magnetism off in the calculation engine.
 
 # Version 1.5.0 (19 Oct 2026)
 

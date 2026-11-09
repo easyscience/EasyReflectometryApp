@@ -14,6 +14,7 @@ from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
+from .helpers import is_independent
 from .material import coupled_material_ids
 from .material import inactive_density_knobs
 
@@ -280,7 +281,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         in the Model Editor is reflected in the Analysis parameters table.
         """
         if path is not None and len(path) >= 2:
-            param_name = _DISPLAY_NAMES.get(path[-1].name, path[-1].name)
+            param_name = _DISPLAY_NAMES.get(path[-1].display_name, path[-1].display_name)
             # For layer parameters the path is:
             # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
@@ -294,11 +295,11 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             else:
                 parent_name = path[-2].name
             return f'{parent_name} {param_name}', parent_name
-        return param.name, ''  # Fallback to parameter name without group
+        return param.display_name, ''  # Fallback to the parameter's own name, without group
 
     def _get_dependency_expression(param: Parameter, paths: dict) -> str:
         """Get simplified dependency expression."""
-        if param.independent:
+        if is_independent(param):
             return ''
 
         # Check if parameter has dependency map with 'a' key (parameter dependency)
@@ -336,8 +337,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     # The models each parameter belongs to (several when contrasts share an object), and
     # how many parameters of other models follow it (equality ties between contrasts).
-    # Object paths replace the global_object.map graph, which the new
-    # easyscience core no longer populates with parent->child edges.
+    # The core keeps no parent->child graph; the paths are walked here.
     model_paths = [_build_param_object_paths(model) for model in models]
     owners: dict[str, list[int]] = {}
     for model_idx, paths in enumerate(model_paths):
@@ -378,7 +378,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             else:
                 prefixed_display_name = display_name
 
-            alias = _make_alias(prefixed_display_name or parameter.name)
+            alias = _make_alias(prefixed_display_name or parameter.display_name)
             param_value = float(parameter.value)
             is_derived = _is_derived_parameter(parameter, models[model_idx])
             # A density material's input knobs (density, mw, scattering
@@ -405,11 +405,11 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'min': float(parameter.min),
                     'units': parameter.unit,
                     'fit': False if (is_derived or is_inactive) else parameter.free,
-                    'independent': parameter.independent,
+                    'independent': is_independent(parameter),
                     'dependency': (
                         inactive_note
                         if is_inactive
-                        else _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
+                        else _DERIVED_DESCRIPTIONS.get(parameter.display_name, 'derived')
                         if is_derived
                         else _get_dependency_expression(parameter, paths)
                     ),
@@ -425,7 +425,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'sharedByIndices': shared_by if len(shared_by) > 1 else [],
                     # A shared layer parameter can be given to one model alone (its assembly is
                     # copied); a material's cannot: materials belong to the project's palette.
-                    'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
+                    'detachable': len(shared_by) > 1 and is_layer_param and is_independent(parameter),
                     'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
                     # Decided under the first model that owns the parameter. That is
@@ -444,10 +444,9 @@ _DERIVED_DESCRIPTIONS = {
     'total_thickness': 'Σ film layer thicknesses',
 }
 
-# Table names for parameters whose own name is forced by something else. A
-# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' because the
-# calculators bind by name (a material parameter called 'rho_m' would be
-# bound to its layer's magnetic SLD slot); the table calls it what it is.
+# Table names for parameters whose library name says something else. A
+# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' by the library;
+# the table calls it what it is.
 _DISPLAY_NAMES = {'magnetic_sld': 'material rho_m'}
 
 # What the 'magnetic' name filter shows.
@@ -470,9 +469,10 @@ def _inactive_note(parameter: Parameter, path, coupled_materials: set[int]):
         return None
     owner = path[-2]
     drives_magnetism = id(owner) in coupled_materials
-    if getattr(owner, 'sld_coupled', True) is False and parameter.name in inactive_density_knobs(owner, drives_magnetism):
+    knobs = inactive_density_knobs(owner, drives_magnetism)
+    if getattr(owner, 'sld_coupled', True) is False and parameter.display_name in knobs:
         return _INACTIVE_KNOB_NOTE
-    if parameter.name == 'magnetic_moment' and id(owner) not in coupled_materials:
+    if parameter.display_name == 'magnetic_moment' and id(owner) not in coupled_materials:
         return _UNUSED_MOMENT_NOTE
     return None
 
@@ -490,7 +490,7 @@ def _exclusive_partner(parameter: Parameter, path):
     if getattr(owner, 'magnetic_moment', None) is None or owner.sld_coupled:
         return None
     partners = {'density': owner.magnetic_moment, 'magnetic_moment': owner.density}
-    return partners.get(parameter.name)
+    return partners.get(parameter.display_name)
 
 
 def _is_derived_parameter(parameter: Parameter, model) -> bool:
@@ -507,10 +507,8 @@ def _is_derived_parameter(parameter: Parameter, model) -> bool:
 def _build_param_object_paths(model) -> dict:
     """Map each parameter's ``unique_name`` to its object chain ``[model, ..., parameter]``.
 
-    Replaces ``global_object.map.find_path``: the new easyscience core
-    (``NewBase`` / ``ModelBase`` / ``EasyList``) registers vertices but no
-    parent->child edges, so the map graph can no longer be walked. The chain
-    mirrors the old map path, e.g.
+    The easyscience core keeps no parent->child graph to look this up in. The
+    chain reads, e.g.
     ``Model -> Sample -> Assembly -> LayerCollection -> Layer -> [Material ->] Parameter``,
     so the existing index logic (``path[-4]`` for the assembly, ``path[-2]``
     for the immediate parent) keeps working.

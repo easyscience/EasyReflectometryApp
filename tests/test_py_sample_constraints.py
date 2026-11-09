@@ -16,6 +16,7 @@ from easyreflectometry.sample import SurfactantLayer
 from easyscience import global_object
 
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
+from EasyReflectometryApp.Backends.Py.logic.helpers import is_independent
 from EasyReflectometryApp.Backends.Py.logic.minimizers import Minimizers
 from EasyReflectometryApp.Backends.Py import sample as sample_module
 from EasyReflectometryApp.Backends.Py.sample import Sample
@@ -23,9 +24,9 @@ from EasyReflectometryApp.Backends.Py.sample import Sample
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 @pytest.fixture
@@ -153,7 +154,7 @@ class TestInequalityConstraints:
         assert t_a.independent
 
         project_dict = json.loads(json.dumps(project.as_dict()))
-        global_object.map._clear()
+        global_object.registry.clear()
         reloaded_project = Project()
         reloaded_backend = Sample(reloaded_project)
         reloaded_project.from_dict(project_dict)
@@ -316,7 +317,7 @@ class TestPhysicsRecipes:
         assert film_b.layers[0].thickness.max == pytest.approx(60.0)
 
         project_dict = json.loads(json.dumps(project.as_dict()))
-        global_object.map._clear()
+        global_object.registry.clear()
         reloaded = Project()
         reloaded_backend = Sample(reloaded)
         reloaded.from_dict(project_dict)
@@ -349,7 +350,7 @@ class TestPhysicsRecipes:
         backend.applyPhysicsConstraint(3, 'equal_apm')
         project_dict = json.loads(json.dumps(project.as_dict()))
 
-        global_object.map._clear()
+        global_object.registry.clear()
         reloaded = Project()
         reloaded_backend = Sample(reloaded)
         reloaded.from_dict(project_dict)
@@ -369,8 +370,8 @@ class TestPhysicsRecipes:
 def _save_and_reload(project, backend):
     """What the app does on save and load: hooks around the library's own (de)serialization."""
     backend.store_constraint_metadata()
-    project_dict = json.loads(json.dumps(project.as_dict(include_materials_not_in_model=True)))
-    global_object.map._clear()
+    project_dict = json.loads(json.dumps(project.as_dict()))
+    global_object.registry.clear()
     reloaded_project = Project()
     reloaded_backend = Sample(reloaded_project)
     reloaded_project.from_dict(project_dict)
@@ -440,7 +441,7 @@ class TestEqualityConstraintPersistence:
         roughness = reloaded.models[0].sample[1].layers[0].roughness
         assert roughness.value == pytest.approx(5.0)
         assert roughness.free is False
-        assert roughness.independent is False
+        assert is_independent(roughness) is False
         # Pinned, so it is not offered as the dependent of a new constraint.
         assert not any('Film A roughness' in name for name in reloaded_backend.constrainableParameterNames)
 
@@ -533,7 +534,7 @@ class TestEqualityConstraintPersistence:
         reloaded_backend.moveSelectedAssemblyDown()
         reloaded_thickness = reloaded.models[0].sample[1].layers[0].thickness
         assert reloaded_thickness.enabled is True
-        assert reloaded_thickness.independent is False
+        assert is_independent(reloaded_thickness) is False
         reloaded_backend.removeConstraintByIndex(_row_index(reloaded_backend, 'Film A thickness'))
         assert reloaded_thickness.independent is True
         assert reloaded_thickness.value == pytest.approx(40.0)
@@ -655,7 +656,7 @@ class TestEqualityConstraintPersistence:
         backend.store_constraint_metadata()
         project.save_as_json()
 
-        global_object.map._clear()
+        global_object.registry.clear()
         reloaded = Project()
         reloaded_backend = Sample(reloaded)
         reloaded.load_from_json(project.path_json)
@@ -692,7 +693,7 @@ class TestStaticConstraintBounds:
 
         assert backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', '45')['success']
 
-        assert (thickness.value, thickness.independent, thickness.free) == (45.0, False, False)
+        assert (thickness.value, is_independent(thickness), thickness.free) == (45.0, False, False)
         assert _equality_rows(backend) == [('static', 'Model Film A thickness', '=', '45')]
 
 
@@ -702,7 +703,7 @@ class TestStructuralEditsDetachCutOffConstraints:
 
     def _save(self, project, backend):
         backend.store_constraint_metadata()
-        return project.as_dict(include_materials_not_in_model=True)
+        return project.as_dict()
 
     @staticmethod
     def _alias_of(backend, parameter):

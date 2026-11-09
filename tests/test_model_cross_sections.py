@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _plain_project():
     from easyreflectometry import Project as RealProject
 
-    global_object.map._clear()
+    global_object.registry.clear()
     project = RealProject()
     project.calculator = 'refl1d'
     project.default_model()

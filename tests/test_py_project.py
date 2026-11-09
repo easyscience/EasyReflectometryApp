@@ -176,7 +176,7 @@ def test_load_emits_error_on_outdated_file_format(monkeypatch, qcore_application
     monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
 
     def _raise_format_error(_path):
-        raise ValueError('This project file predates file_format=2 and cannot be loaded.')
+        raise ValueError('This project file (file_format=3) was written by easyreflectometry 1.x and cannot be loaded.')
 
     monkeypatch.setattr(project._logic, 'load', _raise_format_error)
 
@@ -189,7 +189,8 @@ def test_load_emits_error_on_outdated_file_format(monkeypatch, qcore_application
 
     assert errors == [
         'This project file uses obsolete and unsupported format.\n'
-        'Please re-create the project from its underlying data and save it again.'
+        'Please re-create the project from its underlying data and save it again, '
+        'or open it with EasyReflectometry 1.5.'
     ]
     assert loaded['count'] == 0
 

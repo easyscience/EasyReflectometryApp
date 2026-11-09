@@ -281,7 +281,8 @@ class Project(QObject):
             if 'file_format' in str(ex):
                 message = (
                     'This project file uses obsolete and unsupported format.\n'
-                    'Please re-create the project from its underlying data and save it again.'
+                    'Please re-create the project from its underlying data and save it again, '
+                    'or open it with EasyReflectometry 1.5.'
                 )
             else:
                 message = str(ex)

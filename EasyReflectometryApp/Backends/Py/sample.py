@@ -25,6 +25,8 @@ from PySide6.QtCore import Slot
 
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
+from .logic.helpers import PINNED_FLAG
+from .logic.helpers import is_independent
 from .logic.layers import Layers as LayersLogic
 from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
@@ -400,7 +402,7 @@ class Sample(QObject):
         parameter = self._find_parameter_object_by_unique_name(unique_name)
         if parameter is None:
             return {'success': False, 'message': self.tr('The parameter no longer exists.')}
-        if not parameter.independent:
+        if not is_independent(parameter):
             return {'success': False, 'message': self.tr('Remove its constraint first.')}
         try:
             self._project_lib.detach(parameter, model_index)
@@ -1324,24 +1326,23 @@ class Sample(QObject):
 
     @staticmethod
     def _ensure_parameter_independent(parameter: DescriptorNumber) -> None:
-        """Drop any dependency, together with the library's mark that it is a user constraint.
+        """Drop any dependency or pin, together with the library's mark that it is a user constraint.
 
         A mark left on an independent parameter is ignored by the library, but would be picked
         up again (and saved as the user's) if something internal later made it dependent.
         """
-        try:
+        if not getattr(parameter, 'independent', True):
             parameter.make_independent()
-        except AttributeError:
-            parameter._independent = True
-        if hasattr(parameter, USER_CONSTRAINT_FLAG):
-            delattr(parameter, USER_CONSTRAINT_FLAG)
+        for flag in (USER_CONSTRAINT_FLAG, PINNED_FLAG):
+            if hasattr(parameter, flag):
+                delattr(parameter, flag)
 
     @staticmethod
     def _apply_static_constraint(parameter: DescriptorNumber, value: float) -> None:
-        """Pin `parameter` to `value`: fixed, and marked non-independent so it reads as constrained."""
+        """Pin `parameter` to `value`: fixed, and flagged so that it reads as constrained."""
         parameter.value = value
         parameter.free = False
-        parameter._independent = False
+        setattr(parameter, PINNED_FLAG, True)
 
     def _infer_constraint_state(
         self,
@@ -1362,20 +1363,7 @@ class Sample(QObject):
         if getattr(parameter_obj, 'independent', True) or not getattr(parameter_obj, USER_CONSTRAINT_FLAG, False):
             return None
 
-        try:
-            raw_expression = parameter_obj.dependency_expression
-        except AttributeError:
-            value = float(parameter_obj.value)
-            formatted = self._format_numeric(value)
-            return {
-                'mode': 'static',
-                'relation': '=',
-                'expression': formatted,
-                'raw_expression': formatted,
-                'pretty_expression': formatted,
-                'value': value,
-            }
-
+        raw_expression = parameter_obj.dependency_expression
         dependency_map = getattr(parameter_obj, 'dependency_map', {}) or {}
         display_by_object = display_by_object or {}
         alias_display_subset = {
@@ -1414,7 +1402,6 @@ class Sample(QObject):
             'unit': str(parameter.unit),
             'free': bool(parameter.free),
             'independent': getattr(parameter, 'independent', True),
-            '_independent': getattr(parameter, '_independent', True),
         }
         if hasattr(parameter, 'min'):
             try:
@@ -1448,8 +1435,6 @@ class Sample(QObject):
             parameter.max = state['max']
         if 'free' in state and state['free'] is not None:
             parameter.free = state['free']
-        if '_independent' in state and state['_independent'] is not None:
-            parameter._independent = state['_independent']
 
     @Property('QVariantList', notify=layersChanged)
     def parameterNames(self) -> list[str]:
@@ -1801,7 +1786,7 @@ class Sample(QObject):
                 parameter.free = bool(previous_free)
             logger.warning(
                 'The constraint on %s was removed: it, or a parameter it depends on, is no longer part of a model.',
-                getattr(parameter, 'name', '?'),
+                parameter.display_name,
             )
             detached += 1
         if detached:
@@ -1977,9 +1962,9 @@ class Sample(QObject):
                         'Use a numeric constraint ("= value") instead.'
                     )
             elif mode == 'static':
-                # Not a dependency on a constant: that would set min == max, which the library
-                # then refuses to load. The value and fixed state are saved with the parameter;
-                # the row itself is restored from `store_constraint_metadata`.
+                # Not a dependency on a constant (see `PINNED_FLAG`). The value and fixed state
+                # are saved with the parameter; the row itself is restored from
+                # `store_constraint_metadata`.
                 self._apply_static_constraint(dependent, instruction['value'])
             elif mode == 'lower_bound':
                 dependent.min = instruction['value']
@@ -1995,7 +1980,7 @@ class Sample(QObject):
             try:
                 self._restore_parameter_state(dependent, previous_state)
             except Exception:  # noqa: BLE001
-                logger.exception('Could not roll back %s after a failed constraint', getattr(dependent, 'name', '?'))
+                logger.exception('Could not roll back %s after a failed constraint', dependent.display_name)
             return {'success': False, 'message': str(error)}
 
         unique_name = getattr(dependent, 'unique_name', None)

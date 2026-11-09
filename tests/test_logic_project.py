@@ -133,7 +133,7 @@ def test_save_and_create_propagate_library_failures():
 
 def test_pre_save_hooks_run_before_every_write_and_fingerprint():
     project_lib = make_project_with_sample()
-    project_lib.as_dict = lambda include_materials_not_in_model=False: {'calls': len(project_lib.calls)}
+    project_lib.as_dict = lambda: {'calls': len(project_lib.calls)}
     logic = Project(project_lib)
     logic.add_pre_save_hook(lambda: project_lib.calls.append(('hook',)))
     project_lib.calls.clear()

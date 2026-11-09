@@ -25,9 +25,9 @@ FE_RHO_M = 5.042
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 def _write_film(path, **film_material) -> str:
