@@ -549,6 +549,8 @@ QtObject {
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount
     readonly property int analysisFixedParametersCount: activeBackend.analysis.fixedParametersCount
+    readonly property int analysisActiveParametersCount: activeBackend.analysis.activeParametersCount
+    readonly property int analysisAllParametersCount: activeBackend.analysis.allParametersCount
     readonly property int analysisModelParametersCount: activeBackend.analysis.modelParametersCount
     readonly property int analysisExperimentParametersCount: activeBackend.analysis.experimentParametersCount
     readonly property string analysisNameFilterCriteria: activeBackend.analysis.nameFilterCriteria

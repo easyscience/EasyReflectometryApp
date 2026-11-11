@@ -1360,33 +1360,35 @@ class Analysis(QObject):
 
     @Property(int, notify=parametersChanged)
     def freeParametersCount(self) -> int:
-        result = self._parameters_logic.count_free_parameters()
-        return result
+        """Rows the 'free' variability choice shows (free counts in the table, not the library)."""
+        return self._parameters_logic.variability_counts()['free']
 
     @Property(int, notify=parametersChanged)
     def fixedParametersCount(self) -> int:
-        result = self._parameters_logic.count_fixed_parameters()
-        return result
+        """Rows the 'fixed' variability choice shows: active parameters left out of the fit."""
+        return self._parameters_logic.variability_counts()['fixed']
 
     @Property(int, notify=parametersChanged)
+    def activeParametersCount(self) -> int:
+        """Rows the default 'active' choice shows: those that can be edited and fitted."""
+        return self._parameters_logic.variability_counts()['active']
+
+    @Property(int, notify=parametersChanged)
+    def allParametersCount(self) -> int:
+        """Rows the 'all' choice shows, including constrained, derived and inactive ones."""
+        return self._parameters_logic.variability_counts()['all']
+
+    # The name filter counts follow the variability filter, so each choice is
+    # labelled with the number of rows it would show.
+    @Property(int, notify=parametersChanged)
     def modelParametersCount(self) -> int:
-        return len(
-            [
-                parameter
-                for parameter in self._parameters_logic.all_parameters()
-                if parameter.get('enabled', True) and not parameter['experiment']
-            ]
-        )
+        rows = [parameter for parameter in self._parameters_logic.all_parameters() if not parameter['experiment']]
+        return self._parameters_logic.count_rows_matching_variability(rows)
 
     @Property(int, notify=parametersChanged)
     def experimentParametersCount(self) -> int:
-        return len(
-            [
-                parameter
-                for parameter in self._parameters_logic.all_parameters()
-                if parameter.get('enabled', True) and parameter['experiment']
-            ]
-        )
+        rows = [parameter for parameter in self._parameters_logic.all_parameters() if parameter['experiment']]
+        return self._parameters_logic.count_rows_matching_variability(rows)
 
     @Slot(float)
     def setCurrentParameterValue(self, new_value: float) -> None:

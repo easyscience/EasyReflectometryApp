@@ -22,13 +22,28 @@ logger = logging.getLogger(__name__)
 
 RESERVED_ALIAS_NAMES = {'np', 'numpy', 'math', 'pi', 'e'}
 
+# Choices of the table's variability filter. 'active' (the default) hides the
+# rows that cannot be edited or fitted; only 'all' shows them.
+VARIABILITY_FILTERS = ('active', 'all', 'free', 'fixed')
+DEFAULT_VARIABILITY_FILTER = 'active'
+
+
+def is_active_row(parameter: dict[str, Any]) -> bool:
+    """True for a row the user can edit and fit (shown greyed otherwise).
+
+    Constrained (dependent) and derived parameters take their value from
+    others, and an inactive knob no longer affects the reflectivity. Mirrors
+    ``isEditable`` in the Analysis page's Fittables.qml.
+    """
+    return parameter.get('kind', 'parameter') == 'parameter' and parameter.get('independent', True)
+
 
 class Parameters:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         self._current_index = 0
         self._name_filter_criteria = ''
-        self._variability_filter_criteria = 'all'
+        self._variability_filter_criteria = DEFAULT_VARIABILITY_FILTER
 
     @property
     def as_status_string(self) -> str:
@@ -59,22 +74,36 @@ class Parameters:
         return True
 
     def set_variability_filter_criteria(self, criteria: str) -> bool:
-        normalized = (criteria or 'all').strip().lower()
-        if normalized not in {'all', 'free', 'fixed'}:
-            normalized = 'all'
+        normalized = (criteria or DEFAULT_VARIABILITY_FILTER).strip().lower()
+        if normalized not in VARIABILITY_FILTERS:
+            normalized = DEFAULT_VARIABILITY_FILTER
         if normalized == self._variability_filter_criteria:
             return False
         self._variability_filter_criteria = normalized
         self._current_index = 0
         return True
 
+    def variability_counts(self) -> dict[str, int]:
+        """Rows each variability choice shows, whatever the name filter."""
+        rows = [parameter for parameter in self.all_parameters() if parameter.get('enabled', True)]
+        return {
+            criteria: sum(1 for parameter in rows if _matches_variability(parameter, criteria))
+            for criteria in VARIABILITY_FILTERS
+        }
+
+    def count_rows_matching_variability(self, rows: list[dict[str, Any]]) -> int:
+        """How many of ``rows`` the current variability filter keeps."""
+        return sum(
+            1
+            for parameter in rows
+            if parameter.get('enabled', True) and _matches_variability(parameter, self._variability_filter_criteria)
+        )
+
     def _parameter_matches_filters(self, parameter: dict[str, Any]) -> bool:
         if not parameter.get('enabled', True):
             return False
 
-        if self._variability_filter_criteria == 'free' and not parameter.get('fit', False):
-            return False
-        if self._variability_filter_criteria == 'fixed' and parameter.get('fit', False):
+        if not _matches_variability(parameter, self._variability_filter_criteria):
             return False
 
         criteria = self._name_filter_criteria
@@ -253,6 +282,18 @@ class Parameters:
         return ['', '*', '/', '+', '-']
 
 
+def _matches_variability(parameter: dict[str, Any], criteria: str) -> bool:
+    if criteria == 'all':
+        return True
+    if not is_active_row(parameter):
+        return False
+    if criteria == 'free':
+        return bool(parameter.get('fit', False))
+    if criteria == 'fixed':
+        return not parameter.get('fit', False)
+    return True  # 'active'
+
+
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:
     """Convert parameters to list of dictionaries with simplified logic.
 
@@ -388,9 +429,9 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             # A density material's input knobs (density, mw, scattering
             # lengths) stop affecting the reflectivity once the material's
             # sld/isld are decoupled, and a material's moment does nothing
-            # while no layer is coupled to it — shown greyed with a note, never
-            # hidden (enabled must stay True: _parameter_matches_filters drops
-            # enabled=False rows from the list entirely).
+            # while no layer is coupled to it — hidden by the default 'active'
+            # filter, shown greyed with a note under 'all' (enabled must stay
+            # True: _parameter_matches_filters drops enabled=False rows always).
             inactive_note = _inactive_note(parameter, path, coupled_materials)
             is_inactive = inactive_note is not None
             parameter_list.append(

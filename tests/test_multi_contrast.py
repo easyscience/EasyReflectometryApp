@@ -86,7 +86,9 @@ class TestContrast:
         _contrast(project, sample)
         roughness = project.models[0].sample[2].layers[0].roughness  # substrate, shared
         constrain_equal(roughness, project.models[1].sample[1].layers[0].roughness)
-        row = next(row for row in Parameters(project).parameters if row['unique_name'] == roughness.unique_name)
+        table = Parameters(project)
+        table.set_variability_filter_criteria('all')  # a tied row is not active: hidden by default
+        row = next(row for row in table.parameters if row['unique_name'] == roughness.unique_name)
         assert not row['detachable']
         assert sample.detachParameter(roughness.unique_name, 1)['success'] is False
         assert not roughness.independent

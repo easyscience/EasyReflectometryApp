@@ -251,7 +251,10 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
     assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale']
     assert logic.set_variability_filter_criteria('fixed') is True
     logic.set_name_filter_criteria('')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Layer thickness']
+    # The only fixed row is constrained (dependent): not active, so 'fixed' hides it
+    assert [entry['display_name'] for entry in logic.parameters] == []
+    assert logic.set_variability_filter_criteria('all') is True
+    assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale', 'Layer thickness']
 
     metadata = logic.constraint_metadata()
     assert metadata == [
@@ -360,7 +363,7 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert result[6]['enabled'] is True
 
 
-def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False):
+def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False, kind='parameter', independent=True):
     """A parameter row as ``all_parameters`` returns it, with only the keys the filters read."""
     return {
         'name': name,
@@ -369,11 +372,58 @@ def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=F
         'unique_name': unique_name,
         'fit': fit,
         'enabled': True,
-        'independent': True,
+        'independent': independent,
+        'kind': kind,
         'alias': alias,
         'object': object(),
         'experiment': experiment,
     }
+
+
+def _mixed_activity_rows():
+    return [
+        _filter_row('M1 Film thickness', 'M1 Film thickness', 'Film', 'film.t', 'm1_film_thickness', fit=True),
+        _filter_row('M1 Film roughness', 'M1 Film roughness', 'Film', 'film.r', 'm1_film_roughness', fit=False),
+        # Constrained: takes its value from another parameter
+        _filter_row('M1 Cap thickness', 'M1 Cap thickness', 'Cap', 'cap.t', 'm1_cap_thickness', fit=False, independent=False),
+        # Derived: computed from the layers
+        _filter_row(
+            'M1 total_thickness', 'M1 total_thickness', 'M1', 'total', 'm1_total', fit=False, kind='derived', independent=False
+        ),
+        # A decoupled density material's unused knob
+        _filter_row('Si density', 'Si density', 'Si', 'si.density', 'si_density', fit=False, kind='inactive'),
+        _filter_row('Scale', 'Scale', 'M1', 'scale', 'scale', fit=True, experiment=True),
+    ]
+
+
+def test_variability_filter_defaults_to_active_and_hides_greyed_rows(monkeypatch):
+    logic = parameters_module.Parameters(make_project())
+    monkeypatch.setattr(logic, 'all_parameters', _mixed_activity_rows)
+
+    assert logic.variability_filter_criteria == 'active'
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film thickness', 'M1 Film roughness', 'Scale']
+
+    assert logic.set_variability_filter_criteria('all') is True
+    assert len(logic.parameters) == 6
+
+    # Free and fixed are subsets of the active rows
+    logic.set_variability_filter_criteria('free')
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film thickness', 'Scale']
+    logic.set_variability_filter_criteria('fixed')
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film roughness']
+
+
+def test_variability_counts_ignore_name_filter_and_name_counts_follow_variability(monkeypatch):
+    logic = parameters_module.Parameters(make_project())
+    monkeypatch.setattr(logic, 'all_parameters', _mixed_activity_rows)
+    logic.set_name_filter_criteria('zzz')
+
+    assert logic.variability_counts() == {'active': 3, 'all': 6, 'free': 2, 'fixed': 1}
+
+    model_rows = [row for row in _mixed_activity_rows() if not row['experiment']]
+    assert logic.count_rows_matching_variability(model_rows) == 2
+    logic.set_variability_filter_criteria('all')
+    assert logic.count_rows_matching_variability(model_rows) == 5
 
 
 def test_parameters_special_filters_and_invalid_variability_normalization(monkeypatch):
@@ -389,7 +439,7 @@ def test_parameters_special_filters_and_invalid_variability_normalization(monkey
     monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
 
     assert logic.set_variability_filter_criteria('INVALID') is False
-    assert logic.variability_filter_criteria == 'all'
+    assert logic.variability_filter_criteria == 'active'
 
     logic.set_name_filter_criteria('model')
     assert [entry['display_name'] for entry in logic.parameters] == [

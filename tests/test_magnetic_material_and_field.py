@@ -150,6 +150,9 @@ class TestParameterTable:
 
     def test_magnetic_filter_includes_moment_and_field(self, project):
         logic = Parameters(project)
+        # The moment is inactive here (no layer coupled), so the default
+        # 'active' filter would hide it; this checks the name matching alone.
+        logic.set_variability_filter_criteria('all')
         logic.set_name_filter_criteria('magnetic')
         names = {row['name'] for row in logic.parameters}
         assert any('magnetic_moment' in name for name in names)
