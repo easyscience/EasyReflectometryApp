@@ -11,6 +11,16 @@ from easyreflectometry.model.resolution_functions import PercentageFwhm
 from easyreflectometry.project import ModelRemoval
 
 from .helpers import get_original_name
+from .helpers import is_independent
+
+
+def _set_model_parameter(parameter, new_value: float) -> bool:
+    """Set a model's scale or background; False for no change or a dependent or pinned
+    parameter (both are constrainable, so the user can pin one on the Sample page)."""
+    if not is_independent(parameter) or parameter.value == new_value:
+        return False
+    parameter.value = new_value
+    return True
 
 
 def _formula_of(target) -> str:
@@ -76,16 +86,10 @@ class Models:
         return False
 
     def set_scaling_at_current_index(self, new_value: float) -> bool:
-        if self._models[self.index].scale.value != new_value:
-            self._models[self.index].scale.value = new_value
-            return True
-        return False
+        return _set_model_parameter(self._models[self.index].scale, new_value)
 
     def set_background_at_current_index(self, new_value: float) -> bool:
-        if self._models[self.index].background.value != new_value:
-            self._models[self.index].background.value = new_value
-            return True
-        return False
+        return _set_model_parameter(self._models[self.index].background, new_value)
 
     def set_resolution_at_current_index(self, new_value: str) -> bool:
         if isinstance(self._models[self.index].resolution_function, PercentageFwhm):

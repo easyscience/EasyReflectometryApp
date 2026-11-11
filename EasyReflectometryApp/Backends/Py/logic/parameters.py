@@ -168,7 +168,7 @@ class Parameters:
 
     def set_current_parameter_value(self, new_value: str) -> bool:
         parameter = self._get_current_parameter()
-        if parameter is None:
+        if parameter is None or not is_independent(parameter):
             return False
         try:
             float_value = float(new_value)
@@ -185,7 +185,7 @@ class Parameters:
 
     def set_current_parameter_min(self, new_value: str) -> bool:
         parameter = self._get_current_parameter()
-        if parameter is None:
+        if parameter is None or not is_independent(parameter):
             return False
         try:
             float_value = float(new_value)
@@ -202,7 +202,7 @@ class Parameters:
 
     def set_current_parameter_max(self, new_value: str) -> bool:
         parameter = self._get_current_parameter()
-        if parameter is None:
+        if parameter is None or not is_independent(parameter):
             return False
         try:
             float_value = float(new_value)
@@ -227,6 +227,10 @@ class Parameters:
             # be tickable into the fit through any caller, QML or not.
             return False
         parameter = entry['object']
+        if not is_independent(parameter):
+            # A pin is the value and `free = False`: freeing it would undo the pin while
+            # leaving the parameter locked. A dependent parameter is never fitted.
+            return False
         if bool(new_value) != parameter.free:
             parameter.free = bool(new_value)
             # The data only constrain the product of these two: freeing one

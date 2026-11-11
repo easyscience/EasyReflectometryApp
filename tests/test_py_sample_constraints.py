@@ -18,6 +18,8 @@ from easyscience import global_object
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
 from EasyReflectometryApp.Backends.Py.logic.helpers import is_independent
 from EasyReflectometryApp.Backends.Py.logic.minimizers import Minimizers
+from EasyReflectometryApp.Backends.Py.logic.models import Models as ModelsLogic
+from EasyReflectometryApp.Backends.Py.logic.parameters import Parameters as ParametersLogic
 from EasyReflectometryApp.Backends.Py import sample as sample_module
 from EasyReflectometryApp.Backends.Py.sample import Sample
 
@@ -816,3 +818,125 @@ class TestStructuralEditsDetachCutOffConstraints:
         assert thickness.independent is False
         assert _equality_rows(backend) == [('dynamic', 'Model Film A thickness', '=', 'Model Film B thickness * 2')]
         assert len(self._save(project, backend)['parameter_constraints']) == 1
+
+
+class TestPinnedParameterStaysConsistent:
+    """A pin is only the app's mark (`PINNED_FLAG`); the library would accept any write to the
+    parameter. Every write path must refuse it, and a pin whose row no longer holds must not
+    keep the parameter locked with no row left to unlock it by (PR #367 review)."""
+
+    @staticmethod
+    def _pin(backend, parameter, value):
+        idx = next(i for i, entry in enumerate(backend._constrainable_parameter_entries()) if entry['object'] is parameter)
+        assert backend.addConstraint(idx, '=', str(value))['success']
+        assert not is_independent(parameter)
+
+    @staticmethod
+    def _assert_pin_intact(project, backend, parameter, value):
+        assert parameter.value == value and parameter.free is False
+        assert not is_independent(parameter)
+        assert [row['uniqueName'] for row in backend.constraintsList if row['type'] == 'static'] == [parameter.unique_name]
+        backend.store_constraint_metadata()
+        assert [record['mode'] for record in project._info['app_constraints']] == ['static']
+
+    @staticmethod
+    def _assert_released(project, backend, parameter):
+        # Listing the constraints (what the GUI does after any edit) finds the stale pin.
+        assert not [row for row in backend.constraintsList if row['type'] == 'static']
+        assert is_independent(parameter)
+        assert not hasattr(parameter, sample_module.PINNED_FLAG)
+        assert parameter.unique_name not in backend._constraint_states
+        backend.store_constraint_metadata()
+        assert 'app_constraints' not in project._info
+
+    def test_layer_table_refuses_and_disables_a_pinned_thickness(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        self._pin(backend, thickness, 45)
+        backend.setCurrentAssemblyIndex(1)  # Film A
+
+        assert backend.layers[0]['thickness_enabled'] is False
+        assert backend.layers[0]['roughness_enabled'] is True
+        backend.setLayerThicknessAtIndex(0, 60.0)
+        backend.setCurrentLayerThickness(60.0)
+
+        self._assert_pin_intact(project, backend, thickness, 45)
+
+    def test_layer_table_refuses_a_pinned_roughness(self, project_and_backend):
+        project, backend = project_and_backend
+        roughness = project.models[0].sample[1].layers[0].roughness
+        self._pin(backend, roughness, 5)
+        backend.setCurrentAssemblyIndex(1)
+
+        assert backend.layers[0]['roughness_enabled'] is False
+        backend.setLayerRoughnessAtIndex(0, 7.0)
+        backend.setCurrentLayerRoughness(7.0)
+
+        self._assert_pin_intact(project, backend, roughness, 5)
+
+    def test_experiment_page_refuses_a_pinned_scale_and_background(self, project_and_backend):
+        project, backend = project_and_backend
+        model = project.models[0]
+        self._pin(backend, model.scale, 1)
+        models_logic = ModelsLogic(project)
+
+        assert models_logic.set_scaling_at_current_index(2.5) is False
+        self._assert_pin_intact(project, backend, model.scale, 1)
+
+        backend.removeConstraintByIndex(
+            next(i for i, row in enumerate(backend.constraintsList) if row['uniqueName'] == model.scale.unique_name)
+        )
+        self._pin(backend, model.background, 1e-7)
+        assert models_logic.set_background_at_current_index(1e-5) is False
+        assert model.background.value == 1e-7 and not is_independent(model.background)
+
+    def test_analysis_table_refuses_a_pinned_parameter(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        self._pin(backend, thickness, 45)
+        parameters = ParametersLogic(project)
+        rows = [row for row in parameters.parameters if row.get('enabled', True)]
+        parameters.set_current_index(next(i for i, row in enumerate(rows) if row['object'] is thickness))
+
+        assert parameters.set_current_parameter_value('47') is False
+        assert parameters.set_current_parameter_fit(True) is False
+        assert parameters.set_current_parameter_min('1') is False
+        assert parameters.set_current_parameter_max('100') is False
+
+        self._assert_pin_intact(project, backend, thickness, 45)
+
+    def test_a_pin_changed_past_the_guards_is_released(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        self._pin(backend, thickness, 45)
+
+        thickness.value = 47.0  # a script, or a write path without a guard
+
+        self._assert_released(project, backend, thickness)
+        assert thickness.value == 47.0
+        assert any(entry['object'] is thickness for entry in backend._constrainable_parameter_entries())
+
+    def test_a_stale_pin_is_released_on_save(self, project_and_backend):
+        project, backend = project_and_backend
+        thickness = project.models[0].sample[1].layers[0].thickness
+        self._pin(backend, thickness, 45)
+
+        thickness.free = True
+        backend.store_constraint_metadata()  # before anything lists the constraints
+
+        assert 'app_constraints' not in project._info
+        assert is_independent(thickness)
+
+    def test_a_recipe_replacing_a_pin_releases_it(self, project_and_backend):
+        project, backend = project_and_backend
+        film_b = project.models[0].sample[2]
+        roughness = film_b.layers[1].roughness
+        self._pin(backend, roughness, 5)
+
+        assert backend.applyPhysicsConstraint(2, 'conformal_roughness')['success']
+        assert not roughness.independent  # follows the first layer now
+        assert not hasattr(roughness, sample_module.PINNED_FLAG)
+        assert backend._constraint_states == {}
+
+        assert backend.removePhysicsConstraint(2, 'conformal_roughness')['success']
+        assert is_independent(roughness)
