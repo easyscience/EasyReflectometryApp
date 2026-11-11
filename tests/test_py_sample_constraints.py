@@ -895,6 +895,9 @@ class TestPinnedParameterStaysConsistent:
         thickness = project.models[0].sample[1].layers[0].thickness
         self._pin(backend, thickness, 45)
         parameters = ParametersLogic(project)
+        # A pinned row is not active, so only the 'all' view lists it, and
+        # there it is still selectable: the setters must refuse it.
+        parameters.set_variability_filter_criteria('all')
         rows = [row for row in parameters.parameters if row.get('enabled', True)]
         parameters.set_current_index(next(i for i, row in enumerate(rows) if row['object'] is thickness))
 

@@ -18,10 +18,10 @@ from .summary import Summary
 # Signals whose emission changes what `Project.save()` would write to disk. Every one of them
 # marks the project dirty (see `_connect_dirty_tracking`). The inventory is explicit rather than
 # derived from a naming convention because the `external*` relays do not cover every mutation:
-# a material rename emits only `materialsTableChanged`, reordering layers or editing a repeated
-# assembly's repetitions emits only `externalRefreshPlot`, and the free/fixed checkbox emits only
-# `parametersChanged`. Missing one of those means the close prompt does not fire and the user
-# loses work, so anything doubtful belongs in this list rather than out of it.
+# reordering layers or editing a repeated assembly's repetitions emits only `externalRefreshPlot`,
+# and the free/fixed checkbox emits only `parametersChanged`. Missing one of those means the close
+# prompt does not fire and the user loses work, so anything doubtful belongs in this list rather
+# than out of it.
 #
 # `Project`'s own signals are absent on purpose: its setters call `markDirty` directly, because
 # create, load and reset fan out through those same signal names and must end up clean.

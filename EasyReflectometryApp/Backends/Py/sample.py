@@ -178,12 +178,19 @@ class Sample(QObject):
     @Slot(str)
     def setCurrentMaterialName(self, new_value: str) -> None:
         if self._material_logic.set_name_at_current_index(new_value):
-            self.materialsTableChanged.emit()
+            self._emitMaterialRenamed()
 
     @Slot(int, str)
     def setMaterialNameAtIndex(self, index: int, new_value: str) -> None:
         if self._material_logic.set_name_at_index(index, new_value):
-            self.materialsTableChanged.emit()
+            self._emitMaterialRenamed()
+
+    def _emitMaterialRenamed(self) -> None:
+        # The layer table and the Analysis parameter names show the material's name too,
+        # and both are cached: refresh them as a layer rename does.
+        self.materialsTableChanged.emit()
+        self._clearCacheAndEmitLayersChanged()
+        self.externalSampleChanged.emit()
 
     @Slot(float)
     def setCurrentMaterialSld(self, new_value: float) -> None:
