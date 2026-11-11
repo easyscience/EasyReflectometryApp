@@ -352,9 +352,12 @@ class PyBackend(QObject):
         # A finished fit updates the goodness-of-fit; refresh the Summary tab's
         # HTML binding so it stops showing the stale pre-fit value.
         self._analysis.externalFittingChanged.connect(self._summary.summaryChanged)
-        # The fit path never emits a Sample signal; refresh the Structure view post-fit
-        self._analysis.externalParametersChanged.connect(self._sample._clearStructureCacheAndEmit)
-        self._analysis.externalFittingChanged.connect(self._sample._clearStructureCacheAndEmit)
+        # An edit in the parameters table and a fit emit no Sample signal, but the Sample page
+        # shows the same values: material SLDs, layer thicknesses and roughnesses, and the
+        # Structure view (which follows materialsTableChanged).
+        for signal in (self._analysis.externalParametersChanged, self._analysis.externalFittingChanged):
+            signal.connect(self._sample.materialsTableChanged)
+            signal.connect(self._sample._clearCacheAndEmitLayersChanged)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
         # Selecting another experiment changes the polarization state and the

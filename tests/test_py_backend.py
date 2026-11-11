@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 
@@ -522,3 +523,18 @@ def test_backend_wires_structure_refresh_to_sample_and_analysis_signals(monkeypa
         signal.emit()
 
     assert backend._sample.structure_clear_calls == 8
+
+
+@pytest.mark.parametrize('signal_name', ['externalParametersChanged', 'externalFittingChanged'])
+def test_analysis_parameter_changes_refresh_the_sample_tables(monkeypatch, qcore_application, signal_name):
+    # An SLD edited in the parameters table, or fitted, is shown by the Sample page's material
+    # editor too, and a fitted thickness or roughness by its (cached) layer table.
+    backend = _make_backend(monkeypatch)
+    materials_refreshed = []
+    backend._sample.materialsTableChanged.connect(lambda: materials_refreshed.append(True))
+
+    getattr(backend._analysis, signal_name).emit()
+
+    assert materials_refreshed == [True]
+    assert backend._sample.clear_calls == 1
+    assert backend._sample.structure_clear_calls == 1
