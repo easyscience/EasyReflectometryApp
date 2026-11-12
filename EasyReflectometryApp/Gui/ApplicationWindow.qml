@@ -341,26 +341,26 @@ EaComponents.ApplicationWindow {
             EaElements.Button {
                 text: qsTr("OK")
                 onClicked: {
-                    if (Globals.References.applicationWindow.appBarCentralTabs.sampleButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = false
-                    }
-                    if (Globals.References.applicationWindow.appBarCentralTabs.experimentButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.experimentButton.enabled = false
-                    }
-                    if (Globals.References.applicationWindow.appBarCentralTabs.analysisButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = false
-                    }
-                    if (Globals.References.applicationWindow.appBarCentralTabs.summaryButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.summaryButton.enabled = false
-                    }
-
-                    Globals.BackendWrapper.projectReset()
-                    Globals.References.applicationWindow.appBarCentralTabs.projectButton.toggle()
-                    Globals.References.resetActive = false
+                    applicationWindow.resetToInitialState()
                     resetStateDialog.close()
                 }
             }
         }
+    }
+
+    // Back to the state the application starts in: default sample, no data, no project, and only
+    // the Home and Project tabs enabled. Shared by the reset button and "Start from scratch"
+    // when creating a new project.
+    function resetToInitialState() {
+        const tabs = Globals.References.applicationWindow.appBarCentralTabs
+        for (const button of [tabs.sampleButton, tabs.experimentButton, tabs.analysisButton, tabs.summaryButton]) {
+            if (button !== null) {
+                button.enabled = false
+            }
+        }
+        Globals.BackendWrapper.projectReset()
+        tabs.projectButton.toggle()
+        Globals.References.resetActive = false
     }
 
     // A refused calculation engine switch only reaches the log otherwise,
@@ -425,6 +425,7 @@ EaComponents.ApplicationWindow {
 
     Component.onCompleted: {
         console.debug(`Application window loaded ::: ${this}`)
+        Globals.References.applicationWindow.resetToInitialState = resetToInitialState
         if (Globals.BackendWrapper.testMode) {
 
             // To ensure that Qt starts up there is a delay before the it is shut down again.

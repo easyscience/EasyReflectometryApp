@@ -24,6 +24,9 @@ class Project:
         self._project_lib.default_model()
         apply_app_defaults(self._project_lib)
         self._update_enablement_of_fixed_layers_for_model(0)
+        # Set by `record_default_content` once the backend is wired; until then all content
+        # counts as custom.
+        self._default_content_fingerprint = None
 
     @property
     def created(self) -> bool:
@@ -165,8 +168,37 @@ class Project:
         :raises Exception: whatever `as_dict` raises; a caller that cannot fingerprint the
             project must treat it as changed.
         """
+        return self._fingerprint(with_info=True)
+
+    def has_custom_content(self) -> bool:
+        """Whether the samples, data or fit settings differ from those of a new project.
+
+        The project's name, description and location are left out: they are what a new
+        project replaces anyway. A project that cannot be fingerprinted counts as changed.
+        """
+        try:
+            return self._fingerprint(with_info=False) != self._default_content_fingerprint
+        except Exception:
+            return True
+
+    def record_default_content(self) -> None:
+        """Take the current content as what a new project holds.
+
+        Done after a reset and once the backend is wired at startup: every part that wraps the
+        library project sets up its default model again (advancing the model colour counter),
+        and the save hooks are only registered then. Content that cannot be fingerprinted leaves
+        nothing to compare with, so all content then counts as custom.
+        """
+        try:
+            self._default_content_fingerprint = self._fingerprint(with_info=False)
+        except Exception:
+            self._default_content_fingerprint = None
+
+    def _fingerprint(self, with_info: bool) -> str:
         self._run_pre_save_hooks()
         content = self._project_lib.as_dict()
+        if not with_info:
+            content.pop('info', None)
         return hashlib.sha256(json.dumps(content, sort_keys=True).encode('utf-8')).hexdigest()
 
     def create(self) -> None:
@@ -307,6 +339,7 @@ class Project:
         # A loaded project keeps its own minimizer; only a new one gets the app's.
         apply_app_defaults(self._project_lib)
         self._run_post_load_hooks()
+        self.record_default_content()
 
     @property
     def load_report(self) -> list[str]:

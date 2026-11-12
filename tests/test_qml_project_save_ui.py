@@ -118,3 +118,34 @@ def test_the_prompt_and_error_dialogs_are_modal():
 
 def test_reset_dialog_names_the_unsaved_work_at_risk():
     assert 'The project has unsaved changes that will be lost.' in _application_window()
+
+
+def test_new_project_asks_to_keep_or_drop_custom_content():
+    wrapper_qml = (GUI / 'Globals' / 'BackendWrapper.qml').read_text(encoding='utf-8')
+    mock_qml = (ROOT / 'EasyReflectometryApp' / 'Backends' / 'Mock' / 'Project.qml').read_text(encoding='utf-8')
+    get_started_qml = (GUI / 'Pages' / 'Project' / 'Sidebar' / 'Basic' / 'Groups' / 'GetStarted.qml').read_text(
+        encoding='utf-8'
+    )
+    assert 'activeBackend.project.hasCustomContent()' in wrapper_qml
+    assert 'function hasCustomContent()' in mock_qml
+
+    create_button = _block(get_started_qml, "text: qsTr('Create a new project')", lines=10)
+    assert 'Globals.BackendWrapper.projectHasCustomContent()' in create_button
+    assert 'newProjectChoiceDialog.open()' in create_button
+    assert 'modal: true' in _block(get_started_qml, 'id: newProjectChoiceDialog', lines=4)
+    for label in ('Cancel', 'Start from scratch', 'Keep sample and data'):
+        assert f"text: qsTr('{label}')" in get_started_qml, label
+
+
+def test_start_from_scratch_resets_only_once_the_new_project_is_accepted():
+    """Cancelling the description dialog must leave the current work alone."""
+    description_qml = (GUI / 'Pages' / 'Project' / 'Sidebar' / 'Basic' / 'Popups' / 'ProjectDescription.qml').read_text(
+        encoding='utf-8'
+    )
+    accepted = _block(description_qml, 'onAccepted: {', lines=4)
+    assert 'if (startFromScratch)' in accepted
+    assert 'resetToInitialState()' in accepted
+    # The reset button and "Start from scratch" share one reset.
+    assert 'function resetToInitialState()' in _application_window()
+    assert 'applicationWindow.resetToInitialState()' in _block(_application_window(), 'id: resetStateDialog', lines=40)
+    assert 'Globals.References.applicationWindow.resetToInitialState = resetToInitialState' in _application_window()

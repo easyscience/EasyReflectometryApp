@@ -76,6 +76,8 @@ QtObject {
 
     function projectCreate() { activeBackend.project.create() }
     function projectReset() { activeBackend.project.reset() }
+    // Whether the samples, data or fit settings differ from a new project's
+    function projectHasCustomContent() { return activeBackend.project.hasCustomContent() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
     function sampleFileLoad(value, append) { activeBackend.project.sampleLoad(value, append) }

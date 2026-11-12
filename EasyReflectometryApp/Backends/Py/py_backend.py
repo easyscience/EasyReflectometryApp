@@ -280,6 +280,8 @@ class PyBackend(QObject):
         self._project.add_post_load_hook(self._sample.reload_constraint_states)
         # A loaded or reset project starts with only its current experiment selected.
         self._project.add_post_load_hook(self._analysis.reset_selected_experiments)
+        # Every part is built and every hook is in place: this is what a new project holds.
+        self._project.record_default_content()
         self._project.externalNameChanged.connect(self._relay_project_page_name)
         self._project.externalCreatedChanged.connect(self._relay_project_page_created)
         self._project.externalProjectLoaded.connect(self._relay_project_page_project_changed)

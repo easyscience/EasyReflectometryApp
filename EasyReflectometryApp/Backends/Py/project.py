@@ -56,6 +56,10 @@ class Project(QObject):
         """Run `hook` right after a project is loaded or reset, before it is fingerprinted."""
         self._logic.add_post_load_hook(hook)
 
+    def record_default_content(self) -> None:
+        """Take the current content as a new project's (see `hasCustomContent`)."""
+        self._logic.record_default_content()
+
     # Properties
 
     @Property(bool, notify=createdChanged)
@@ -128,6 +132,11 @@ class Project(QObject):
             self.locationChanged.emit()
 
     # Methods
+
+    @Slot(result=bool)
+    def hasCustomContent(self) -> bool:
+        """Whether creating a new project should first ask to keep or drop the current work."""
+        return self._logic.has_custom_content()
 
     @Slot()
     def markDirty(self) -> None:

@@ -10,9 +10,10 @@ from easyreflectometry.fit_settings import requires_finite_bounds
 
 BAYESIAN_LABEL = 'BUMPS-DREAM (Bayesian)'
 #: The minimizer the app gives a new project (#319: a classical default, and
-#: BUMPS is the engine that honours inequality constraints). The library's
-#: own default stays LMFit for notebooks; a loaded project keeps its own.
-APP_DEFAULT_MINIMIZER = MinimizerEnum.Bumps_simplex
+#: BUMPS is the engine that honours inequality constraints; Bumps_lm only
+#: weakly, which the app warns about). The library's own default stays LMFit
+#: for notebooks; a loaded project keeps its own.
+APP_DEFAULT_MINIMIZER = MinimizerEnum.Bumps_lm
 
 
 def apply_app_defaults(project_lib: ProjectLib) -> None:

@@ -28,6 +28,11 @@ class StubProject(QObject):
         self.dirty_calls = 0
         self.pre_save_hooks = []
         self.post_load_hooks = []
+        # (pre-save, post-load) hook counts at each record_default_content call
+        self.default_content_recorded_with = []
+
+    def record_default_content(self):
+        self.default_content_recorded_with.append((len(self.pre_save_hooks), len(self.post_load_hooks)))
 
     def markDirty(self):
         self.dirty_calls += 1
@@ -276,6 +281,14 @@ def test_backend_constructor_hooks_constraint_state_into_save_and_load(monkeypat
         # A loaded or reset project starts with only its current experiment selected.
         backend._analysis.reset_selected_experiments,
     ]
+
+
+def test_backend_constructor_records_the_new_project_content_once_wired(monkeypatch, qcore_application):
+    """Recorded too early, a fresh session would already count as holding custom content."""
+    backend = _make_backend(monkeypatch)
+
+    project = backend._project
+    assert project.default_content_recorded_with == [(len(project.pre_save_hooks), len(project.post_load_hooks))]
 
 
 def test_analysis_and_plotting_share_one_experiment_selection(monkeypatch, qcore_application):

@@ -37,6 +37,8 @@ QtObject {
         projectSaved(projectFilePath())
     }
 
+    function hasCustomContent() { return created }
+
     function reset() {
         console.debug(`Reset project ${name}`)
         created = false
