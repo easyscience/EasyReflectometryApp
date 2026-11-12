@@ -43,8 +43,15 @@ class StubProject(QObject):
     def add_post_load_hook(self, hook):
         self.post_load_hooks.append(hook)
 
+    def add_autosave_blocker(self, is_blocking):
+        self.autosave_blockers = getattr(self, 'autosave_blockers', []) + [is_blocking]
+
+    def checkpoint(self, reason):
+        self.checkpoints = getattr(self, 'checkpoints', []) + [reason]
+
 
 class StubSample(QObject):
+    checkpointRequested = Signal(str)
     externalSampleChanged = Signal()
     experimentsRekeyed = Signal(object)
     calculationEngineChanged = Signal()
@@ -89,7 +96,12 @@ class StubExperiment(QObject):
         super().__init__()
 
 
+class StubFittingLogic:
+    running = False
+
+
 class StubAnalysis(QObject):
+    checkpointRequested = Signal(str)
     calculatorChanged = Signal()
     externalMinimizerChanged = Signal()
     externalFitSettingsChanged = Signal()
@@ -108,6 +120,7 @@ class StubAnalysis(QObject):
         super().__init__(parent)
         self.selection = selection
         self._minimizers_logic = object()
+        self._fitting_logic = StubFittingLogic()
         self._selected = [0]
         self.received_indices = None
         self.clear_calls = 0
@@ -289,6 +302,24 @@ def test_backend_constructor_records_the_new_project_content_once_wired(monkeypa
 
     project = backend._project
     assert project.default_content_recorded_with == [(len(project.pre_save_hooks), len(project.post_load_hooks))]
+
+
+def test_backend_routes_save_checkpoints_to_the_project(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+
+    backend._sample.checkpointRequested.emit('engine switch')
+    backend._analysis.checkpointRequested.emit('fit')
+
+    assert backend._project.checkpoints == ['engine switch', 'fit']
+
+
+def test_a_running_fit_blocks_automatic_saves(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+    (is_blocking,) = backend._project.autosave_blockers
+
+    assert is_blocking() is False
+    backend._analysis._fitting_logic.running = True
+    assert is_blocking() is True
 
 
 def test_analysis_and_plotting_share_one_experiment_selection(monkeypatch, qcore_application):

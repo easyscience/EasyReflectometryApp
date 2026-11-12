@@ -1,5 +1,9 @@
 import hashlib
 import json
+import logging
+import os
+import shutil
+import tempfile
 from copy import copy
 from pathlib import Path
 from typing import Callable
@@ -9,6 +13,8 @@ from easyreflectometry import Project as ProjectLib
 
 from .experiments import ordered_experiment_items
 from .minimizers import apply_app_defaults
+
+logger = logging.getLogger(__name__)
 
 
 class Project:
@@ -206,9 +212,51 @@ class Project:
         self._run_pre_save_hooks()
         self._project_lib.save_as_json()
 
-    def save(self) -> None:
+    @property
+    def path_backup(self) -> str:
+        """Where an automatic save keeps the project file it replaces."""
+        return str(self._backup_path())
+
+    def _backup_path(self) -> Path:
+        path_json = Path(self._project_lib.path_json)
+        return path_json.with_name(path_json.name + '.bak')
+
+    def save(self, backup: bool = False) -> None:
+        """Write the project file.
+
+        :param backup: first keep the file being replaced as `path_backup`, so that the save can
+            be undone by hand. Automatic saves ask for this; they write without the user deciding
+            that the state on screen is worth keeping.
+        """
         self._run_pre_save_hooks()
+        if backup:
+            self._rotate_backup()
         self._project_lib.save_as_json(overwrite=True)
+
+    def _rotate_backup(self) -> None:
+        """Copy the current project file over the backup, atomically.
+
+        A failure is logged and swallowed: the backup is a convenience, and the save itself is
+        atomic, so refusing to save over a missing backup would only lose the newer work.
+        """
+        source = Path(self._project_lib.path_json)
+        if not source.is_file():
+            return
+        destination = self._backup_path()
+        temporary = None
+        try:
+            # Same directory as the destination, so that the replace is atomic.
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                dir=destination.parent, prefix=f'{destination.name}.', suffix='.tmp'
+            )
+            os.close(file_descriptor)
+            temporary = Path(temporary_name)
+            shutil.copy2(source, temporary)
+            os.replace(temporary, destination)
+        except OSError:
+            logger.warning('Could not back up %s before an automatic save', source, exc_info=True)
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def load(self, path: str) -> None:
         self._project_lib.load_from_json(path)

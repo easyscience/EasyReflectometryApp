@@ -134,6 +134,24 @@ QtObject {
         return null
     }
 
+    // Automatic saves: the backend decides whether a checkpoint writes anything (autosave on,
+    // project created and changed, no fit running) and keeps the replaced file as a backup.
+    readonly property bool projectAutosaveEnabled: activeBackend.project.autosaveEnabled ?? false
+    function projectSetAutosaveEnabled(value) { activeBackend.project.setAutosaveEnabled(value) }
+    readonly property bool projectAutosaveFailing: activeBackend.project.autosaveFailing ?? false
+    readonly property bool projectLastSaveAutomatic: activeBackend.project.lastSaveAutomatic ?? false
+    readonly property string projectBackupPath: activeBackend.project.backupPath ?? ''
+    function projectAutosave(reason) { return activeBackend.project.autosave(reason) }
+
+    signal projectAutosaveError(string message)
+
+    property var _projectAutosaveErrorConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.autosaveError) {
+            activeBackend.project.autosaveError.connect(projectAutosaveError)
+        }
+        return null
+    }
+
 
     ///////////////
     // Sample page

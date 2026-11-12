@@ -264,6 +264,7 @@ class PyBackend(QObject):
         self._connect_experiment_page()
         self._connect_analysis_page()
         self._connect_dirty_tracking()
+        self._connect_autosave()
 
     def _connect_dirty_tracking(self) -> None:
         """Route every content-changing signal to the project's unsaved-changes flag."""
@@ -271,6 +272,21 @@ class PyBackend(QObject):
             part = getattr(self, part_name)
             for signal_name in signal_names:
                 getattr(part, signal_name).connect(self._project.markDirty)
+
+    def _connect_autosave(self) -> None:
+        """Route the backend's save checkpoints to `Project.autosave`.
+
+        Connected after dirty tracking, so that a checkpoint emitted right after a dirtying
+        signal (a finished fit) sees the project already marked as changed. Leaving a page is the
+        other trigger; it comes from QML.
+        """
+        # The fit thread writes into the very models a save serializes. The closure holds the
+        # fitting logic rather than `self`, so it adds no backend -> project -> backend cycle.
+        fitting_logic = self._analysis._fitting_logic
+        self._project.add_autosave_blocker(lambda: fitting_logic.running)
+        # `checkpoint`, not `autosave`: a slot with a result crashes when a signal invokes it.
+        self._sample.checkpointRequested.connect(self._project.checkpoint)
+        self._analysis.checkpointRequested.connect(self._project.checkpoint)
 
     ######### Forming connections between the backend parts
     def _connect_project_page(self) -> None:

@@ -149,3 +149,58 @@ def test_start_from_scratch_resets_only_once_the_new_project_is_accepted():
     assert 'function resetToInitialState()' in _application_window()
     assert 'applicationWindow.resetToInitialState()' in _block(_application_window(), 'id: resetStateDialog', lines=40)
     assert 'Globals.References.applicationWindow.resetToInitialState = resetToInitialState' in _application_window()
+
+
+def test_backend_wrapper_and_mock_expose_the_autosave_api():
+    wrapper_qml = (GUI / 'Globals' / 'BackendWrapper.qml').read_text(encoding='utf-8')
+    mock_qml = (ROOT / 'EasyReflectometryApp' / 'Backends' / 'Mock' / 'Project.qml').read_text(encoding='utf-8')
+
+    for name in ('autosaveEnabled', 'autosaveFailing', 'lastSaveAutomatic', 'backupPath'):
+        assert f'activeBackend.project.{name}' in wrapper_qml, name
+        assert f'property {"string" if name == "backupPath" else "bool"} {name}' in mock_qml, name
+    assert 'activeBackend.project.setAutosaveEnabled(value)' in wrapper_qml
+    assert 'activeBackend.project.autosave(reason)' in wrapper_qml
+    assert 'activeBackend.project.autosaveError.connect(projectAutosaveError)' in wrapper_qml
+    assert 'function setAutosaveEnabled(value)' in mock_qml
+    assert 'function autosave(reason)' in mock_qml
+    assert 'signal autosaveError(string message)' in mock_qml
+
+
+def test_leaving_a_page_is_an_autosave_checkpoint():
+    application_window_qml = _application_window()
+
+    trigger = _block(application_window_qml, 'target: applicationWindow.appBarCentralTabs', lines=4)
+    assert 'function onCurrentIndexChanged()' in trigger
+    assert 'Globals.BackendWrapper.projectAutosave(' in trigger
+
+
+def test_the_autosave_preference_is_persisted_and_pushed_to_the_backend():
+    application_window_qml = _application_window()
+
+    settings = _block(application_window_qml, 'id: projectPreferences', lines=6)
+    assert 'location: EaGlobals.Vars.settingsFile' in settings
+    assert "category: 'Preferences.Project'" in settings
+    assert 'property bool autosave: true' in settings
+    assert 'Globals.BackendWrapper.projectSetAutosaveEnabled(autosave)' in settings
+    mirror = _block(application_window_qml, 'function onProjectAutosaveEnabledChanged()', lines=3)
+    assert 'projectPreferences.autosave = Globals.BackendWrapper.projectAutosaveEnabled' in mirror
+
+
+def test_the_project_page_offers_the_autosave_toggle():
+    project_sidebar = GUI / 'Pages' / 'Project' / 'Sidebar' / 'Basic'
+    assert "Loader { source: 'Groups/Autosave.qml' }" in (project_sidebar / 'Layout.qml').read_text(encoding='utf-8')
+    toggle = _block((project_sidebar / 'Groups' / 'Autosave.qml').read_text(encoding='utf-8'), 'EaElements.CheckBox {', 12)
+    assert 'checked: Globals.BackendWrapper.projectAutosaveEnabled' in toggle
+    assert 'Globals.BackendWrapper.projectSetAutosaveEnabled(checked)' in toggle
+
+
+def test_failed_autosaves_are_reported_without_nagging():
+    application_window_qml = _application_window()
+    status_bar_qml = (GUI / 'StatusBar.qml').read_text(encoding='utf-8')
+
+    handler = _block(application_window_qml, 'function onProjectAutosaveError(message)', lines=7)
+    assert 'projectSaveErrorDialog.open()' in handler
+    # An autosave failure must not cancel a pending "Save and exit".
+    assert 'quitAfterSave' not in handler
+    assert 'visible: Globals.BackendWrapper.projectAutosaveFailing' in status_bar_qml
+    assert 'Globals.BackendWrapper.projectLastSaveAutomatic' in status_bar_qml

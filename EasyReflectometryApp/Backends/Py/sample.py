@@ -107,6 +107,9 @@ class Sample(QObject):
 
     externalRefreshPlot = Signal()
     externalSampleChanged = Signal()
+    # Emitted synchronously, with the reason, just before an action that replaces a lot of
+    # content (a calculation engine switch). PyBackend connects it to Project.autosave.
+    checkpointRequested = Signal(str)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -856,6 +859,8 @@ class Sample(QObject):
     @Slot(int)
     def setCalculationEngineIndex(self, new_value: int) -> None:
         """Switch the project's calculation engine from the Sample page."""
+        if new_value != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         try:
             changed = self._calculators_logic.set_current_index(new_value)
         except NotImplementedError as exception:
@@ -919,6 +924,8 @@ class Sample(QObject):
         if engine_index < 0:
             self.magnetismFailed.emit(f'The {engine} calculation engine is not available.')
             return
+        if engine_index != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         previous_calculator = self._project_lib.calculator
         engine_switched = False
         try:

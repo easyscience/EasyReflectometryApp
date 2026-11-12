@@ -56,6 +56,11 @@ class Analysis(QObject):
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
     prefitCheckFailed = Signal(str, str)  # Emitted with (title, message) when a fit is refused before starting
     stopFit = Signal()  # Signal to request fitting stop
+    # A good moment for an automatic save, with the reason: just before a fit or a calculator
+    # switch rewrites the models, and right after a successful run. Emitted synchronously, so a
+    # "before" checkpoint has finished when the action starts. PyBackend connects it to
+    # Project.autosave, which decides whether anything is written.
+    checkpointRequested = Signal(str)
     # Posterior predictive curves for the charts, as numpy arrays: (q, median, lower, upper) and
     # (z, median, lower, upper). PyBackend connects them to Plotting1d.
     posteriorPredictiveReady = Signal(object, object, object, object)
@@ -428,6 +433,9 @@ class Analysis(QObject):
             self.prefitCheckFailed.emit('Invalid Parameter Bounds', '\n\n'.join(errors))
             return
 
+        # The fit overwrites the parameter values: put the starting point on disk first.
+        self.checkpointRequested.emit('before a fit')
+
         # Use threaded fitting for non-blocking UI
         self._start_threaded_fit()
 
@@ -524,6 +532,11 @@ class Analysis(QObject):
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
         self.externalFittingChanged.emit()
+        # After externalFittingChanged, which marks the project dirty. A fit that ran to the end
+        # without converging still rewrote the parameters, but is not a result worth keeping
+        # unasked.
+        if self._fitting_logic.fit_success:
+            self.checkpointRequested.emit('after a successful fit')
 
     @Slot(str)
     def _on_fit_failed(self, error_message: str) -> None:
@@ -656,6 +669,9 @@ class Analysis(QObject):
                 logger.exception('Bayesian post-processing step %s failed', getattr(step, '__name__', step))
         self.fittingChanged.emit()
         self.externalFittingChanged.emit()
+        # The posterior itself is not part of the project file; this keeps whatever the run
+        # left in the project (it saves nothing when the project is unchanged).
+        self.checkpointRequested.emit('after Bayesian sampling')
 
     def _compute_and_publish_posterior_predictive(self) -> None:
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
@@ -1037,6 +1053,8 @@ class Analysis(QObject):
 
     @Slot(int)
     def setCalculatorCurrentIndex(self, new_value: int) -> None:
+        if new_value != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         try:
             changed = self._calculators_logic.set_current_index(new_value)
         except NotImplementedError as exception:

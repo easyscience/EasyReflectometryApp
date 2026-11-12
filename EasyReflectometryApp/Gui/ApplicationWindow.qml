@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtCore
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Globals as EaGlobals
@@ -292,9 +293,46 @@ EaComponents.ApplicationWindow {
         function onProjectSaveError(message) {
             // A failed "Save and exit" must not exit: the work is still only in memory.
             applicationWindow.quitAfterSave = false
+            projectSaveErrorDialog.title = qsTr('Project Save Error')
             projectSaveErrorDialog.errorMessage = message
             projectSaveErrorDialog.open()
         }
+
+        // Once per streak of failed automatic saves; the status bar keeps showing the failure
+        // until a save succeeds, so that a broken destination does not reopen this on every tab.
+        function onProjectAutosaveError(message) {
+            projectSaveErrorDialog.title = qsTr('Automatic Save Failed')
+            projectSaveErrorDialog.errorMessage = message + '\n\n'
+                    + qsTr('Your work is still in memory. Automatic saving will keep trying; '
+                           + 'use Save to retry now, or turn automatic saving off on the Project page.')
+            projectSaveErrorDialog.open()
+        }
+
+        // Mirror the backend's choice into the persisted preference (the Project page toggles it).
+        function onProjectAutosaveEnabledChanged() {
+            projectPreferences.autosave = Globals.BackendWrapper.projectAutosaveEnabled
+        }
+    }
+
+    // Automatic save checkpoint: leaving a page. The backend saves only when autosave is on, a
+    // project has been created and changed, and no fit is running. The other checkpoints (a
+    // successful fit, and just before a fit, an engine switch or an ORSO sample replacement)
+    // are raised by the backend itself.
+    Connections {
+        target: applicationWindow.appBarCentralTabs
+        function onCurrentIndexChanged() {
+            Globals.BackendWrapper.projectAutosave('leaving a page')
+        }
+    }
+
+    // Application preference, not project content: kept in the shared settings file next to the
+    // Preferences dialog's own, and pushed to the backend once it has been read.
+    Settings {
+        id: projectPreferences
+        location: EaGlobals.Vars.settingsFile
+        category: 'Preferences.Project'
+        property bool autosave: true
+        Component.onCompleted: Globals.BackendWrapper.projectSetAutosaveEnabled(autosave)
     }
 
     EaElements.Dialog {

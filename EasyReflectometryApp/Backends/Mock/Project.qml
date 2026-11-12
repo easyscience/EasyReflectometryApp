@@ -33,8 +33,28 @@ QtObject {
     function save() {
         console.debug(`Saving project ${name}`)
         lastSaved = new Date().toISOString()
+        lastSaveAutomatic = false
         hasUnsavedChanges = false
         projectSaved(projectFilePath())
+    }
+
+    // Automatic saves, with the same gating as the Python backend (minus the fit blocker).
+    property bool autosaveEnabled: true
+    function setAutosaveEnabled(value) { autosaveEnabled = value }
+    property bool autosaveFailing: false
+    property bool lastSaveAutomatic: false
+    property string backupPath: `${projectFilePath()}.bak`
+    signal autosaveError(string message)
+    function autosave(reason) {
+        if (!autosaveEnabled || !created || !hasUnsavedChanges) {
+            return false
+        }
+        console.debug(`Autosaving project ${name} (${reason})`)
+        lastSaved = new Date().toISOString()
+        lastSaveAutomatic = true
+        hasUnsavedChanges = false
+        projectSaved(projectFilePath())
+        return true
     }
 
     function hasCustomContent() { return created }

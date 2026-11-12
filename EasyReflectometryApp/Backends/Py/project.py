@@ -36,17 +36,29 @@ class Project(QObject):
     projectLoadError = Signal(str)
     projectSaved = Signal(str)
     projectSaveError = Signal(str)
+    autosaveEnabledChanged = Signal()
+    autosaveFailingChanged = Signal()
+    # Emitted when an automatic save fails after the last one succeeded; further failures in the
+    # same streak only keep `autosaveFailing` set, so a broken destination does not open a
+    # dialog on every tab switch.
+    autosaveError = Signal(str)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
         self._logic = ProjectLogic(project_lib)
         self._last_saved = ''
+        self._last_save_automatic = False
         self._has_unsaved_changes = False
         self._dirty_suspended = 0
         # Fingerprint of the project content as it was last known to match the disk (taken on
         # create, save, load and reset). None means "unknown", in which case a dirtying signal
         # is trusted as is.
         self._clean_fingerprint = None
+        # On by default; the GUI restores the user's persisted choice at startup.
+        self._autosave_enabled = True
+        self._autosave_failing = False
+        # Predicates that veto an automatic save while true (e.g. a fit thread writing the models).
+        self._autosave_blockers: list[Callable[[], bool]] = []
 
     def add_pre_save_hook(self, hook: Callable[[], None]) -> None:
         """Run `hook` before the project is serialized (save, create and dirty checks)."""
@@ -59,6 +71,10 @@ class Project(QObject):
     def record_default_content(self) -> None:
         """Take the current content as a new project's (see `hasCustomContent`)."""
         self._logic.record_default_content()
+
+    def add_autosave_blocker(self, is_blocking: Callable[[], bool]) -> None:
+        """Skip automatic saves while `is_blocking()` is true."""
+        self._autosave_blockers.append(is_blocking)
 
     # Properties
 
@@ -83,6 +99,34 @@ class Project(QObject):
         left unformatted so that QML can render it with a locale-aware `Qt.formatTime`.
         """
         return self._last_saved
+
+    @Property(bool, notify=lastSavedChanged)
+    def lastSaveAutomatic(self) -> bool:
+        """Whether the save `lastSaved` refers to was an automatic one."""
+        return self._last_save_automatic
+
+    @Property(bool, notify=autosaveEnabledChanged)
+    def autosaveEnabled(self) -> bool:
+        return self._autosave_enabled
+
+    @Slot(bool)
+    def setAutosaveEnabled(self, new_value: bool) -> None:
+        # An application preference, not project content: it does not mark the project dirty.
+        if self._autosave_enabled != new_value:
+            self._autosave_enabled = new_value
+            self.autosaveEnabledChanged.emit()
+            if not new_value:
+                self._set_autosave_failing(False)
+
+    @Property(bool, notify=autosaveFailingChanged)
+    def autosaveFailing(self) -> bool:
+        """Whether the most recent automatic save failed and no save has succeeded since."""
+        return self._autosave_failing
+
+    @Property(str, notify=createdChanged)
+    def backupPath(self) -> str:
+        """Where automatic saves keep the version of the project file they replace."""
+        return self._logic.path_backup
 
     @Property(bool, notify=hasUnsavedChangesChanged)
     def hasUnsavedChanges(self) -> bool:
@@ -213,16 +257,26 @@ class Project(QObject):
 
     def _clear_last_saved(self) -> None:
         """Drop the save stamp when the project it referred to is gone (reset or load)."""
+        # A failure streak belongs to the project that was being saved.
+        self._set_autosave_failing(False)
         if self._last_saved:
             self._last_saved = ''
+            self._last_save_automatic = False
             self.lastSavedChanged.emit()
 
-    def _mark_saved(self) -> None:
+    def _mark_saved(self, automatic: bool = False) -> None:
         self._record_clean_state()
+        self._set_autosave_failing(False)
         # Aware stamp: unambiguous if it is ever logged or shown outside the local session.
         self._last_saved = datetime.now().astimezone().isoformat(timespec='seconds')
+        self._last_save_automatic = automatic
         self.lastSavedChanged.emit()
         self.projectSaved.emit(self._logic.path_json)
+
+    def _set_autosave_failing(self, failing: bool) -> None:
+        if self._autosave_failing != failing:
+            self._autosave_failing = failing
+            self.autosaveFailingChanged.emit()
 
     def _save_error_message(self, exception: Exception) -> str:
         """Turn a save failure into a sentence a user can act on, keeping the raw text as detail.
@@ -330,6 +384,52 @@ class Project(QObject):
             return
         self._mark_saved()
 
+    @Slot(str, result=bool)
+    def autosave(self, reason: str = '') -> bool:
+        """Save without being asked, if there is anything to save and it is safe to do so now.
+
+        Called at checkpoints: leaving a page, after a successful fit, and just before an action
+        that replaces a lot of content (starting a fit, switching the calculation engine,
+        replacing the sample from an ORSO file). Does nothing while autosave is off, before a
+        project has been created, while the project matches the disk, or while a blocker (a
+        running fit) vetoes it; a vetoed checkpoint is not retried, the next one covers it.
+
+        Unlike `save()`, the file being replaced is first kept as `backupPath`, so that one
+        unwanted automatic save can be undone by hand, and failures are reported once per
+        streak through `autosaveError` instead of `projectSaveError`.
+
+        :param reason: what triggered the save, for the log.
+        :return: whether the project was written.
+        """
+        if not self._autosave_enabled or self._dirty_suspended:
+            return False
+        if not self._logic.created or not self._has_unsaved_changes:
+            return False
+        if any(is_blocking() for is_blocking in self._autosave_blockers):
+            logger.debug('Automatic save (%s) skipped: blocked', reason)
+            return False
+        try:
+            self._logic.save(backup=True)
+        except Exception as ex:
+            logger.warning('Automatic save (%s) failed', reason, exc_info=True)
+            if not self._autosave_failing:
+                self._set_autosave_failing(True)
+                self.autosaveError.emit(self._save_error_message(ex))
+            return False
+        logger.debug('Automatic save (%s) to %s', reason, self._logic.path_json)
+        self._mark_saved(automatic=True)
+        return True
+
+    @Slot(str)
+    def checkpoint(self, reason: str) -> None:
+        """`autosave` for signal connections.
+
+        A slot declared with a result must not be the target of a signal: PySide6 then writes the
+        return value through a null pointer and the process crashes. QML and direct callers use
+        `autosave`, which reports whether it wrote.
+        """
+        self.autosave(reason)
+
     @Slot()
     def reset(self) -> None:
         self._logic.reset()
@@ -371,7 +471,10 @@ class Project(QObject):
                 # Add the sample as a new model in the project
                 self._logic.add_sample_from_orso(sample)
             else:
-                # Replace all existing models with the loaded sample
+                # Replace all existing models with the loaded sample. Checkpoint first, so the
+                # models being dropped are on disk (and, after the next automatic save, in the
+                # backup).
+                self.autosave('before replacing the sample from an ORSO file')
                 self._logic.replace_models_from_orso(sample)
         except Exception as ex:
             # The library refuses what it cannot attach (a magnetic sample on an

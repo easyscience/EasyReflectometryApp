@@ -24,6 +24,9 @@ class StubProjectLogic:
         self.load_report = []
         # Stands in for the model/experiment content the real fingerprint covers.
         self.content_version = 0
+        self.path_backup = 'project.json.bak'
+        # Saves and content replacements in call order.
+        self.events = []
 
     def content_fingerprint(self) -> str:
         return f'{self.name}|{self.description}|{self.root_path}|{self.content_version}'
@@ -36,8 +39,9 @@ class StubProjectLogic:
         self.loaded_paths.append(path)
         self.created = True
 
-    def save(self):
+    def save(self, backup=False):
         self.saved_calls += 1
+        self.events.append('save+backup' if backup else 'save')
 
     def reset(self):
         self.reset_calls += 1
@@ -49,6 +53,7 @@ class StubProjectLogic:
 
     def replace_models_from_orso(self, sample):
         self.replaced_samples.append(sample)
+        self.events.append('replace')
         self.content_version += 1
 
 
@@ -130,6 +135,35 @@ def test_sample_load_marks_the_project_dirty(monkeypatch, qcore_application):
     project.sampleLoad('sample.orso', append=True)
 
     assert project.hasUnsavedChanges is True
+
+
+def test_replacing_the_sample_from_orso_saves_the_old_one_first(monkeypatch, qcore_application):
+    """Replacing every model is the destructive kind of import: the models it drops go to disk
+    (with a backup of the file they replace) before the replacement happens."""
+    project = _build_project(monkeypatch, created=True)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+    monkeypatch.setattr(project_module.orso, 'load_orso', lambda path: 'orso-data')
+    monkeypatch.setattr(project_module, 'load_orso_model', lambda _orso_data: 'sample-model')
+    project.sampleLoad('sample.orso', append=True)  # unsaved edit
+    project._logic.events.clear()
+
+    project.sampleLoad('sample.orso', append=False)
+
+    assert project._logic.events == ['save+backup', 'replace']
+    assert project.lastSaveAutomatic is True
+    # The replacement itself is a new unsaved change.
+    assert project.hasUnsavedChanges is True
+
+
+def test_appending_a_sample_from_orso_is_not_a_checkpoint(monkeypatch, qcore_application):
+    project = _build_project(monkeypatch, created=True)
+    monkeypatch.setattr(project_module.IO, 'generalizePath', lambda path: path)
+    monkeypatch.setattr(project_module.orso, 'load_orso', lambda path: 'orso-data')
+    monkeypatch.setattr(project_module, 'load_orso_model', lambda _orso_data: 'sample-model')
+    project.sampleLoad('sample.orso', append=True)
+    project.sampleLoad('sample.orso', append=True)
+
+    assert 'save+backup' not in project._logic.events
 
 
 def test_sample_load_emits_warning_when_model_missing(monkeypatch, qcore_application):
