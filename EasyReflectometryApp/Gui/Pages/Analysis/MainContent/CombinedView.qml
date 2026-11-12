@@ -441,6 +441,17 @@ Rectangle {
                     }
                 }
 
+                // QtCharts deletes an axis as soon as a series moves off it and no other series
+                // uses it. The posterior overlay series rebind between the two x axes on every
+                // log toggle, so switching back to linear would delete the log axis, and every
+                // later log plot would fall back to the hidden linear axis (no log scale, no
+                // q axis). This empty series keeps the log axis in use.
+                LineSeries {
+                    axisX: analysisAxisXLog
+                    axisY: analysisChartView.axisY
+                    visible: false
+                }
+
                 // Dynamic series for log mode (single experiment)
                 property var logModeSeries: null
 
