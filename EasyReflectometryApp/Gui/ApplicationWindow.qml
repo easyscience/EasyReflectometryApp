@@ -304,7 +304,7 @@ EaComponents.ApplicationWindow {
             projectSaveErrorDialog.title = qsTr('Automatic Save Failed')
             projectSaveErrorDialog.errorMessage = message + '\n\n'
                     + qsTr('Your work is still in memory. Automatic saving will keep trying; '
-                           + 'use Save to retry now, or turn automatic saving off on the Project page.')
+                           + 'use Save to retry now, or turn automatic saving off in the Project page\'s Advanced controls.')
             projectSaveErrorDialog.open()
         }
 

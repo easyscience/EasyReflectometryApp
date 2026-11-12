@@ -17,12 +17,4 @@ EaComponents.SideBarColumn {
         Loader { source: 'Groups/GetStarted.qml' }
     }
 
-    EaElements.GroupBox {
-        title: qsTr('Saving')
-        icon: 'save'
-        collapsed: false
-
-        Loader { source: 'Groups/Autosave.qml' }
-    }
-
 }

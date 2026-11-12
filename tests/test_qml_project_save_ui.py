@@ -186,8 +186,11 @@ def test_the_autosave_preference_is_persisted_and_pushed_to_the_backend():
     assert 'projectPreferences.autosave = Globals.BackendWrapper.projectAutosaveEnabled' in mirror
 
 
-def test_the_project_page_offers_the_autosave_toggle():
-    project_sidebar = GUI / 'Pages' / 'Project' / 'Sidebar' / 'Basic'
+def test_the_project_page_offers_the_autosave_toggle_in_its_advanced_controls():
+    project_layout = (GUI / 'Pages' / 'Project' / 'Layout.qml').read_text(encoding='utf-8')
+    assert "EaElements.TabButton { text: qsTr('Advanced controls') }" in project_layout
+    assert "Loader { source: 'Sidebar/Advanced/Layout.qml' }" in project_layout
+    project_sidebar = GUI / 'Pages' / 'Project' / 'Sidebar' / 'Advanced'
     assert "Loader { source: 'Groups/Autosave.qml' }" in (project_sidebar / 'Layout.qml').read_text(encoding='utf-8')
     toggle = _block((project_sidebar / 'Groups' / 'Autosave.qml').read_text(encoding='utf-8'), 'EaElements.CheckBox {', 12)
     assert 'checked: Globals.BackendWrapper.projectAutosaveEnabled' in toggle
