@@ -14,6 +14,7 @@ from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
 from .helpers import get_original_name
+from .helpers import is_independent
 from .material import coupled_material_ids
 from .material import inactive_density_knobs
 
@@ -21,13 +22,28 @@ logger = logging.getLogger(__name__)
 
 RESERVED_ALIAS_NAMES = {'np', 'numpy', 'math', 'pi', 'e'}
 
+# Choices of the table's variability filter. 'active' (the default) hides the
+# rows that cannot be edited or fitted; only 'all' shows them.
+VARIABILITY_FILTERS = ('active', 'all', 'free', 'fixed')
+DEFAULT_VARIABILITY_FILTER = 'active'
+
+
+def is_active_row(parameter: dict[str, Any]) -> bool:
+    """True for a row the user can edit and fit (shown greyed otherwise).
+
+    Constrained (dependent) and derived parameters take their value from
+    others, and an inactive knob no longer affects the reflectivity. Mirrors
+    ``isEditable`` in the Analysis page's Fittables.qml.
+    """
+    return parameter.get('kind', 'parameter') == 'parameter' and parameter.get('independent', True)
+
 
 class Parameters:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         self._current_index = 0
         self._name_filter_criteria = ''
-        self._variability_filter_criteria = 'all'
+        self._variability_filter_criteria = DEFAULT_VARIABILITY_FILTER
 
     @property
     def as_status_string(self) -> str:
@@ -58,22 +74,36 @@ class Parameters:
         return True
 
     def set_variability_filter_criteria(self, criteria: str) -> bool:
-        normalized = (criteria or 'all').strip().lower()
-        if normalized not in {'all', 'free', 'fixed'}:
-            normalized = 'all'
+        normalized = (criteria or DEFAULT_VARIABILITY_FILTER).strip().lower()
+        if normalized not in VARIABILITY_FILTERS:
+            normalized = DEFAULT_VARIABILITY_FILTER
         if normalized == self._variability_filter_criteria:
             return False
         self._variability_filter_criteria = normalized
         self._current_index = 0
         return True
 
+    def variability_counts(self) -> dict[str, int]:
+        """Rows each variability choice shows, whatever the name filter."""
+        rows = [parameter for parameter in self.all_parameters() if parameter.get('enabled', True)]
+        return {
+            criteria: sum(1 for parameter in rows if _matches_variability(parameter, criteria))
+            for criteria in VARIABILITY_FILTERS
+        }
+
+    def count_rows_matching_variability(self, rows: list[dict[str, Any]]) -> int:
+        """How many of ``rows`` the current variability filter keeps."""
+        return sum(
+            1
+            for parameter in rows
+            if parameter.get('enabled', True) and _matches_variability(parameter, self._variability_filter_criteria)
+        )
+
     def _parameter_matches_filters(self, parameter: dict[str, Any]) -> bool:
         if not parameter.get('enabled', True):
             return False
 
-        if self._variability_filter_criteria == 'free' and not parameter.get('fit', False):
-            return False
-        if self._variability_filter_criteria == 'fixed' and parameter.get('fit', False):
+        if not _matches_variability(parameter, self._variability_filter_criteria):
             return False
 
         criteria = self._name_filter_criteria
@@ -167,7 +197,7 @@ class Parameters:
 
     def set_current_parameter_value(self, new_value: str) -> bool:
         parameter = self._get_current_parameter()
-        if parameter is None:
+        if parameter is None or not is_independent(parameter):
             return False
         try:
             float_value = float(new_value)
@@ -184,7 +214,7 @@ class Parameters:
 
     def set_current_parameter_min(self, new_value: str) -> bool:
         parameter = self._get_current_parameter()
-        if parameter is None:
+        if parameter is None or not is_independent(parameter):
             return False
         try:
             float_value = float(new_value)
@@ -201,7 +231,7 @@ class Parameters:
 
     def set_current_parameter_max(self, new_value: str) -> bool:
         parameter = self._get_current_parameter()
-        if parameter is None:
+        if parameter is None or not is_independent(parameter):
             return False
         try:
             float_value = float(new_value)
@@ -226,6 +256,10 @@ class Parameters:
             # be tickable into the fit through any caller, QML or not.
             return False
         parameter = entry['object']
+        if not is_independent(parameter):
+            # A pin is the value and `free = False`: freeing it would undo the pin while
+            # leaving the parameter locked. A dependent parameter is never fitted.
+            return False
         if bool(new_value) != parameter.free:
             parameter.free = bool(new_value)
             # The data only constrain the product of these two: freeing one
@@ -246,6 +280,18 @@ class Parameters:
 
     def constraint_arithmetic(self) -> List[str]:
         return ['', '*', '/', '+', '-']
+
+
+def _matches_variability(parameter: dict[str, Any], criteria: str) -> bool:
+    if criteria == 'all':
+        return True
+    if not is_active_row(parameter):
+        return False
+    if criteria == 'free':
+        return bool(parameter.get('fit', False))
+    if criteria == 'fixed':
+        return not parameter.get('fit', False)
+    return True  # 'active'
 
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:
@@ -280,7 +326,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         in the Model Editor is reflected in the Analysis parameters table.
         """
         if path is not None and len(path) >= 2:
-            param_name = _DISPLAY_NAMES.get(path[-1].name, path[-1].name)
+            param_name = _DISPLAY_NAMES.get(path[-1].display_name, path[-1].display_name)
             # For layer parameters the path is:
             # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
@@ -294,11 +340,11 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             else:
                 parent_name = path[-2].name
             return f'{parent_name} {param_name}', parent_name
-        return param.name, ''  # Fallback to parameter name without group
+        return param.display_name, ''  # Fallback to the parameter's own name, without group
 
     def _get_dependency_expression(param: Parameter, paths: dict) -> str:
         """Get simplified dependency expression."""
-        if param.independent:
+        if is_independent(param):
             return ''
 
         # Check if parameter has dependency map with 'a' key (parameter dependency)
@@ -336,8 +382,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     # The models each parameter belongs to (several when contrasts share an object), and
     # how many parameters of other models follow it (equality ties between contrasts).
-    # Object paths replace the global_object.map graph, which the new
-    # easyscience core no longer populates with parent->child edges.
+    # The core keeps no parent->child graph; the paths are walked here.
     model_paths = [_build_param_object_paths(model) for model in models]
     owners: dict[str, list[int]] = {}
     for model_idx, paths in enumerate(model_paths):
@@ -378,15 +423,15 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             else:
                 prefixed_display_name = display_name
 
-            alias = _make_alias(prefixed_display_name or parameter.name)
+            alias = _make_alias(prefixed_display_name or parameter.display_name)
             param_value = float(parameter.value)
             is_derived = _is_derived_parameter(parameter, models[model_idx])
             # A density material's input knobs (density, mw, scattering
             # lengths) stop affecting the reflectivity once the material's
             # sld/isld are decoupled, and a material's moment does nothing
-            # while no layer is coupled to it — shown greyed with a note, never
-            # hidden (enabled must stay True: _parameter_matches_filters drops
-            # enabled=False rows from the list entirely).
+            # while no layer is coupled to it — hidden by the default 'active'
+            # filter, shown greyed with a note under 'all' (enabled must stay
+            # True: _parameter_matches_filters drops enabled=False rows always).
             inactive_note = _inactive_note(parameter, path, coupled_materials)
             is_inactive = inactive_note is not None
             parameter_list.append(
@@ -405,11 +450,11 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'min': float(parameter.min),
                     'units': parameter.unit,
                     'fit': False if (is_derived or is_inactive) else parameter.free,
-                    'independent': parameter.independent,
+                    'independent': is_independent(parameter),
                     'dependency': (
                         inactive_note
                         if is_inactive
-                        else _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
+                        else _DERIVED_DESCRIPTIONS.get(parameter.display_name, 'derived')
                         if is_derived
                         else _get_dependency_expression(parameter, paths)
                     ),
@@ -425,7 +470,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'sharedByIndices': shared_by if len(shared_by) > 1 else [],
                     # A shared layer parameter can be given to one model alone (its assembly is
                     # copied); a material's cannot: materials belong to the project's palette.
-                    'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
+                    'detachable': len(shared_by) > 1 and is_layer_param and is_independent(parameter),
                     'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
                     # Decided under the first model that owns the parameter. That is
@@ -444,10 +489,9 @@ _DERIVED_DESCRIPTIONS = {
     'total_thickness': 'Σ film layer thicknesses',
 }
 
-# Table names for parameters whose own name is forced by something else. A
-# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' because the
-# calculators bind by name (a material parameter called 'rho_m' would be
-# bound to its layer's magnetic SLD slot); the table calls it what it is.
+# Table names for parameters whose library name says something else. A
+# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' by the library;
+# the table calls it what it is.
 _DISPLAY_NAMES = {'magnetic_sld': 'material rho_m'}
 
 # What the 'magnetic' name filter shows.
@@ -470,9 +514,10 @@ def _inactive_note(parameter: Parameter, path, coupled_materials: set[int]):
         return None
     owner = path[-2]
     drives_magnetism = id(owner) in coupled_materials
-    if getattr(owner, 'sld_coupled', True) is False and parameter.name in inactive_density_knobs(owner, drives_magnetism):
+    knobs = inactive_density_knobs(owner, drives_magnetism)
+    if getattr(owner, 'sld_coupled', True) is False and parameter.display_name in knobs:
         return _INACTIVE_KNOB_NOTE
-    if parameter.name == 'magnetic_moment' and id(owner) not in coupled_materials:
+    if parameter.display_name == 'magnetic_moment' and id(owner) not in coupled_materials:
         return _UNUSED_MOMENT_NOTE
     return None
 
@@ -490,7 +535,7 @@ def _exclusive_partner(parameter: Parameter, path):
     if getattr(owner, 'magnetic_moment', None) is None or owner.sld_coupled:
         return None
     partners = {'density': owner.magnetic_moment, 'magnetic_moment': owner.density}
-    return partners.get(parameter.name)
+    return partners.get(parameter.display_name)
 
 
 def _is_derived_parameter(parameter: Parameter, model) -> bool:
@@ -507,10 +552,8 @@ def _is_derived_parameter(parameter: Parameter, model) -> bool:
 def _build_param_object_paths(model) -> dict:
     """Map each parameter's ``unique_name`` to its object chain ``[model, ..., parameter]``.
 
-    Replaces ``global_object.map.find_path``: the new easyscience core
-    (``NewBase`` / ``ModelBase`` / ``EasyList``) registers vertices but no
-    parent->child edges, so the map graph can no longer be walked. The chain
-    mirrors the old map path, e.g.
+    The easyscience core keeps no parent->child graph to look this up in. The
+    chain reads, e.g.
     ``Model -> Sample -> Assembly -> LayerCollection -> Layer -> [Material ->] Parameter``,
     so the existing index logic (``path[-4]`` for the assembly, ``path[-2]``
     for the immediate parent) keeps working.

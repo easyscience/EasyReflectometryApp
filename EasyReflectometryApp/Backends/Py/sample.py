@@ -25,6 +25,8 @@ from PySide6.QtCore import Slot
 
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
+from .logic.helpers import PINNED_FLAG
+from .logic.helpers import is_independent
 from .logic.layers import Layers as LayersLogic
 from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
@@ -105,6 +107,9 @@ class Sample(QObject):
 
     externalRefreshPlot = Signal()
     externalSampleChanged = Signal()
+    # Emitted synchronously, with the reason, just before an action that replaces a lot of
+    # content (a calculation engine switch). PyBackend connects it to Project.autosave.
+    checkpointRequested = Signal(str)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -176,12 +181,19 @@ class Sample(QObject):
     @Slot(str)
     def setCurrentMaterialName(self, new_value: str) -> None:
         if self._material_logic.set_name_at_current_index(new_value):
-            self.materialsTableChanged.emit()
+            self._emitMaterialRenamed()
 
     @Slot(int, str)
     def setMaterialNameAtIndex(self, index: int, new_value: str) -> None:
         if self._material_logic.set_name_at_index(index, new_value):
-            self.materialsTableChanged.emit()
+            self._emitMaterialRenamed()
+
+    def _emitMaterialRenamed(self) -> None:
+        # The layer table and the Analysis parameter names show the material's name too,
+        # and both are cached: refresh them as a layer rename does.
+        self.materialsTableChanged.emit()
+        self._clearCacheAndEmitLayersChanged()
+        self.externalSampleChanged.emit()
 
     @Slot(float)
     def setCurrentMaterialSld(self, new_value: float) -> None:
@@ -257,9 +269,13 @@ class Sample(QObject):
         if getattr(material, 'sld_coupled', True):
             return  # already coupled: no user constraint to have been overwritten
         for parameter in (getattr(material, 'sld', None), getattr(material, 'isld', None)):
-            # The density dependency replacing the user's must not be saved as theirs.
-            if parameter is not None and hasattr(parameter, USER_CONSTRAINT_FLAG):
-                delattr(parameter, USER_CONSTRAINT_FLAG)
+            if parameter is not None:
+                # The density dependency replacing the user's must not be saved as theirs,
+                # and a pin must not outlive it: decoupling again would leave the parameter
+                # locked with no row to unlock it by.
+                for flag in (USER_CONSTRAINT_FLAG, PINNED_FLAG):
+                    if hasattr(parameter, flag):
+                        delattr(parameter, flag)
             unique_name = getattr(parameter, 'unique_name', None)
             if unique_name and self._constraint_states.pop(unique_name, None) is not None:
                 logger.warning(
@@ -400,7 +416,7 @@ class Sample(QObject):
         parameter = self._find_parameter_object_by_unique_name(unique_name)
         if parameter is None:
             return {'success': False, 'message': self.tr('The parameter no longer exists.')}
-        if not parameter.independent:
+        if not is_independent(parameter):
             return {'success': False, 'message': self.tr('Remove its constraint first.')}
         try:
             self._project_lib.detach(parameter, model_index)
@@ -436,7 +452,8 @@ class Sample(QObject):
         return removed
 
     def _drop_constraint_states_that_no_longer_hold(self) -> None:
-        """Forget the rows of constraints the library removed (a tie freed with its model)."""
+        """Forget the rows of constraints the library removed or replaced (a tie freed with
+        its model, a pin overwritten by a physics recipe or a coupling), with their pins."""
         objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
         stale = [
             unique_name
@@ -444,7 +461,7 @@ class Sample(QObject):
             if unique_name not in objects or not self._constraint_state_holds(objects[unique_name], state)
         ]
         for unique_name in stale:
-            del self._constraint_states[unique_name]
+            self._forget_constraint_state(unique_name, objects.get(unique_name))
         if stale:
             self._scheduleConstraintsChanged()
 
@@ -842,6 +859,8 @@ class Sample(QObject):
     @Slot(int)
     def setCalculationEngineIndex(self, new_value: int) -> None:
         """Switch the project's calculation engine from the Sample page."""
+        if new_value != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         try:
             changed = self._calculators_logic.set_current_index(new_value)
         except NotImplementedError as exception:
@@ -905,6 +924,8 @@ class Sample(QObject):
         if engine_index < 0:
             self.magnetismFailed.emit(f'The {engine} calculation engine is not available.')
             return
+        if engine_index != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         previous_calculator = self._project_lib.calculator
         engine_switched = False
         try:
@@ -934,6 +955,8 @@ class Sample(QObject):
     @Slot(int, bool)
     def setLayerRhoMCoupledAtIndex(self, index: int, coupled: bool) -> None:
         if self._layers_logic.set_rho_m_coupled_at_index(index, coupled):
+            # Coupling makes rho_m follow the material, replacing a pin on it.
+            self._drop_constraint_states_that_no_longer_hold()
             self._emitMagnetismChanged()
 
     @Property('QVariantMap', notify=magnetismChanged)
@@ -1324,24 +1347,40 @@ class Sample(QObject):
 
     @staticmethod
     def _ensure_parameter_independent(parameter: DescriptorNumber) -> None:
-        """Drop any dependency, together with the library's mark that it is a user constraint.
+        """Drop any dependency or pin, together with the library's mark that it is a user constraint.
 
         A mark left on an independent parameter is ignored by the library, but would be picked
         up again (and saved as the user's) if something internal later made it dependent.
         """
-        try:
+        if not getattr(parameter, 'independent', True):
             parameter.make_independent()
-        except AttributeError:
-            parameter._independent = True
-        if hasattr(parameter, USER_CONSTRAINT_FLAG):
-            delattr(parameter, USER_CONSTRAINT_FLAG)
+        for flag in (USER_CONSTRAINT_FLAG, PINNED_FLAG):
+            if hasattr(parameter, flag):
+                delattr(parameter, flag)
+
+    @staticmethod
+    def _release_pin(parameter: DescriptorNumber | None) -> None:
+        """Drop the app's pin mark, which the library does not know about."""
+        if parameter is not None and hasattr(parameter, PINNED_FLAG):
+            delattr(parameter, PINNED_FLAG)
+
+    def _forget_constraint_state(self, unique_name: str, parameter: DescriptorNumber | None) -> None:
+        """Forget a constraint row that no longer holds, releasing its pin.
+
+        A pin is only the app's mark (see `PINNED_FLAG`), so nothing else would ever clear it:
+        a parameter whose pinned value or fixed state was changed past the guards, or that the
+        library took over, would stay locked with no row left to unlock it by.
+        """
+        state = self._constraint_states.pop(unique_name, None)
+        if state is not None and state.get('mode') == 'static':
+            self._release_pin(parameter)
 
     @staticmethod
     def _apply_static_constraint(parameter: DescriptorNumber, value: float) -> None:
-        """Pin `parameter` to `value`: fixed, and marked non-independent so it reads as constrained."""
+        """Pin `parameter` to `value`: fixed, and flagged so that it reads as constrained."""
         parameter.value = value
         parameter.free = False
-        parameter._independent = False
+        setattr(parameter, PINNED_FLAG, True)
 
     def _infer_constraint_state(
         self,
@@ -1362,20 +1401,7 @@ class Sample(QObject):
         if getattr(parameter_obj, 'independent', True) or not getattr(parameter_obj, USER_CONSTRAINT_FLAG, False):
             return None
 
-        try:
-            raw_expression = parameter_obj.dependency_expression
-        except AttributeError:
-            value = float(parameter_obj.value)
-            formatted = self._format_numeric(value)
-            return {
-                'mode': 'static',
-                'relation': '=',
-                'expression': formatted,
-                'raw_expression': formatted,
-                'pretty_expression': formatted,
-                'value': value,
-            }
-
+        raw_expression = parameter_obj.dependency_expression
         dependency_map = getattr(parameter_obj, 'dependency_map', {}) or {}
         display_by_object = display_by_object or {}
         alias_display_subset = {
@@ -1403,8 +1429,11 @@ class Sample(QObject):
             stored = self._constraint_states.get(unique_name)
             # A stale state (the constraint was replaced or undone elsewhere) must not describe
             # the parameter; it is not saved either (see store_constraint_metadata).
-            if stored is not None and self._constraint_state_holds(parameter_obj, stored):
-                return stored
+            if stored is not None:
+                if self._constraint_state_holds(parameter_obj, stored):
+                    return stored
+                if stored.get('mode') == 'static':
+                    self._forget_constraint_state(unique_name, parameter_obj)
         return self._infer_constraint_state(parameter_obj, display_lookup, display_by_object)
 
     @staticmethod
@@ -1414,7 +1443,6 @@ class Sample(QObject):
             'unit': str(parameter.unit),
             'free': bool(parameter.free),
             'independent': getattr(parameter, 'independent', True),
-            '_independent': getattr(parameter, '_independent', True),
         }
         if hasattr(parameter, 'min'):
             try:
@@ -1448,8 +1476,6 @@ class Sample(QObject):
             parameter.max = state['max']
         if 'free' in state and state['free'] is not None:
             parameter.free = state['free']
-        if '_independent' in state and state['_independent'] is not None:
-            parameter._independent = state['_independent']
 
     @Property('QVariantList', notify=layersChanged)
     def parameterNames(self) -> list[str]:
@@ -1618,6 +1644,8 @@ class Sample(QObject):
         except Exception as error:  # noqa: BLE001
             return {'success': False, 'message': str(error)}
         if changed:
+            # A recipe overwrites what its parameters followed, a pin included.
+            self._drop_constraint_states_that_no_longer_hold()
             self._emit_constraints_changed()
         return {'success': True, 'message': ''}
 
@@ -1640,6 +1668,8 @@ class Sample(QObject):
         """
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
+        # The layer table shows constrained values and disables pinned/dependent fields.
+        self._cached_layers = None
         self.layersChanged.emit()
 
     @Property(int, notify=constraintsChanged)
@@ -1801,7 +1831,7 @@ class Sample(QObject):
                 parameter.free = bool(previous_free)
             logger.warning(
                 'The constraint on %s was removed: it, or a parameter it depends on, is no longer part of a model.',
-                getattr(parameter, 'name', '?'),
+                parameter.display_name,
             )
             detached += 1
         if detached:
@@ -1845,8 +1875,15 @@ class Sample(QObject):
         if mode == 'dynamic':
             return not getattr(parameter, 'independent', True) and self._same_dependency(parameter, state)
         if mode == 'static':
-            # A loaded project keeps only the value and the fixed state, not the marker.
-            return state.get('value') is not None and not parameter.free and float(parameter.value) == float(state['value'])
+            # A loaded project keeps only the value and the fixed state, not the marker. A pin
+            # is not a dependency: one the library has made dependent (a recipe, a coupling)
+            # was replaced.
+            return (
+                state.get('value') is not None
+                and getattr(parameter, 'independent', True)
+                and not parameter.free
+                and float(parameter.value) == float(state['value'])
+            )
         if mode == 'lower_bound':
             return state.get('value') is not None and float(parameter.min) == float(state['value'])
         if mode == 'upper_bound':
@@ -1869,9 +1906,12 @@ class Sample(QObject):
         # All parameters, not the filtered table list: disabled ones keep their constraints.
         objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
         records = []
+        stale_pins = []
         for unique_name, state in self._constraint_states.items():
             parameter = objects.get(unique_name)
             if parameter is None or not self._constraint_state_holds(parameter, state):
+                if state.get('mode') == 'static':
+                    stale_pins.append(unique_name)
                 continue
             path = self._project_lib.parameter_path(parameter)
             if path is None:
@@ -1884,6 +1924,10 @@ class Sample(QObject):
                 record['dependency_paths'] = dependency_paths
             record['path'] = path
             records.append(record)
+        for unique_name in stale_pins:
+            self._forget_constraint_state(unique_name, objects.get(unique_name))
+        if stale_pins:
+            self._scheduleConstraintsChanged()
         info = self._project_lib._info
         if records:
             info[APP_CONSTRAINTS_INFO_KEY] = records
@@ -1906,6 +1950,8 @@ class Sample(QObject):
                 continue
             state = {key: value for key, value in record.items() if key != 'path'}
             if not self._constraint_state_holds(parameter, state):
+                if state.get('mode') == 'static':
+                    self._release_pin(parameter)
                 continue
             if state.get('mode') == 'dynamic':
                 state['dependency_map'] = dict(getattr(parameter, 'dependency_map', {}) or {})
@@ -1977,9 +2023,9 @@ class Sample(QObject):
                         'Use a numeric constraint ("= value") instead.'
                     )
             elif mode == 'static':
-                # Not a dependency on a constant: that would set min == max, which the library
-                # then refuses to load. The value and fixed state are saved with the parameter;
-                # the row itself is restored from `store_constraint_metadata`.
+                # Not a dependency on a constant (see `PINNED_FLAG`). The value and fixed state
+                # are saved with the parameter; the row itself is restored from
+                # `store_constraint_metadata`.
                 self._apply_static_constraint(dependent, instruction['value'])
             elif mode == 'lower_bound':
                 dependent.min = instruction['value']
@@ -1995,7 +2041,7 @@ class Sample(QObject):
             try:
                 self._restore_parameter_state(dependent, previous_state)
             except Exception:  # noqa: BLE001
-                logger.exception('Could not roll back %s after a failed constraint', getattr(dependent, 'name', '?'))
+                logger.exception('Could not roll back %s after a failed constraint', dependent.display_name)
             return {'success': False, 'message': str(error)}
 
         unique_name = getattr(dependent, 'unique_name', None)
@@ -2066,9 +2112,17 @@ class Sample(QObject):
             if follower == reference:
                 continue
             try:
-                plans.append((follower, self._project_lib.plan_link(follower, reference)))
+                plan = self._project_lib.plan_link(follower, reference)
             except ValueError as error:
                 messages.append(str(error))
+                continue
+            for row in plan.rows:
+                # The library sees a pinned parameter as independent and would tie it, leaving
+                # it dependent and still marked as pinned. Before pins were app-side it skipped
+                # them as derived; keep that.
+                if row.action in ('tie', 'undecided') and getattr(row.follower, PINNED_FLAG, False):
+                    row.action, row.reason = 'skip', self.tr('pinned to a value')
+            plans.append((follower, plan))
         return reference, plans, messages
 
     @staticmethod

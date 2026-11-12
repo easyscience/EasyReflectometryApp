@@ -18,7 +18,14 @@ EaComponents.ProjectDescriptionDialog {
         projectLocation = Globals.BackendWrapper.projectLocation
     }
 
+    // Chosen in "Create a new project" when the session already holds work. The reset waits for
+    // OK here, so cancelling this dialog leaves the current work alone.
+    property bool startFromScratch: false
+
     onAccepted: {
+        if (startFromScratch) {
+            Globals.References.applicationWindow.resetToInitialState()
+        }
         Globals.BackendWrapper.projectSetName(projectName)
         Globals.BackendWrapper.projectSetDescription(projectDescription)
         Globals.BackendWrapper.projectSetLocation(projectLocation)

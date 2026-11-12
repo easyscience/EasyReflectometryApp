@@ -300,7 +300,7 @@ class FakeMinimizerValue:
 class FakeParameter:
     def __init__(
         self,
-        name,
+        display_name,
         unique_name,
         value=0.0,
         variance=0.0,
@@ -313,7 +313,7 @@ class FakeParameter:
         dependency_expression='',
         dependency_map=None,
     ):
-        self.name = name
+        self.display_name = display_name
         self.unique_name = unique_name
         self.value = value
         self.variance = variance

@@ -76,6 +76,8 @@ QtObject {
 
     function projectCreate() { activeBackend.project.create() }
     function projectReset() { activeBackend.project.reset() }
+    // Whether the samples, data or fit settings differ from a new project's
+    function projectHasCustomContent() { return activeBackend.project.hasCustomContent() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
     function sampleFileLoad(value, append) { activeBackend.project.sampleLoad(value, append) }
@@ -128,6 +130,24 @@ QtObject {
     property var _projectSaveErrorConnection: {
         if (activeBackend && activeBackend.project && activeBackend.project.projectSaveError) {
             activeBackend.project.projectSaveError.connect(projectSaveError)
+        }
+        return null
+    }
+
+    // Automatic saves: the backend decides whether a checkpoint writes anything (autosave on,
+    // project created and changed, no fit running) and keeps the replaced file as a backup.
+    readonly property bool projectAutosaveEnabled: activeBackend.project.autosaveEnabled ?? false
+    function projectSetAutosaveEnabled(value) { activeBackend.project.setAutosaveEnabled(value) }
+    readonly property bool projectAutosaveFailing: activeBackend.project.autosaveFailing ?? false
+    readonly property bool projectLastSaveAutomatic: activeBackend.project.lastSaveAutomatic ?? false
+    readonly property string projectBackupPath: activeBackend.project.backupPath ?? ''
+    function projectAutosave(reason) { return activeBackend.project.autosave(reason) }
+
+    signal projectAutosaveError(string message)
+
+    property var _projectAutosaveErrorConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.autosaveError) {
+            activeBackend.project.autosaveError.connect(projectAutosaveError)
         }
         return null
     }
@@ -549,6 +569,8 @@ QtObject {
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount
     readonly property int analysisFixedParametersCount: activeBackend.analysis.fixedParametersCount
+    readonly property int analysisActiveParametersCount: activeBackend.analysis.activeParametersCount
+    readonly property int analysisAllParametersCount: activeBackend.analysis.allParametersCount
     readonly property int analysisModelParametersCount: activeBackend.analysis.modelParametersCount
     readonly property int analysisExperimentParametersCount: activeBackend.analysis.experimentParametersCount
     readonly property string analysisNameFilterCriteria: activeBackend.analysis.nameFilterCriteria

@@ -9,6 +9,7 @@ from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
 
+from .helpers import is_independent
 from .structure import guide_field_reference
 from .structure import magnetic_vector_for_layer
 
@@ -105,32 +106,20 @@ class Layers:
         return False
 
     def set_thickness_at_current_index(self, new_value: float) -> bool:
-        if self._layers[self.index].thickness.value != new_value:
-            self._layers[self.index].thickness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[self.index].thickness, new_value)
 
     def set_thickness_at_index(self, index: int, new_value: float) -> bool:
         if not self._has_valid_layer_index(index):
             return False
-        if self._layers[index].thickness.value != new_value:
-            self._layers[index].thickness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[index].thickness, new_value)
 
     def set_roughness_at_current_index(self, new_value: float) -> bool:
-        if self._layers[self.index].roughness.value != new_value:
-            self._layers[self.index].roughness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[self.index].roughness, new_value)
 
     def set_roughness_at_index(self, index: int, new_value: float) -> bool:
         if not self._has_valid_layer_index(index):
             return False
-        if self._layers[index].roughness.value != new_value:
-            self._layers[index].roughness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[index].roughness, new_value)
 
     def set_material_at_current_index(self, new_value: int) -> bool:
         if self._layers[self.index].material != self._project_lib._materials[new_value]:
@@ -244,7 +233,7 @@ class Layers:
                     'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
                     'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
-                    'editable': magnetism is not None and bool(magnetism.theta_m.independent),
+                    'editable': magnetism is not None and is_independent(magnetism.theta_m),
                     'material_magnetic': getattr(layer.material, 'rho_m', None) is not None,
                     'rho_m_coupled': bool(layer.rho_m_coupled),
                 }
@@ -365,10 +354,20 @@ class Layers:
 DEFAULT_FIELD = {'guide_field_angle': 270.0, 'applied_field': 0.0, 'model_magnetic': False, 'in_plane': True, 'phi': 0.0}
 
 
+def _set_layer_parameter(parameter, new_value) -> bool:
+    """Set a layer's thickness or roughness; False for no change or a dependent or pinned
+    parameter. The library knows nothing of a pin, so it would accept the write and leave
+    the parameter locked with no constraint row to unlock it by."""
+    if not is_independent(parameter) or parameter.value == new_value:
+        return False
+    parameter.value = new_value
+    return True
+
+
 def _set_parameter_value(parameter, new_value) -> bool:
     """Set a parameter from an edit; False for no change, bad input or a
-    dependent parameter (a coupled rho_m follows its material)."""
-    if not parameter.independent:
+    dependent or pinned parameter (a coupled rho_m follows its material)."""
+    if not is_independent(parameter):
         return False
     try:
         value = float(new_value)
@@ -379,7 +378,7 @@ def _set_parameter_value(parameter, new_value) -> bool:
     try:
         parameter.value = value
     except (ValueError, TypeError):
-        logger.exception('Failed to set %s to %s', parameter.name, value)
+        logger.exception('Failed to set %s to %s', parameter.display_name, value)
         return False
     return True
 
@@ -392,7 +391,8 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
     in step with the superphase (first layer of the first assembly) and the
     subphase (last layer of the last assembly). Reading the flag rather than
     re-deriving it from the assembly position keeps the table and the
-    parameters in agreement (issue #329). Only area-per-molecule layers carry
+    parameters in agreement (issue #329). A dependent or pinned parameter is not
+    editable either: it follows its constraint. Only area-per-molecule layers carry
     ``formula``, ``apm``, ``solvent`` and ``solvation``.
 
     :param layers_collection: The collection of layers.
@@ -407,8 +407,8 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
                 'material': layer.material.name,
                 # `enabled` is set on a parameter only once enablement has run
                 # over it; until then it counts as enabled, as in the library.
-                'thickness_enabled': bool(getattr(layer.thickness, 'enabled', True)),
-                'roughness_enabled': bool(getattr(layer.roughness, 'enabled', True)),
+                'thickness_enabled': bool(getattr(layer.thickness, 'enabled', True)) and is_independent(layer.thickness),
+                'roughness_enabled': bool(getattr(layer.roughness, 'enabled', True)) and is_independent(layer.roughness),
             }
         )
         if isinstance(layer, LayerAreaPerMolecule):

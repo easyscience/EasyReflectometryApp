@@ -20,9 +20,9 @@ Q = np.linspace(0.01, 0.25, 30)
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 @pytest.fixture
@@ -86,7 +86,9 @@ class TestContrast:
         _contrast(project, sample)
         roughness = project.models[0].sample[2].layers[0].roughness  # substrate, shared
         constrain_equal(roughness, project.models[1].sample[1].layers[0].roughness)
-        row = next(row for row in Parameters(project).parameters if row['unique_name'] == roughness.unique_name)
+        table = Parameters(project)
+        table.set_variability_filter_criteria('all')  # a tied row is not active: hidden by default
+        row = next(row for row in table.parameters if row['unique_name'] == roughness.unique_name)
         assert not row['detachable']
         assert sample.detachParameter(roughness.unique_name, 1)['success'] is False
         assert not roughness.independent
@@ -212,6 +214,26 @@ class TestLinkModels:
         ]
         assert film.thickness.independent  # planning changes nothing
         assert project.links == []
+
+    def test_a_pinned_follower_is_not_tied(self, project_and_sample):
+        """The library cannot see a pin (it is the app's mark) and would tie the parameter,
+        leaving it dependent and still marked as pinned."""
+        from EasyReflectometryApp.Backends.Py.logic.helpers import is_independent
+
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        index = next(i for i, e in enumerate(sample._constrainable_parameter_entries()) if e['object'] is film.thickness)
+        assert sample.addConstraint(index, '=', '120')['success']
+
+        rows = {row['path']: row for row in sample.planModelLink([0, 1], -1, False)['rows']}
+        thickness = rows['sample/1/layers/0/thickness']
+        assert not thickness['selectable'] and thickness['reason'] == 'pinned to a value'
+
+        assert sample.constrainModelsParameters([0, 1], False)['tied'] > 0
+        assert film.thickness.independent and film.thickness.value == 120.0
+        assert not is_independent(film.thickness)  # still pinned
+        assert not film.roughness.independent
 
     def test_unticked_rows_stay_free(self, project_and_sample):
         project, sample = project_and_sample

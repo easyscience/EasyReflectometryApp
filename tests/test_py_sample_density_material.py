@@ -16,14 +16,16 @@ from easyreflectometry.sample import Multilayer
 from easyreflectometry.sample import SurfactantLayer
 from easyscience import global_object
 
+from EasyReflectometryApp.Backends.Py.logic.helpers import PINNED_FLAG
+from EasyReflectometryApp.Backends.Py.logic.helpers import is_independent
 from EasyReflectometryApp.Backends.Py.sample import Sample
 
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 @pytest.fixture
@@ -156,7 +158,7 @@ def test_recoupling_drops_the_user_constraint_mark(backend_with_density_material
 
     assert material.isld.independent is False  # follows the density again
     assert not hasattr(material.isld, USER_CONSTRAINT_FLAG)
-    assert 'parameter_constraints' not in project.as_dict(include_materials_not_in_model=True)
+    assert 'parameter_constraints' not in project.as_dict()
 
 
 def test_constraint_on_decoupled_sld_keeps_material_decoupled_and_recoupling_works(backend_with_density_material):
@@ -208,7 +210,7 @@ def test_project_with_a_decoupled_density_material_reloads_with_its_constraint(q
     backend.store_constraint_metadata()
     project_dict = json.loads(json.dumps(project.as_dict()))
 
-    global_object.map._clear()
+    global_object.registry.clear()
     reloaded = Project()
     reloaded_backend = Sample(reloaded)
     reloaded.from_dict(project_dict)
@@ -223,3 +225,27 @@ def test_project_with_a_decoupled_density_material_reloads_with_its_constraint(q
     assert reloaded_isld.independent is False
     reloaded_material.sld.value = 8.0
     assert reloaded_isld.value == pytest.approx(8.0)
+
+
+@pytest.mark.parametrize('name', ['sld', 'isld'])
+def test_recoupling_releases_a_pin(backend_with_density_material, name):
+    """Re-coupling overwrites a pin on sld/isld like any user constraint. The pin mark must go
+    with it, or decoupling again leaves the parameter locked with no row to unlock it by."""
+    project, backend, index = backend_with_density_material
+    material = project._materials[index]
+    parameter = getattr(material, name)
+    project.models[0].add_assemblies(Multilayer(Layer(material, thickness=10.0, roughness=1.0, name='d'), name='Density film'))
+    backend.setMaterialSldCoupledAtIndex(index, False)
+    entry = next(i for i, e in enumerate(backend._constrainable_parameter_entries()) if e['object'] is parameter)
+    assert backend.addConstraint(entry, '=', '3')['success']
+    assert not is_independent(parameter)
+
+    backend.setMaterialSldCoupledAtIndex(index, True)
+    backend.setMaterialSldCoupledAtIndex(index, False)
+
+    assert not hasattr(parameter, PINNED_FLAG)
+    assert is_independent(parameter)
+    assert backend.constraintsList == []
+    setter = backend.setMaterialSldAtIndex if name == 'sld' else backend.setMaterialISldAtIndex
+    setter(index, 9.9)
+    assert parameter.value == 9.9

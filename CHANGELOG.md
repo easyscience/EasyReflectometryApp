@@ -1,5 +1,12 @@
 # Unreleased
 
+- A new project now fits with `Bumps_lm` (Levenberg–Marquardt) by default,
+  instead of `Bumps_simplex`. Loaded projects keep their own minimizer.
+- **Create a new project** now asks first when the session already holds a
+  sample, data or fit settings of your own: **Keep sample and data** starts the
+  new project with them (as before), **Start from scratch** begins with the
+  default sample and no data. The reset only happens once the new project's
+  details are confirmed, so cancelling keeps everything as it was.
 - Installing over an earlier version:
   the installer no longer stops with "The directory you selected already exists
   and contains an installation". When the chosen folder holds an earlier
@@ -60,6 +67,14 @@
   backend slots and properties, and misspelt names corrected. No change in
   behaviour, except that converged R̂ values in the Bayesian diagnostics are now
   shown in green rather than the blue accent colour.
+- Built on easyreflectometry 2 and easyscience 3:
+  - Projects saved by EasyReflectometry 1.5 or earlier no longer open. Re-create
+    them, or open them with EasyReflectometry 1.5.
+  - The refl1d engine now smears the curve properly (it oversamples the
+    resolution kernel), so refl1d fits give different, more accurate results,
+    and they take longer.
+  - Removing the last magnetic layer, its assembly or its model now always
+    switches magnetism off in the calculation engine.
 
 # Version 1.5.0 (19 Oct 2026)
 

@@ -18,10 +18,10 @@ from .summary import Summary
 # Signals whose emission changes what `Project.save()` would write to disk. Every one of them
 # marks the project dirty (see `_connect_dirty_tracking`). The inventory is explicit rather than
 # derived from a naming convention because the `external*` relays do not cover every mutation:
-# a material rename emits only `materialsTableChanged`, reordering layers or editing a repeated
-# assembly's repetitions emits only `externalRefreshPlot`, and the free/fixed checkbox emits only
-# `parametersChanged`. Missing one of those means the close prompt does not fire and the user
-# loses work, so anything doubtful belongs in this list rather than out of it.
+# reordering layers or editing a repeated assembly's repetitions emits only `externalRefreshPlot`,
+# and the free/fixed checkbox emits only `parametersChanged`. Missing one of those means the close
+# prompt does not fire and the user loses work, so anything doubtful belongs in this list rather
+# than out of it.
 #
 # `Project`'s own signals are absent on purpose: its setters call `markDirty` directly, because
 # create, load and reset fan out through those same signal names and must end up clean.
@@ -264,6 +264,7 @@ class PyBackend(QObject):
         self._connect_experiment_page()
         self._connect_analysis_page()
         self._connect_dirty_tracking()
+        self._connect_autosave()
 
     def _connect_dirty_tracking(self) -> None:
         """Route every content-changing signal to the project's unsaved-changes flag."""
@@ -271,6 +272,21 @@ class PyBackend(QObject):
             part = getattr(self, part_name)
             for signal_name in signal_names:
                 getattr(part, signal_name).connect(self._project.markDirty)
+
+    def _connect_autosave(self) -> None:
+        """Route the backend's save checkpoints to `Project.autosave`.
+
+        Connected after dirty tracking, so that a checkpoint emitted right after a dirtying
+        signal (a finished fit) sees the project already marked as changed. Leaving a page is the
+        other trigger; it comes from QML.
+        """
+        # The fit thread writes into the very models a save serializes. The closure holds the
+        # fitting logic rather than `self`, so it adds no backend -> project -> backend cycle.
+        fitting_logic = self._analysis._fitting_logic
+        self._project.add_autosave_blocker(lambda: fitting_logic.running)
+        # `checkpoint`, not `autosave`: a slot with a result crashes when a signal invokes it.
+        self._sample.checkpointRequested.connect(self._project.checkpoint)
+        self._analysis.checkpointRequested.connect(self._project.checkpoint)
 
     ######### Forming connections between the backend parts
     def _connect_project_page(self) -> None:
@@ -280,6 +296,8 @@ class PyBackend(QObject):
         self._project.add_post_load_hook(self._sample.reload_constraint_states)
         # A loaded or reset project starts with only its current experiment selected.
         self._project.add_post_load_hook(self._analysis.reset_selected_experiments)
+        # Every part is built and every hook is in place: this is what a new project holds.
+        self._project.record_default_content()
         self._project.externalNameChanged.connect(self._relay_project_page_name)
         self._project.externalCreatedChanged.connect(self._relay_project_page_created)
         self._project.externalProjectLoaded.connect(self._relay_project_page_project_changed)
@@ -352,9 +370,12 @@ class PyBackend(QObject):
         # A finished fit updates the goodness-of-fit; refresh the Summary tab's
         # HTML binding so it stops showing the stale pre-fit value.
         self._analysis.externalFittingChanged.connect(self._summary.summaryChanged)
-        # The fit path never emits a Sample signal; refresh the Structure view post-fit
-        self._analysis.externalParametersChanged.connect(self._sample._clearStructureCacheAndEmit)
-        self._analysis.externalFittingChanged.connect(self._sample._clearStructureCacheAndEmit)
+        # An edit in the parameters table and a fit emit no Sample signal, but the Sample page
+        # shows the same values: material SLDs, layer thicknesses and roughnesses, and the
+        # Structure view (which follows materialsTableChanged).
+        for signal in (self._analysis.externalParametersChanged, self._analysis.externalFittingChanged):
+            signal.connect(self._sample.materialsTableChanged)
+            signal.connect(self._sample._clearCacheAndEmitLayersChanged)
         self._analysis.externalExperimentChanged.connect(self._relay_experiment_page_experiment_changed)
         self._analysis.externalExperimentChanged.connect(self._refresh_plots)
         # Selecting another experiment changes the polarization state and the

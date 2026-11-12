@@ -152,9 +152,12 @@ EaElements.GroupBox {
                 valueRole: "value"
                 textRole: "text"
 
+                // 'active' (the default) hides the greyed rows: constrained, derived and
+                // inactive parameters, which can be neither edited nor fitted. Only 'all'
+                // shows them; free and fixed are subsets of the active rows.
                 model: [
-                    { value: 'all', text: `All parameters (${Globals.BackendWrapper.analysisFreeParametersCount +
-                                                        Globals.BackendWrapper.analysisFixedParametersCount})` },
+                    { value: 'active', text: `Active parameters (${Globals.BackendWrapper.analysisActiveParametersCount})` },
+                    { value: 'all', text: `All parameters (${Globals.BackendWrapper.analysisAllParametersCount})` },
                     { value: 'free', text: `Free parameters (${Globals.BackendWrapper.analysisFreeParametersCount})` },
                     { value: 'fixed', text: `Fixed parameters (${Globals.BackendWrapper.analysisFixedParametersCount})` }
                 ]

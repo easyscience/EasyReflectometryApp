@@ -44,12 +44,12 @@ def _patch_tree_types(monkeypatch):
 def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive(monkeypatch):
     _patch_tree_types(monkeypatch)
 
-    density = make_parameter(name='density', unique_name='density', value=2.33, free=True, enabled=True)
+    density = make_parameter(display_name='density', unique_name='density', value=2.33, free=True, enabled=True)
     # molecular_weight is intentionally absent: in the lib it is a
     # DescriptorNumber (a formula constant), so the Parameter tree walk
     # never yields it. The scattering length stands in as the second knob.
-    b_real = make_parameter(name='scattering_length_real', unique_name='b_real', value=4.15, free=False, enabled=True)
-    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+    b_real = make_parameter(display_name='scattering_length_real', unique_name='b_real', value=4.15, free=False, enabled=True)
+    thickness = make_parameter(display_name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
 
     def build_model(sld_coupled):
         model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
@@ -89,10 +89,10 @@ def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive
 def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_shared_params(monkeypatch):
     _patch_tree_types(monkeypatch)
 
-    scale = make_parameter(name='scale', unique_name='scale', value=1.5, free=False, enabled=True)
-    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+    scale = make_parameter(display_name='scale', unique_name='scale', value=1.5, free=False, enabled=True)
+    thickness = make_parameter(display_name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
     dependent = make_parameter(
-        name='background',
+        display_name='background',
         unique_name='dep',
         value=0.2,
         free=False,
@@ -146,8 +146,8 @@ def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
     ancestor and superphase/subphase parameters get mislabelled."""
     _patch_tree_types(monkeypatch)
 
-    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
-    roughness = make_parameter(name='roughness', unique_name='roughness', value=3.0, free=True, enabled=True)
+    thickness = make_parameter(display_name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+    roughness = make_parameter(display_name='roughness', unique_name='roughness', value=3.0, free=True, enabled=True)
 
     model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
     layer = FakeLayerNode('Layer', 'layer', thickness=thickness, roughness=roughness)
@@ -172,13 +172,13 @@ def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
 def test_from_parameters_to_list_of_dicts_classifies_by_owner_not_by_name(monkeypatch):
     _patch_tree_types(monkeypatch)
 
-    scale = make_parameter(name='scale', unique_name='scale')
-    background = make_parameter(name='background', unique_name='background')
-    thickness = make_parameter(name='thickness', unique_name='thickness')
-    rho_m = make_parameter(name='rho_m', unique_name='rho_m')
+    scale = make_parameter(display_name='scale', unique_name='scale')
+    background = make_parameter(display_name='background', unique_name='background')
+    thickness = make_parameter(display_name='thickness', unique_name='thickness')
+    rho_m = make_parameter(display_name='rho_m', unique_name='rho_m')
     # Named like experiment and layer parameters, but owned by a material.
-    impostor = make_parameter(name='thickness', unique_name='impostor')
-    scale_named = make_parameter(name='scale', unique_name='scale_named')
+    impostor = make_parameter(display_name='thickness', unique_name='impostor')
+    scale_named = make_parameter(display_name='scale', unique_name='scale_named')
 
     model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
     model.scale = scale
@@ -205,8 +205,10 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
     monkeypatch.setattr(parameters_module, 'count_fixed_parameters', lambda project: 1)
     project = make_project()
     logic = parameters_module.Parameters(project)
-    free_parameter = make_parameter(name='Scale', unique_name='scale', value=1.0, minimum=0.0, maximum=2.0, free=True)
-    fixed_parameter = make_parameter(name='Thickness', unique_name='layer.thickness', value=10.0, minimum=1.0, maximum=50.0)
+    free_parameter = make_parameter(display_name='Scale', unique_name='scale', value=1.0, minimum=0.0, maximum=2.0, free=True)
+    fixed_parameter = make_parameter(
+        display_name='Thickness', unique_name='layer.thickness', value=10.0, minimum=1.0, maximum=50.0
+    )
     mocked_parameters = [
         {
             'name': 'Instrument scale',
@@ -239,7 +241,7 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
             'enabled': False,
             'independent': True,
             'alias': 'hidden_background',
-            'object': make_parameter(name='Background', unique_name='background'),
+            'object': make_parameter(display_name='Background', unique_name='background'),
         },
     ]
     monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
@@ -249,7 +251,10 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
     assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale']
     assert logic.set_variability_filter_criteria('fixed') is True
     logic.set_name_filter_criteria('')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Layer thickness']
+    # The only fixed row is constrained (dependent): not active, so 'fixed' hides it
+    assert [entry['display_name'] for entry in logic.parameters] == []
+    assert logic.set_variability_filter_criteria('all') is True
+    assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale', 'Layer thickness']
 
     metadata = logic.constraint_metadata()
     assert metadata == [
@@ -294,7 +299,7 @@ def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
     fixed for the fittables table."""
     project = make_project()
     logic = parameters_module.Parameters(project)
-    inactive_parameter = make_parameter(name='Density', unique_name='density', value=2.33, free=False)
+    inactive_parameter = make_parameter(display_name='Density', unique_name='density', value=2.33, free=False)
     mocked_parameters = [
         {
             'display_name': 'SiDensity density',
@@ -314,19 +319,19 @@ def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
 def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks(monkeypatch):
     _patch_tree_types(monkeypatch)
 
-    param1 = make_parameter(name='Same Name', unique_name='p1')
-    param2 = make_parameter(name='Same Name', unique_name='p2')
-    reserved = make_parameter(name='np', unique_name='reserved')
-    numeric = make_parameter(name='456', unique_name='numeric')
-    empty = make_parameter(name='!!!', unique_name='empty')
+    param1 = make_parameter(display_name='Same Name', unique_name='p1')
+    param2 = make_parameter(display_name='Same Name', unique_name='p2')
+    reserved = make_parameter(display_name='np', unique_name='reserved')
+    numeric = make_parameter(display_name='456', unique_name='numeric')
+    empty = make_parameter(display_name='!!!', unique_name='empty')
     dep_other = make_parameter(
-        name='dep',
+        display_name='dep',
         unique_name='dep_other',
         independent=False,
         dependency_expression='a+1',
         dependency_map={'a': 'external'},
     )
-    no_enabled = make_parameter(name='visible', unique_name='no_enabled', value=2.0)
+    no_enabled = make_parameter(display_name='visible', unique_name='no_enabled', value=2.0)
     del no_enabled.enabled  # exercise the missing-`enabled` fallback (-> True)
 
     model = make_model(name='M1', unique_name='m1', user_data={'original_name': 'M1'})
@@ -358,7 +363,7 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert result[6]['enabled'] is True
 
 
-def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False):
+def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False, kind='parameter', independent=True):
     """A parameter row as ``all_parameters`` returns it, with only the keys the filters read."""
     return {
         'name': name,
@@ -367,11 +372,58 @@ def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=F
         'unique_name': unique_name,
         'fit': fit,
         'enabled': True,
-        'independent': True,
+        'independent': independent,
+        'kind': kind,
         'alias': alias,
         'object': object(),
         'experiment': experiment,
     }
+
+
+def _mixed_activity_rows():
+    return [
+        _filter_row('M1 Film thickness', 'M1 Film thickness', 'Film', 'film.t', 'm1_film_thickness', fit=True),
+        _filter_row('M1 Film roughness', 'M1 Film roughness', 'Film', 'film.r', 'm1_film_roughness', fit=False),
+        # Constrained: takes its value from another parameter
+        _filter_row('M1 Cap thickness', 'M1 Cap thickness', 'Cap', 'cap.t', 'm1_cap_thickness', fit=False, independent=False),
+        # Derived: computed from the layers
+        _filter_row(
+            'M1 total_thickness', 'M1 total_thickness', 'M1', 'total', 'm1_total', fit=False, kind='derived', independent=False
+        ),
+        # A decoupled density material's unused knob
+        _filter_row('Si density', 'Si density', 'Si', 'si.density', 'si_density', fit=False, kind='inactive'),
+        _filter_row('Scale', 'Scale', 'M1', 'scale', 'scale', fit=True, experiment=True),
+    ]
+
+
+def test_variability_filter_defaults_to_active_and_hides_greyed_rows(monkeypatch):
+    logic = parameters_module.Parameters(make_project())
+    monkeypatch.setattr(logic, 'all_parameters', _mixed_activity_rows)
+
+    assert logic.variability_filter_criteria == 'active'
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film thickness', 'M1 Film roughness', 'Scale']
+
+    assert logic.set_variability_filter_criteria('all') is True
+    assert len(logic.parameters) == 6
+
+    # Free and fixed are subsets of the active rows
+    logic.set_variability_filter_criteria('free')
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film thickness', 'Scale']
+    logic.set_variability_filter_criteria('fixed')
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film roughness']
+
+
+def test_variability_counts_ignore_name_filter_and_name_counts_follow_variability(monkeypatch):
+    logic = parameters_module.Parameters(make_project())
+    monkeypatch.setattr(logic, 'all_parameters', _mixed_activity_rows)
+    logic.set_name_filter_criteria('zzz')
+
+    assert logic.variability_counts() == {'active': 3, 'all': 6, 'free': 2, 'fixed': 1}
+
+    model_rows = [row for row in _mixed_activity_rows() if not row['experiment']]
+    assert logic.count_rows_matching_variability(model_rows) == 2
+    logic.set_variability_filter_criteria('all')
+    assert logic.count_rows_matching_variability(model_rows) == 5
 
 
 def test_parameters_special_filters_and_invalid_variability_normalization(monkeypatch):
@@ -387,7 +439,7 @@ def test_parameters_special_filters_and_invalid_variability_normalization(monkey
     monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
 
     assert logic.set_variability_filter_criteria('INVALID') is False
-    assert logic.variability_filter_criteria == 'all'
+    assert logic.variability_filter_criteria == 'active'
 
     logic.set_name_filter_criteria('model')
     assert [entry['display_name'] for entry in logic.parameters] == [
@@ -405,7 +457,7 @@ def test_parameters_special_filters_and_invalid_variability_normalization(monkey
 def test_parameter_current_selection_edge_cases(monkeypatch):
     project = make_project()
     logic = parameters_module.Parameters(project)
-    parameter = make_parameter(name='Scale', unique_name='scale', value=1.0, free=True)
+    parameter = make_parameter(display_name='Scale', unique_name='scale', value=1.0, free=True)
     monkeypatch.setattr(
         logic,
         'all_parameters',

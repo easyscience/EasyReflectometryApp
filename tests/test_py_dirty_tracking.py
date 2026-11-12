@@ -300,3 +300,12 @@ def test_save_succeeds_with_a_newly_added_or_duplicated_model_selected(py_backen
     project.save()
     assert errors == []
     assert project.hasUnsavedChanges is False
+
+
+def test_content_that_cannot_be_fingerprinted_counts_as_custom(_backend, monkeypatch):
+    def fail(**_kwargs):
+        raise TypeError('not serializable')
+
+    monkeypatch.setattr(_backend._project._logic, '_fingerprint', fail)
+
+    assert _backend._project.hasCustomContent() is True

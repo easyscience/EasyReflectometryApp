@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtCore
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Globals as EaGlobals
@@ -292,9 +293,46 @@ EaComponents.ApplicationWindow {
         function onProjectSaveError(message) {
             // A failed "Save and exit" must not exit: the work is still only in memory.
             applicationWindow.quitAfterSave = false
+            projectSaveErrorDialog.title = qsTr('Project Save Error')
             projectSaveErrorDialog.errorMessage = message
             projectSaveErrorDialog.open()
         }
+
+        // Once per streak of failed automatic saves; the status bar keeps showing the failure
+        // until a save succeeds, so that a broken destination does not reopen this on every tab.
+        function onProjectAutosaveError(message) {
+            projectSaveErrorDialog.title = qsTr('Automatic Save Failed')
+            projectSaveErrorDialog.errorMessage = message + '\n\n'
+                    + qsTr('Your work is still in memory. Automatic saving will keep trying; '
+                           + 'use Save to retry now, or turn automatic saving off in the Project page\'s Advanced controls.')
+            projectSaveErrorDialog.open()
+        }
+
+        // Mirror the backend's choice into the persisted preference (the Project page toggles it).
+        function onProjectAutosaveEnabledChanged() {
+            projectPreferences.autosave = Globals.BackendWrapper.projectAutosaveEnabled
+        }
+    }
+
+    // Automatic save checkpoint: leaving a page. The backend saves only when autosave is on, a
+    // project has been created and changed, and no fit is running. The other checkpoints (a
+    // successful fit, and just before a fit, an engine switch or an ORSO sample replacement)
+    // are raised by the backend itself.
+    Connections {
+        target: applicationWindow.appBarCentralTabs
+        function onCurrentIndexChanged() {
+            Globals.BackendWrapper.projectAutosave('leaving a page')
+        }
+    }
+
+    // Application preference, not project content: kept in the shared settings file next to the
+    // Preferences dialog's own, and pushed to the backend once it has been read.
+    Settings {
+        id: projectPreferences
+        location: EaGlobals.Vars.settingsFile
+        category: 'Preferences.Project'
+        property bool autosave: true
+        Component.onCompleted: Globals.BackendWrapper.projectSetAutosaveEnabled(autosave)
     }
 
     EaElements.Dialog {
@@ -341,26 +379,26 @@ EaComponents.ApplicationWindow {
             EaElements.Button {
                 text: qsTr("OK")
                 onClicked: {
-                    if (Globals.References.applicationWindow.appBarCentralTabs.sampleButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.sampleButton.enabled = false
-                    }
-                    if (Globals.References.applicationWindow.appBarCentralTabs.experimentButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.experimentButton.enabled = false
-                    }
-                    if (Globals.References.applicationWindow.appBarCentralTabs.analysisButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.analysisButton.enabled = false
-                    }
-                    if (Globals.References.applicationWindow.appBarCentralTabs.summaryButton !== null) {
-                        Globals.References.applicationWindow.appBarCentralTabs.summaryButton.enabled = false
-                    }
-
-                    Globals.BackendWrapper.projectReset()
-                    Globals.References.applicationWindow.appBarCentralTabs.projectButton.toggle()
-                    Globals.References.resetActive = false
+                    applicationWindow.resetToInitialState()
                     resetStateDialog.close()
                 }
             }
         }
+    }
+
+    // Back to the state the application starts in: default sample, no data, no project, and only
+    // the Home and Project tabs enabled. Shared by the reset button and "Start from scratch"
+    // when creating a new project.
+    function resetToInitialState() {
+        const tabs = Globals.References.applicationWindow.appBarCentralTabs
+        for (const button of [tabs.sampleButton, tabs.experimentButton, tabs.analysisButton, tabs.summaryButton]) {
+            if (button !== null) {
+                button.enabled = false
+            }
+        }
+        Globals.BackendWrapper.projectReset()
+        tabs.projectButton.toggle()
+        Globals.References.resetActive = false
     }
 
     // A refused calculation engine switch only reaches the log otherwise,
@@ -425,6 +463,7 @@ EaComponents.ApplicationWindow {
 
     Component.onCompleted: {
         console.debug(`Application window loaded ::: ${this}`)
+        Globals.References.applicationWindow.resetToInitialState = resetToInitialState
         if (Globals.BackendWrapper.testMode) {
 
             // To ensure that Qt starts up there is a delay before the it is shut down again.

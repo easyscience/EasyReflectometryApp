@@ -22,9 +22,9 @@ from tests.test_logic_summary import FakePyplot
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 def _write_file(path, q, relative_sigma_q):
@@ -152,13 +152,13 @@ class TestPosteriorBand:
 
 class TestSampling:
     def test_the_sampler_compares_each_dataset_to_the_curve_the_fit_does(self, tmp_path):
-        from easyscience.fitting.minimizers.factory import AvailableMinimizers
+        from easyreflectometry import Minimizers as MinimizerEnum
 
         from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting
         from tests.test_polarized_analysis import _StubMinimizers
 
         project = two_datasets_on_one_model(tmp_path)
-        project.minimizer = AvailableMinimizers.Bumps_simplex
+        project.minimizer = MinimizerEnum.Bumps_simplex
 
         fitter = Fitting(project).prepare_threaded_sample(_StubMinimizers())
 

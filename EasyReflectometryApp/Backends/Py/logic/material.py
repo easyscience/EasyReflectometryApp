@@ -6,6 +6,8 @@ from easyreflectometry.sample import MaterialCollection
 from easyreflectometry.sample import MaterialDensity
 from easyreflectometry.sample import MaterialMagnetic
 
+from .helpers import is_independent
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +22,7 @@ def _parameter_is_writable(parameter) -> bool:
     the dependent parameter would raise, so the setters refuse instead.
     Checked per-parameter (not just `sld`): the lib guards sld and isld
     individually since they can disagree mid-toggle."""
-    return getattr(parameter, 'independent', True)
+    return is_independent(parameter)
 
 
 # A density material's fittable input knobs; cleared (free = False) when the

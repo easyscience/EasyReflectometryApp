@@ -90,6 +90,8 @@ QtObject {
     readonly property int experimentParametersCount: 20
     readonly property int freeParametersCount: 100
     readonly property int fixedParametersCount: 200
+    readonly property int activeParametersCount: 300
+    readonly property int allParametersCount: 320
     readonly property var enabledParameters: [
         {
             'name': 'name 1',

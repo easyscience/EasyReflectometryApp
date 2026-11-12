@@ -1,5 +1,9 @@
 import hashlib
 import json
+import logging
+import os
+import shutil
+import tempfile
 from copy import copy
 from pathlib import Path
 from typing import Callable
@@ -9,6 +13,8 @@ from easyreflectometry import Project as ProjectLib
 
 from .experiments import ordered_experiment_items
 from .minimizers import apply_app_defaults
+
+logger = logging.getLogger(__name__)
 
 
 class Project:
@@ -24,6 +30,9 @@ class Project:
         self._project_lib.default_model()
         apply_app_defaults(self._project_lib)
         self._update_enablement_of_fixed_layers_for_model(0)
+        # Set by `record_default_content` once the backend is wired; until then all content
+        # counts as custom.
+        self._default_content_fingerprint = None
 
     @property
     def created(self) -> bool:
@@ -165,8 +174,37 @@ class Project:
         :raises Exception: whatever `as_dict` raises; a caller that cannot fingerprint the
             project must treat it as changed.
         """
+        return self._fingerprint(with_info=True)
+
+    def has_custom_content(self) -> bool:
+        """Whether the samples, data or fit settings differ from those of a new project.
+
+        The project's name, description and location are left out: they are what a new
+        project replaces anyway. A project that cannot be fingerprinted counts as changed.
+        """
+        try:
+            return self._fingerprint(with_info=False) != self._default_content_fingerprint
+        except Exception:
+            return True
+
+    def record_default_content(self) -> None:
+        """Take the current content as what a new project holds.
+
+        Done after a reset and once the backend is wired at startup: every part that wraps the
+        library project sets up its default model again (advancing the model colour counter),
+        and the save hooks are only registered then. Content that cannot be fingerprinted leaves
+        nothing to compare with, so all content then counts as custom.
+        """
+        try:
+            self._default_content_fingerprint = self._fingerprint(with_info=False)
+        except Exception:
+            self._default_content_fingerprint = None
+
+    def _fingerprint(self, with_info: bool) -> str:
         self._run_pre_save_hooks()
-        content = self._project_lib.as_dict(include_materials_not_in_model=True)
+        content = self._project_lib.as_dict()
+        if not with_info:
+            content.pop('info', None)
         return hashlib.sha256(json.dumps(content, sort_keys=True).encode('utf-8')).hexdigest()
 
     def create(self) -> None:
@@ -174,9 +212,51 @@ class Project:
         self._run_pre_save_hooks()
         self._project_lib.save_as_json()
 
-    def save(self) -> None:
+    @property
+    def path_backup(self) -> str:
+        """Where an automatic save keeps the project file it replaces."""
+        return str(self._backup_path())
+
+    def _backup_path(self) -> Path:
+        path_json = Path(self._project_lib.path_json)
+        return path_json.with_name(path_json.name + '.bak')
+
+    def save(self, backup: bool = False) -> None:
+        """Write the project file.
+
+        :param backup: first keep the file being replaced as `path_backup`, so that the save can
+            be undone by hand. Automatic saves ask for this; they write without the user deciding
+            that the state on screen is worth keeping.
+        """
         self._run_pre_save_hooks()
+        if backup:
+            self._rotate_backup()
         self._project_lib.save_as_json(overwrite=True)
+
+    def _rotate_backup(self) -> None:
+        """Copy the current project file over the backup, atomically.
+
+        A failure is logged and swallowed: the backup is a convenience, and the save itself is
+        atomic, so refusing to save over a missing backup would only lose the newer work.
+        """
+        source = Path(self._project_lib.path_json)
+        if not source.is_file():
+            return
+        destination = self._backup_path()
+        temporary = None
+        try:
+            # Same directory as the destination, so that the replace is atomic.
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                dir=destination.parent, prefix=f'{destination.name}.', suffix='.tmp'
+            )
+            os.close(file_descriptor)
+            temporary = Path(temporary_name)
+            shutil.copy2(source, temporary)
+            os.replace(temporary, destination)
+        except OSError:
+            logger.warning('Could not back up %s before an automatic save', source, exc_info=True)
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def load(self, path: str) -> None:
         self._project_lib.load_from_json(path)
@@ -307,6 +387,7 @@ class Project:
         # A loaded project keeps its own minimizer; only a new one gets the app's.
         apply_app_defaults(self._project_lib)
         self._run_post_load_hooks()
+        self.record_default_content()
 
     @property
     def load_report(self) -> list[str]:

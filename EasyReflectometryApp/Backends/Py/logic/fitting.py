@@ -345,7 +345,7 @@ class Fitting:
         for parameter in getattr(prepared, 'added_roots', []):
             owners = ', '.join(f"'{models[index].name}'" for index in self._project_lib.parameter_models(parameter))
             notes.append(
-                f"'{parameter.name}' of {owners} is fitted too: a parameter of a fitted model follows it, "
+                f"'{parameter.display_name}' of {owners} is fitted too: a parameter of a fitted model follows it, "
                 'although no experiment of that model is included.'
             )
         excluded = [name for name, included in zip(self._experiment_names(), self._inclusion()) if not included]

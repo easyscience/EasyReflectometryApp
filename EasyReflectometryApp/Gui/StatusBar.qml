@@ -66,9 +66,22 @@ EaElements.StatusBar {
                 return ''
             }
             const format = Qt.locale().timeFormat(Locale.ShortFormat).replace(/[:.]?s+/g, '')
-            return Qt.formatTime(new Date(Globals.BackendWrapper.projectLastSaved), format)
+            const time = Qt.formatTime(new Date(Globals.BackendWrapper.projectLastSaved), format)
+            return Globals.BackendWrapper.projectLastSaveAutomatic ? qsTr('%1 (auto)').arg(time) : time
         }
-        ToolTip.text: qsTr('Time of the last successful save')
+        ToolTip.text: Globals.BackendWrapper.projectLastSaveAutomatic
+                      ? qsTr('Time of the last successful save, made automatically.\nThe version it replaced is kept as %1')
+                            .arg(Globals.BackendWrapper.projectBackupPath)
+                      : qsTr('Time of the last successful save')
+    }
+
+    // Stays up for the whole failure streak; the error dialog itself is shown only once.
+    EaElements.StatusBarItem {
+        visible: Globals.BackendWrapper.projectAutosaveFailing
+        keyIcon: 'exclamation-triangle'
+        keyText: qsTr('Autosave')
+        valueText: qsTr('failed')
+        ToolTip.text: qsTr('The last automatic save failed. Your work is still in memory; use Save to retry.')
     }
 
     EaElements.StatusBarItem {

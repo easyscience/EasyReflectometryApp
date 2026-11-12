@@ -1,3 +1,5 @@
+import pytest
+
 from EasyReflectometryApp.Backends.Py.sample import Sample
 from tests.factories import FakeLayerMagnetism
 from tests.factories import make_assembly
@@ -174,3 +176,26 @@ def test_attaching_and_detaching_magnetism_rebuilds_the_structure(qcore_applicat
     backend.setLayerMagneticAtIndex(0, False)
     assert emitted == [True, True]
     assert 'magnetic' not in backend.structure[1]
+
+
+@pytest.mark.parametrize(
+    'rename',
+    [
+        lambda backend: backend.setMaterialNameAtIndex(1, 'Silicon'),
+        lambda backend: (backend.setCurrentMaterialIndex(1), backend.setCurrentMaterialName('Silicon')),
+    ],
+    ids=['at index', 'current'],
+)
+def test_material_rename_refreshes_layer_table_and_analysis_names(qcore_application, rename):
+    materials = make_material_collection(make_material('Air'), make_material('Si'))
+    sample = make_sample(make_assembly(name='Substrate', layers=[make_layer(name='Si Layer', material=materials[1])]))
+    backend = Sample(make_project(materials=materials, models=make_model_collection(make_model(sample=sample))))
+    assert [layer['material'] for layer in backend.layers] == ['Si']  # the layer table is now cached
+    sample_changed = []
+    backend.externalSampleChanged.connect(lambda: sample_changed.append(True))
+
+    rename(backend)
+
+    assert [layer['material'] for layer in backend.layers] == ['Silicon']
+    # Relayed to the Analysis page, whose parameter names include the material's name.
+    assert sample_changed == [True]
