@@ -182,25 +182,33 @@ class Models:
     def add_new(self) -> None:
         self._models.add_model()
         self.default_model_content(self._models[-1])
-        self._attach_calculator(self._models[-1])
+        self._adopt_new_model(self._models[-1])
         # Update index to point to the new model
         self.index = len(self._models) - 1
 
     def duplicate_selected_model(self) -> None:
         self._models.duplicate_model(self.index)
-        self._attach_calculator(self._models[-1])
+        self._adopt_new_model(self._models[-1])
         # Update index to point to the duplicated model
         self.index = len(self._models) - 1
 
-    def _attach_calculator(self, model: Model) -> None:
-        """Bind a model added through the collection to the project's calculator.
+    def _adopt_new_model(self, model: Model) -> None:
+        """Make a model added through the collection a full member of the project.
 
-        The collection's `add_model`/`duplicate_model` do not know the project's calculator, so
-        a model added through them has no interface. The project's fitter is built lazily for
-        the current model, and `Project.as_dict` (hence every save) touches it, so saving with
-        such a model selected failed with an internal error instead of writing the file.
+        The collection's `add_model`/`duplicate_model` know nothing of the project, so the
+        project-level setup its own entry points (models setter, `add_contrast`, sample loads)
+        perform has to be applied here:
+
+        - the calculator: without an interface the project's lazily built fitter fails, and
+          `Project.as_dict` (hence every save) touches it, so saving with such a model selected
+          failed with an internal error instead of writing the file;
+        - parameter states: the project disables (and fixes) the guide field angle and applied
+          field of a model with no magnetic layer. Skipped, a new non-magnetic model's field
+          parameters carried no `enabled` flag at all, read as enabled, and so appeared in the
+          Analysis table as fittable polarisation parameters in an unpolarised project.
         """
         model.interface = self._project_lib._calculator
+        self._project_lib._sync_parameter_states()
 
     # The library keeps the moved model the current one.
     def move_selected_up(self) -> None:

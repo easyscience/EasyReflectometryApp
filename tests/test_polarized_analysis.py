@@ -13,6 +13,7 @@ from easyreflectometry.sample import LayerMagnetism
 from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting as FittingLogic
 from EasyReflectometryApp.Backends.Py.logic.layers import Layers as LayersLogic
+from EasyReflectometryApp.Backends.Py.logic.models import Models as ModelsLogic
 from EasyReflectometryApp.Backends.Py.logic.parameters import Parameters as ParametersLogic
 from EasyReflectometryApp.Backends.Py.plotting_1d import Plotting1d
 
@@ -216,6 +217,30 @@ class TestMagneticParametersInTheTable:
         logic.set_name_filter_criteria('model')
 
         assert 'Model D2O rho_m' in [row['name'] for row in logic.parameters]
+
+    @pytest.mark.parametrize('action', ['add_new', 'duplicate_selected_model'])
+    def test_field_stays_out_of_an_unpolarized_table_for_a_model_added_from_the_gui(self, action):
+        # Add/Duplicate model go through the collection, past the project's own
+        # parameter-state sync; the new model's guide field angle and applied
+        # field then carried no `enabled` flag, read as enabled, and showed up
+        # as fittable polarisation parameters in a non-magnetic project.
+        project = _project()
+        getattr(ModelsLogic(project), action)()
+        assert len(project.models) == 2
+
+        # all_parameters() lists every row; the table drops the enabled=False ones.
+        field_rows = [
+            row
+            for row in ParametersLogic(project).all_parameters()
+            if 'guide_field_angle' in row['name'] or 'applied_field' in row['name']
+        ]
+
+        assert field_rows
+        assert all(row['enabled'] is False and row['fit'] is False for row in field_rows)
+        for model in project.models:
+            for parameter in (model.guide_field_angle, model.applied_field):
+                assert parameter.enabled is False
+                assert parameter.free is False
 
 
 class TestPolarizedFitting:
