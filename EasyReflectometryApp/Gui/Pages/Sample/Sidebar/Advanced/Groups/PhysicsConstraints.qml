@@ -142,6 +142,7 @@ EaElements.GroupBox {
                             }
                             EaElements.ToolTip {
                                 text: recipeRow.recipe.reason ? recipeRow.recipe.reason : ""
+                                delay: Globals.Variables.toolTipDelay
                                 visible: text !== "" &&
                                          infoLabel.text !== "" &&
                                          infoHover.hovered &&

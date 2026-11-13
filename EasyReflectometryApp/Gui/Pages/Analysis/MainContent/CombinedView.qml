@@ -423,13 +423,12 @@ Rectangle {
                 property bool useLogQAxis: Globals.Variables.logarithmicQAxis
                 axisX.visible: !useLogQAxis
 
-                LogValueAxis {
+                Gui.LogQAxis {
                     id: analysisAxisXLog
                     visible: analysisChartView.useLogQAxis
                     titleText: "q (Å⁻¹)"
                     property double minAfterReset: Math.max(Globals.BackendWrapper.plottingAnalysisMinX, 1e-6)
                     property double maxAfterReset: Globals.BackendWrapper.plottingAnalysisMaxX * 1.1
-                    base: 10
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine

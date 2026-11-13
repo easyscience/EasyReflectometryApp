@@ -11,6 +11,7 @@ import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Charts as EaCharts
 
+import Gui as Gui
 import Gui.Globals as Globals
 import "../../../Logic/MeasuredScatter.js" as MeasuredScatter
 
@@ -405,13 +406,12 @@ Rectangle {
         property bool useLogQAxis: Globals.Variables.logarithmicQAxis
         axisX.visible: !useLogQAxis
 
-        LogValueAxis {
+        Gui.LogQAxis {
             id: axisXLog
             visible: chartView.useLogQAxis
             titleText: "q (Å⁻¹)"
             property double minAfterReset: Math.max(Globals.BackendWrapper.plottingExperimentMinX, 1e-6)
             property double maxAfterReset: Globals.BackendWrapper.plottingExperimentMaxX * 1.1
-            base: 10
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine

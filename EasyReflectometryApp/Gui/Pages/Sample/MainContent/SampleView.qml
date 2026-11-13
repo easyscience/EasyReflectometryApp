@@ -11,6 +11,7 @@ import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Charts as EaCharts
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 import "../../../Logic/ChannelCurves.js" as ChannelCurves
@@ -71,14 +72,13 @@ Rectangle {
             }
         }
 
-        LogValueAxis {
+        Gui.LogQAxis {
             id: axisXLog
             visible: chartView.useLogQAxis
             titleText: "q (Å⁻¹)"
             // min/max set for log scale - ensure positive values
             property double minAfterReset: Math.max(Globals.BackendWrapper.plottingSampleMinX, 1e-6)
             property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX * 1.1
-            base: 10
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine

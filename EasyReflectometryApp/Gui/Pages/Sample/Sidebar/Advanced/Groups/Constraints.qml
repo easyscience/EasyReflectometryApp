@@ -442,6 +442,7 @@ EaElements.GroupBox {
                             }
                             return EaStyle.Colors.themeForegroundMinor
                         }
+                        ToolTip.delay: Globals.Variables.toolTipDelay
                         ToolTip.visible: hovered && Globals.BackendWrapper.sampleConstraintsList[index] !== undefined
                         ToolTip.text: {
                             const constraint = Globals.BackendWrapper.sampleConstraintsList[index]
@@ -498,6 +499,7 @@ EaElements.GroupBox {
                                     ? EaStyle.Colors.themeAccent : EaStyle.Colors.themeForeground
                         }
                         elide: Text.ElideRight
+                        ToolTip.delay: Globals.Variables.toolTipDelay
                         ToolTip.visible: hovered && Globals.BackendWrapper.sampleConstraintsList[index] && Globals.BackendWrapper.sampleConstraintsList[index].rawExpression
                         ToolTip.text: Globals.BackendWrapper.sampleConstraintsList[index] ? Globals.BackendWrapper.sampleConstraintsList[index].rawExpression : ""
                     }

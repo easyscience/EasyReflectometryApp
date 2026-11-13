@@ -8,6 +8,11 @@ import QtQuick
 // whose id is stored here can be accessed from any other qml file.
 
 QtObject {
+    // Hover delay (ms) before a tooltip appears, so it doesn't pop up over the
+    // control the moment the cursor crosses it. Matches Qt's desktop default
+    // (QStyleHints::toolTipWakeUpDelay). Chart data readouts stay instant.
+    readonly property int toolTipDelay: 700
+
     property bool showLegendOnSamplePage: false
     property bool showLegendOnExperimentPage: false
     property bool showLegendOnAnalysisPage: false

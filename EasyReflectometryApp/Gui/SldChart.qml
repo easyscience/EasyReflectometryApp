@@ -162,6 +162,37 @@ Rectangle {
             axisY.max = axisY.maxAfterReset
         }
 
+        // SLD = 0 reference line. Declared before every other series so it is
+        // drawn underneath them (the model curves are created later and stack
+        // on top); thin, dashed and half-transparent so it never hides a
+        // curve. Not hover-connected, so it gives no coordinates tooltip. Its
+        // two points track the visible z range, so it spans the plot at any
+        // zoom or pan.
+        LineSeries {
+            id: zeroSldLine
+            // root aliases: inside a series, a bare `axisX` is its own property.
+            axisX: root.chartAxisX
+            axisY: root.chartAxisY
+            width: 1
+            style: Qt.DashLine
+            color: Qt.rgba(EaStyle.Colors.chartAxis.r, EaStyle.Colors.chartAxis.g,
+                           EaStyle.Colors.chartAxis.b, 1.0)
+
+            function span() {
+                clear()
+                append(root.chartAxisX.min, 0)
+                append(root.chartAxisX.max, 0)
+            }
+
+            Component.onCompleted: span()
+        }
+
+        Connections {
+            target: axisX
+            function onMinChanged() { zeroSldLine.span() }
+            function onMaxChanged() { zeroSldLine.span() }
+        }
+
         // Tool buttons
         Row {
             id: toolButtons

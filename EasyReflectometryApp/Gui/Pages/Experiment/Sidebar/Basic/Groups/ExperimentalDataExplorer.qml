@@ -118,6 +118,7 @@ EaElements.GroupBox {
                 stepSize: 0.05
                 enabled: staggeredPlottingCheckbox.checked && selectedExperimentIndices.length > 1
                 ToolTip.text: "Adjust staggering distance (" + Number(value).toFixed(2) + ")"
+                ToolTip.delay: Globals.Variables.toolTipDelay
                 ToolTip.visible: hovered
 
                 onValueChanged: {

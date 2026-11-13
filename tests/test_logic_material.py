@@ -130,13 +130,19 @@ def test_material_logic_add_new_creates_a_density_material():
     logic.add_new()
 
     added = logic.materials[-1]
-    assert added['label'] == 'Material added'
+    assert added['label'] == 'New material'
     assert added['kind'] == 'density'
     # The library's defaults, so the material starts at a physical SLD rather than zero.
     assert added['formula'] == 'Si'
     assert float(added['density']) == pytest.approx(2.33)
     assert float(added['sld']) == pytest.approx(2.0737, abs=1e-4)
-    assert added['sld_coupled'] is True
+    # Decoupled, so SLD/iSLD are editable straight from the table row.
+    assert added['sld_coupled'] is False
+    index = len(logic.materials) - 1
+    assert logic.set_sld_at_index(index, 3.5) is True
+    assert logic.set_isld_at_index(index, 0.1) is True
+    assert float(logic.materials[-1]['sld']) == pytest.approx(3.5)
+    assert float(logic.materials[-1]['isld']) == pytest.approx(0.1)
 
 
 def test_material_logic_add_duplicate_move_and_remove():

@@ -3,6 +3,7 @@ module Gui
 ApplicationWindow ApplicationWindow.qml
 CalculationEngineControl CalculationEngineControl.qml
 GuideFieldLegend GuideFieldLegend.qml
+LogQAxis LogQAxis.qml
 MagnetizationAngleSlider MagnetizationAngleSlider.qml
 MagnetizationArrow MagnetizationArrow.qml
 ExperimentModelComboBox ExperimentModelComboBox.qml

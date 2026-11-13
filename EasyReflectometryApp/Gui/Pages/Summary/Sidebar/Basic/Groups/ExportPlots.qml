@@ -65,7 +65,7 @@ Column {
                 ? qsTr('Matplotlib figure object, reloadable with pickle.load() for further editing')
                 : qsTr('Image format of the saved figure')
             ToolTip.visible: hovered
-            ToolTip.delay: 500
+            ToolTip.delay: Globals.Variables.toolTipDelay
             EaElements.Label {
                 id: plotFormatLabel
                 text: qsTr('Format')

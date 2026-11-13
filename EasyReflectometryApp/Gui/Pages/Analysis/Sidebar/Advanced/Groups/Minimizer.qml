@@ -142,6 +142,7 @@ EaElements.GroupBox {
                 model: Globals.BackendWrapper.analysisFitObjectives
                 currentIndex: model.indexOf(Globals.BackendWrapper.analysisFitObjective)
                 onActivated: Globals.BackendWrapper.analysisSetFitObjective(model[currentIndex])
+                ToolTip.delay: Globals.Variables.toolTipDelay
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("hybrid: Mighell substitution for zero-variance points, weighted least squares elsewhere.\n" +
                                    "mighell: Mighell transform for all points.\n" +
@@ -188,6 +189,7 @@ EaElements.GroupBox {
                                     Globals.BackendWrapper.analysisSetMinimizerOption(optionLoader.modelData.name, text)
                                 focus = false
                             }
+                            ToolTip.delay: Globals.Variables.toolTipDelay
                             ToolTip.visible: hovered
                             ToolTip.text: optionLoader.modelData.doc
                             EaElements.Label {
@@ -208,6 +210,7 @@ EaElements.GroupBox {
                             currentIndex: optionLoader.modelData.isSet ? optionLoader.modelData.choices.indexOf(optionLoader.modelData.value) + 1 : 0
                             onActivated: Globals.BackendWrapper.analysisSetMinimizerOption(
                                              optionLoader.modelData.name, currentIndex === 0 ? '' : optionLoader.modelData.choices[currentIndex - 1])
+                            ToolTip.delay: Globals.Variables.toolTipDelay
                             ToolTip.visible: hovered
                             ToolTip.text: optionLoader.modelData.doc
                             EaElements.Label {
