@@ -529,7 +529,95 @@ Rectangle {
         axisY.minAfterReset: Globals.BackendWrapper.plottingExperimentMinY - yRange * 0.01
         axisY.maxAfterReset: Globals.BackendWrapper.plottingExperimentMaxY + yRange * 0.01
 
-        calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
+        // Coordinates tooltip. Series-level `hovered` signals only fire when the
+        // cursor is exactly over a (tiny) marker, so instead track the cursor
+        // over the whole chart and snap to the nearest visible data point
+        // within `hoverRadius` pixels.
+        property real hoverRadius: EaStyle.Sizes.fontPixelSize
+
+        HoverHandler {
+            id: coordHoverHandler
+            enabled: chartView.allowHover
+            onPointChanged: chartView.updateHoverTooltip(point.position)
+            onHoveredChanged: if (!hovered) dataToolTip.visible = false
+            onEnabledChanged: if (!enabled) dataToolTip.visible = false
+        }
+
+        // Series currently showing measured data (calcSerie is kept hidden).
+        function activeMeasuredSeries() {
+            var list = []
+            if (isMultiExperimentMode && multiExperimentSeries.length > 0) {
+                for (var i = 0; i < multiExperimentSeries.length; i++)
+                    list.push(multiExperimentSeries[i].measuredSerie)
+            } else if (isPolarizedMode) {
+                for (var j = 0; j < channelSeries.length; j++)
+                    list.push(channelSeries[j].measuredSerie)
+            } else if (useLogQAxis && logModeSeries) {
+                list.push(logModeSeries.measuredSerie)
+            } else if (measuredScatterSerie) {
+                list.push(measuredScatterSerie)
+            }
+            return list.filter(s => s && s.visible && s.count > 0)
+        }
+
+        // First index whose x >= value, assuming x is ascending.
+        function lowerBound(serie, value) {
+            var lo = 0
+            var hi = serie.count
+            while (lo < hi) {
+                var mid = (lo + hi) >> 1
+                if (serie.at(mid).x < value) lo = mid + 1
+                else hi = mid
+            }
+            return lo
+        }
+
+        function updateHoverTooltip(mousePos) {
+            var area = plotArea
+            var inPlot = mousePos.x >= area.x && mousePos.x <= area.x + area.width &&
+                         mousePos.y >= area.y && mousePos.y <= area.y + area.height
+            if (!allowHover || !inPlot) {
+                dataToolTip.visible = false
+                return
+            }
+            var r2 = hoverRadius * hoverRadius
+            var best = null
+            var bestSerie = null
+            var bestPos = null
+            var bestD2 = r2
+            var series = activeMeasuredSeries()
+            for (var s = 0; s < series.length; s++) {
+                var serie = series[s]
+                var first = 0
+                var last = serie.count - 1
+                // Restrict the scan to the x-window around the cursor when
+                // the data is sorted (it normally is, q ascending).
+                if (serie.at(0).x <= serie.at(last).x) {
+                    var xLo = mapToValue(Qt.point(mousePos.x - hoverRadius, mousePos.y), serie).x
+                    var xHi = mapToValue(Qt.point(mousePos.x + hoverRadius, mousePos.y), serie).x
+                    first = Math.max(0, lowerBound(serie, xLo) - 1)
+                    last = Math.min(serie.count - 1, lowerBound(serie, xHi))
+                }
+                for (var i = first; i <= last; i++) {
+                    var p = serie.at(i)
+                    var pos = mapToPosition(p, serie)
+                    var dx = pos.x - mousePos.x
+                    var dy = pos.y - mousePos.y
+                    var d2 = dx * dx + dy * dy
+                    if (d2 <= bestD2) {
+                        bestD2 = d2
+                        best = p
+                        bestSerie = serie
+                        bestPos = pos
+                    }
+                }
+            }
+            if (!best) {
+                dataToolTip.visible = false
+                return
+            }
+            showMainTooltip(chartView, best, true, bestSerie, bestPos)
+        }
 
         // Multi-experiment series management
         function updateMultiExperimentSeries() {
@@ -919,6 +1007,8 @@ Rectangle {
 
             arrowLength: 0
             textFormat: Text.RichText
+            enterAnimationDuration: 150
+            exitAnimationDuration: 150
         }
 
         // Data is set in python backend (plotting_1d.py)
@@ -966,15 +1056,25 @@ Rectangle {
 
     // Logic
 
-    function showMainTooltip(chart, point, state) {
+    function showMainTooltip(chart, point, state, serie, pos) {
         if (!chartView.allowHover) {
             return
         }
-        const pos = chart.mapToPosition(Qt.point(point.x, point.y))
-        dataToolTip.x = pos.x
-        dataToolTip.y = pos.y
         dataToolTip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
         dataToolTip.parent = chart
+        // Put the tooltip above-right of the point, further away than the
+        // hover radius, so it never sits under the cursor (which would steal
+        // the hover and make it flicker). Flip sides near the plot edges.
+        const gap = chart.hoverRadius + 0.5 * EaStyle.Sizes.fontPixelSize
+        const area = chart.plotArea
+        let tx = pos.x + gap
+        let ty = pos.y - gap - dataToolTip.implicitHeight
+        if (tx + dataToolTip.implicitWidth > area.x + area.width)
+            tx = pos.x - gap - dataToolTip.implicitWidth
+        if (ty < area.y)
+            ty = pos.y + gap
+        dataToolTip.x = tx
+        dataToolTip.y = ty
         dataToolTip.visible = state
     }
 }
