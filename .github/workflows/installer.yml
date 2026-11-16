@@ -146,8 +146,59 @@ jobs:
           if-no-files-found: error
           retention-days: 10
 
-      - name: Upload zipped offline app installer to GitHub releases (non-master branch)
-        if: github.event_name == 'push' && env.BRANCH_NAME != 'master'
+  # Upload all installers to the GitHub release from a single job. Uploading
+  # from each matrix job in parallel races on creating the draft release
+  # (drafts have no git tag to look up), so a job could end up in a duplicate
+  # draft and its installer go missing from the published release - this is
+  # how the ubuntu-24.04 installer was lost from v1.5.0.
+  publish-release:
+    needs: build-installer
+    if: github.event_name == 'push' && always() && !cancelled()
+
+    timeout-minutes: 15
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check-out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python environment
+        uses: actions/setup-python@v5
+        with:
+            python-version: 3.12
+
+      - name: Install Python dependences
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install toml
+          python -m pip install requests
+
+      - name: Add extra info to pyproject.toml
+        run: python utils.py --update
+
+      - name: Declare env variables
+        shell: bash
+        run: |
+          echo "BRANCH_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+          echo "RELEASE_TAG=$(python utils.py --get ci.app.info.release_tag)" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=$(python utils.py --get ci.app.info.release_title)" >> $GITHUB_ENV
+
+      - name: Download zipped offline app installers of all platforms
+        uses: actions/download-artifact@v4
+        with:
+          pattern: zipped-app-installer_*
+          path: release-assets
+          merge-multiple: true
+
+      - name: List installers to be uploaded
+        run: ls -l release-assets
+
+      - name: Upload zipped offline app installers to GitHub releases (non-master branch)
+        if: env.BRANCH_NAME != 'master'
         uses: ncipollo/release-action@v1
         with:
           draft: true
@@ -155,13 +206,13 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          artifacts: "${{ env.DISTRIBUTION_PATH }}/*.zip"
+          artifacts: "release-assets/*.zip"
           tag: ${{ env.BRANCH_NAME }}
           name: ${{ env.BRANCH_NAME }}
           bodyFile: "RELEASE.md"
 
-      - name: Upload zipped offline app installer to GitHub releases (master branch)
-        if: github.event_name == 'push' && env.BRANCH_NAME == 'master'
+      - name: Upload zipped offline app installers to GitHub releases (master branch)
+        if: env.BRANCH_NAME == 'master'
         uses: ncipollo/release-action@v1
         with:
           draft: true
@@ -169,7 +220,7 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          artifacts: "${{ env.DISTRIBUTION_PATH }}/*.zip"
+          artifacts: "release-assets/*.zip"
           tag: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TITLE }}
           bodyFile: "RELEASE.md"
