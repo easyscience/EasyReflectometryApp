@@ -66,7 +66,6 @@ class StubFittingLogic:
     def __init__(self):
         self.sample_step = 0
         self.sample_total_steps = 0
-        self.sample_progress_message = ''
         self.sample_has_update = False
         self.running = False
         self.fit_error_message = ''
@@ -76,8 +75,8 @@ class StubFittingLogic:
     def snapshot_constraints_factory(self):
         return None
 
-    def prepare_for_threaded_sample(self):
-        pass
+    def prepare_for_threaded_sample(self, burn=0):
+        self.prepared_burn = burn
 
     def prepare_threaded_sample(self, minimizers_logic):
         return 'fake-multi-fitter'
@@ -310,22 +309,6 @@ class TestBayesianHyperParameterSignals:
         analysis.minimizerChanged.connect(lambda: emissions.append('minimizerChanged'))
         analysis.setBayesianThinning(3)
         assert 'minimizerChanged' in emissions
-
-
-class TestBayesianProgressProperties:
-    """Sampling progress properties from fitting stub."""
-
-    def test_sample_progress_step(self, analysis):
-        assert analysis.sampleProgressStep == 0
-
-    def test_sample_progress_message(self, analysis):
-        assert analysis.sampleProgressMessage == ''
-
-    def test_sample_progress_has_update(self, analysis):
-        assert analysis.sampleProgressHasUpdate is False
-
-    def test_sample_total_steps(self, analysis):
-        assert analysis.sampleProgressTotalSteps == 0
 
 
 # ===================================================================
@@ -912,6 +895,8 @@ class TestStartThreadedSample:
         assert worker.kwargs['burn'] == 1000
         assert worker.kwargs['thin'] == 2
         assert worker.kwargs['population'] == 5
+        # The burn-in phase of the progress uses the burn the worker was given
+        assert analysis._fitting_logic.prepared_burn == 1000
 
     def test_worker_has_progress_and_delete_connections(self, analysis):
         StubWorker.instances = []
@@ -1085,8 +1070,9 @@ class TestSamplingProgress:
         assert analysis._fitting_logic.sample_step == 42
         assert analysis._fitting_logic.sample_total_steps == 1000
 
-    def test_fitting_changed_emitted_on_progress(self, analysis):
+    def test_only_fit_progress_changed_emitted_on_progress(self, analysis):
         emissions = []
-        analysis.fittingChanged.connect(lambda: emissions.append('emitted'))
+        analysis.fittingChanged.connect(lambda: emissions.append('fitting'))
+        analysis.fitProgressChanged.connect(lambda: emissions.append('progress'))
         analysis._on_fit_progress({'sampling': True, 'iteration': 1, 'total_steps': 100})
-        assert 'emitted' in emissions
+        assert emissions == ['progress']

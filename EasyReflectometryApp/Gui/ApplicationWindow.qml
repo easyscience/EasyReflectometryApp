@@ -189,7 +189,19 @@ EaComponents.ApplicationWindow {
     // STATUS BAR
     /////////////
 
-    statusBar: Gui.StatusBar {}
+    // The progress strip is a sibling of the status bar, over its top edge: the
+    // status bar lays its own children out in a Row, where anchoring is not possible.
+    // Like the status bar, it is not shown on the Home page.
+    statusBar: [
+        Gui.StatusBar {},
+        Gui.FitProgressBar {
+            visible: progress.phase !== '' && EaGlobals.Vars.appBarCurrentIndex !== 0
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            progress: Globals.BackendWrapper.analysisFitProgress
+        }
+    ]
 
     ///////
     // MISC

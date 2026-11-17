@@ -52,6 +52,10 @@ class Analysis(QObject):
     parametersChanged = Signal()
     parametersIndexChanged = Signal()
     fittingChanged = Signal()
+    # The running operation's progress. Kept apart from fittingChanged, which also
+    # notifies the results and the posterior: a progress tick re-reads only these.
+    # Every fittingChanged (a lifecycle transition) emits it too.
+    fitProgressChanged = Signal()
     heatmapChanged = Signal()
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
     prefitCheckFailed = Signal(str, str)  # Emitted with (title, message) when a fit is refused before starting
@@ -90,6 +94,8 @@ class Analysis(QObject):
         self._fitter_thread = None
         # Connect stopFit signal to slot
         self.stopFit.connect(self._onStopFit)
+        # Start, stop, finish and failure change the progress as well.
+        self.fittingChanged.connect(self.fitProgressChanged)
         # A minimizer switch changes the inequality-constraint notices too.
         self.minimizerChanged.connect(self.inequalityContextChanged)
         # The selected experiments, shared with Plotting1d (PyBackend passes the same instance).
@@ -135,31 +141,16 @@ class Analysis(QObject):
     def fitChi2(self) -> float:
         return self._fitting_logic.fit_chi2
 
-    @Property(int, notify=fittingChanged)
-    def fitIteration(self) -> int:
-        return self._fitting_logic.fit_iteration
+    @Property('QVariantMap', notify=fitProgressChanged)
+    def fitProgress(self) -> dict:
+        """The running operation's progress (phase, fraction, count, ...), see ``Fitting.progress_snapshot``."""
+        return self._fitting_logic.progress_snapshot()
 
-    @Property(float, notify=fittingChanged)
-    def fitInterimChi2(self) -> float:
-        return self._fitting_logic.fit_interim_chi2
-
-    @Property(float, notify=fittingChanged)
-    def fitInterimReducedChi2(self) -> float:
-        return self._fitting_logic.fit_interim_reduced_chi2
-
-    @Property(str, notify=fittingChanged)
-    def fitProgressMessage(self) -> str:
-        return self._fitting_logic.fit_progress_message
-
-    @Property(bool, notify=fittingChanged)
-    def fitHasInterimUpdate(self) -> bool:
-        return self._fitting_logic.fit_has_interim_update
-
-    @Property(bool, notify=fittingChanged)
+    @Property(bool, notify=fitProgressChanged)
     def fitHasPreviewUpdate(self) -> bool:
         return self._fitting_logic.fit_has_preview_update
 
-    @Property('QVariantMap', notify=fittingChanged)
+    @Property('QVariantMap', notify=fitProgressChanged)
     def fitPreviewParameterValues(self) -> dict:
         return self._fitting_logic.fit_preview_parameter_values
 
@@ -204,22 +195,6 @@ class Analysis(QObject):
     def fitInfeasible(self) -> bool:
         """Whether the last progress report came from the BUMPS penalty plateau."""
         return self._fitting_logic.fit_infeasible
-
-    # ------------------------------------------------------------------
-    # Bayesian sampling progress properties
-    # ------------------------------------------------------------------
-
-    @Property(int, notify=fittingChanged)
-    def sampleProgressStep(self) -> int:
-        return self._fitting_logic.sample_step
-
-    @Property(str, notify=fittingChanged)
-    def sampleProgressMessage(self) -> str:
-        return self._fitting_logic.sample_progress_message
-
-    @Property(bool, notify=fittingChanged)
-    def sampleProgressHasUpdate(self) -> bool:
-        return self._fitting_logic.sample_has_update
 
     # ------------------------------------------------------------------
     # Bayesian sampling parameter properties
@@ -494,10 +469,10 @@ class Analysis(QObject):
     def _is_stale_worker_signal(self) -> bool:
         """Return True when a worker signal comes from a superseded worker.
 
-        A cancelled fit's thread may outlive the cancellation (lmfit/DFO cannot
-        abort mid-run); its late signals must not clobber the state of a newer
-        run. Signals from the current worker — and direct calls, where
-        ``sender()`` is None — are processed normally.
+        A cancelled run's thread outlives the cancellation until the engine
+        finishes its current evaluation or step; its late signals must not
+        clobber the state of a newer run. Signals from the current worker — and
+        direct calls, where ``sender()`` is None — are processed normally.
         """
         sender = self.sender()
         if sender is not None and sender is not self._fitter_thread:
@@ -514,7 +489,9 @@ class Analysis(QObject):
             self._fitting_logic.on_sample_progress(payload)
         else:
             self._fitting_logic.on_fit_progress(payload)
-        self.fittingChanged.emit()
+        # Progress only: neither fittingChanged (results, posterior) nor
+        # externalFittingChanged (plot refresh).
+        self.fitProgressChanged.emit()
 
     @Slot(list)
     def _on_fit_finished(self, results: list) -> None:
@@ -558,12 +535,15 @@ class Analysis(QObject):
 
     @Slot()
     def _onStopFit(self) -> None:
-        """Stop fitting and clean up."""
+        """Request the running fit or sampling to stop.
+
+        The parameters are not refreshed here: the worker may still be writing
+        them until it exits, and its exit handlers emit externalFittingChanged.
+        """
         self._fitting_logic.stop_fit()
         if self._fitter_thread is not None:
             self._fitter_thread.stop()
         self.fittingChanged.emit()
-        self.externalFittingChanged.emit()
 
     # ------------------------------------------------------------------
     # Bayesian sampling dispatch and result handling
@@ -597,7 +577,7 @@ class Analysis(QObject):
         # A fresh run invalidates the previous posterior immediately; if the
         # run fails, the UI must not keep presenting the old result as current.
         self._clear_bayesian_results()
-        self._fitting_logic.prepare_for_threaded_sample()
+        self._fitting_logic.prepare_for_threaded_sample(self._bayesian_logic.burn)
         self.fittingChanged.emit()
 
         multi_fitter = self._fitting_logic.prepare_threaded_sample(self._minimizers_logic)
@@ -836,10 +816,6 @@ class Analysis(QObject):
                 diagnostics['rhatStatus'] = 'Unavailable: the sampler returned flattened draws without chain identities.'
 
         self._bayesian_logic.diagnostics = diagnostics
-
-    @Property(int, notify=fittingChanged)
-    def sampleProgressTotalSteps(self) -> int:
-        return self._fitting_logic.sample_total_steps
 
     def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""

@@ -1,3 +1,6 @@
+import pytest
+
+from EasyReflectometryApp.Backends.Py.workers import fitter_worker as fitter_worker_module
 from EasyReflectometryApp.Backends.Py.workers.fitter_worker import FitterWorker
 from tests.factories import make_worker_fitter
 
@@ -83,26 +86,88 @@ def test_run_injects_progress_callback_for_fit_method(qcore_application):
     assert kwargs['weights'] == [1.0]
 
 
-def test_progress_callback_emits_detail_payload(qcore_application):
+@pytest.mark.parametrize('method_name', ['fit', 'mcmc_sample'])
+def test_run_passes_abort_test_for_every_engine(qcore_application, method_name):
+    fitter = make_worker_fitter(method_result='ok')
+    setattr(fitter, method_name, fitter.fit)
+    worker = FitterWorker(fitter, method_name)
+
+    worker.run()
+
+    abort_test = fitter.calls[0][1]['abort_test']
+    assert abort_test() is False
+    worker.stop()
+    assert abort_test() is True
+
+
+@pytest.mark.parametrize('error', [None, RuntimeError('Fit aborted by user')], ids=['returns', 'raises'])
+def test_run_reports_a_stop_as_cancelled_however_the_engine_ends(qcore_application, error):
+    """BUMPS returns after an abort; lmfit, DFO and DREAM raise. Both are a cancellation."""
+    worker = None
+
+    def stop_then_end(*args, **kwargs):
+        worker.stop()
+        if error is not None:
+            raise error
+        return 'partial'
+
+    fitter = make_worker_fitter(method_result='ok')
+    fitter.fit = stop_then_end
+    worker = FitterWorker(fitter, 'fit')
+    received = {'finished': [], 'failed': []}
+    worker.finished.connect(received['finished'].append)
+    worker.failed.connect(received['failed'].append)
+
+    worker.run()
+
+    assert received == {'finished': [], 'failed': [FitterWorker.CANCELLED_MESSAGE]}
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """A controllable monotonic clock for the progress throttle."""
+    now = {'t': 100.0}
+    monkeypatch.setattr(fitter_worker_module.time, 'monotonic', lambda: now['t'])
+    return now
+
+
+def test_progress_callback_emits_the_first_payload_at_once(qcore_application, clock):
     worker = FitterWorker(make_worker_fitter(method_result='ok'), 'fit')
     received = []
     worker.progressDetail.connect(received.append)
-    payload = {'iteration': 5, 'chi2': 12.5, 'finished': False}
 
-    should_continue = worker._progress_callback(payload)
+    worker._progress_callback({'iteration': 5, 'chi2': 12.5, 'refresh_plots': False})
 
-    assert should_continue is True
-    assert received == [payload]
+    assert received == [{'iteration': 5, 'chi2': 12.5, 'refresh_plots': False}]
 
 
-def test_progress_callback_requests_stop_when_flagged(qcore_application):
+def test_progress_callback_emits_at_most_once_per_interval(qcore_application, clock):
     worker = FitterWorker(make_worker_fitter(method_result='ok'), 'fit')
+    received = []
+    worker.progressDetail.connect(received.append)
 
-    worker.stop()
+    worker._progress_callback({'iteration': 1})
+    clock['t'] += FitterWorker.PROGRESS_INTERVAL_S * 0.99
+    worker._progress_callback({'iteration': 2})
+    clock['t'] += FitterWorker.PROGRESS_INTERVAL_S * 0.02
+    worker._progress_callback({'iteration': 3})
 
-    should_continue = worker._progress_callback({'iteration': 1})
+    assert [payload['iteration'] for payload in received] == [1, 3]
 
-    assert should_continue is False
+
+def test_progress_callback_carries_a_suppressed_refresh_request(qcore_application, clock):
+    worker = FitterWorker(make_worker_fitter(method_result='ok'), 'fit')
+    received = []
+    worker.progressDetail.connect(received.append)
+
+    worker._progress_callback({'iteration': 1, 'refresh_plots': False})
+    worker._progress_callback({'iteration': 2, 'refresh_plots': True})  # suppressed
+    clock['t'] += FitterWorker.PROGRESS_INTERVAL_S * 1.5
+    worker._progress_callback({'iteration': 3, 'refresh_plots': False})
+    clock['t'] += FitterWorker.PROGRESS_INTERVAL_S * 1.5
+    worker._progress_callback({'iteration': 4, 'refresh_plots': False})
+
+    assert [(payload['iteration'], payload['refresh_plots']) for payload in received] == [(1, False), (3, True), (4, False)]
 
 
 def test_stop_sets_flag_without_terminating_idle_thread(qcore_application, monkeypatch):

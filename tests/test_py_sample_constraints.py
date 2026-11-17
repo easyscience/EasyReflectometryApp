@@ -239,13 +239,11 @@ class TestFitScreening:
         fitting = Fitting(project)
         fitting.on_fit_progress({'iteration': 3, 'chi2': 1e12, 'infeasible': True})
         assert fitting.fit_infeasible is True
-        assert 'outside' in fitting.fit_progress_message
         fitting.on_fit_progress({'iteration': 4, 'chi2': 2.0, 'infeasible': False})
         assert fitting.fit_infeasible is False
         fitting.on_fit_progress({'iteration': 5, 'chi2': 1e12, 'infeasible': True})
         fitting.clear_fit_progress()
         assert fitting.fit_infeasible is False
-        assert fitting.fit_progress_message == ''
 
 
 class TestPhysicsRecipes:

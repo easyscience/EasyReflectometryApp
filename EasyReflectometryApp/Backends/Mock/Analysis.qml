@@ -33,11 +33,7 @@ QtObject {
     readonly property string fitErrorMessage: ''
     readonly property int fitNumRefinedParams: 3
     readonly property real fitChi2: 1.2345
-    readonly property int fitIteration: 0
-    readonly property real fitInterimChi2: 0.0
-    readonly property real fitInterimReducedChi2: 0.0
-    readonly property string fitProgressMessage: ''
-    readonly property bool fitHasInterimUpdate: false
+    readonly property var fitProgress: ({ phase: '', kind: '', fraction: -1, count: 0, total: 0, unit: '', reducedChi2: 0.0, startedAtMs: 0 })
     readonly property bool fitHasPreviewUpdate: false
     readonly property var fitPreviewParameterValues: ({})
     readonly property var fitResults: ({ success: true, nvarys: 3, chi2: 1.2345 })
