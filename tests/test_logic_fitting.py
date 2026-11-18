@@ -96,7 +96,10 @@ def test_prepare_threaded_fit_asks_the_project_for_a_run_and_keeps_its_warnings(
         2: make_experiment('Exp A', model=model_a, x=np.array([1.0, 2.0, 3.0]), y=np.array([4.0, 5.0, 6.0]), ye=np.array([1.0, 0.0, 4.0])),
     }
     project = make_project(experiments=experiments)
-    prepared = SimpleNamespace(core_fitter=SimpleNamespace(minimizer=SimpleNamespace(name='Bumps_simplex')), objective='hybrid')
+    prepared = SimpleNamespace(
+        core_fitter=SimpleNamespace(minimizer=SimpleNamespace(name='Bumps_simplex', package='bumps'), max_evaluations=None),
+        objective='hybrid',
+    )
     seen = {}
 
     def prepare_fit():
@@ -210,7 +213,7 @@ def test_a_failure_or_a_sampling_run_cannot_be_recorded_against_a_previous_fit()
     assert recorded == []
 
 
-def test_fit_progress_updates_transient_state_and_message():
+def test_fit_progress_updates_transient_state():
     project = make_project()
     logic = fitting_module.Fitting(project)
 
@@ -232,7 +235,6 @@ def test_fit_progress_updates_transient_state_and_message():
     assert logic.fit_preview_parameter_values == {'alpha': 2.0}
     assert logic.fit_has_preview_update is True
     assert logic.fit_has_interim_update is True
-    assert logic.fit_progress_message == 'Fitting... iter 12, Chi2 = 4.25'
 
 
 def test_fit_progress_state_resets_on_finish_failure_and_stop():
@@ -244,7 +246,6 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
     logic.on_fit_finished(make_fit_result(success=True, chi2=8.0, n_pars=1, x=[1, 2], reduced_chi2=4.0))
 
     assert logic.fit_iteration == 0
-    assert logic.fit_progress_message == ''
     assert logic.fit_has_interim_update is False
 
     logic.prepare_for_threaded_fit()
@@ -265,7 +266,6 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
     logic.on_fit_failed('Fitting cancelled by user')
 
     assert logic.fit_iteration == 0
-    assert logic.fit_progress_message == ''
     assert logic.fit_has_interim_update is False
 
 
@@ -294,6 +294,111 @@ def test_fit_failure_and_cancellation_state_transitions():
 
     logic.reset_stop_flag()
     assert logic.fit_cancelled is False
+
+
+# ===================================================================
+# Progress snapshot
+# ===================================================================
+
+def _prepared_fit(package, max_evaluations):
+    core_fitter = SimpleNamespace(minimizer=SimpleNamespace(name='engine', package=package), max_evaluations=max_evaluations)
+    return SimpleNamespace(core_fitter=core_fitter, objective='hybrid')
+
+
+def _logic_with_prepared_fit(package='lmfit', max_evaluations=None):
+    """A fit started the way Analysis starts one, prepared with the given engine and budget."""
+    project = make_project(experiments={0: make_experiment('Exp A', model=make_model(name='A'))})
+    project.prepare_fit = lambda: _prepared_fit(package, max_evaluations)
+    logic = fitting_module.Fitting(project)
+    logic.reset_stop_flag()
+    logic.prepare_for_threaded_fit()
+    assert logic.prepare_threaded_fit(StubMinimizersLogic()) is not None
+    return logic
+
+
+def test_progress_snapshot_is_idle_when_nothing_runs():
+    logic = fitting_module.Fitting(make_project())
+
+    assert logic.progress_snapshot() == fitting_module._IDLE_PROGRESS
+    assert None not in logic.progress_snapshot().values()
+
+
+def test_progress_snapshot_of_a_fit_has_no_fraction():
+    logic = _logic_with_prepared_fit('lmfit', max_evaluations=1000)
+    assert logic.progress_snapshot()['phase'] == 'starting'
+    assert logic.progress_snapshot()['startedAtMs'] > 0
+
+    # lmfit counts evaluations from -1
+    logic.on_fit_progress({'iteration': -1, 'chi2': 4.0, 'reduced_chi2': 2.0})
+    assert logic.progress_snapshot()['count'] == 0
+    logic.on_fit_progress({'iteration': 132, 'chi2': 4.0, 'reduced_chi2': 2.0})
+
+    snapshot = logic.progress_snapshot()
+    assert snapshot == {
+        'phase': 'fitting',
+        'kind': 'fit',
+        'fraction': -1.0,
+        'count': 132,
+        'total': 1000,
+        'unit': 'evaluations',
+        'reducedChi2': 2.0,
+        'startedAtMs': snapshot['startedAtMs'],
+    }
+
+
+def test_progress_snapshot_unit_and_budget_come_from_the_prepared_run():
+    snapshot = _logic_with_prepared_fit('bumps', max_evaluations=None).progress_snapshot()
+
+    assert snapshot['unit'] == 'steps'
+    assert snapshot['total'] == 0  # engine default: not shown
+
+
+def test_progress_snapshot_replaces_a_non_finite_chi2():
+    logic = _logic_with_prepared_fit()
+    logic.on_fit_progress({'iteration': 3, 'chi2': float('nan'), 'reduced_chi2': float('inf')})
+
+    assert logic.progress_snapshot()['reducedChi2'] == 0.0
+
+
+def test_progress_snapshot_of_sampling_is_determinate_with_a_burn_in_phase():
+    logic = fitting_module.Fitting(make_project())
+    logic.prepare_for_threaded_sample(burn=400)
+    assert logic.progress_snapshot()['phase'] == 'starting'
+    assert logic.progress_snapshot()['fraction'] == -1.0
+
+    logic.on_sample_progress({'sampling': True, 'iteration': 400, 'total_steps': 2000})
+    snapshot = logic.progress_snapshot()
+    assert (snapshot['phase'], snapshot['fraction']) == ('burn', 0.2)
+    assert (snapshot['unit'], snapshot['kind']) == ('generations', 'sample')
+
+    logic.on_sample_progress({'sampling': True, 'iteration': 401, 'total_steps': 2000})
+    assert logic.progress_snapshot()['phase'] == 'sampling'
+
+    # A run can report one generation past its total: the fraction is clamped
+    logic.on_sample_progress({'sampling': True, 'iteration': 2001, 'total_steps': 2000})
+    assert logic.progress_snapshot()['fraction'] == 1.0
+
+
+def test_progress_snapshot_without_a_total_is_indeterminate():
+    logic = fitting_module.Fitting(make_project())
+    logic.prepare_for_threaded_sample(burn=10)
+    logic.on_sample_progress({'sampling': True, 'iteration': 50, 'total_steps': 0})
+
+    assert logic.progress_snapshot()['fraction'] == -1.0
+
+
+def test_progress_snapshot_cancelling_survives_later_payloads_and_ends_idle():
+    logic = fitting_module.Fitting(make_project())
+    logic.prepare_for_threaded_sample(burn=10)
+    logic.on_sample_progress({'sampling': True, 'iteration': 50, 'total_steps': 100})
+
+    logic.stop_fit()
+    logic.on_sample_progress({'sampling': True, 'iteration': 51, 'total_steps': 100})
+
+    assert logic.progress_snapshot()['phase'] == 'cancelling'
+    assert logic.progress_snapshot()['fraction'] == -1.0
+    logic.on_fit_failed('Fitting cancelled by user')
+    assert logic.progress_snapshot()['phase'] == ''
 
 
 # ===================================================================
@@ -377,7 +482,7 @@ def test_a_project_refusal_is_reported_not_raised(monkeypatch):
     assert 'cannot be sampled' in logic.fit_error_message
 
 
-def test_prepare_for_threaded_sample_sets_flags_and_message():
+def test_prepare_for_threaded_sample_sets_flags_and_starts_the_progress():
     project = make_project()
     logic = fitting_module.Fitting(project)
     # A previously cancelled fit must not leak its cancel flag into sampling.
@@ -389,7 +494,7 @@ def test_prepare_for_threaded_sample_sets_flags_and_message():
     assert logic.fit_finished is False
     assert logic.show_results_dialog is False
     assert logic.fit_cancelled is False
-    assert logic.sample_progress_message == 'Sampling… (this may take several minutes)'
+    assert (logic.progress_snapshot()['phase'], logic.progress_snapshot()['kind']) == ('starting', 'sample')
 
 
 # ===================================================================
@@ -472,4 +577,4 @@ def test_clear_sample_progress_works():
 
     assert logic.sample_step == 0
     assert logic.sample_total_steps == 0
-    assert logic.sample_progress_message == ''
+    assert logic.sample_has_update is False

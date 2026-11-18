@@ -7,6 +7,7 @@ LogQAxis LogQAxis.qml
 MagnetizationAngleSlider MagnetizationAngleSlider.qml
 MagnetizationArrow MagnetizationArrow.qml
 ExperimentModelComboBox ExperimentModelComboBox.qml
+FitProgressBar FitProgressBar.qml
 MagneticProfileControl MagneticProfileControl.qml
 PlotControlCommon PlotControlCommon.qml
 SpinAsymmetryChart SpinAsymmetryChart.qml

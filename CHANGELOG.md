@@ -1,7 +1,5 @@
 # Unreleased
 
-<<<<<<< Updated upstream
-=======
 - Progress of a fit or a Bayesian sampling run:
   - A thin bar along the top of the status bar shows it on every page except
     Home. For sampling it fills up with the generations run so far; a fit has
@@ -25,7 +23,6 @@
   they now stop at once and put the parameters back to their values before the
   fit. A cancelled Bayesian sampling run is reported as cancelled instead of as
   a failed fit.
->>>>>>> Stashed changes
 - A new project now fits with `Bumps_lm` (Levenberg–Marquardt) by default,
   instead of `Bumps_simplex`. Loaded projects keep their own minimizer.
 - **Create a new project** now asks first when the session already holds a

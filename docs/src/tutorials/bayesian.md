@@ -31,6 +31,13 @@ With the Bayesian minimiser selected, the fit button in `Basic controls` reads
 is in progress; cancelling keeps the interface locked until the worker has actually
 stopped, so a superseded run can never write into the parameters of the next one.
 
+While a run is in progress, a thin bar along the top of the status bar, and a bar with a
+line of text under the button, show how far it has got. For sampling the bar fills up: the
+text names the phase (**Burn-in**, then **Sampling**), the generation out of the number the
+run will take, and the time elapsed. A classical fit has no knowable end, so its bar only
+shows that it is running; the text gives the number of evaluations (optimizer steps for a
+BUMPS minimiser), the reduced χ² and the time elapsed.
+
 ## Reading the results
 
 ### On the reflectivity chart

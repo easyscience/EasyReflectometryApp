@@ -112,13 +112,13 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
     analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
-    fitting_changed = {'count': 0}
-    analysis.fittingChanged.connect(
-        lambda: fitting_changed.__setitem__('count', fitting_changed['count'] + 1)
-    )
 
     analysis._start_threaded_fit()
 
+    emitted = []
+    analysis.fittingChanged.connect(lambda: emitted.append('fitting'))
+    analysis.fitProgressChanged.connect(lambda: emitted.append('progress'))
+    analysis.externalFittingChanged.connect(lambda: emitted.append('external'))
     worker = StubWorker.instances[-1]
     worker.progressDetail.emit(
         {
@@ -136,29 +136,48 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     assert worker.kwargs == {'weights': ['w']}
     assert worker.start_calls == 1
     assert analysis.fittingRunning is True
-    assert analysis.fitIteration == 9
-    assert analysis.fitInterimChi2 == 3.5
-    assert analysis.fitInterimReducedChi2 == 1.4
-    assert analysis.fitProgressMessage == 'Fitting... iter 9, Chi2 = 3.5'
-    assert analysis.fitHasInterimUpdate is True
     assert analysis.fitHasPreviewUpdate is False
     assert analysis.fitPreviewParameterValues == {'thickness': 12.0}
-    assert fitting_changed['count'] >= 2
+    assert analysis.fitProgress['phase'] == 'fitting'
+    assert analysis.fitProgress['count'] == 9
+    assert analysis.fitProgress['reducedChi2'] == 1.4
+    # A progress tick re-reads the progress only: not the results, not the plots
+    assert emitted == ['progress']
+
+
+def test_lifecycle_transitions_notify_the_progress_too(monkeypatch, qcore_application):
+    StubWorker.instances = []
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
+    phases = []
+    analysis.fitProgressChanged.connect(lambda: phases.append(analysis.fitProgress['phase']))
+
+    analysis._start_threaded_fit()
+    analysis._onStopFit()
+    StubWorker.instances[-1].failed.emit('Fitting cancelled by user')
+
+    assert phases[0] == 'starting'
+    assert 'cancelling' in phases
+    assert phases[-1] == ''
 
 
 def test_on_stop_fit_requests_worker_stop_and_keeps_ui_locked_until_thread_exits(monkeypatch, qcore_application):
     """Cancel only requests a cooperative stop; ``running`` stays True until the
-    worker thread actually exits, so a second fit cannot start while a
-    non-abortable minimizer is still mutating the shared parameters."""
+    worker thread actually exits, so a second fit cannot start while the
+    stopping engine is still finishing its current evaluation or step."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
     analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     worker = StubWorker.instances[-1]
+    refreshes = []
+    analysis.externalFittingChanged.connect(lambda: refreshes.append('refresh'))
 
     analysis._onStopFit()
 
+    # The parameters are refreshed when the worker exits, not while it may still write them
+    assert refreshes == []
     assert worker.stop_calls == 1
     assert analysis._fitter_thread is worker
     # UI stays locked: the thread has not exited yet.
@@ -413,7 +432,7 @@ def test_start_threaded_sample_uses_defaults_when_not_set(monkeypatch, qcore_app
 
 
 def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_application):
-    """Progress payloads with sampling=True update Bayesian-specific progress properties."""
+    """Progress payloads with sampling=True make a determinate sampling progress."""
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
@@ -430,9 +449,8 @@ def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_a
         'sampling': True,
     })
 
-    assert analysis.sampleProgressStep == 25
-    assert analysis.sampleProgressMessage != ''
-    assert analysis.sampleProgressHasUpdate is True
+    progress = analysis.fitProgress
+    assert (progress['kind'], progress['count'], progress['total'], progress['fraction']) == ('sample', 25, 100, 0.25)
 
 
 def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcore_application):

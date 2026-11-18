@@ -3,7 +3,6 @@
 // © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 
 import QtQuick
-import QtQuick.Controls
 
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
@@ -44,22 +43,6 @@ EaElements.GroupBox {
             wrapMode: Text.WordWrap
         }
 
-        // Progress message shown during fitting or sampling
-        EaElements.Label {
-            visible: Globals.BackendWrapper.analysisFitProgressMessage !== ''
-            text: Globals.BackendWrapper.analysisFitProgressMessage
-            color: Globals.BackendWrapper.analysisFitInfeasible ? EaStyle.Colors.themeAccent : EaStyle.Colors.themeForegroundMinor
-            wrapMode: Text.WordWrap
-        }
-
-        // Indeterminate progress bar shown during fitting/sampling
-        ProgressBar {
-            visible: Globals.BackendWrapper.analysisFittingRunning
-            indeterminate: Globals.BackendWrapper.analysisIsBayesianSelected
-            from: 0
-            to: 100
-            value: Globals.BackendWrapper.analysisFitIteration > 0 ? 50 : 0
-            width: parent.width
-        }
+        // The progress of a run is shown in the sidebar footer, under both tabs.
     }
 }

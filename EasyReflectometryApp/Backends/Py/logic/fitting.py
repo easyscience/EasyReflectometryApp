@@ -1,4 +1,6 @@
 import logging
+import math
+import time
 import warnings
 from typing import TYPE_CHECKING
 from typing import List
@@ -19,6 +21,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: `Fitting.progress_snapshot()` while nothing runs. Every value is a number or a
+#: string: a Python None in a QVariantMap reaches QML as `undefined`.
+_IDLE_PROGRESS = {
+    'phase': '',
+    'kind': '',
+    'fraction': -1.0,
+    'count': 0,
+    'total': 0,
+    'unit': '',
+    'reducedChi2': 0.0,
+    'startedAtMs': 0.0,
+}
+
 
 class Fitting:
     def __init__(self, project_lib: ProjectLib):
@@ -35,14 +50,19 @@ class Fitting:
         self._fit_interim_chi2 = 0.0
         self._fit_interim_reduced_chi2 = 0.0
         self._fit_infeasible = False
-        self._fit_running_message = ''
         self._fit_preview_parameter_values: dict = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
         self._sample_step = 0
         self._sample_total_steps = 0
-        self._sample_running_message = ''
         self._sample_has_update = False
+        # What the running operation is, captured when it starts: the editor's
+        # minimizer and Bayesian settings stay editable while a worker runs.
+        self._run_kind = ''  # 'fit' | 'sample'
+        self._run_unit = ''  # 'evaluations' | 'steps' | 'generations'
+        self._run_budget = 0  # the user's evaluation/step budget, 0 for the engine default
+        self._run_burn = 0
+        self._run_started_at_ms = 0.0
         # The run the worker executes, kept for its measured arrays at completion.
         self._prepared: 'PreparedFit | None' = None
         self._fit_notes: list[str] = []
@@ -106,10 +126,6 @@ class Fitting:
         return self._fit_infeasible
 
     @property
-    def fit_progress_message(self) -> str:
-        return self._fit_running_message
-
-    @property
     def fit_preview_parameter_values(self) -> dict:
         return dict(self._fit_preview_parameter_values)
 
@@ -130,16 +146,58 @@ class Fitting:
         return self._sample_step
 
     @property
-    def sample_progress_message(self) -> str:
-        return self._sample_running_message
-
-    @property
     def sample_has_update(self) -> bool:
         return self._sample_has_update
 
     @property
     def sample_total_steps(self) -> int:
         return self._sample_total_steps
+
+    # ------------------------------------------------------------------
+    # Progress of the running operation, for the progress bars
+    # ------------------------------------------------------------------
+
+    def _start_run(self, kind: str, unit: str, burn: int = 0) -> None:
+        self._run_kind = kind
+        self._run_unit = unit
+        self._run_budget = 0
+        self._run_burn = burn
+        self._run_started_at_ms = time.time() * 1000.0
+
+    def progress_snapshot(self) -> dict:
+        """The running operation's progress as one consistent map for QML.
+
+        ``phase`` is one of ``''`` (idle), ``'starting'``, ``'fitting'``, ``'burn'``,
+        ``'sampling'``, ``'cancelling'``. ``fraction`` is in ``[0, 1]`` while sampling
+        with a known total, ``-1.0`` otherwise (a fit has no knowable end). ``count``
+        is in ``unit``; ``total`` is the generation count of a sampling run, or the
+        user's budget of a fit (0 when the engine default applies).
+        """
+        if not self._running:
+            return dict(_IDLE_PROGRESS)
+        sampling = self._run_kind == 'sample'
+        count = max(self._sample_step if sampling else self._fit_iteration, 0)
+        total = max(self._sample_total_steps if sampling else self._run_budget, 0)
+        if self._stop_requested:
+            phase = 'cancelling'
+        elif not self._fit_has_interim_update:
+            phase = 'starting'
+        elif sampling:
+            phase = 'burn' if count <= self._run_burn else 'sampling'
+        else:
+            phase = 'fitting'
+        fraction = min(count / total, 1.0) if phase in ('burn', 'sampling') and total > 0 else -1.0
+        reduced_chi2 = self._fit_interim_reduced_chi2
+        return {
+            'phase': phase,
+            'kind': self._run_kind,
+            'fraction': fraction,
+            'count': count,
+            'total': total,
+            'unit': self._run_unit,
+            'reducedChi2': reduced_chi2 if math.isfinite(reduced_chi2) else 0.0,
+            'startedAtMs': self._run_started_at_ms,
+        }
 
     # ------------------------------------------------------------------
     # Progress handling
@@ -159,23 +217,11 @@ class Fitting:
         # reports the 1e12 penalty as chi2 — meaningless, so don't show it.
         self._fit_infeasible = bool(payload.get('infeasible', False))
 
-        if self._fit_infeasible:
-            self._fit_running_message = (
-                f'Fitting... iter {self._fit_iteration}, outside the inequality constraints'
-            )
-        elif self._fit_iteration > 0:
-            self._fit_running_message = (
-                f'Fitting... iter {self._fit_iteration}, Chi2 = {self._fit_interim_chi2:.6g}'
-            )
-        else:
-            self._fit_running_message = 'Fitting...'
-
     def clear_fit_progress(self) -> None:
         self._fit_iteration = 0
         self._fit_interim_chi2 = 0.0
         self._fit_interim_reduced_chi2 = 0.0
         self._fit_infeasible = False
-        self._fit_running_message = ''
         self._fit_preview_parameter_values = {}
         self._fit_has_preview_update = False
         self._fit_has_interim_update = False
@@ -201,8 +247,9 @@ class Fitting:
         Only the stop/cancel flags are set here. The lifecycle state (running,
         finished, results, dialog) is finalised by ``on_fit_failed`` when the
         worker thread actually exits. Keeping ``running`` True until then keeps
-        the UI locked, so a second fit cannot be started while a non-abortable
-        minimizer (lmfit, DFO) is still mutating the shared parameters.
+        the UI locked, so a second fit cannot be started while the stopping
+        engine (which finishes its current evaluation or step first) is still
+        writing the shared parameters.
         """
         self._stop_requested = True
         self._fit_cancelled = True
@@ -225,7 +272,8 @@ class Fitting:
         self._result = None
         self._results = []
         self.clear_fit_progress()
-        self._fit_running_message = 'Fitting...'
+        # The unit and budget are known once the run is prepared (prepare_threaded_fit).
+        self._start_run('fit', '')
 
     _POLARIZED_SAMPLE_MESSAGE = (
         'Bayesian sampling of polarized experiments is not supported yet.'
@@ -330,7 +378,11 @@ class Fitting:
             self._fit_notes.extend(self._scope_notes(prepared))
             for note in self._fit_notes:
                 logger.warning(note)
-            logger.info('Fitting: prepared %s with objective %s', prepared.core_fitter.minimizer.name, prepared.objective)
+            core_fitter = prepared.core_fitter
+            logger.info('Fitting: prepared %s with objective %s', core_fitter.minimizer.name, prepared.objective)
+            # BUMPS reports (and budgets) optimizer steps; lmfit and DFO count evaluations.
+            self._run_unit = 'steps' if core_fitter.minimizer.package == 'bumps' else 'evaluations'
+            self._run_budget = core_fitter.max_evaluations or 0
             self._prepared = prepared
             return prepared
         except Exception as e:
@@ -466,8 +518,11 @@ class Fitting:
             logger.exception('Error preparing threaded sample')
             return None
 
-    def prepare_for_threaded_sample(self) -> None:
-        """Set running flags and sampling progress message before launching the worker."""
+    def prepare_for_threaded_sample(self, burn: int = 0) -> None:
+        """Set the running flags and start the progress of a sampling run before launching the worker.
+
+        :param burn: The burn-in generations the worker is given, for the burn-in phase.
+        """
         self._prepared = None  # a sampling run is not recorded as a classical one
         self.reset_stop_flag()
         self._running = True
@@ -478,7 +533,7 @@ class Fitting:
         self._results = []
         self.clear_fit_progress()
         self.clear_sample_progress()
-        self._sample_running_message = 'Sampling… (this may take several minutes)'
+        self._start_run('sample', 'generations', burn)
 
     def on_sample_finished(self) -> None:
         """Handle successful Bayesian sampling completion without FitResults.
@@ -500,19 +555,10 @@ class Fitting:
         self._sample_total_steps = int(payload.get('total_steps', 0) or 0)
         self._sample_has_update = True
         self._fit_has_interim_update = True
-        total = self._sample_total_steps
-        if self._sample_step > 0:
-            if total > 0:
-                self._sample_running_message = f'DREAM step {self._sample_step} of {total}'
-            else:
-                self._sample_running_message = f'DREAM step {self._sample_step}'
-        else:
-            self._sample_running_message = 'Sampling…'
 
     def clear_sample_progress(self) -> None:
         self._sample_step = 0
         self._sample_total_steps = 0
-        self._sample_running_message = ''
         self._sample_has_update = False
 
     def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
