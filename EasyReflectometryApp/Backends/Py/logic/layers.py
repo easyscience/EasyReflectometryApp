@@ -10,6 +10,7 @@ from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
 
 from .helpers import is_independent
+from .helpers import set_value_widening_bounds
 from .structure import guide_field_reference
 from .structure import magnetic_vector_for_layer
 
@@ -341,7 +342,8 @@ class Layers:
         magnetism = self.magnetism_at_index(index)
         if magnetism is None:
             return False
-        return _set_parameter_value(getattr(magnetism, attribute), new_value)
+        # theta_m's 0-360 bounds are the angle's domain, not a default window to widen.
+        return _set_parameter_value(getattr(magnetism, attribute), new_value, widen_bounds=attribute == 'rho_m')
 
     def magnetism_at_index(self, index: int) -> Optional[LayerMagnetism]:
         """The layer's magnetism, or None when the layer is not magnetic/valid."""
@@ -360,13 +362,16 @@ def _set_layer_parameter(parameter, new_value) -> bool:
     the parameter locked with no constraint row to unlock it by."""
     if not is_independent(parameter) or parameter.value == new_value:
         return False
-    parameter.value = new_value
+    set_value_widening_bounds(parameter, new_value)
     return True
 
 
-def _set_parameter_value(parameter, new_value) -> bool:
+def _set_parameter_value(parameter, new_value, widen_bounds: bool = False) -> bool:
     """Set a parameter from an edit; False for no change, bad input or a
-    dependent or pinned parameter (a coupled rho_m follows its material)."""
+    dependent or pinned parameter (a coupled rho_m follows its material).
+
+    With `widen_bounds`, a value past a bound moves it; otherwise the value is
+    clamped to the bounds."""
     if not is_independent(parameter):
         return False
     try:
@@ -376,7 +381,10 @@ def _set_parameter_value(parameter, new_value) -> bool:
     if parameter.value == value:
         return False
     try:
-        parameter.value = value
+        if widen_bounds:
+            set_value_widening_bounds(parameter, value)
+        else:
+            parameter.value = value
     except (ValueError, TypeError):
         logger.exception('Failed to set %s to %s', parameter.display_name, value)
         return False

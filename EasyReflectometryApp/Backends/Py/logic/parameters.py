@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 from collections.abc import MutableSequence
 from typing import Any
@@ -6,6 +7,8 @@ from typing import List
 from typing import Tuple
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.limits import SCALE_LIMITS
+from easyreflectometry.limits import SLD_LIMITS
 from easyreflectometry.sample import Layer
 from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.utils import count_fixed_parameters
@@ -15,6 +18,7 @@ from easyscience.variable import Parameter
 
 from .helpers import get_original_name
 from .helpers import is_independent
+from .helpers import set_bound
 from .material import coupled_material_ids
 from .material import inactive_density_knobs
 
@@ -196,40 +200,20 @@ class Parameters:
         return None
 
     def set_current_parameter_value(self, new_value: str) -> bool:
-        parameter = self._get_current_parameter()
-        if parameter is None or not is_independent(parameter):
-            return False
-        try:
-            float_value = float(new_value)
-        except ValueError:
-            return False
-        if float_value != parameter.value:
-            try:
-                parameter.value = float_value
-            except (ValueError, TypeError):
-                logger.exception('Failed to set parameter value to %s', float_value)
-                return False
-            return True
-        return False
+        return self._set_current_parameter('value', new_value)
 
     def set_current_parameter_min(self, new_value: str) -> bool:
-        parameter = self._get_current_parameter()
-        if parameter is None or not is_independent(parameter):
-            return False
-        try:
-            float_value = float(new_value)
-        except ValueError:
-            return False
-        if float_value != parameter.min:
-            try:
-                parameter.min = float_value
-            except (ValueError, TypeError):
-                logger.exception('Failed to set parameter min to %s', float_value)
-                return False
-            return True
-        return False
+        return self._set_current_parameter('min', new_value)
 
     def set_current_parameter_max(self, new_value: str) -> bool:
+        return self._set_current_parameter('max', new_value)
+
+    def _set_current_parameter(self, attribute: str, new_value: str) -> bool:
+        """Set the current row's value or bound as entered; False for no change or bad input.
+
+        A bound is kept whatever it is, moving the value onto it when it lies past
+        it (`set_bound`). A value is clamped to the bounds next to it in the table.
+        """
         parameter = self._get_current_parameter()
         if parameter is None or not is_independent(parameter):
             return False
@@ -237,14 +221,17 @@ class Parameters:
             float_value = float(new_value)
         except ValueError:
             return False
-        if float_value != parameter.max:
-            try:
-                parameter.max = float_value
-            except (ValueError, TypeError):
-                logger.exception('Failed to set parameter max to %s', float_value)
-                return False
-            return True
-        return False
+        if float_value == getattr(parameter, attribute):
+            return False
+        try:
+            if attribute == 'value':
+                parameter.value = float_value
+            else:
+                set_bound(parameter, attribute, float_value)
+        except (ValueError, TypeError):
+            logger.exception('Failed to set parameter %s to %s', attribute, float_value)
+            return False
+        return True
 
     def set_current_parameter_fit(self, new_value: bool) -> bool:
         entry = self._get_current_parameter_entry()
@@ -426,6 +413,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             alias = _make_alias(prefixed_display_name or parameter.display_name)
             param_value = float(parameter.value)
             is_derived = _is_derived_parameter(parameter, models[model_idx])
+            physical_min, physical_max = physical_range(parameter, path, models[model_idx])
             # A density material's input knobs (density, mw, scattering
             # lengths) stop affecting the reflectivity once the material's
             # sld/isld are decoupled, and a material's moment does nothing
@@ -448,6 +436,12 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'error': float(parameter.error) if parameter.error is not None else None,
                     'max': float(parameter.max),
                     'min': float(parameter.min),
+                    # A bound the user set outside what is physically sensible: kept and
+                    # used by the fit, shown red so it is not mistaken for a sensible one.
+                    'minUnphysical': _is_unphysical(parameter.min, physical_min, physical_max),
+                    'maxUnphysical': _is_unphysical(parameter.max, physical_min, physical_max),
+                    # For the table's explanation of a red bound
+                    'physicalRange': [physical_min, physical_max],
                     'units': parameter.unit,
                     'fit': False if (is_derived or is_inactive) else parameter.free,
                     'independent': is_independent(parameter),
@@ -496,6 +490,33 @@ _DISPLAY_NAMES = {'magnetic_sld': 'material rho_m'}
 
 # What the 'magnetic' name filter shows.
 MAGNETIC_PARAMETER_NAMES = ('rho_m', 'theta_m', 'magnetic_moment', 'magnetic_sld', 'guide_field_angle', 'applied_field')
+
+#: Parameters whose physical scale is an SLD's, by library name: the window the
+#: library opens around a new one is the same.
+_SLD_PARAMETER_NAMES = ('sld', 'isld', 'rho_m', 'magnetic_sld')
+
+
+def physical_range(parameter: Parameter, path, model) -> Tuple[float, float]:
+    """The values a parameter can physically take, (-inf, inf) when no rule applies.
+
+    The SLD and scale windows are the library's default limits. Thickness and
+    roughness only have to be non-negative: the library's window around them
+    (50 % to 200 % of the starting value) is a search range, not physics.
+    """
+    if parameter is model.scale:
+        return SCALE_LIMITS
+    owner = path[-2] if path is not None and len(path) >= 2 else None
+    if isinstance(owner, Layer) and (parameter is owner.thickness or parameter is owner.roughness):
+        return 0.0, math.inf
+    if parameter.display_name in _SLD_PARAMETER_NAMES:
+        return SLD_LIMITS
+    return -math.inf, math.inf
+
+
+def _is_unphysical(bound: float, low: float, high: float) -> bool:
+    """A finite bound outside [low, high]. An infinite one sets no limit, so it has no value to judge."""
+    return math.isfinite(bound) and not low <= bound <= high
+
 
 _INACTIVE_KNOB_NOTE = 'unused (SLD is fitted directly)'
 _UNUSED_MOMENT_NOTE = 'unused (no layer takes ρM from this material)'

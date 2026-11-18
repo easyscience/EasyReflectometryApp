@@ -27,6 +27,7 @@ from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.helpers import PINNED_FLAG
 from .logic.helpers import is_independent
+from .logic.helpers import set_bound
 from .logic.layers import Layers as LayersLogic
 from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
@@ -2027,11 +2028,9 @@ class Sample(QObject):
                 # are saved with the parameter; the row itself is restored from
                 # `store_constraint_metadata`.
                 self._apply_static_constraint(dependent, instruction['value'])
-            elif mode == 'lower_bound':
-                dependent.min = instruction['value']
-                dependent.free = True
-            elif mode == 'upper_bound':
-                dependent.max = instruction['value']
+            elif mode in ('lower_bound', 'upper_bound'):
+                # Kept whatever it is: a bound past the value moves the value onto it.
+                set_bound(dependent, 'min' if mode == 'lower_bound' else 'max', instruction['value'])
                 dependent.free = True
             else:
                 raise ValueError(f'Unsupported constraint mode: {mode}')

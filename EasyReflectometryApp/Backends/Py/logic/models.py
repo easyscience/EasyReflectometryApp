@@ -12,6 +12,7 @@ from easyreflectometry.project import ModelRemoval
 
 from .helpers import get_original_name
 from .helpers import is_independent
+from .helpers import set_value_widening_bounds
 
 
 def _set_model_parameter(parameter, new_value: float) -> bool:
@@ -19,7 +20,7 @@ def _set_model_parameter(parameter, new_value: float) -> bool:
     parameter (both are constrainable, so the user can pin one on the Sample page)."""
     if not is_independent(parameter) or parameter.value == new_value:
         return False
-    parameter.value = new_value
+    set_value_widening_bounds(parameter, new_value)
     return True
 
 

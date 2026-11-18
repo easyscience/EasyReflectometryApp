@@ -7,6 +7,7 @@ from easyreflectometry.sample import MaterialDensity
 from easyreflectometry.sample import MaterialMagnetic
 
 from .helpers import is_independent
+from .helpers import set_value_widening_bounds
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ class Material:
         if not _parameter_is_writable(material.sld):
             return False
         if material.sld.value != new_value:
-            material.sld.value = new_value
+            set_value_widening_bounds(material.sld, new_value)
             return True
         return False
 
@@ -148,7 +149,7 @@ class Material:
         if not _parameter_is_writable(material.sld):
             return False
         if material.sld.value != new_value:
-            material.sld.value = new_value
+            set_value_widening_bounds(material.sld, new_value)
             return True
         return False
 
@@ -157,7 +158,7 @@ class Material:
         if not _parameter_is_writable(material.isld):
             return False
         if material.isld.value != new_value:
-            material.isld.value = new_value
+            set_value_widening_bounds(material.isld, new_value)
             return True
         return False
 
@@ -168,7 +169,7 @@ class Material:
         if not _parameter_is_writable(material.isld):
             return False
         if material.isld.value != new_value:
-            material.isld.value = new_value
+            set_value_widening_bounds(material.isld, new_value)
             return True
         return False
 

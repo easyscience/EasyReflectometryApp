@@ -382,10 +382,11 @@ EaElements.GroupBox {
                     enabled: !parameterRow.derived && parameterRow.editable
                     text: parameterRow.derived ? '' :
                           EaLogic.Utils.toDefaultPrecision(parameterRow.param.min).replace('Infinity', 'inf')
-                    // Missing bound of a free parameter while the minimizer needs finite ones
-                    warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
-                            parameterRow.param.fit &&
-                            !isFinite(parameterRow.param.min)
+                    readonly property string warning: parameterRow.derived ? '' : boundWarning(parameterRow.param, 'min')
+                    warned: warning !== ''
+                    ToolTip.text: warning
+                    ToolTip.visible: hovered && warned
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'min' field of fittable on Analysis page ***")
@@ -398,10 +399,11 @@ EaElements.GroupBox {
                     enabled: !parameterRow.derived && parameterRow.editable
                     text: parameterRow.derived ? '' :
                           EaLogic.Utils.toDefaultPrecision(parameterRow.param.max).replace('Infinity', 'inf')
-                    // Missing bound of a free parameter while the minimizer needs finite ones
-                    warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
-                            parameterRow.param.fit &&
-                            !isFinite(parameterRow.param.max)
+                    readonly property string warning: parameterRow.derived ? '' : boundWarning(parameterRow.param, 'max')
+                    warned: warning !== ''
+                    ToolTip.text: warning
+                    ToolTip.visible: hovered && warned
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'max' field of fittable on Analysis page ***")
@@ -579,6 +581,25 @@ EaElements.GroupBox {
         }
         fittables.parameterSlider.from = EaLogic.Utils.toDefaultPrecision(from)
         fittables.parameterSlider.to = EaLogic.Utils.toDefaultPrecision(to)
+    }
+
+    // Why a min ('min') or max ('max') cell is red, '' when it is not: a bound
+    // outside the physical range (kept, and used by the fit), or a missing bound
+    // of a fitted parameter while the minimizer needs finite ones.
+    function boundWarning(parameter, bound) {
+        if (parameter[bound + 'Unphysical']) {
+            const low = parameter.physicalRange[0]
+            const high = parameter.physicalRange[1]
+            const format = value => EaLogic.Utils.toDefaultPrecision(value)
+            const reason = !isFinite(high) ? qsTr("Below the physical minimum of %1.").arg(format(low))
+                         : !isFinite(low) ? qsTr("Above the physical maximum of %1.").arg(format(high))
+                         : qsTr("Outside the physical range %1 to %2.").arg(format(low)).arg(format(high))
+            return reason + ' ' + qsTr("Kept for the fit.")
+        }
+        if (Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds && parameter.fit && !isFinite(parameter[bound])) {
+            return qsTr("The selected minimizer needs a finite %1 for every fitted parameter.").arg(bound)
+        }
+        return ''
     }
 
     function formatError(value) {
