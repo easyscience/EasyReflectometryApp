@@ -45,6 +45,10 @@ density**:
   note `unused (SLD is fitted directly)`, because they no longer affect the
   reflectivity - they cannot be fitted or edited until the box is checked again.
 
+The greyed rows are listed on the `Analysis` page only when its variability filter is set
+to **All parameters**; the default, **Active parameters**, hides them (see
+[simple fitting](./simple_fitting.md)).
+
 The molecular weight never appears in the `Analysis` table: it is a constant of the
 chemical formula (recomputed whenever the formula is edited), not a fittable parameter -
 fitting it alongside density would be degenerate, since only their ratio enters the SLD.
@@ -130,6 +134,11 @@ By clicking an assembly, the `Layer editor` is specified and changes can be made
 - **1**: Choose a material from materials in the `Material Editor`.
 - **2**+**3**: Setting the Thickness and Upper Roughness of the material in Angstrom, Å.
 
+A value typed here, or an SLD typed in the `Material editor`, is taken as typed even when
+it lies outside the parameter's fit limits: the limit it passes is moved out to the new
+value. The limits themselves are shown and edited on the `Analysis` page, see
+[simple fitting](./simple_fitting.md).
+
 ### Magnetism
 A layer can also be given a magnetisation, in the `Magnetism` group below the layer editor.
 This needs the `refl1d` calculation engine and is described in
@@ -163,6 +172,10 @@ The **Calculation engine** group selects between `refnx` and `refl1d` for this p
 same selector is available on the `Analysis` page. Only `refl1d` can model magnetic layers,
 so selecting `refnx` while the sample has magnetic layers is refused - see
 [magnetic layers](./magnetism.md).
+
+The **Plot control** group switches the reflectivity chart between a logarithmic R(q)
+axis, a linear one (**Linear R(q)-axis**) and R(q)×q⁴, and sets the q-axis; it is described
+in [simple fitting](./simple_fitting.md).
 
 Below these sit three constraint groups, from the most specific to the most general:
 `Physics constraints`, `Single constraints` and `Link contrasts`.

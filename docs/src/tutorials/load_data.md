@@ -7,6 +7,12 @@ Data is loaded in the `Experimental` page, by pressing the `Import experimental 
 
 - **A**: Open your file manager to load data in the mentioned format.
 
+The loaded data is drawn in the main window. Move the cursor near a measured point to read
+its coordinates: the tooltip snaps to the nearest visible point, so the cursor does not
+have to be exactly on the marker. The **Plot control** group of the advanced controls
+chooses between a logarithmic and a linear R(q) axis, see
+[simple fitting](./simple_fitting.md).
+
 ## Instrumental parameters  
 When data is loaded, it is possible to change instrumental parameters that affect the data.
 

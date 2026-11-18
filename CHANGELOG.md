@@ -1,5 +1,26 @@
 # Unreleased
 
+- Automatic saving: once a project has been created, it is saved when you leave
+  a page, after a successful fit or a Bayesian sampling run, and just before a
+  fit, a calculation engine switch or replacing the sample from an ORSO file.
+  Each automatic save keeps the file it replaces as `project.json.bak`. The
+  status bar marks an automatic save with `(auto)` and shows **Autosave failed**
+  while one is failing. **Save automatically**, in the new `Advanced controls`
+  tab of the Project page, switches it off.
+- Parameter limits are kept as entered (#374):
+  - A min or max typed in the Analysis table is no longer refused when the
+    current value lies outside it; the value is moved onto the new limit.
+  - A value typed on the Sample page (thickness, roughness, SLD, ρM) is no
+    longer clamped to the default limits; the limit it passes is moved out.
+  - A limit outside the physical range (a negative thickness or roughness, an
+    SLD outside -1 to 10, a scale outside 0 to 10) is shown in red, with the
+    reason in its tooltip, and is still used by the fit.
+- Analysis parameter table: the variability filter has a new default choice,
+  **Active parameters**, which hides the greyed rows (constrained, derived and
+  unused parameters). **All parameters** shows them as before.
+- The new project dialog has a **Cancel** button. (#371)
+- Experiment chart: the coordinates tooltip snaps to the nearest measured point,
+  so the cursor no longer has to be exactly on a marker.
 - Progress of a fit or a Bayesian sampling run:
   - A thin bar along the top of the status bar shows it on every page except
     Home. For sampling it fills up with the generations run so far; a fit has
