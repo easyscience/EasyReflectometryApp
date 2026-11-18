@@ -95,10 +95,10 @@ def test_plotting_mode_and_axis_toggles_emit_signals(qcore_application):
     plotting.referenceLineVisibilityChanged.connect(lambda: counts.__setitem__('ref', counts['ref'] + 1))
 
     assert plotting.plotRQ4 is False
-    assert plotting.yMainAxisTitle == 'R(q)'
+    assert plotting.yMainAxisTitle == 'log<sub>10</sub>(R(q))'
     plotting.togglePlotRQ4()
     assert plotting.plotRQ4 is True
-    assert plotting.yMainAxisTitle == 'R(q)×q⁴'
+    assert plotting.yMainAxisTitle == 'log<sub>10</sub>(R(q)×q<sup>4</sup>)'
 
     assert plotting.xAxisType == 'linear'
     plotting.toggleXAxisType()
@@ -115,6 +115,38 @@ def test_plotting_mode_and_axis_toggles_emit_signals(qcore_application):
     assert plotting.scaleShown is True
     assert plotting.bkgShown is True
     assert counts == {'plot': 1, 'axis': 1, 'sld': 1, 'ref': 2}
+
+
+def test_linear_y_axis_and_rq4_are_mutually_exclusive(qcore_application):
+    plotting, _project = _make_plotting()
+    changes = []
+    plotting.plotModeChanged.connect(lambda: changes.append(None))
+
+    plotting.togglePlotRQ4()
+    plotting.toggleYAxisLog()
+    assert (plotting.yAxisLog, plotting.plotRQ4, plotting.yMainAxisTitle) == (False, False, 'R(q)')
+
+    plotting.togglePlotRQ4()
+    assert (plotting.yAxisLog, plotting.plotRQ4) == (True, True)
+    assert len(changes) == 3
+
+
+def test_linear_y_axis_draws_reflectivity_unchanged(qcore_application):
+    plotting, project = _make_plotting()
+    project._exp[0] = FakeData(x=[0.1, 0.2], y=[-1e-6, 1e-5], ye=[4e-12, 1e-12], model=project.models[0])
+    plotting.toggleYAxisLog()
+
+    assert plotting.getSampleDataPointsForModel(0) == [{'x': 0.1, 'y': 1.0}, {'x': 0.2, 'y': 2.0}]
+    assert (plotting.sampleMinY, plotting.sampleMaxY) == (1.0, 4.0)
+    # A linear axis keeps the non-positive points a log axis drops, and their full error bars
+    points = plotting.getExperimentDataPoints(0)
+    assert [point['y'] for point in points] == [-1e-6, 1e-5]
+    assert points[0]['errorLower'] == pytest.approx(-3e-6)
+    assert (plotting.experimentMinY, plotting.experimentMaxY) == (-1e-6, 1e-5)
+
+    plotting.toggleYAxisLog()
+    assert [point['y'] for point in plotting.getExperimentDataPoints(0)] == [pytest.approx(-5.0)]
+    assert plotting.experimentMinY == pytest.approx(-5.0)
 
 
 def test_plotting_reference_lines_use_defaults_and_visibility(qcore_application):

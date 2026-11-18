@@ -14,6 +14,10 @@
     `132 evaluations · reduced χ² 1.2345`) and hides the Calculator and
     Minimizer items during a run. A sampling run is labelled as one even if
     the minimizer selection is changed while it runs.
+- Reflectivity plots on the Sample, Experiment and Analysis pages can show
+  R(q) on a linear y-axis: **Linear R(q)-axis** next to **Plot R(q)×q⁴**. The
+  two are exclusive, so checking one unchecks the other. The log axis is now
+  titled log₁₀(R(q)) or log₁₀(R(q)×q⁴). (#378)
 - **Cancel fitting** now stops every minimizer within one evaluation or step.
   LMFit and DFO fits used to run to the end before the cancellation took effect;
   they now stop at once and put the parameters back to their values before the

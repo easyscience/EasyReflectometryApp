@@ -523,7 +523,7 @@ Rectangle {
         }
 
         property double yRange: Globals.BackendWrapper.plottingExperimentMaxY - Globals.BackendWrapper.plottingExperimentMinY
-        axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
+        axisY.title: Globals.BackendWrapper.plottingYAxisTitle
         axisY.min: Globals.BackendWrapper.plottingExperimentMinY - yRange * 0.01
         axisY.max: Globals.BackendWrapper.plottingExperimentMaxY + yRange * 0.01
         axisY.minAfterReset: Globals.BackendWrapper.plottingExperimentMinY - yRange * 0.01

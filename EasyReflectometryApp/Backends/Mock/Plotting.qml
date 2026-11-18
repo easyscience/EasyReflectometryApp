@@ -87,7 +87,11 @@ QtObject {
 
     // Plot mode properties
     property bool plotRQ4: false
-    property string yMainAxisTitle: 'R(q)'
+    property bool yAxisLog: true
+    readonly property string yMainAxisTitle: {
+        const quantity = plotRQ4 ? 'R(q)×q<sup>4</sup>' : 'R(q)'
+        return yAxisLog ? 'log<sub>10</sub>(' + quantity + ')' : quantity
+    }
     property bool xAxisLog: false
     property string xAxisType: 'linear'
     property bool sldXDataReversed: false
@@ -146,7 +150,14 @@ QtObject {
     // Plot mode toggle functions
     function togglePlotRQ4() {
         plotRQ4 = !plotRQ4
-        yMainAxisTitle = plotRQ4 ? 'R(q)×q⁴' : 'R(q)'
+        // A log-axis view, as in the Python backend
+        yAxisLog = yAxisLog || plotRQ4
+        plotModeChanged()
+    }
+
+    function toggleYAxisLog() {
+        yAxisLog = !yAxisLog
+        plotRQ4 = plotRQ4 && yAxisLog
         plotModeChanged()
     }
 
