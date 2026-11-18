@@ -112,10 +112,12 @@ Rectangle {
                     return shown
                 }
                 // Decades between consecutive experiments in the staggered view (0: not staggered,
-                // also in the R·q⁴ view, whose curves are compared on one scale). Only the
+                // also in the R·q⁴ view, whose curves are compared on one scale, and on a linear
+                // axis, which has no decades). Only the
                 // reflectivity is shifted; residuals are computed from the measured data.
                 readonly property double staggerDecades: Globals.Variables.staggerAnalysis && isMultiExperimentMode
                                                          && !Globals.BackendWrapper.plottingPlotRQ4
+                                                         && Globals.BackendWrapper.plottingYAxisLog
                                                          ? Globals.Variables.analysisStaggerDecades : 0
                 property double staggerSpan: 0
                 onStaggerDecadesChanged: if (useDynamicSeries) updateMultiExperimentSeries()
@@ -532,7 +534,7 @@ Rectangle {
                 }
 
                 property double yRange: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) || isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? 10.0 : Globals.BackendWrapper.plottingAnalysisMaxY - Globals.BackendWrapper.plottingAnalysisMinY
-                axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
+                axisY.title: Globals.BackendWrapper.plottingYAxisTitle
                 axisY.min: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - staggerSpan - yRange * 0.01
                 axisY.max: isNaN(Globals.BackendWrapper.plottingAnalysisMaxY) ? 0.0 : Globals.BackendWrapper.plottingAnalysisMaxY + yRange * 0.01
                 axisY.minAfterReset: isNaN(Globals.BackendWrapper.plottingAnalysisMinY) ? -10.0 : Globals.BackendWrapper.plottingAnalysisMinY - staggerSpan - yRange * 0.01

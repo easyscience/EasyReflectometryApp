@@ -1,5 +1,31 @@
 # Unreleased
 
+<<<<<<< Updated upstream
+=======
+- Progress of a fit or a Bayesian sampling run:
+  - A thin bar along the top of the status bar shows it on every page except
+    Home. For sampling it fills up with the generations run so far; a fit has
+    no knowable end, so its bar only shows that it is running.
+  - Under the **Start/Cancel** button of the Analysis sidebar, now on both the
+    `Basic controls` and `Extra controls` tabs: the same bar and a line of text
+    with the phase (**Burn-in**, **Sampling**, **Fitting**, **Cancelling…**),
+    the generation or evaluation count, the reduced χ² of a fit, and the time
+    elapsed. It replaces the bar of the `Basic controls` Fitting group, which
+    stood at a fixed 50 % during a fit.
+  - The status bar shows the short form (`Sampling 42 %`,
+    `132 evaluations · reduced χ² 1.2345`) and hides the Calculator and
+    Minimizer items during a run. A sampling run is labelled as one even if
+    the minimizer selection is changed while it runs.
+- Reflectivity plots on the Sample, Experiment and Analysis pages can show
+  R(q) on a linear y-axis: **Linear R(q)-axis** next to **Plot R(q)×q⁴**. The
+  two are exclusive, so checking one unchecks the other. The log axis is now
+  titled log₁₀(R(q)) or log₁₀(R(q)×q⁴). (#378)
+- **Cancel fitting** now stops every minimizer within one evaluation or step.
+  LMFit and DFO fits used to run to the end before the cancellation took effect;
+  they now stop at once and put the parameters back to their values before the
+  fit. A cancelled Bayesian sampling run is reported as cancelled instead of as
+  a failed fit.
+>>>>>>> Stashed changes
 - A new project now fits with `Bumps_lm` (Levenberg–Marquardt) by default,
   instead of `Bumps_simplex`. Loaded projects keep their own minimizer.
 - **Create a new project** now asks first when the session already holds a

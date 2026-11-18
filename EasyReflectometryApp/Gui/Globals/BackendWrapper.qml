@@ -644,6 +644,7 @@ QtObject {
 
     // Plot mode properties
     readonly property bool plottingPlotRQ4: activeBackend.plotting.plotRQ4
+    readonly property bool plottingYAxisLog: activeBackend.plotting.yAxisLog
     readonly property string plottingYAxisTitle: activeBackend.plotting.yMainAxisTitle
     readonly property bool plottingXAxisLog: activeBackend.plotting.xAxisLog
     readonly property string plottingXAxisType: activeBackend.plotting.xAxisType
@@ -661,6 +662,7 @@ QtObject {
 
     // Plot mode toggle functions
     function plottingTogglePlotRQ4() { activeBackend.plotting.togglePlotRQ4() }
+    function plottingToggleYAxisLog() { activeBackend.plotting.toggleYAxisLog() }
     function plottingToggleXAxisType() { activeBackend.plotting.toggleXAxisType() }
     function plottingReverseSldXData() { activeBackend.plotting.reverseSldXData() }
     function plottingFlipScaleShown() { activeBackend.plotting.flipScaleShown() }

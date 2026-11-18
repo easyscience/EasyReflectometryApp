@@ -28,6 +28,17 @@ Column {
         }
     }
 
+    // Mutually exclusive with R(q)×q⁴, which is a log-axis view: the backend unchecks the other.
+    EaElements.CheckBox {
+        topPadding: 0
+        checked: !Globals.BackendWrapper.plottingYAxisLog
+        text: qsTr("Linear R(q)-axis")
+        ToolTip.text: qsTr("Checking this box will make the R(q)-axis linear instead of logarithmic")
+        onToggled: {
+            Globals.BackendWrapper.plottingToggleYAxisLog()
+        }
+    }
+
     EaElements.CheckBox {
         topPadding: 0
         checked: Globals.Variables.logarithmicQAxis
