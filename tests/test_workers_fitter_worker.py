@@ -1,6 +1,14 @@
+from types import SimpleNamespace
+
+import numpy as np
 import pytest
+from easyscience import Fitter
+from easyscience import Minimizers
+from easyscience import Parameter
+from easyscience.base_classes import ModelBase
 
 from EasyReflectometryApp.Backends.Py.workers import fitter_worker as fitter_worker_module
+from EasyReflectometryApp.Backends.Py.workers.fitter_worker import FitCancelled
 from EasyReflectometryApp.Backends.Py.workers.fitter_worker import FitterWorker
 from tests.factories import make_worker_fitter
 
@@ -86,9 +94,10 @@ def test_run_injects_progress_callback_for_fit_method(qcore_application):
     assert kwargs['weights'] == [1.0]
 
 
-@pytest.mark.parametrize('method_name', ['fit', 'mcmc_sample'])
-def test_run_passes_abort_test_for_every_engine(qcore_application, method_name):
+@pytest.mark.parametrize('method_name', ['fit', 'mcmc_sample'], ids=['bumps-fit', 'dream-sampling'])
+def test_run_passes_abort_test_to_bumps_and_dream(qcore_application, method_name):
     fitter = make_worker_fitter(method_result='ok')
+    fitter.minimizer = SimpleNamespace(package='bumps')
     setattr(fitter, method_name, fitter.fit)
     worker = FitterWorker(fitter, method_name)
 
@@ -98,6 +107,28 @@ def test_run_passes_abort_test_for_every_engine(qcore_application, method_name):
     assert abort_test() is False
     worker.stop()
     assert abort_test() is True
+    # BUMPS stops through abort_test only; the callback keeps relaying progress.
+    worker._progress_callback({'iteration': 1})
+
+
+@pytest.mark.parametrize('package', ['lmfit', 'dfo'])
+def test_run_stops_other_engines_from_the_progress_callback(qcore_application, package):
+    """lmfit and DFO take no abort_test in the released core: the callback raises instead."""
+    fitter = make_worker_fitter(method_result='ok')
+    fitter.minimizer = SimpleNamespace(package=package)
+    worker = FitterWorker(fitter, 'fit')
+    received = []
+    worker.progressDetail.connect(received.append)
+
+    worker.run()
+
+    kwargs = fitter.calls[0][1]
+    assert 'abort_test' not in kwargs
+    kwargs['progress_callback']({'iteration': 1})
+    worker.stop()
+    with pytest.raises(FitCancelled):
+        kwargs['progress_callback']({'iteration': 2})
+    assert [payload['iteration'] for payload in received] == [1]
 
 
 @pytest.mark.parametrize('error', [None, RuntimeError('Fit aborted by user')], ids=['returns', 'raises'])
@@ -168,6 +199,68 @@ def test_progress_callback_carries_a_suppressed_refresh_request(qcore_applicatio
     worker._progress_callback({'iteration': 4, 'refresh_plots': False})
 
     assert [(payload['iteration'], payload['refresh_plots']) for payload in received] == [(1, False), (3, True), (4, False)]
+
+
+class _AbsSin(ModelBase):
+    """|sin(phase * x + offset)|, counting its evaluations."""
+
+    def __init__(self, offset: float, phase: float):
+        super().__init__()
+        self._offset = Parameter(offset, display_name='offset')
+        self._phase = Parameter(phase, display_name='phase')
+        self.evaluations = 0
+
+    @property
+    def offset(self) -> Parameter:
+        return self._offset
+
+    @property
+    def phase(self) -> Parameter:
+        return self._phase
+
+    def __call__(self, x):
+        self.evaluations += 1
+        return np.abs(np.sin(self._phase.value * x + self._offset.value))
+
+
+@pytest.mark.parametrize(
+    'minimizer',
+    [
+        Minimizers.LMFit_leastsq,
+        Minimizers.LMFit_powell,
+        Minimizers.LMFit_scipy_least_squares,
+        Minimizers.DFO,
+        Minimizers.Bumps_simplex,
+    ],
+    ids=lambda minimizer: minimizer.name,
+)
+def test_cancel_stops_a_real_core_fit(qcore_application, minimizer):
+    """Cancel works against the installed core for every engine, without core's lmfit/DFO abort_test.
+
+    The worker is run synchronously, so ``progressDetail`` is delivered directly
+    and can request the stop from inside the fit, after the first payload.
+    """
+    x = np.linspace(0, 5, 200)
+    y = np.abs(np.sin(np.pi * x + 0.2))
+    model = _AbsSin(0.354, 3.05)
+    model.offset.fixed = False
+    model.phase.fixed = False
+    fitter = Fitter(model, model)
+    fitter.switch_minimizer(minimizer)
+    worker = FitterWorker(fitter, 'fit', args=(x, y), kwargs={'weights': np.ones_like(x)})
+    received = {'finished': [], 'failed': []}
+    worker.finished.connect(received['finished'].append)
+    worker.failed.connect(received['failed'].append)
+    worker.progressDetail.connect(lambda _payload: worker.stop())
+
+    worker.run()
+
+    assert received == {'finished': [], 'failed': [FitterWorker.CANCELLED_MESSAGE]}
+    # Stopped at the evaluation or step after the first progress report, not run to the end.
+    assert model.evaluations < 20
+    if minimizer.package != 'bumps':
+        # lmfit and DFO put the parameters back; BUMPS keeps its best point (core's behaviour).
+        assert (model.offset.value, model.phase.value) == (0.354, 3.05)
 
 
 def test_stop_sets_flag_without_terminating_idle_thread(qcore_application, monkeypatch):

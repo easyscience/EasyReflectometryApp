@@ -18,8 +18,7 @@
   LMFit and DFO fits used to run to the end before the cancellation took effect;
   they now stop at once and put the parameters back to their values before the
   fit. A cancelled Bayesian sampling run is reported as cancelled instead of as
-  a failed fit. Requires the easyscience release that adds `abort_test` to the
-  LMFit and DFO minimizers.
+  a failed fit.
 - A new project now fits with `Bumps_lm` (Levenberg–Marquardt) by default,
   instead of `Bumps_simplex`. Loaded projects keep their own minimizer.
 - **Create a new project** now asks first when the session already holds a
