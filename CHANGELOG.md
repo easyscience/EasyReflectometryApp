@@ -1,5 +1,13 @@
 # Unreleased
 
+- SLD charts: the z range can be set by hand. A new **SLD z range** group in
+  the `Advanced controls` tab of the Sample and Analysis pages has an **Auto**
+  box, on by default, which fits the z axis to the calculated profiles as
+  before. With **Auto** unchecked, **z-min** and **z-max** set the range that
+  **Reset axes** returns to; the first time, they start from the calculated
+  range. A range wider than the calculated profile extends the SLD, ρ ± ρM∥
+  and ρM curves flat with the fronting and backing values. The setting is
+  shared by both pages and is not saved in the project.
 - Automatic saving: once a project has been created, it is saved when you leave
   a page, after a successful fit or a Bayesian sampling run, and just before a
   fit, a calculation engine switch or replacing the sample from an ORSO file.

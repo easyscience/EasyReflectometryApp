@@ -30,6 +30,13 @@ QtObject {
     property bool logarithmicQAxis: false
     property int experimentMarkerStyle: 0  // 0: dots, 1: circles, 2: line
 
+    // SLD chart z range, shared by the Sample and Analysis SLD charts.
+    // Auto: fit the calculated profiles. Otherwise [sldZMin, sldZMax]; NaN until
+    // first set (seeded from the auto range when Auto is switched off).
+    property bool sldZAuto: true
+    property real sldZMin: NaN
+    property real sldZMax: NaN
+
     // Shared experiment color palette — used by Data Explorer table, Experiment chart, and Analysis charts
     // Muted/pastel palette to match the application's professional aesthetic
     readonly property var experimentColorPalette: [

@@ -3,6 +3,7 @@ import QtQuick.Controls 2.14
 
 import EasyApplication.Gui.Components 1.0 as EaComponents
 
+import Gui as Gui
 import Gui.Globals as Globals
 import "./Groups" as Groups
 
@@ -11,6 +12,8 @@ EaComponents.SideBarColumn {
         enabled: Globals.BackendWrapper.analysisIsFitFinished
     }
     Groups.PlotControl{
+    }
+    Gui.SldZRangeControl{
     }
     Groups.CalculationEngine {
         collapsed: true

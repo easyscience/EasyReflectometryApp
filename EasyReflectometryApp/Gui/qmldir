@@ -13,4 +13,5 @@ PlotControlCommon PlotControlCommon.qml
 SpinAsymmetryChart SpinAsymmetryChart.qml
 SideBarWithFooter SideBarWithFooter.qml
 SldChart SldChart.qml
+SldZRangeControl SldZRangeControl.qml
 StatusBar StatusBar.qml
