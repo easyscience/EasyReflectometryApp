@@ -26,17 +26,21 @@ The settings below the drop-down change with the choice. Instead of the classica
 The parameters that are sampled, and the ranges they are sampled in, are the ones ticked
 for fitting in the `Basic controls`, exactly as for a classical fit.
 
-With the Bayesian minimiser selected, the fit button in `Basic controls` reads
-**Start sampling** instead of **Start fitting**. It becomes **Cancel fitting** while a run
-is in progress; cancelling keeps the interface locked until the worker has actually
-stopped, so a superseded run can never write into the parameters of the next one.
+With the Bayesian minimiser selected, the fit button below the sidebar (on both the
+`Basic controls` and the `Extra controls` tabs) reads **Start sampling** instead of
+**Start fitting**. It becomes **Cancel fitting** while a run is in progress; cancelling
+keeps the interface locked until the worker has actually stopped, so a superseded run can
+never write into the parameters of the next one. A cancelled run is reported as cancelled,
+not as a failed fit.
 
 While a run is in progress, a thin bar along the top of the status bar, and a bar with a
 line of text under the button, show how far it has got. For sampling the bar fills up: the
 text names the phase (**Burn-in**, then **Sampling**), the generation out of the number the
 run will take, and the time elapsed. A classical fit has no knowable end, so its bar only
 shows that it is running; the text gives the number of evaluations (optimizer steps for a
-BUMPS minimiser), the reduced χ² and the time elapsed.
+BUMPS minimiser), the reduced χ² and the time elapsed. The status bar shows the short form,
+e.g. `Sampling 42 %`, on every page except `Home`; see
+[simple fitting](./simple_fitting.md).
 
 ## Reading the results
 
