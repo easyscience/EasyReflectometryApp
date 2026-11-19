@@ -3,8 +3,8 @@
 - Live preview of a running fit: the Analysis page's reflectivity, residual and
   SLD curves are redrawn with the best values found so far, at most once per
   second and only when the fit has improved. **Preview every (s)**, in the
-  Minimization method group of the `Extra controls` tab, sets the interval
-  (empty: back to 1 s, 0: no preview); it applies from the next fit.
+  Minimization method group of the `Extra controls` tab, sets the interval in
+  whole seconds (empty: back to 1 s, 0: no preview); it applies from the next fit.
 - **Cancel fitting** no longer throws away the progress of a fit. A dialog
   reports the reduced χ² and the number of evaluations (steps for BUMPS) reached,
   with the parameters already at the best values found, and asks:

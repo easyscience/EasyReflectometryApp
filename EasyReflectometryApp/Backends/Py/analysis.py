@@ -60,8 +60,10 @@ class Analysis(QObject):
     # Every fittingChanged (a lifecycle transition) emits it too.
     fitProgressChanged = Signal()
     fitPreviewIntervalChanged = Signal()
-    # The parameters hold a running fit's best point and the worker waits: PyBackend
-    # redraws the Analysis page from them, synchronously (see MD/FIT_PREVIEW_DESIGN.md).
+    # The parameters hold a running fit's best point and the worker waits (blocking
+    # connection) until the slot emitting this returns. PyBackend redraws the Analysis
+    # page from them synchronously: a model read deferred with Qt.callLater would run
+    # after the worker resumed, while it writes the parameters again.
     fitPreviewReady = Signal()
     heatmapChanged = Signal()
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
@@ -154,16 +156,21 @@ class Analysis(QObject):
         """The running operation's progress (phase, fraction, count, ...), see ``Fitting.progress_snapshot``."""
         return self._fitting_logic.progress_snapshot()
 
-    @Property(float, notify=fitPreviewIntervalChanged)
-    def fitPreviewInterval(self) -> float:
-        """Shortest time (s) between two redraws of the curves during a fit; 0: no preview."""
+    @Property(int, notify=fitPreviewIntervalChanged)
+    def fitPreviewInterval(self) -> int:
+        """Shortest time (whole seconds) between two redraws of the curves during a fit; 0: no preview."""
         return self._fit_preview_interval_s
 
+    # A float slot, so that QML's 2.5 arrives as 2.5 and is rejected instead of truncated.
     @Slot(float)
     def setFitPreviewInterval(self, value: float) -> None:
-        """Set the preview interval of the next fit; a negative or non-finite value is ignored."""
-        if math.isfinite(value) and value >= 0 and value != self._fit_preview_interval_s:
-            self._fit_preview_interval_s = float(value)
+        """Set the preview interval of the next fit, in whole seconds.
+
+        Anything but a non-negative whole number is ignored: each preview pauses the
+        fit for a full redraw, so a fraction of a second would slow it down too much.
+        """
+        if float(value).is_integer() and value >= 0 and value != self._fit_preview_interval_s:
+            self._fit_preview_interval_s = int(value)
         # Also on a rejected value, so the field shows the stored one again.
         self.fitPreviewIntervalChanged.emit()
 
@@ -580,14 +587,16 @@ class Analysis(QObject):
         if self._is_stale_worker_signal():
             return
         is_user_cancel = self._fitting_logic.fit_cancelled and 'cancel' in error_message.lower()
-        best = None
-        if is_user_cancel:
-            error_message = 'Fitting cancelled by user'
-            # The worker has finished: its best point can be put in the parameters.
-            best = getattr(self._fitter_thread, 'best_progress', None)
         # Not recorded on the project here: a failure leaves the record describing the last
         # completed fit; a cancelled one is recorded if the user keeps it (keepCancelledFit).
-        self._fitting_logic.on_fit_failed(error_message, best)
+        if is_user_cancel:
+            error_message = 'Fitting cancelled by user'
+            # The worker has finished, so its best point can be put in the parameters.
+            # None for a sampling worker, and when called with no worker.
+            best = getattr(self._fitter_thread, 'best_progress', None)
+            self._fitting_logic.on_fit_cancelled(error_message, best)
+        else:
+            self._fitting_logic.on_fit_failed(error_message)
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()

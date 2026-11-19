@@ -38,8 +38,11 @@ class FitterWorker(QThread):
         previewRequested(dict): Emitted with the best parameter values so far,
             at most once per ``preview_interval_s``, while the fit waits between
             evaluations. Connect it with ``Qt.BlockingQueuedConnection``: the
-            receiver may then read the model, which nothing writes until it
-            returns (see MD/FIT_PREVIEW_DESIGN.md).
+            worker then waits until the receiver returns, so the receiver may
+            write the parameters and read the model, which the fit does not touch
+            meanwhile. Every model read must happen before it returns (nothing
+            deferred with ``Qt.callLater``), and the receiver must not wait for
+            this thread, which would deadlock.
 
     Example:
         worker = FitterWorker(
@@ -71,8 +74,9 @@ class FitterWorker(QThread):
     #: back on every evaluation; a person reads the progress at most a few times a second.
     PROGRESS_INTERVAL_S = 0.1
 
-    #: Default shortest time between two previews; 0 turns the preview off.
-    DEFAULT_PREVIEW_INTERVAL_S = 1.0
+    #: The GUI's default shortest time (whole seconds) between two previews; 0 turns
+    #: the preview off. Not the constructor's default, see ``preview_interval_s``.
+    DEFAULT_PREVIEW_INTERVAL_S = 1
 
     CANCELLED_MESSAGE = 'Fitting cancelled by user'
 
@@ -83,6 +87,9 @@ class FitterWorker(QThread):
         args: tuple = (),
         kwargs: Optional[dict] = None,
         parent: Optional[Any] = None,
+        # Off (0) unless the caller asks, unlike the GUI's DEFAULT_PREVIEW_INTERVAL_S:
+        # a preview needs a receiver connected with Qt.BlockingQueuedConnection, which
+        # only the caller can provide. Analysis passes the user's interval explicitly.
         preview_interval_s: float = 0.0,
     ):
         """

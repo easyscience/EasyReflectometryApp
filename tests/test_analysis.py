@@ -343,12 +343,15 @@ def test_a_user_cancel_hands_the_workers_best_point_to_the_logic(monkeypatch, qc
     worker = StubWorker.instances[-1]
     worker.best_progress = {'chi2': 1.0, 'reduced_chi2': 0.1, 'parameter_values': {'a': 2.0}, 'iterations': 7}
     on_fit_failed = MagicMock()
+    on_fit_cancelled = MagicMock()
     analysis._fitting_logic.on_fit_failed = on_fit_failed
+    analysis._fitting_logic.on_fit_cancelled = on_fit_cancelled
 
     analysis._onStopFit()
     worker.failed.emit('Fitting cancelled by user')
 
-    on_fit_failed.assert_called_once_with('Fitting cancelled by user', worker.best_progress)
+    on_fit_cancelled.assert_called_once_with('Fitting cancelled by user', worker.best_progress)
+    on_fit_failed.assert_not_called()
 
 
 def test_an_error_is_not_a_cancel_and_keeps_no_best_point(monkeypatch, qcore_application):
@@ -359,11 +362,14 @@ def test_an_error_is_not_a_cancel_and_keeps_no_best_point(monkeypatch, qcore_app
     worker = StubWorker.instances[-1]
     worker.best_progress = {'chi2': 1.0, 'reduced_chi2': 0.1, 'parameter_values': {'a': 2.0}, 'iterations': 7}
     on_fit_failed = MagicMock()
+    on_fit_cancelled = MagicMock()
     analysis._fitting_logic.on_fit_failed = on_fit_failed
+    analysis._fitting_logic.on_fit_cancelled = on_fit_cancelled
 
     worker.failed.emit('boom')
 
-    on_fit_failed.assert_called_once_with('boom', None)
+    on_fit_failed.assert_called_once_with('boom')
+    on_fit_cancelled.assert_not_called()
 
 
 def test_a_preview_writes_the_best_values_then_asks_for_a_redraw(monkeypatch, qcore_application):
@@ -378,19 +384,20 @@ def test_a_preview_writes_the_best_values_then_asks_for_a_redraw(monkeypatch, qc
     assert events == [('apply', {'a': 2.0}), 'redraw']
 
 
-def test_the_preview_interval_takes_non_negative_values_and_resets_to_one_second(monkeypatch, qcore_application):
+def test_the_preview_interval_takes_whole_seconds_and_resets_to_one_second(monkeypatch, qcore_application):
     analysis = _make_analysis(monkeypatch)
     notified = []
     analysis.fitPreviewIntervalChanged.connect(lambda: notified.append(analysis.fitPreviewInterval))
 
-    analysis.setFitPreviewInterval(2.5)
-    analysis.setFitPreviewInterval(-1.0)
-    analysis.setFitPreviewInterval(float('nan'))
+    analysis.setFitPreviewInterval(2.0)
+    for rejected in (2.5, 0.001, -1.0, float('nan'), float('inf')):
+        analysis.setFitPreviewInterval(rejected)
     analysis.setFitPreviewInterval(0.0)
     analysis.resetFitPreviewInterval()
 
     # A rejected value re-notifies too, so the field shows the stored one again.
-    assert notified == [2.5, 2.5, 2.5, 0.0, 1.0]
+    assert notified == [2, 2, 2, 2, 2, 2, 0, 1]
+    assert isinstance(analysis.fitPreviewInterval, int)
 
 
 def test_keeping_or_reverting_a_cancelled_fit_refreshes_like_a_finished_fit(monkeypatch, qcore_application):

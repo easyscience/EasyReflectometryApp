@@ -259,7 +259,7 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
     # stop_fit only requests cancellation; progress stays visible while the
     # worker thread is still winding down and is cleared when it exits.
     assert logic.fit_iteration == 5
-    logic.on_fit_failed('Fitting cancelled by user')
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
 
     assert logic.fit_iteration == 0
     assert logic.fit_has_interim_update is False
@@ -297,7 +297,7 @@ _BEST = {'chi2': 8.0, 'reduced_chi2': 0.8, 'parameter_values': {}, 'iterations':
 def test_cancel_puts_the_best_point_in_the_parameters_and_asks():
     logic, _project, free, fixed, dependent, _recorded = _cancel_scene()
 
-    logic.on_fit_failed('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
 
     assert (free.value, free.error, dependent.value) == (11.0, None, 22.0)
     assert fixed.value == 3.0
@@ -309,7 +309,7 @@ def test_cancel_puts_the_best_point_in_the_parameters_and_asks():
 
 def test_keeping_a_cancelled_fit_records_it_as_cancelled():
     logic, project, free, _fixed, _dependent, recorded = _cancel_scene()
-    logic.on_fit_failed('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
 
     logic.keep_cancelled_fit()
     project.last_fit = 'run'
@@ -325,7 +325,7 @@ def test_keeping_a_cancelled_fit_records_it_as_cancelled():
 
 def test_reverting_a_cancelled_fit_puts_back_the_starting_values_and_errors():
     logic, _project, free, _fixed, dependent, recorded = _cancel_scene()
-    logic.on_fit_failed('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
 
     logic.revert_cancelled_fit()
 
@@ -338,12 +338,35 @@ def test_reverting_a_cancelled_fit_puts_back_the_starting_values_and_errors():
 def test_a_cancel_before_any_progress_reverts_without_asking():
     logic, _project, free, _fixed, _dependent, recorded = _cancel_scene()
 
-    logic.on_fit_failed('Fitting cancelled by user', None)
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
 
     assert (free.value, free.error) == (10.0, 0.5)
     assert logic.fit_cancel_pending is False
     assert logic.show_results_dialog is True
     assert recorded == []
+
+
+def test_a_failure_leaves_the_parameters_where_the_engine_left_them():
+    logic, _project, free, _fixed, _dependent, recorded = _cancel_scene()
+
+    logic.on_fit_failed('boom')
+
+    assert (free.value, free.error) == (12.0, 0.5)
+    assert logic.fit_cancel_pending is False
+    assert logic.fit_error_message == 'boom'
+    assert recorded == []
+
+
+def test_a_cancelled_sampling_run_has_no_point_to_keep():
+    logic, _project, free, _fixed, _dependent, _recorded = _cancel_scene()
+    logic.prepare_for_threaded_sample(burn=10)
+    logic.stop_fit()
+
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+
+    assert free.value == 12.0
+    assert logic.fit_cancel_pending is False
+    assert logic.show_results_dialog is True
 
 
 def test_fit_failure_and_cancellation_state_transitions():
@@ -358,13 +381,13 @@ def test_fit_failure_and_cancellation_state_transitions():
     logic.prepare_for_threaded_fit()
     logic.stop_fit()
     # stop_fit only requests cancellation; the lifecycle state is finalised by
-    # on_fit_failed when the worker thread actually exits. Keeping ``running``
+    # on_fit_cancelled when the worker thread actually exits. Keeping ``running``
     # True until then keeps the UI locked against starting a second fit.
     assert logic.fit_cancelled is True
     assert logic.running is True
     assert logic.fit_finished is False
 
-    logic.on_fit_failed('Fitting cancelled by user')
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
     assert logic.running is False
     assert logic.fit_finished is True
     assert logic.fit_error_message == 'Fitting cancelled by user'
@@ -474,7 +497,7 @@ def test_progress_snapshot_cancelling_survives_later_payloads_and_ends_idle():
 
     assert logic.progress_snapshot()['phase'] == 'cancelling'
     assert logic.progress_snapshot()['fraction'] == -1.0
-    logic.on_fit_failed('Fitting cancelled by user')
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
     assert logic.progress_snapshot()['phase'] == ''
 
 

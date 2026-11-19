@@ -99,7 +99,10 @@ class StubFittingLogic:
         self.running = False
         self.fit_cancelled = True
 
-    def on_fit_failed(self, msg, best=None):
+    def on_fit_failed(self, msg):
+        self.fit_error_message = msg
+
+    def on_fit_cancelled(self, msg, best):
         self.fit_error_message = msg
 
 
