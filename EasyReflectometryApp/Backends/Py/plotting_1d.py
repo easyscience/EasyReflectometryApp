@@ -30,6 +30,9 @@ PLOT_BACKEND = 'QtCharts'
 #: Where a non-positive reflectivity goes on a log10 y axis, which has no place for it.
 LOG_FLOOR = -10.0
 
+#: A page's single-experiment measured points and their upper and lower error bounds.
+MEASURED_SERIES = ('measuredSerie', 'errorUpperSerie', 'errorLowerSerie')
+
 
 class Plotting1d(QObject):
     chartRefsChanged = Signal()
@@ -145,6 +148,8 @@ class Plotting1d(QObject):
                 'analysisPage': {
                     'calculatedSerie': None,
                     'measuredSerie': None,
+                    'errorUpperSerie': None,
+                    'errorLowerSerie': None,
                     'sldSerie': None,
                 },
             }
@@ -1608,10 +1613,13 @@ class Plotting1d(QObject):
             for point in self._get_aligned_analysis_values(experiment_index, channel):
                 measured = point['measured']
                 calculated = point['calculated']
+                sigma = point['sigma']
                 points.append(
                     {
                         'x': point['q'],
                         'measured': float(self._axis_y(measured)),
+                        'errorUpper': float(self._axis_y(measured + sigma)),
+                        'errorLower': float(self._axis_y(measured - sigma)),
                         'calculated': float(self._axis_y(calculated)),
                         'hasCalculated': bool(point['has_calculated']),
                     }
@@ -1727,26 +1735,26 @@ class Plotting1d(QObject):
             else:
                 self.qtchartsReplaceMeasuredOnExperimentChartAndRedraw()
 
+    def _replace_measured_series(self, page: str) -> int:
+        """Draw the current experiment's points and their error bounds on a page's measured series."""
+        points = self._measured_points_from_dataset(self.experiment_data)
+        for serie, y_key in zip(MEASURED_SERIES, ('y', 'errorUpper', 'errorLower')):
+            self._replace_series_points(self._qtcharts_series_ref(page, serie), self._xy(points, y_key))
+        return len(points)
+
     def qtchartsReplaceMeasuredOnExperimentChartAndRedraw(self):
-        if not self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie'):
+        if not self._clear_qtcharts_series('experimentPage', *MEASURED_SERIES):
             return
 
-        series_measured = self._qtcharts_series_ref('experimentPage', 'measuredSerie')
-        series_error_upper = self._qtcharts_series_ref('experimentPage', 'errorUpperSerie')
-        series_error_lower = self._qtcharts_series_ref('experimentPage', 'errorLowerSerie')
-        points = self._measured_points_from_dataset(self.experiment_data)
-        self._replace_series_points(series_measured, self._xy(points))
-        self._replace_series_points(series_error_upper, self._xy(points, 'errorUpper'))
-        self._replace_series_points(series_error_lower, self._xy(points, 'errorLower'))
-
-        console.debug(IO.formatMsg('sub', 'Measured curve', f'{len(points)} points', 'on experiment page', 'replaced'))
+        nr_points = self._replace_measured_series('experimentPage')
+        console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on experiment page', 'replaced'))
 
     def qtchartsReplaceMultiExperimentChartAndRedraw(self):
         """Draw multiple experiment series with distinct colors."""
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines'))
 
         # Clear default series but don't use them for multi-experiment mode
-        self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie')
+        self._clear_qtcharts_series('experimentPage', *MEASURED_SERIES)
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
@@ -1765,21 +1773,18 @@ class Plotting1d(QObject):
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines on analysis page'))
 
         # Clear default series but don't use them for multi-experiment mode
-        self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie')
+        self._clear_qtcharts_series('analysisPage', *MEASURED_SERIES, 'calculatedSerie')
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
         self.experimentDataChanged.emit()
 
     def qtchartsReplaceCalculatedAndMeasuredOnAnalysisChartAndRedraw(self):
-        if not self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie'):
+        if not self._clear_qtcharts_series('analysisPage', *MEASURED_SERIES, 'calculatedSerie'):
             return
 
-        series_measured = self._qtcharts_series_ref('analysisPage', 'measuredSerie')
         series_calculated = self._qtcharts_series_ref('analysisPage', 'calculatedSerie')
-        nr_points = self._replace_series_points(
-            series_measured, self._xy(self._measured_points_from_dataset(self.experiment_data))
-        )
+        nr_points = self._replace_measured_series('analysisPage')
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
         nr_points = self._replace_series_points(series_calculated, self._xy(self._reflectivity_points(self.model_data)))

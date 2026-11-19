@@ -32,6 +32,8 @@ Rectangle {
         )
 
         calcSerie.color: currentExperimentColor
+        // The error bounds share the colour of the points they belong to
+        measSerie.color: currentExperimentColor
         bkgSerie.color: measSerie.color
         measSerie.width: 1
         bkgSerie.width: 1
@@ -232,28 +234,13 @@ Rectangle {
                                                        xAxis, chartView.axisY,
                                                        channelRow.color, Globals.Variables.experimentMarkerStyle)
 
-            var errorColor = Qt.darker(channelRow.color, 1.3)
-
-            var errorUpperSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                         `${name} - Error Upper`,
-                                                         xAxis, chartView.axisY)
-            errorUpperSerie.color = errorColor
-            errorUpperSerie.width = 1
-            errorUpperSerie.style = Qt.DashLine
-            errorUpperSerie.useOpenGL = chartView.useOpenGL
-
-            var errorLowerSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                         `${name} - Error Lower`,
-                                                         xAxis, chartView.axisY)
-            errorLowerSerie.color = errorColor
-            errorLowerSerie.width = 1
-            errorLowerSerie.style = Qt.DashLine
-            errorLowerSerie.useOpenGL = chartView.useOpenGL
+            var errorBounds = MeasuredScatter.createErrorBounds(chartView, ChartView, name,
+                                                                xAxis, chartView.axisY, channelRow.color)
 
             var seriesSet = {
                 measuredSerie: measuredSerie,
-                errorUpperSerie: errorUpperSerie,
-                errorLowerSerie: errorLowerSerie,
+                errorUpperSerie: errorBounds.upper,
+                errorLowerSerie: errorBounds.lower,
                 channel: channelRow.channel,
                 color: channelRow.color
             }
@@ -723,30 +710,14 @@ Rectangle {
                                                        xAxis, chartView.axisY,
                                                        color, Globals.Variables.experimentMarkerStyle)
 
-            // Create error bound series (lighter colors)
-            var errorColor = Qt.darker(color, 1.3)
-
-            var errorUpperSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                        `${expName} - Error Upper`,
-                                                        xAxis, chartView.axisY)
-            errorUpperSerie.color = errorColor
-            errorUpperSerie.width = 1
-            errorUpperSerie.style = Qt.DashLine
-            errorUpperSerie.useOpenGL = chartView.useOpenGL
-
-            var errorLowerSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                        `${expName} - Error Lower`,
-                                                        xAxis, chartView.axisY)
-            errorLowerSerie.color = errorColor
-            errorLowerSerie.width = 1
-            errorLowerSerie.style = Qt.DashLine
-            errorLowerSerie.useOpenGL = chartView.useOpenGL
+            var errorBounds = MeasuredScatter.createErrorBounds(chartView, ChartView, expName,
+                                                                xAxis, chartView.axisY, color)
 
             // Store references
             var seriesSet = {
                 measuredSerie: measuredSerie,
-                errorUpperSerie: errorUpperSerie,
-                errorLowerSerie: errorLowerSerie,
+                errorUpperSerie: errorBounds.upper,
+                errorLowerSerie: errorBounds.lower,
                 expIndex: expIndex,
                 expName: expName,
                 color: color,

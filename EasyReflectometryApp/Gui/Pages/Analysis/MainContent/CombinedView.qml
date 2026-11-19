@@ -214,6 +214,31 @@ Rectangle {
                     }
                 }
 
+                // Error bounds (±1σ) of the single experiment's measured points, in their colour.
+                // They follow the x axis, so the linear and the log view share them; the
+                // dynamic series draw their own.
+                LineSeries {
+                    id: errorUpperSerie
+                    axisX: analysisChartView.currentXAxis()
+                    axisY: analysisChartView.axisY
+                    useOpenGL: analysisChartView.useOpenGL
+                    color: analysisChartView.currentExperimentColor
+                    width: 1
+                    style: Qt.DashLine
+                    visible: !analysisChartView.useDynamicSeries
+                }
+
+                LineSeries {
+                    id: errorLowerSerie
+                    axisX: errorUpperSerie.axisX
+                    axisY: errorUpperSerie.axisY
+                    useOpenGL: errorUpperSerie.useOpenGL
+                    color: errorUpperSerie.color
+                    width: errorUpperSerie.width
+                    style: errorUpperSerie.style
+                    visible: errorUpperSerie.visible
+                }
+
                 // Posterior predictive overlay (Bayesian)
                 LineSeries {
                     id: ppMedianSerie
@@ -341,6 +366,12 @@ Rectangle {
                         if (seriesSet.measuredSerie) {
                             analysisChartView.removeSeries(seriesSet.measuredSerie)
                         }
+                        if (seriesSet.errorUpperSerie) {
+                            analysisChartView.removeSeries(seriesSet.errorUpperSerie)
+                        }
+                        if (seriesSet.errorLowerSerie) {
+                            analysisChartView.removeSeries(seriesSet.errorLowerSerie)
+                        }
                         if (seriesSet.calculatedSerie) {
                             analysisChartView.removeSeries(seriesSet.calculatedSerie)
                         }
@@ -366,6 +397,8 @@ Rectangle {
                                                                `${expName} - Measured`,
                                                                xAxis, analysisChartView.axisY,
                                                                color, Globals.Variables.experimentMarkerStyle)
+                    var errorBounds = MeasuredScatter.createErrorBounds(analysisChartView, ChartView, `${expName} - Measured`,
+                                                                        xAxis, analysisChartView.axisY, color)
 
                     // Create calculated data series using the model's own color
                     var calculatedSerie = analysisChartView.createSeries(ChartView.SeriesTypeLine,
@@ -379,6 +412,8 @@ Rectangle {
                     // Store references
                     var seriesSet = {
                         measuredSerie: measuredSerie,
+                        errorUpperSerie: errorBounds.upper,
+                        errorLowerSerie: errorBounds.lower,
                         calculatedSerie: calculatedSerie,
                         expIndex: expIndex,
                         expName: expName,
@@ -400,12 +435,16 @@ Rectangle {
 
                     // Clear existing points
                     seriesSet.measuredSerie.clear()
+                    seriesSet.errorUpperSerie.clear()
+                    seriesSet.errorLowerSerie.clear()
                     seriesSet.calculatedSerie.clear()
 
                     // Add data points
                     for (var i = 0; i < dataPoints.length; i++) {
                         var point = dataPoints[i]
                         seriesSet.measuredSerie.append(point.x, point.measured - seriesSet.offset)
+                        seriesSet.errorUpperSerie.append(point.x, point.errorUpper - seriesSet.offset)
+                        seriesSet.errorLowerSerie.append(point.x, point.errorLower - seriesSet.offset)
                         // A channel the model cannot calculate (spin-flip on a
                         // non-magnetic model) has no curve; measured points still show.
                         if (point.hasCalculated !== false) {
@@ -656,6 +695,11 @@ Rectangle {
                         }
                         EaElements.Label {
                             visible: !analysisChartView.useDynamicSeries
+                            text: Globals.Variables.lineStyleSymbol(errorUpperSerie.style) + ' Error'
+                            color: errorUpperSerie.color
+                        }
+                        EaElements.Label {
+                            visible: !analysisChartView.useDynamicSeries
                             text: Globals.Variables.lineStyleSymbol(analysisChartView.calcSerie.style) + ' (Calculated)'
                             color: analysisChartView.calcSerie.color
                         }
@@ -735,6 +779,11 @@ Rectangle {
                                 color: EaStyle.Colors.themeForegroundMinor
                             }
                             EaElements.Label {
+                                text: Globals.Variables.lineStyleSymbol(errorUpperSerie.style) + ' ' + qsTr("Error bounds")
+                                font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
+                                color: EaStyle.Colors.themeForegroundMinor
+                            }
+                            EaElements.Label {
                                 text: Globals.Variables.lineStyleSymbol(analysisChartView.calcSerie.style) + ' ' + qsTr("Calculated")
                                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
                                 color: EaStyle.Colors.themeForegroundMinor
@@ -770,6 +819,8 @@ Rectangle {
                     Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage',
                                                                        'calculatedSerie',
                                                                        calculated)
+                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'errorUpperSerie', errorUpperSerie)
+                    Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'errorLowerSerie', errorLowerSerie)
                     Globals.BackendWrapper.plottingRefreshAnalysis()
 
                     // Initialize multi-experiment support

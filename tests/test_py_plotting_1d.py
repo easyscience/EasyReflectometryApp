@@ -6,6 +6,7 @@ import pytest
 
 from EasyReflectometryApp.Backends.Py import plotting_1d as plotting_module
 from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
+from EasyReflectometryApp.Backends.Py.plotting_1d import MEASURED_SERIES
 from EasyReflectometryApp.Backends.Py.plotting_1d import Plotting1d
 
 
@@ -78,10 +79,9 @@ def _make_plotting(selected=None):
     project = FakeProject()
     selection = ExperimentSelection([0] if selected is None else selected)
     plotting = Plotting1d(project, selection=selection)
-    plotting._chartRefs['QtCharts']['experimentPage']['measuredSerie'] = FakeSeries()
-    plotting._chartRefs['QtCharts']['experimentPage']['errorUpperSerie'] = FakeSeries()
-    plotting._chartRefs['QtCharts']['experimentPage']['errorLowerSerie'] = FakeSeries()
-    plotting._chartRefs['QtCharts']['analysisPage']['measuredSerie'] = FakeSeries()
+    for page in ('experimentPage', 'analysisPage'):
+        for serie in MEASURED_SERIES:
+            plotting._chartRefs['QtCharts'][page][serie] = FakeSeries()
     plotting._chartRefs['QtCharts']['analysisPage']['calculatedSerie'] = FakeSeries()
     return plotting, project
 
@@ -448,6 +448,15 @@ class TestGetAnalysisDataPoints:
         assert len(result) == 1
         assert pytest.approx(result[0]['measured'], rel=1e-6) == np.log10(1e-2)
         assert pytest.approx(result[0]['calculated'], rel=1e-6) == np.log10(2e-2)
+
+    def test_error_bounds_are_one_sigma_around_the_measured_point(self):
+        # ye holds the variance: σ = 1e-3
+        proj = _make_project_stub(np.array([0.10]), np.array([1e-2]), np.array([2e-2]), ye=np.array([1e-6]))
+        p = _make_plotting_stub(proj)
+
+        point = p.getAnalysisDataPoints(0)[0]
+        assert point['errorUpper'] == pytest.approx(np.log10(1.1e-2))
+        assert point['errorLower'] == pytest.approx(np.log10(0.9e-2))
 
     def test_returns_empty_on_error(self):
         proj = MagicMock()
