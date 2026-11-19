@@ -44,6 +44,9 @@ Rectangle {
         enabled: target !== null
         ignoreUnknownSignals: true  // the mock backend has no range signals
         function onSldChartRangesChanged() { root.rangeRevision++ }
+        // During a fit the model may only be read while the fit waits: redraw now,
+        // not through scheduleChartRefresh (Qt.callLater).
+        function onFitPreviewChanged() { root.dispatchChartRefresh() }
     }
 
     // Whether to show the z-axis reversed

@@ -143,6 +143,13 @@ Rectangle {
                     function onExperimentChannelsChanged() {
                         analysisChartView.updateMultiExperimentSeries()
                     }
+                    // A fit preview: the single-experiment curves are refilled by the
+                    // backend itself; the per-experiment series are drawn here, at once.
+                    function onFitPreviewChanged() {
+                        if (analysisChartView.useDynamicSeries) {
+                            analysisChartView.updateMultiExperimentSeries()
+                        }
+                    }
                 }
 
                 // Watch for plot mode changes (R(q)×q⁴ toggle)

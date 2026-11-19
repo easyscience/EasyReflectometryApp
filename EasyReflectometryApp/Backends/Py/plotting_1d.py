@@ -43,6 +43,8 @@ class Plotting1d(QObject):
     experimentDataChanged = Signal()
     samplePageDataChanged = Signal()  # Signal for QML to refresh sample page charts
     samplePageResetAxes = Signal()  # Signal for QML to reset chart axes after data load
+    # A fit preview: redraw from the model *now* (no Qt.callLater), while the fit waits.
+    fitPreviewChanged = Signal()
 
     # New signals for plot mode properties
     plotModeChanged = Signal()
@@ -1689,6 +1691,22 @@ class Plotting1d(QObject):
         self._invalidate_residual_range_cache()
         self.drawCalculatedAndMeasuredOnAnalysisChart()
         self.sampleChartRangesChanged.emit()
+
+    def refreshFitPreview(self):
+        """Redraw the Analysis page from a running fit's best point, while the fit waits.
+
+        Every model read must happen before this returns, so only signals whose QML
+        handlers draw synchronously are emitted: the single-experiment curves and
+        the residuals (refreshAnalysisPage), the SLD range, and fitPreviewChanged
+        for the SLD and multi-experiment charts.
+
+        Only the caches redrawn here are dropped: the others keep serving their
+        pre-fit data to lazy readers instead of reading the model mid-evaluation.
+        """
+        self._magnetic_profile_cache = {}
+        self.refreshAnalysisPage()
+        self.sldChartRangesChanged.emit()
+        self.fitPreviewChanged.emit()
 
     def refreshExperimentRanges(self):
         """Emit signal to update experiment chart ranges when selection changes."""

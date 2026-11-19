@@ -1,5 +1,24 @@
 # Unreleased
 
+- Live preview of a running fit: the Analysis page's reflectivity, residual and
+  SLD curves are redrawn with the best values found so far, at most once per
+  second and only when the fit has improved. **Preview every (s)**, in the
+  Minimization method group of the `Extra controls` tab, sets the interval
+  (empty: back to 1 s, 0: no preview); it applies from the next fit.
+- **Cancel fitting** no longer throws away the progress of a fit. A dialog
+  reports the reduced χ² and the number of evaluations (steps for BUMPS) reached,
+  with the parameters already at the best values found, and asks:
+  - **Keep current values**: the values stay, their uncertainties are cleared (a
+    cancelled fit has none), and the run is recorded as cancelled; the status
+    bar shows its reduced χ² marked `(cancelled)`.
+  - **Revert to starting values**: values and uncertainties go back to what they
+    were when the fit started, and the last completed fit stays the recorded one.
+
+  Before, LMFit and DFO went back to the starting values and BUMPS kept its last
+  point, with uncertainties. A fit cancelled before its first progress report
+  goes back to the starting values without asking.
+- The status bar no longer shows the previous project's reduced χ² after a
+  project is loaded or reset.
 - SLD charts: the z range can be set by hand. A new **SLD z range** group in
   the `Advanced controls` tab of the Sample and Analysis pages has an **Auto**
   box, on by default, which fits the z axis to the calculated profiles as

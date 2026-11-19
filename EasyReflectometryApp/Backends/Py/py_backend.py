@@ -366,6 +366,7 @@ class PyBackend(QObject):
         self._analysis.externalParametersChanged.connect(self._refresh_plots)
         self._analysis.externalFittingChanged.connect(self._refresh_plots)
         self._analysis.externalFittingChanged.connect(self._sample.magnetismChanged)
+        self._analysis.fitPreviewReady.connect(self._plotting_1d.refreshFitPreview)
 
         # A finished fit updates the goodness-of-fit; refresh the Summary tab's
         # HTML binding so it stops showing the stale pre-fit value.

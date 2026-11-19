@@ -99,10 +99,17 @@ EaElements.StatusBar {
     }
 
     EaElements.StatusBarItem {
-        visible: !Globals.BackendWrapper.analysisFittingRunning && Globals.BackendWrapper.analysisFitChi2 > 0
+        // A kept cancelled fit has no statistics in its record: its own reduced chi² is shown instead
+        readonly property var cancelled: Globals.BackendWrapper.analysisFitCancelledAt
+        readonly property bool isCancelled: cancelled.reducedChi2 !== undefined
+        visible: !Globals.BackendWrapper.analysisFittingRunning && (Globals.BackendWrapper.analysisFitChi2 > 0 || isCancelled)
         keyIcon: 'chart-line'
         keyText: qsTr('Reduced Chi²')
-        valueText: Globals.BackendWrapper.analysisFitChi2.toFixed(2)
-        ToolTip.text: qsTr('Goodness of fit (reduced chi-squared)')
+        valueText: isCancelled
+                   ? qsTr('%1 (cancelled)').arg(Number(cancelled.reducedChi2).toFixed(2))
+                   : Globals.BackendWrapper.analysisFitChi2.toFixed(2)
+        ToolTip.text: isCancelled
+                      ? qsTr('Reduced chi-squared where the fit was cancelled, after %1 %2').arg(cancelled.count).arg(cancelled.unit)
+                      : qsTr('Goodness of fit (reduced chi-squared)')
     }
 }

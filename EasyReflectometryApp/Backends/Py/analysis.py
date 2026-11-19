@@ -9,6 +9,7 @@ import numpy as np
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import Qt
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
@@ -29,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 #: Shown for an experiment that has no model.
 NO_MODEL_COLOR = '#A5A5A5'
+
+DEFAULT_PREVIEW_INTERVAL_S = FitterWorker.DEFAULT_PREVIEW_INTERVAL_S
 
 
 def _lacks_finite_bounds(param: dict) -> bool:
@@ -56,6 +59,10 @@ class Analysis(QObject):
     # notifies the results and the posterior: a progress tick re-reads only these.
     # Every fittingChanged (a lifecycle transition) emits it too.
     fitProgressChanged = Signal()
+    fitPreviewIntervalChanged = Signal()
+    # The parameters hold a running fit's best point and the worker waits: PyBackend
+    # redraws the Analysis page from them, synchronously (see MD/FIT_PREVIEW_DESIGN.md).
+    fitPreviewReady = Signal()
     heatmapChanged = Signal()
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
     prefitCheckFailed = Signal(str, str)  # Emitted with (title, message) when a fit is refused before starting
@@ -92,6 +99,7 @@ class Analysis(QObject):
         self._cached_enabled_parameters = None
         # Thread management for background fitting
         self._fitter_thread = None
+        self._fit_preview_interval_s = DEFAULT_PREVIEW_INTERVAL_S
         # Connect stopFit signal to slot
         self.stopFit.connect(self._onStopFit)
         # Start, stop, finish and failure change the progress as well.
@@ -146,13 +154,47 @@ class Analysis(QObject):
         """The running operation's progress (phase, fraction, count, ...), see ``Fitting.progress_snapshot``."""
         return self._fitting_logic.progress_snapshot()
 
-    @Property(bool, notify=fitProgressChanged)
-    def fitHasPreviewUpdate(self) -> bool:
-        return self._fitting_logic.fit_has_preview_update
+    @Property(float, notify=fitPreviewIntervalChanged)
+    def fitPreviewInterval(self) -> float:
+        """Shortest time (s) between two redraws of the curves during a fit; 0: no preview."""
+        return self._fit_preview_interval_s
 
-    @Property('QVariantMap', notify=fitProgressChanged)
-    def fitPreviewParameterValues(self) -> dict:
-        return self._fitting_logic.fit_preview_parameter_values
+    @Slot(float)
+    def setFitPreviewInterval(self, value: float) -> None:
+        """Set the preview interval of the next fit; a negative or non-finite value is ignored."""
+        if math.isfinite(value) and value >= 0 and value != self._fit_preview_interval_s:
+            self._fit_preview_interval_s = float(value)
+        # Also on a rejected value, so the field shows the stored one again.
+        self.fitPreviewIntervalChanged.emit()
+
+    @Slot()
+    def resetFitPreviewInterval(self) -> None:
+        self.setFitPreviewInterval(DEFAULT_PREVIEW_INTERVAL_S)
+
+    @Property(bool, notify=fittingChanged)
+    def fitCancelPending(self) -> bool:
+        """A cancelled fit's best point is in the parameters; QML asks to keep or revert it."""
+        return self._fitting_logic.fit_cancel_pending
+
+    @Property('QVariantMap', notify=fittingChanged)
+    def fitCancelledAt(self) -> dict:
+        """``reducedChi2``, ``count`` and ``unit`` of the cancelled fit asked about or kept; {} otherwise."""
+        return self._fitting_logic.fit_cancelled_at
+
+    @Slot()
+    def keepCancelledFit(self) -> None:
+        self._fitting_logic.keep_cancelled_fit()
+        self._on_cancelled_fit_resolved()
+
+    @Slot()
+    def revertCancelledFit(self) -> None:
+        self._fitting_logic.revert_cancelled_fit()
+        self._on_cancelled_fit_resolved()
+
+    def _on_cancelled_fit_resolved(self) -> None:
+        self.fittingChanged.emit()
+        self._clearCacheAndEmitParametersChanged()
+        self.externalFittingChanged.emit()
 
     @Property('QVariantMap', notify=fittingChanged)
     def fitResults(self) -> dict:
@@ -449,10 +491,14 @@ class Analysis(QObject):
             args=(prepared.x, prepared.y),
             kwargs={'weights': prepared.weights, **prepared.call_kwargs(**self._constraints_kwargs())},
             parent=self,
+            preview_interval_s=self._fit_preview_interval_s,
         )
         self._fitter_thread.finished.connect(self._on_fit_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
         self._fitter_thread.progressDetail.connect(self._on_fit_progress)
+        # Blocking: the worker waits between evaluations until the preview is drawn,
+        # so nothing writes the parameters while the GUI reads the model.
+        self._fitter_thread.previewRequested.connect(self._on_fit_preview, Qt.BlockingQueuedConnection)
         self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
@@ -493,6 +539,19 @@ class Analysis(QObject):
         # externalFittingChanged (plot refresh).
         self.fitProgressChanged.emit()
 
+    @Slot(dict)
+    def _on_fit_preview(self, values: dict) -> None:
+        """Draw the running fit's best point. The worker waits until this returns
+        (blocking connection), and its next evaluation overwrites the values again."""
+        if self._is_stale_worker_signal():
+            return
+        try:
+            self._fitting_logic.apply_parameter_values(values)
+            self.fitPreviewReady.emit()
+        except Exception:
+            # The fit must go on whatever the preview does.
+            logger.exception('Fit preview failed')
+
     @Slot(list)
     def _on_fit_finished(self, results: list) -> None:
         """Handle successful completion of threaded fit."""
@@ -521,11 +580,14 @@ class Analysis(QObject):
         if self._is_stale_worker_signal():
             return
         is_user_cancel = self._fitting_logic.fit_cancelled and 'cancel' in error_message.lower()
+        best = None
         if is_user_cancel:
             error_message = 'Fitting cancelled by user'
-        # Not recorded on the project: its record keeps describing the last completed fit,
-        # which the parameters still hold. The dialog shows this error.
-        self._fitting_logic.on_fit_failed(error_message)
+            # The worker has finished: its best point can be put in the parameters.
+            best = getattr(self._fitter_thread, 'best_progress', None)
+        # Not recorded on the project here: a failure leaves the record describing the last
+        # completed fit; a cancelled one is recorded if the user keeps it (keepCancelledFit).
+        self._fitting_logic.on_fit_failed(error_message, best)
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
@@ -1315,6 +1377,8 @@ class Analysis(QObject):
     def onProjectLoaded(self) -> None:
         """A loaded or reset project brings its own fit settings: re-read every bound control."""
         self.minimizerChanged.emit()
+        # ... and no fit record: the status bar's chi² (or cancelled note) is the old project's.
+        self.fittingChanged.emit()
 
     #############
     ## Parameters

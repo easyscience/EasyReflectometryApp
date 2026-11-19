@@ -99,7 +99,7 @@ class StubFittingLogic:
         self.running = False
         self.fit_cancelled = True
 
-    def on_fit_failed(self, msg):
+    def on_fit_failed(self, msg, best=None):
         self.fit_error_message = msg
 
 
@@ -143,10 +143,11 @@ class StubWorker(QObject):
     finished = Signal(list)
     failed = Signal(str)
     progressDetail = Signal(dict)
+    previewRequested = Signal(dict)
 
     instances = []
 
-    def __init__(self, fitter, method_name, args=(), kwargs=None, parent=None):
+    def __init__(self, fitter, method_name, args=(), kwargs=None, parent=None, preview_interval_s=0.0):
         super().__init__(parent)
         self.fitter = fitter
         self.method_name = method_name
