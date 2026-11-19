@@ -690,7 +690,7 @@ Rectangle {
                         // Single experiment legend
                         EaElements.Label {
                             visible: !analysisChartView.useDynamicSeries
-                            text: Globals.Variables.lineStyleSymbol(analysisChartView.measSerie.style) + '  I (Measured)'
+                            text: Globals.Variables.markerStyleSymbol(Globals.Variables.experimentMarkerStyle) + '  I (Measured)'
                             color: analysisChartView.measSerie.color
                         }
                         EaElements.Label {
@@ -774,7 +774,7 @@ Rectangle {
                             }
 
                             EaElements.Label {
-                                text: Globals.Variables.lineStyleSymbol(analysisChartView.measSerie.style) + ' ' + qsTr("Measured")
+                                text: Globals.Variables.markerStyleSymbol(Globals.Variables.experimentMarkerStyle) + ' ' + qsTr("Measured")
                                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.7
                                 color: EaStyle.Colors.themeForegroundMinor
                             }
