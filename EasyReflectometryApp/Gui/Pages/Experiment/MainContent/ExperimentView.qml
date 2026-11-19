@@ -880,7 +880,7 @@ Rectangle {
                 // Single experiment legend
                 EaElements.Label {
                     visible: !chartView.isMultiExperimentMode && !chartView.isPolarizedMode
-                    text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + '  I (Measured)'
+                    text: Globals.Variables.markerStyleSymbol(Globals.Variables.experimentMarkerStyle) + '  I (Measured)'
                     color: chartView.calcSerie.color
                 }
                 EaElements.Label {

@@ -49,4 +49,13 @@ QtObject {
         default:                return '\u2501'
         }
     }
+
+    // Legend symbol for the measured-data series, matching experimentMarkerStyle
+    function markerStyleSymbol(markerStyle) {
+        switch (markerStyle) {
+        case 0:  return '\u2022'   // dots: small bullet
+        case 1:  return '\u25cf'   // circles: large filled circle
+        default: return '\u2501'   // line
+        }
+    }
 }
