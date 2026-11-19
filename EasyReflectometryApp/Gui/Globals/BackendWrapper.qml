@@ -625,6 +625,11 @@ QtObject {
     readonly property var plottingSampleMinY: activeBackend.plotting.sampleMinY
     readonly property var plottingSampleMaxY: activeBackend.plotting.sampleMaxY
 
+    // [minX, maxX, minY, maxY] of the curves of the given models (null: every model); re-read
+    // on the plotting object's sampleChartRangesChanged / sldChartRangesChanged
+    function plottingSampleRangeForModels(models) { return activeBackend.plotting.sampleRangeForModels(models) }
+    function plottingSldRangeForModels(models) { return activeBackend.plotting.sldRangeForModels(models) }
+
     readonly property var plottingExperimentMinX: activeBackend.plotting.experimentMinX
     readonly property var plottingExperimentMaxX: activeBackend.plotting.experimentMaxX
     readonly property var plottingExperimentMinY: activeBackend.plotting.experimentMinY

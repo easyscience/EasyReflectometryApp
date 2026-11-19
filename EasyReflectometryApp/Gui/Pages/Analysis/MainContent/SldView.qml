@@ -89,6 +89,12 @@ Item {
 
             Gui.SldChart {
                 id: sldChart
+                // The models of the experiments selected in the Data Explorer
+                shownModels: {
+                    const selected = Globals.BackendWrapper.analysisSelectedExperimentIndices
+                    const modelIndices = Globals.BackendWrapper.analysisExperimentsModelIndices
+                    return selected.length ? selected.map(index => modelIndices[index]) : null
+                }
                 showLegend: Globals.Variables.showLegendOnAnalysisPage
                 onShowLegendChanged: Globals.Variables.showLegendOnAnalysisPage = showLegend
             }

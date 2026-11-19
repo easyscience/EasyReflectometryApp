@@ -16,6 +16,7 @@ import Gui as Gui
 import Gui.Globals as Globals
 
 import "../../../Logic/ChannelCurves.js" as ChannelCurves
+import "../../../Logic/ShownModels.js" as ShownModels
 
 
 Rectangle {
@@ -25,6 +26,30 @@ Rectangle {
 
     // Track model count changes to refresh charts
     property int modelCount: Globals.BackendWrapper.sampleModels.length
+
+    // Models drawn in both charts: all, or only the one picked in the Models selector
+    readonly property var shownModels: Globals.Variables.showAllSampleModels
+                                       ? null : [Globals.BackendWrapper.sampleCurrentModelIndex]
+    onShownModelsChanged: {
+        ShownModels.apply(shownModels, sampleSeries, channelSeries)
+        // Fit the axes to the models now shown (the SLD chart fits its own)
+        Qt.callLater(sampleChartView.resetAxes)
+    }
+
+    // [minX, maxX, minY, maxY] of the shown models' reflectivity curves. The backend announces
+    // new ranges with a signal, which bumps rangeRevision; reading it re-evaluates this binding.
+    property int rangeRevision: 0
+    readonly property var shownRange: {
+        rangeRevision
+        return Globals.BackendWrapper.plottingSampleRangeForModels(shownModels)
+    }
+
+    Connections {
+        target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+        enabled: target !== null
+        ignoreUnknownSignals: true  // the mock backend has no range signals
+        function onSampleChartRangesChanged() { container.rangeRevision++ }
+    }
 
     // Store dynamically created series
     property var sampleSeries: []
@@ -62,7 +87,7 @@ Rectangle {
                 property bool allowZoom: true
                 property bool allowHover: true
 
-                property double xRange: Globals.BackendWrapper.plottingSampleMaxX - Globals.BackendWrapper.plottingSampleMinX
+                property double xRange: container.shownRange[1] - container.shownRange[0]
 
                 // Logarithmic axis control
                 property bool useLogQAxis: Globals.Variables.logarithmicQAxis
@@ -72,8 +97,8 @@ Rectangle {
                     visible: !sampleChartView.useLogQAxis
                     titleText: "q (Å⁻¹)"
                     // min/max set imperatively to avoid binding reset during zoom
-                    property double minAfterReset: Globals.BackendWrapper.plottingSampleMinX - sampleChartView.xRange * 0.01
-                    property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX + sampleChartView.xRange * 0.01
+                    property double minAfterReset: container.shownRange[0] - sampleChartView.xRange * 0.01
+                    property double maxAfterReset: container.shownRange[1] + sampleChartView.xRange * 0.01
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -90,8 +115,8 @@ Rectangle {
                     visible: sampleChartView.useLogQAxis
                     titleText: "q (Å⁻¹)"
                     // min/max set for log scale - ensure positive values
-                    property double minAfterReset: Math.max(Globals.BackendWrapper.plottingSampleMinX, 1e-6)
-                    property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxX * 1.1
+                    property double minAfterReset: Math.max(container.shownRange[0], 1e-6)
+                    property double maxAfterReset: container.shownRange[1] * 1.1
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -103,14 +128,14 @@ Rectangle {
                     }
                 }
 
-                property double yRange: Globals.BackendWrapper.plottingSampleMaxY - Globals.BackendWrapper.plottingSampleMinY
+                property double yRange: container.shownRange[3] - container.shownRange[2]
 
                 ValueAxis {
                     id: sampleAxisY
                     titleText: Globals.BackendWrapper.plottingYAxisTitle
                     // min/max set imperatively to avoid binding reset during zoom
-                    property double minAfterReset: Globals.BackendWrapper.plottingSampleMinY - sampleChartView.yRange * 0.01
-                    property double maxAfterReset: Globals.BackendWrapper.plottingSampleMaxY + sampleChartView.yRange * 0.01
+                    property double minAfterReset: container.shownRange[2] - sampleChartView.yRange * 0.01
+                    property double maxAfterReset: container.shownRange[3] + sampleChartView.yRange * 0.01
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -239,6 +264,8 @@ Rectangle {
                         Repeater {
                             model: container.modelCount
                             EaElements.Label {
+                                visible: ShownModels.includes(container.shownModels, index)
+                                height: visible ? implicitHeight : 0
                                 text: '━  ' + Globals.BackendWrapper.sampleModels[index].label
                                 color: Globals.BackendWrapper.sampleModels[index].color
                             }
@@ -250,6 +277,8 @@ Rectangle {
                             model: container.channelSeries.length
                             EaElements.Label {
                                 readonly property var entry: container.channelSeries[index]
+                                visible: ShownModels.includes(container.shownModels, entry.modelIndex)
+                                height: visible ? implicitHeight : 0
                                 text: '┄  ' + entry.label
                                 color: entry.series.color
                             }
@@ -386,6 +415,7 @@ Rectangle {
 
             showLegend: Globals.Variables.showLegendOnSamplePage
             reverseZAxis: Globals.Variables.reverseSldZAxis
+            shownModels: container.shownModels
             onShowLegendChanged: Globals.Variables.showLegendOnSamplePage = showLegend
 
             Component.onCompleted: {
@@ -486,6 +516,7 @@ Rectangle {
         }
 
         channelSeries = newChannelSeries
+        ShownModels.apply(shownModels, sampleSeries, channelSeries)
 
         // Populate data
         refreshAllCharts()

@@ -361,17 +361,21 @@ class Sample(QObject):
     def setCurrentModelIndex(self, new_value: int) -> None:
         if self._project_lib.current_model_index != new_value:
             self._project_lib.current_model_index = new_value
-            self.modelsIndexChanged.emit()
-            # A model switch starts from the first assembly and layer of the new model
-            # (the lib does the same). The layer table is cached, so the assembly/layer
-            # side has to be refreshed too, or the layer editor keeps showing the
-            # previous model's layers (#407).
-            self._project_lib.current_assembly_index = 0
-            self._project_lib.current_layer_index = 0
-            self._refreshCurrentAssemblySelectionState()
-            self.assembliesTableChanged.emit()
-            self.externalRefreshPlot.emit()
-            self.externalSampleChanged.emit()
+            self._announce_current_model()
+
+    def _announce_current_model(self) -> None:
+        """Tell the GUI that another model became the current one."""
+        self.modelsIndexChanged.emit()
+        # A model switch starts from the first assembly and layer of the new model
+        # (the lib does the same). The layer table is cached, so the assembly/layer
+        # side has to be refreshed too, or the layer editor keeps showing the
+        # previous model's layers (#407).
+        self._project_lib.current_assembly_index = 0
+        self._project_lib.current_layer_index = 0
+        self._refreshCurrentAssemblySelectionState()
+        self.assembliesTableChanged.emit()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
 
     @Slot(str)
     def setCurrentModelName(self, value: str) -> None:
@@ -449,6 +453,8 @@ class Sample(QObject):
         if removed:
             self.experimentsRekeyed.emit(removal.remap)
         self.modelsTableChanged.emit()
+        # The models after it moved up, so the current one may have a new index
+        self.modelsIndexChanged.emit()
         self.externalRefreshPlot.emit()
         return removed
 
@@ -472,12 +478,14 @@ class Sample(QObject):
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
         self.materialsTableChanged.emit()
+        self._announce_current_model()  # the new model is the current one
 
     @Slot()
     def duplicateSelectedModel(self) -> None:
         self._models_logic.duplicate_selected_model()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
+        self._announce_current_model()  # the copy is the current one
 
     @Slot()
     def moveSelectedModelUp(self) -> None:

@@ -74,11 +74,25 @@ EaElements.GroupBox {
                     }
                 }
 
+                // Picking a model also narrows the charts to it
                 mouseArea.onPressed: {
                     if (Globals.BackendWrapper.sampleCurrentModelIndex !== index) {
                         Globals.BackendWrapper.sampleSetCurrentModelIndex(index)
                     }
+                    Globals.Variables.showAllSampleModels = false
                 }
+            }
+        }
+
+        EaElements.CheckBox {
+            enabled: modelView.model > 1
+            checked: Globals.Variables.showAllSampleModels
+            text: qsTr("Show all models")
+            ToolTip.text: qsTr("Draw every model in the reflectivity and SLD charts, not only the selected one")
+            onToggled: {
+                Globals.Variables.showAllSampleModels = checked
+                // A click replaces the binding; restore it so picking a model unticks the box
+                checked = Qt.binding(() => Globals.Variables.showAllSampleModels)
             }
         }
 

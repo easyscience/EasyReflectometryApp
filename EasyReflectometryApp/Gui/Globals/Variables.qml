@@ -24,6 +24,8 @@ QtObject {
     property double analysisStaggerDecades: 1.0
 
     // Sample page plot control settings
+    // Draw every model, or only the one picked in the Models selector
+    property bool showAllSampleModels: true
     property bool reverseSldZAxis: false
     property bool logarithmicQAxis: false
     property int experimentMarkerStyle: 0  // 0: dots, 1: circles, 2: line

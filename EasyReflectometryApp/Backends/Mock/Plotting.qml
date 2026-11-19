@@ -28,6 +28,9 @@ QtObject {
 
     property int modelCount: 1
 
+    function sampleRangeForModels(models) { return [sampleMinX, sampleMaxX, sampleMinY, sampleMaxY] }
+    function sldRangeForModels(models) { return [sldMinX, sldMaxX, sldMinY, sldMaxY] }
+
     // Polarized experiment (spin channel) support
     property bool currentExperimentIsPolarized: false
     property var experimentChannelList: []

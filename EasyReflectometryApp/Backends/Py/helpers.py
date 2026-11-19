@@ -6,9 +6,17 @@ from PySide6.QtCore import Qt
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QOffscreenSurface
 from PySide6.QtGui import QOpenGLContext
+from PySide6.QtQml import QJSValue
 from PySide6.QtQuick import QQuickWindow
 from PySide6.QtQuick import QSGRendererInterface
 from PySide6.QtWidgets import QApplication
+
+
+def from_qml(value):
+    """Unwrap a QJSValue handed over by QML (e.g. an array to a 'QVariant' slot) into plain Python data."""
+    if isinstance(value, QJSValue):
+        return value.toVariant()
+    return value
 
 
 class IO:

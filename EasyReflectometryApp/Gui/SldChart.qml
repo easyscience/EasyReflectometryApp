@@ -12,6 +12,8 @@ import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
+import "Logic/ShownModels.js" as ShownModels
+
 
 Rectangle {
     id: root
@@ -20,6 +22,29 @@ Rectangle {
 
     // Whether to show the legend (caller binds to the right page variable)
     property bool showLegend: false
+
+    // Indices of the models to draw (caller binds to its page's selection); null draws all
+    property var shownModels: null
+    onShownModelsChanged: {
+        ShownModels.apply(shownModels, sldSeries, magneticSeries)
+        // Fit the axes to the models now shown
+        Qt.callLater(chartView.resetAxes)
+    }
+
+    // [minX, maxX, minY, maxY] of the shown models' curves. The backend announces new ranges
+    // with a signal, which bumps rangeRevision; reading it re-evaluates this binding.
+    property int rangeRevision: 0
+    readonly property var shownRange: {
+        rangeRevision
+        return Globals.BackendWrapper.plottingSldRangeForModels(shownModels)
+    }
+
+    Connections {
+        target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+        enabled: target !== null
+        ignoreUnknownSignals: true  // the mock backend has no range signals
+        function onSldChartRangesChanged() { root.rangeRevision++ }
+    }
 
     // Whether to show the z-axis reversed
     property bool reverseZAxis: false
@@ -103,13 +128,13 @@ Rectangle {
         property bool allowZoom: true
         property bool allowHover: true
 
-        property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
+        property double xRange: root.shownRange[1] - root.shownRange[0]
 
         ValueAxis {
             id: axisX
             titleText: "z (Å)"
-            property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - chartView.xRange * 0.01
-            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + chartView.xRange * 0.01
+            property double minAfterReset: root.shownRange[0] - chartView.xRange * 0.01
+            property double maxAfterReset: root.shownRange[1] + chartView.xRange * 0.01
             reverse: root.reverseZAxis
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
@@ -122,13 +147,13 @@ Rectangle {
             }
         }
 
-        property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
+        property double yRange: root.shownRange[3] - root.shownRange[2]
 
         ValueAxis {
             id: axisY
             titleText: "SLD (10⁻⁶Å⁻²)"
-            property double minAfterReset: Globals.BackendWrapper.plottingSldMinY - chartView.yRange * 0.01
-            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + chartView.yRange * 0.01
+            property double minAfterReset: root.shownRange[2] - chartView.yRange * 0.01
+            property double maxAfterReset: root.shownRange[3] + chartView.yRange * 0.01
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -283,6 +308,8 @@ Rectangle {
                 Repeater {
                     model: root.modelCount
                     EaElements.Label {
+                        visible: ShownModels.includes(root.shownModels, index)
+                        height: visible ? implicitHeight : 0
                         text: '━  SLD ' + Globals.BackendWrapper.sampleModels[index].label
                         color: Globals.BackendWrapper.sampleModels[index].color
                     }
@@ -294,7 +321,7 @@ Rectangle {
                     model: root.magneticSeries.length
                     EaElements.Label {
                         readonly property var entry: root.magneticSeries[index]
-                        visible: entry.inLegend
+                        visible: entry.inLegend && ShownModels.includes(root.shownModels, entry.modelIndex)
                         height: visible ? implicitHeight : 0
                         text: '┄  ' + root.magneticCurveStyle(entry.curve).label + ' '
                               + (Globals.BackendWrapper.sampleModels[entry.modelIndex]
@@ -560,6 +587,7 @@ Rectangle {
 
         sldSeries = newSldSeries
         magneticSeries = newMagneticSeries
+        ShownModels.apply(shownModels, sldSeries, magneticSeries)
         drawnMagneticSignature = magneticSeriesSignature()
         refreshAllCharts()
     }

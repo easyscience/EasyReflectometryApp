@@ -16,6 +16,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
 from .helpers import IO
+from .helpers import from_qml
 from .logic.experiment_data import concatenated_experiment_data
 from .logic.experiment_data import individual_experiment_data_list
 from .logic.experiment_selection import ExperimentSelection
@@ -517,12 +518,31 @@ class Plotting1d(QObject):
     def sampleMinY(self):
         return self._get_all_models_sample_range()[2]
 
-    def _get_all_models_sample_range(self):
-        """Get combined X/Y ranges for all models' sample data."""
+    def _model_indices(self, models=None) -> list:
+        """The indices in `models` that name a model, or every model when it is None."""
+        count = len(self._project_lib.models)
+        models = from_qml(models)
+        if models is None:
+            return list(range(count))
+        return [int(index) for index in models if 0 <= int(index) < count]
+
+    @Slot('QVariant', result='QVariantList')
+    def sampleRangeForModels(self, models) -> list:
+        """[min_x, max_x, min_y, max_y] of the reflectivity curves of `models` (None: every model)."""
+        # float(): numpy scalars do not reach QML through a QVariantList
+        return [float(value) for value in self._get_all_models_sample_range(models)]
+
+    @Slot('QVariant', result='QVariantList')
+    def sldRangeForModels(self, models) -> list:
+        """[min_x, max_x, min_y, max_y] of the SLD curves of `models` (None: every model)."""
+        return [float(value) for value in self._get_all_models_sld_range(models)]
+
+    def _get_all_models_sample_range(self, models=None):
+        """Get combined X/Y ranges of the models' sample data (all models unless `models` is given)."""
         min_x, max_x = float('inf'), float('-inf')
         min_y, max_y = float('inf'), float('-inf')
 
-        for idx in range(len(self._project_lib.models)):
+        for idx in self._model_indices(models):
             try:
                 data = self._project_lib.sample_data_for_model_at_index(idx)
                 if data.x.size > 0:
@@ -587,12 +607,12 @@ class Plotting1d(QObject):
     def sldThetaMaxY(self) -> float:
         return self._get_all_models_theta_range()[1]
 
-    def _get_all_models_sld_range(self):
-        """Get combined X/Y ranges for all models' SLD data."""
+    def _get_all_models_sld_range(self, models=None):
+        """Get combined X/Y ranges of the models' SLD data (all models unless `models` is given)."""
         min_x, max_x = float('inf'), float('-inf')
         min_y, max_y = float('inf'), float('-inf')
 
-        for idx in range(len(self._project_lib.models)):
+        for idx in self._model_indices(models):
             try:
                 datasets = [self._project_lib.sld_data_for_model_at_index(idx)]
                 # The magnetic curves are drawn on the same axes and rho + rhoM

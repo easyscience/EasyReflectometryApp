@@ -190,6 +190,17 @@ def test_plotting_empty_range_fallbacks_and_experiment_min_y(qcore_application):
     assert plotting.experimentMinY == -10.0
 
 
+def test_chart_ranges_cover_only_the_shown_models(qcore_application):
+    # A chart showing one model fits its axes to that model, not to all of them
+    plotting, _project = _make_plotting()
+
+    assert plotting.sldRangeForModels(None) == pytest.approx([1.0, 3.0, -1.0, 1.0])
+    assert plotting.sldRangeForModels([0]) == pytest.approx([1.0, 2.0, -0.5, 0.5])
+    # -1: an experiment without a model, which draws no SLD curve
+    assert plotting.sldRangeForModels([1, -1]) == pytest.approx([1.5, 3.0, -1.0, 1.0])
+    assert plotting.sampleRangeForModels([1]) == pytest.approx([0.05, 0.4, np.log10(3.0), np.log10(4.0)])
+
+
 def test_plotting_multi_experiment_mode_refreshes_via_signal(qcore_application):
     plotting, _project = _make_plotting(selected=[0, 1])
     count = {'changed': 0}
