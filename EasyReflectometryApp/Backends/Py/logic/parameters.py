@@ -16,6 +16,7 @@ from easyreflectometry.utils import count_free_parameters
 from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
+from .helpers import display_expression
 from .helpers import get_original_name
 from .helpers import is_independent
 from .helpers import set_bound
@@ -330,18 +331,23 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         return param.display_name, ''  # Fallback to the parameter's own name, without group
 
     def _get_dependency_expression(param: Parameter, paths: dict) -> str:
-        """Get simplified dependency expression."""
+        """The dependency expression with each variable shown by its display name,
+        e.g. ``max(Instrument scale, 0)``; ``= <value>`` when there is none to show."""
         if is_independent(param):
             return ''
 
-        # Check if parameter has dependency map with 'a' key (parameter dependency)
-        if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
-            dependent_param = param.dependency_map['a']
-            if isinstance(dependent_param, Parameter):
-                dep_name, _ = _get_parameter_display_data(dependent_param, paths.get(dependent_param.unique_name))
-            else:
-                dep_name = str(dependent_param)
-            return param.dependency_expression.replace('a', dep_name)
+        # Whatever the variables are called: 'a', a constraint's aliases (Sample),
+        # the library's own keys ('rho_m' in Layer, 't0' ... 'tn' for the total thickness).
+        expression = getattr(param, 'dependency_expression', None)
+        dependency_map = getattr(param, 'dependency_map', None)
+        if expression and dependency_map:
+            names = {}
+            for variable, dependency in dependency_map.items():
+                if isinstance(dependency, Parameter):
+                    names[variable], _ = _get_parameter_display_data(dependency, paths.get(dependency.unique_name))
+                else:
+                    names[variable] = str(dependency)
+            return display_expression(expression, names)
 
         # Simple numerical dependency
         return f'= {param.value}'

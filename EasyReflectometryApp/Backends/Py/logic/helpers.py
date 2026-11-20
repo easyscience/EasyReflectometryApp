@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # © 2026 Contributors to the EasyApp project <https://github.com/easyscience/EasyApp>
 
+import re
 
 #: Set on a parameter the user pinned to a value (an "= value" constraint). A pin is the
 #: value and a cleared `free`: a dependency on a constant would collapse the bounds, and
@@ -51,6 +52,24 @@ def set_bound(parameter, bound: str, value: float) -> None:
     else:
         raise ValueError(f"Unknown bound {bound!r}, expected 'min' or 'max'.")
     setattr(parameter, bound, value)
+
+
+def display_expression(expression: str, names: dict) -> str:
+    """`expression` with each variable in `names` replaced by its display name.
+
+    Only whole words are replaced, so with ``{'a': 'Instrument scale'}``
+    ``max(a, 0)`` becomes ``max(Instrument scale, 0)``, not ``mInstrument scalex(...)``.
+    All variables are replaced in one pass: a display name that contains another
+    variable's name is not replaced again. A variable whose display name is empty
+    is left as it is.
+    """
+    replacements = {variable: name for variable, name in names.items() if name}
+    if not replacements:
+        return expression
+    # Longest first, so of two variables sharing a prefix the longer one is tried first.
+    variables = sorted(replacements, key=len, reverse=True)
+    pattern = r'\b(?:' + '|'.join(re.escape(variable) for variable in variables) + r')\b'
+    return re.sub(pattern, lambda match: replacements[match.group(0)], expression)
 
 
 def get_original_name(obj) -> str:

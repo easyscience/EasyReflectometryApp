@@ -26,6 +26,7 @@ from PySide6.QtCore import Slot
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.helpers import PINNED_FLAG
+from .logic.helpers import display_expression
 from .logic.helpers import is_independent
 from .logic.helpers import set_bound
 from .logic.layers import Layers as LayersLogic
@@ -1113,17 +1114,6 @@ class Sample(QObject):
         raise TypeError('Expression must evaluate to a numeric value.')
 
     @staticmethod
-    def _pretty_expression(expression: str, alias_display: Dict[str, str]) -> str:
-        pretty_expression = expression
-        for alias in sorted(alias_display.keys(), key=len, reverse=True):
-            replacement = alias_display[alias]
-            if not replacement:
-                continue
-            pattern = rf'\b{re.escape(alias)}\b'
-            pretty_expression = re.sub(pattern, replacement, pretty_expression)
-        return pretty_expression
-
-    @staticmethod
     def _sanitize_relation(operator: str) -> str:
         mapping = {
             '=': '=',
@@ -1203,7 +1193,7 @@ class Sample(QObject):
                 # conflict instead of the fallback's symptom.
                 raise RuntimeError(str(error)) from None
 
-        pretty_expression = self._pretty_expression(expression_text, display_lookup)
+        pretty_expression = display_expression(expression_text, display_lookup)
 
         if relation == '=':
             if dependency_map:
@@ -1333,8 +1323,8 @@ class Sample(QObject):
                     # layer was removed); keep the alias so the user can tell
                     # which term broke, but label it clearly.
                     alias_display[alias] = f'{alias} (missing)'
-            lhs_display = self._pretty_expression(spec.lhs_expression, alias_display)
-            rhs_display = self._pretty_expression(spec.rhs_expression, alias_display)
+            lhs_display = display_expression(spec.lhs_expression, alias_display)
+            rhs_display = display_expression(spec.rhs_expression, alias_display)
             try:
                 satisfied = evaluate_spec(spec, self._project_lib.resolve_parameter_path).satisfied
             except Exception:  # noqa: BLE001 - unresolved path: shown, flagged, never crashes the list
@@ -1417,7 +1407,7 @@ class Sample(QObject):
             alias: display_by_object.get(id(dependency), display_lookup.get(alias, alias))
             for alias, dependency in dependency_map.items()
         }
-        pretty_expression = self._pretty_expression(raw_expression, alias_display_subset)
+        pretty_expression = display_expression(raw_expression, alias_display_subset)
         return {
             'mode': 'dynamic',
             'relation': '=',
