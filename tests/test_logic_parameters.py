@@ -399,6 +399,36 @@ def test_dependency_text_shows_variables_with_any_name(monkeypatch):
     assert text == 'Instrument scale * Instrument offset + Instrument scale'
 
 
+def test_dependency_text_names_another_models_parameter_as_the_table_does(monkeypatch):
+    """Issue #366: a leader in another model (a linked contrast) read as its bare name, 'thickness'."""
+    _patch_tree_types(monkeypatch)
+    leader = make_parameter(display_name='thickness', unique_name='t1')
+    follower = make_parameter(
+        display_name='thickness',
+        unique_name='t2',
+        independent=False,
+        dependency_expression='a + 2 * b',
+        dependency_map={'a': leader, 'b': make_parameter(display_name='offset', unique_name='no_row')},
+    )
+
+    def build_model(unique_name, original_name, thickness):
+        model = make_model(
+            name=f'{original_name} internal', unique_name=unique_name, user_data={'original_name': original_name}
+        )
+        layer = FakeLayerNode('Layer', f'{unique_name}_layer', thickness=thickness, roughness=None)
+        model.sample = [FakeNode('LayerA', f'{unique_name}_asm', layers=[layer])]
+        return model
+
+    models = make_model_collection(build_model('m1', 'M1', leader), build_model('m2', 'M2', follower))
+
+    rows = parameters_module._from_parameters_to_list_of_dicts([leader, follower], models)
+
+    assert [row['display_name'] for row in rows] == ['M1 LayerA thickness', 'M2 LayerA thickness']
+    # The leader as the table names it, model prefix included; a parameter with no row by its own name.
+    assert rows[1]['dependency'] == 'M1 LayerA thickness + 2 * offset'
+    assert rows[0]['dependency'] == ''
+
+
 def test_display_expression_replaces_each_variable_once():
     # 'a' -> 'b', then 'b' -> 'a' again would be a sequential replacement; one pass swaps them.
     assert helpers_module.display_expression('a - b + ab', {'a': 'b', 'b': 'a', 'ab': 'x y'}) == 'b - a + x y'

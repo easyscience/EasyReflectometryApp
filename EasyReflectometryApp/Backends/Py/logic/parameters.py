@@ -330,9 +330,12 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             return f'{parent_name} {param_name}', parent_name
         return param.display_name, ''  # Fallback to the parameter's own name, without group
 
-    def _get_dependency_expression(param: Parameter, paths: dict) -> str:
+    def _get_dependency_expression(param: Parameter, display_names: dict) -> str:
         """The dependency expression with each variable shown by its display name,
-        e.g. ``max(Instrument scale, 0)``; ``= <value>`` when there is none to show."""
+        e.g. ``max(M1 scale, 0)``; ``= <value>`` when there is none to show.
+
+        :param display_names: ``{unique_name: display_name}`` of every row of the table.
+        """
         if is_independent(param):
             return ''
 
@@ -343,10 +346,12 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         if expression and dependency_map:
             names = {}
             for variable, dependency in dependency_map.items():
-                if isinstance(dependency, Parameter):
-                    names[variable], _ = _get_parameter_display_data(dependency, paths.get(dependency.unique_name))
-                else:
+                unique_name = getattr(dependency, 'unique_name', None)
+                if unique_name is None:
                     names[variable] = str(dependency)
+                else:
+                    # A parameter with no row of its own keeps its library name.
+                    names[variable] = display_names.get(unique_name) or dependency.display_name
             return display_expression(expression, names)
 
         # Simple numerical dependency
@@ -456,7 +461,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                         if is_inactive
                         else _DERIVED_DESCRIPTIONS.get(parameter.display_name, 'derived')
                         if is_derived
-                        else _get_dependency_expression(parameter, paths)
+                        else ''  # filled in once every row is built, see below
                     ),
                     # Derived "calculation" parameters (e.g. the model's total film
                     # thickness) are computed from the layers: shown read-only, never
@@ -481,6 +486,14 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'exclusive_with': _exclusive_partner(parameter, path),
                 }
             )
+
+    # A constrained row names the parameters it depends on as the table does, model
+    # prefix included, whichever model they belong to (a linked contrast follows
+    # another model's parameters): known only once every row is built.
+    display_names = {row['unique_name']: row['display_name'] for row in parameter_list}
+    for row in parameter_list:
+        if row['kind'] == 'parameter':
+            row['dependency'] = _get_dependency_expression(row['object'], display_names)
 
     return parameter_list
 

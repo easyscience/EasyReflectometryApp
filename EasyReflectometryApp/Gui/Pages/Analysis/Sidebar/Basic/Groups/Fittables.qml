@@ -316,10 +316,18 @@ EaElements.GroupBox {
                     text: (parameterRow.derived ? 'ƒ ' : '') + (sharedBy.length > 1 ? '⇄ ' : '') + parameterRow.param.name
                     textFormat: Text.PlainText
                     color: parameterRow.editable ? EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
-                    // The embedded TableViewLabel tooltip only appears while the
-                    // text is elided, so a hover on a truncated name (e.g.
-                    // 'Ni on Si L... roughness') reveals the full name. Derived and
-                    // inactive rows also say what they are computed from.
+                    // The tooltip gives the full name of a truncated one (e.g.
+                    // 'Ni on Si L... roughness'). Derived and inactive rows also say
+                    // what they are computed from, constrained rows their constraint
+                    // (e.g. 'M2 scale = M1 scale'), and shared or followed rows the
+                    // other models involved.
+                    readonly property string constraint: {
+                        const dependency = parameterRow.param.dependency || ''
+                        if ((parameterRow.param.independent ?? true) || dependency === '')
+                            return ''
+                        // A pin reads '= 1.5' already
+                        return parameterRow.param.name + (dependency.startsWith('=') ? ' ' : ' = ') + dependency
+                    }
                     ToolTip.text: parameterRow.derived
                                   ? qsTr("%1 — derived, read-only: %2")
                                         .arg(text)
@@ -329,8 +337,14 @@ EaElements.GroupBox {
                                         .arg(text)
                                         .arg(parameterRow.param.dependency || '')
                                   : text
-                                    + (sharedBy.length > 1 ? qsTr("\nOne parameter of %1: changing it changes all of them.").arg(sharedBy.join(', ')) : '')
-                                    + (followedBy > 0 ? qsTr("\nFollowed by %1 parameter(s) of other models.").arg(followedBy) : '')
+                                    + (constraint !== '' ? qsTr("\nConstrained, read-only: %1").arg(constraint) : '')
+                                    + (sharedBy.length > 1 ? qsTr("\nShared by %1: any change applies to each.").arg(sharedBy.join(', ')) : '')
+                                    + (followedBy > 0 ? qsTr("\n%1 parameter(s) in other models are tied to this one and change with it.").arg(followedBy) : '')
+                    // The embedded TableViewLabel tooltip appears only while the name
+                    // is elided. When it is not, show this one if it says more than
+                    // the name: never both at once.
+                    ToolTip.visible: hovered && !truncated && ToolTip.text !== text
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                 }
 
                 EaComponents.TableViewParameter {
