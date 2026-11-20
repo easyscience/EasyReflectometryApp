@@ -5,6 +5,7 @@ This module provides a FitterWorker class that runs fitting operations
 in a background thread to keep the UI responsive during long-running fits.
 """
 
+import math
 import time
 from typing import Any
 from typing import Optional
@@ -34,6 +35,14 @@ class FitterWorker(QThread):
         failed(str): Emitted with error message on failure or cancellation.
         progressDetail(dict): Emitted with the minimizer's progress payload,
             at most once per ``PROGRESS_INTERVAL_S``.
+        previewRequested(dict): Emitted with the best parameter values so far,
+            at most once per ``preview_interval_s``, while the fit waits between
+            evaluations. Connect it with ``Qt.BlockingQueuedConnection``: the
+            worker then waits until the receiver returns, so the receiver may
+            write the parameters and read the model, which the fit does not touch
+            meanwhile. Every model read must happen before it returns (nothing
+            deferred with ``Qt.callLater``), and the receiver must not wait for
+            this thread, which would deadlock.
 
     Example:
         worker = FitterWorker(
@@ -58,9 +67,16 @@ class FitterWorker(QThread):
     # Detailed fitting progress payload emitted from minimizer callbacks
     progressDetail = Signal(dict)
 
+    # Best parameter values so far, for the live preview of a classical fit
+    previewRequested = Signal(dict)
+
     #: Shortest time between two ``progressDetail`` emissions. lmfit and DFO call
     #: back on every evaluation; a person reads the progress at most a few times a second.
     PROGRESS_INTERVAL_S = 0.1
+
+    #: The GUI's default shortest time (whole seconds) between two previews; 0 turns
+    #: the preview off. Not the constructor's default, see ``preview_interval_s``.
+    DEFAULT_PREVIEW_INTERVAL_S = 1
 
     CANCELLED_MESSAGE = 'Fitting cancelled by user'
 
@@ -71,6 +87,10 @@ class FitterWorker(QThread):
         args: tuple = (),
         kwargs: Optional[dict] = None,
         parent: Optional[Any] = None,
+        # Off (0) unless the caller asks, unlike the GUI's DEFAULT_PREVIEW_INTERVAL_S:
+        # a preview needs a receiver connected with Qt.BlockingQueuedConnection, which
+        # only the caller can provide. Analysis passes the user's interval explicitly.
+        preview_interval_s: float = 0.0,
     ):
         """
         Initialize the fitter worker.
@@ -80,6 +100,7 @@ class FitterWorker(QThread):
         :param args: Positional arguments to pass to the method.
         :param kwargs: Keyword arguments to pass to the method.
         :param parent: Optional parent QObject.
+        :param preview_interval_s: Shortest time between two ``previewRequested``; 0: no preview.
         """
         super().__init__(parent)
         self._fitter = fitter
@@ -90,7 +111,13 @@ class FitterWorker(QThread):
         # True when the engine takes no abort_test, so a stop is raised from the progress callback.
         self._raise_on_stop = False
         self._last_progress_emit: float | None = None
-        self._pending_refresh_plots = False
+        # A classical fit has a best point; a sampling run does not.
+        self._track_best = method_name == 'fit'
+        self._best_progress: dict | None = None
+        self._last_iteration = 0
+        self._preview_interval_s = max(float(preview_interval_s), 0.0)
+        self._last_preview: float | None = None
+        self._best_changed_since_preview = False
 
     def run(self) -> None:
         """
@@ -145,24 +172,67 @@ class FitterWorker(QThread):
     def _progress_callback(self, payload: dict) -> None:
         """Relay progress payloads from the minimizer to Qt, at most once per ``PROGRESS_INTERVAL_S``.
 
-        Each payload is a full snapshot, so dropping one in between loses nothing,
-        except ``refresh_plots``, which is an event: it is carried into the next
-        emitted payload.
+        Each payload is a full snapshot, so dropping one in between loses nothing.
+        The best point is tracked from every payload, before the throttle, and a
+        preview is requested when it is due (see ``_request_preview_if_due``).
 
         For an engine without ``abort_test`` it raises ``FitCancelled`` once a stop
-        is requested. The check comes before the throttle, so it runs on every
-        callback (every evaluation for lmfit and DFO).
+        is requested. The check comes first, so it runs on every callback (every
+        evaluation for lmfit and DFO).
         """
         if self._raise_on_stop and self._stop_requested:
             raise FitCancelled(self.CANCELLED_MESSAGE)
-        refresh_plots = self._pending_refresh_plots or bool(payload.get('refresh_plots', False))
         now = time.monotonic()
+        if self._track_best:
+            self._track_best_progress(payload)
+            self._request_preview_if_due(now)
         if self._last_progress_emit is not None and now - self._last_progress_emit < self.PROGRESS_INTERVAL_S:
-            self._pending_refresh_plots = refresh_plots
             return
         self._last_progress_emit = now
-        self._pending_refresh_plots = False
-        self.progressDetail.emit({**payload, 'refresh_plots': refresh_plots})
+        self.progressDetail.emit(payload)
+
+    def _track_best_progress(self, payload: dict) -> None:
+        """Keep the payload with the lowest chi2 seen (lmfit reports the point just
+        evaluated, DFO the best so far, BUMPS its step's point)."""
+        self._last_iteration = int(payload.get('iteration', self._last_iteration) or 0)
+        values = payload.get('parameter_values')
+        chi2 = payload.get('chi2')
+        # A BUMPS point that violates an inequality constraint carries the penalty as chi2.
+        if not values or payload.get('infeasible') or chi2 is None or not math.isfinite(chi2):
+            return
+        if self._best_progress is None or chi2 < self._best_progress['chi2']:
+            self._best_progress = {
+                'chi2': float(chi2),
+                'reduced_chi2': float(payload.get('reduced_chi2', chi2)),
+                'parameter_values': dict(values),
+            }
+            self._best_changed_since_preview = True
+
+    def _request_preview_if_due(self, now: float) -> None:
+        """Emit ``previewRequested`` when the best point improved and the interval has passed.
+
+        The first interval starts at the first callback, so the starting point is
+        not previewed. With a blocking connection this returns once the preview is drawn.
+        """
+        if self._preview_interval_s <= 0 or self._stop_requested:
+            return
+        if self._last_preview is None:
+            self._last_preview = now
+            return
+        if not self._best_changed_since_preview or now - self._last_preview < self._preview_interval_s:
+            return
+        self._best_changed_since_preview = False
+        self.previewRequested.emit(dict(self._best_progress['parameter_values']))
+        # Measured after the preview, so a slow redraw cannot take the whole interval.
+        self._last_preview = time.monotonic()
+
+    @property
+    def best_progress(self) -> dict | None:
+        """The best point of a classical fit so far: ``chi2``, ``reduced_chi2``,
+        ``parameter_values`` and ``iterations`` (the last count reported), or None."""
+        if self._best_progress is None:
+            return None
+        return {**self._best_progress, 'iterations': self._last_iteration}
 
     def _uses_bumps_minimizer(self) -> bool:
         """Return True if the fitter's minimizer is BUMPS (and therefore accepts ``abort_test``)."""

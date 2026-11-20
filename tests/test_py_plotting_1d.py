@@ -22,6 +22,9 @@ class FakeSeries:
     def append(self, x, y):
         self.points.append((x, y))
 
+    def replaceNp(self, x, y):
+        self.points = list(zip(x, y, strict=True))
+
 
 class FakeData:
     def __init__(self, x=None, y=None, ye=None, model=None):
@@ -115,6 +118,25 @@ def test_plotting_mode_and_axis_toggles_emit_signals(qcore_application):
     assert plotting.scaleShown is True
     assert plotting.bkgShown is True
     assert counts == {'plot': 1, 'axis': 1, 'sld': 1, 'ref': 2}
+
+
+def test_fit_preview_redraws_the_analysis_page_at_once_and_keeps_other_caches(qcore_application):
+    """The fit waits only while refreshFitPreview runs: every signal it emits must be
+    drawn synchronously, and caches it does not redraw keep serving their data."""
+    plotting, _project = _make_plotting()
+    sample_cache = {0: 'pre-fit sample curve'}
+    plotting._sample_data = sample_cache
+    plotting._magnetic_profile_cache = {0: 'pre-fit profile'}
+    emitted = []
+    for name in ('sampleChartRangesChanged', 'sldChartRangesChanged', 'fitPreviewChanged', 'samplePageDataChanged'):
+        getattr(plotting, name).connect(lambda name=name: emitted.append(name))
+
+    plotting.refreshFitPreview()
+
+    assert sorted(emitted) == ['fitPreviewChanged', 'sampleChartRangesChanged', 'sldChartRangesChanged']
+    assert plotting._chartRefs['QtCharts']['analysisPage']['calculatedSerie'].points  # refilled
+    assert plotting._sample_data is sample_cache
+    assert plotting._magnetic_profile_cache == {}
 
 
 def test_linear_y_axis_and_rq4_are_mutually_exclusive(qcore_application):

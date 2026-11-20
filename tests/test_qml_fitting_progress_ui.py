@@ -24,7 +24,9 @@ def test_status_bar_shows_short_progress_and_hides_final_chi2_while_running():
     assert 'FitProgressText.statusText(Globals.BackendWrapper.analysisFitProgress)' in status_bar_qml
     # Calculator and Minimizer make room while a run is active
     assert status_bar_qml.count('visible: !Globals.BackendWrapper.analysisFittingRunning\n') == 2
-    assert '!Globals.BackendWrapper.analysisFittingRunning && Globals.BackendWrapper.analysisFitChi2 > 0' in status_bar_qml
+    # The final chi² (or a kept cancelled fit's) is hidden while a run is active
+    assert ('!Globals.BackendWrapper.analysisFittingRunning && '
+            '(Globals.BackendWrapper.analysisFitChi2 > 0 || isCancelled)') in status_bar_qml
     # The run kind comes from the progress map, not from the editable minimizer selection
     assert 'analysisIsBayesianSelected' not in status_bar_qml
 

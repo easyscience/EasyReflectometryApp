@@ -22,6 +22,10 @@ EaComponents.ContentPage {
         source: 'Sidebar/Basic/Popups/PrefitCheckDialog.qml'
     }
 
+    Loader {
+        source: 'Sidebar/Basic/Popups/FitCancelledDialog.qml'
+    }
+
     mainView: EaComponents.MainContent {
         tabs: [
             EaElements.TabButton { text: qsTr('Reflectivity') },

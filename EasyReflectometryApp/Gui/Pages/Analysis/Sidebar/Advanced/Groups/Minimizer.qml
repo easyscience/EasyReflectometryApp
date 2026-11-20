@@ -153,6 +153,29 @@ EaElements.GroupBox {
                     color: EaStyle.Colors.themeForegroundMinor
                 }
             }
+
+            // How often the curves are redrawn with the best values while a fit runs.
+            EaElements.TextField {
+                id: previewIntervalField
+                width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
+                topInset: previewIntervalLabel.height
+                topPadding: topInset + padding
+                horizontalAlignment: TextInput.AlignLeft
+                text: formatNumber(Globals.BackendWrapper.analysisFitPreviewInterval)
+                // Empty text: back to the default.
+                onEditingFinished: submitNumber(previewIntervalField,
+                                                Globals.BackendWrapper.analysisSetFitPreviewInterval,
+                                                Globals.BackendWrapper.analysisResetFitPreviewInterval,
+                                                function() { return formatNumber(Globals.BackendWrapper.analysisFitPreviewInterval) })
+                ToolTip.delay: Globals.Variables.toolTipDelay
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("While a fit runs, the curves are redrawn with its best values at most this often (in whole seconds). 0 turns this off. Applies to the next fit.")
+                EaElements.Label {
+                    id: previewIntervalLabel
+                    text: qsTr("Preview every (s)")
+                    color: EaStyle.Colors.themeForegroundMinor
+                }
+            }
         }
 
         // One field per option the selected minimizer declares; empty means the engine default.

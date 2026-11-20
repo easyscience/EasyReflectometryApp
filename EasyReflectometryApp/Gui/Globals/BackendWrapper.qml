@@ -494,8 +494,16 @@ QtObject {
     // Progress of the running fit or sampling: phase, fraction, count, unit, ...
     // (Fitting.progress_snapshot); worded by Gui/Logic/FitProgressText.js.
     readonly property var analysisFitProgress: activeBackend.analysis.fitProgress
-    readonly property bool analysisFitHasPreviewUpdate: activeBackend.analysis.fitHasPreviewUpdate
-    readonly property var analysisFitPreviewParameterValues: activeBackend.analysis.fitPreviewParameterValues
+    // Shortest time (whole seconds) between two redraws of the curves during a fit; 0: no preview
+    readonly property int analysisFitPreviewInterval: activeBackend.analysis.fitPreviewInterval
+    function analysisSetFitPreviewInterval(value) { activeBackend.analysis.setFitPreviewInterval(value) }
+    function analysisResetFitPreviewInterval() { activeBackend.analysis.resetFitPreviewInterval() }
+    // A cancelled fit's best point waits to be kept or reverted; fitCancelledAt describes it
+    // (reducedChi2, count, unit), and the kept one while it is the project's last run ({} otherwise)
+    readonly property bool analysisFitCancelPending: activeBackend.analysis.fitCancelPending
+    readonly property var analysisFitCancelledAt: activeBackend.analysis.fitCancelledAt
+    function analysisKeepCancelledFit() { activeBackend.analysis.keepCancelledFit() }
+    function analysisRevertCancelledFit() { activeBackend.analysis.revertCancelledFit() }
     readonly property var analysisFitResults: activeBackend.analysis.fitResults
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
