@@ -26,7 +26,9 @@ from PySide6.QtCore import Slot
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.helpers import PINNED_FLAG
+from .logic.helpers import display_expression
 from .logic.helpers import is_independent
+from .logic.helpers import set_bound
 from .logic.layers import Layers as LayersLogic
 from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
@@ -326,16 +328,6 @@ class Sample(QObject):
         self.materialsTableChanged.emit()
         self.externalSampleChanged.emit()
 
-    @Slot()
-    def moveSelectedMaterialUp(self) -> None:
-        self._material_logic.move_selected_up()
-        self.materialsTableChanged.emit()
-
-    @Slot()
-    def moveSelectedMaterialDown(self) -> None:
-        self._material_logic.move_selected_down()
-        self.materialsTableChanged.emit()
-
     # # #
     # Models
     # # #
@@ -360,17 +352,21 @@ class Sample(QObject):
     def setCurrentModelIndex(self, new_value: int) -> None:
         if self._project_lib.current_model_index != new_value:
             self._project_lib.current_model_index = new_value
-            self.modelsIndexChanged.emit()
-            # A model switch starts from the first assembly and layer of the new model
-            # (the lib does the same). The layer table is cached, so the assembly/layer
-            # side has to be refreshed too, or the layer editor keeps showing the
-            # previous model's layers (#407).
-            self._project_lib.current_assembly_index = 0
-            self._project_lib.current_layer_index = 0
-            self._refreshCurrentAssemblySelectionState()
-            self.assembliesTableChanged.emit()
-            self.externalRefreshPlot.emit()
-            self.externalSampleChanged.emit()
+            self._announce_current_model()
+
+    def _announce_current_model(self) -> None:
+        """Tell the GUI that another model became the current one."""
+        self.modelsIndexChanged.emit()
+        # A model switch starts from the first assembly and layer of the new model
+        # (the lib does the same). The layer table is cached, so the assembly/layer
+        # side has to be refreshed too, or the layer editor keeps showing the
+        # previous model's layers (#407).
+        self._project_lib.current_assembly_index = 0
+        self._project_lib.current_layer_index = 0
+        self._refreshCurrentAssemblySelectionState()
+        self.assembliesTableChanged.emit()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
 
     @Slot(str)
     def setCurrentModelName(self, value: str) -> None:
@@ -448,6 +444,8 @@ class Sample(QObject):
         if removed:
             self.experimentsRekeyed.emit(removal.remap)
         self.modelsTableChanged.emit()
+        # The models after it moved up, so the current one may have a new index
+        self.modelsIndexChanged.emit()
         self.externalRefreshPlot.emit()
         return removed
 
@@ -471,12 +469,14 @@ class Sample(QObject):
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
         self.materialsTableChanged.emit()
+        self._announce_current_model()  # the new model is the current one
 
     @Slot()
     def duplicateSelectedModel(self) -> None:
         self._models_logic.duplicate_selected_model()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
+        self._announce_current_model()  # the copy is the current one
 
     @Slot()
     def moveSelectedModelUp(self) -> None:
@@ -1104,17 +1104,6 @@ class Sample(QObject):
         raise TypeError('Expression must evaluate to a numeric value.')
 
     @staticmethod
-    def _pretty_expression(expression: str, alias_display: Dict[str, str]) -> str:
-        pretty_expression = expression
-        for alias in sorted(alias_display.keys(), key=len, reverse=True):
-            replacement = alias_display[alias]
-            if not replacement:
-                continue
-            pattern = rf'\b{re.escape(alias)}\b'
-            pretty_expression = re.sub(pattern, replacement, pretty_expression)
-        return pretty_expression
-
-    @staticmethod
     def _sanitize_relation(operator: str) -> str:
         mapping = {
             '=': '=',
@@ -1194,7 +1183,7 @@ class Sample(QObject):
                 # conflict instead of the fallback's symptom.
                 raise RuntimeError(str(error)) from None
 
-        pretty_expression = self._pretty_expression(expression_text, display_lookup)
+        pretty_expression = display_expression(expression_text, display_lookup)
 
         if relation == '=':
             if dependency_map:
@@ -1324,8 +1313,8 @@ class Sample(QObject):
                     # layer was removed); keep the alias so the user can tell
                     # which term broke, but label it clearly.
                     alias_display[alias] = f'{alias} (missing)'
-            lhs_display = self._pretty_expression(spec.lhs_expression, alias_display)
-            rhs_display = self._pretty_expression(spec.rhs_expression, alias_display)
+            lhs_display = display_expression(spec.lhs_expression, alias_display)
+            rhs_display = display_expression(spec.rhs_expression, alias_display)
             try:
                 satisfied = evaluate_spec(spec, self._project_lib.resolve_parameter_path).satisfied
             except Exception:  # noqa: BLE001 - unresolved path: shown, flagged, never crashes the list
@@ -1408,7 +1397,7 @@ class Sample(QObject):
             alias: display_by_object.get(id(dependency), display_lookup.get(alias, alias))
             for alias, dependency in dependency_map.items()
         }
-        pretty_expression = self._pretty_expression(raw_expression, alias_display_subset)
+        pretty_expression = display_expression(raw_expression, alias_display_subset)
         return {
             'mode': 'dynamic',
             'relation': '=',
@@ -2027,11 +2016,9 @@ class Sample(QObject):
                 # are saved with the parameter; the row itself is restored from
                 # `store_constraint_metadata`.
                 self._apply_static_constraint(dependent, instruction['value'])
-            elif mode == 'lower_bound':
-                dependent.min = instruction['value']
-                dependent.free = True
-            elif mode == 'upper_bound':
-                dependent.max = instruction['value']
+            elif mode in ('lower_bound', 'upper_bound'):
+                # Kept whatever it is: a bound past the value moves the value onto it.
+                set_bound(dependent, 'min' if mode == 'lower_bound' else 'max', instruction['value'])
                 dependent.free = True
             else:
                 raise ValueError(f'Unsupported constraint mode: {mode}')

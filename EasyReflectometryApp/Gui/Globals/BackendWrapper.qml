@@ -178,8 +178,6 @@ QtObject {
     function sampleAddNewMagneticMaterial() { activeBackend.sample.addNewMagneticMaterial() }
     function sampleSetMaterialMagneticMomentAtIndex(index, value) { activeBackend.sample.setMaterialMagneticMomentAtIndex(index, value) }
     function sampleDuplicateSelectedMaterial() { activeBackend.sample.duplicateSelectedMaterial() }
-    function sampleMoveSelectedMaterialUp() { activeBackend.sample.moveSelectedMaterialUp() }
-    function sampleMoveSelectedMaterialDown() { activeBackend.sample.moveSelectedMaterialDown() }
 
     // Model
     readonly property var sampleModels: activeBackend.sample.models
@@ -491,13 +489,19 @@ QtObject {
     readonly property string analysisFitErrorMessage: activeBackend.analysis.fitErrorMessage
     readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
     readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
-    readonly property int analysisFitIteration: activeBackend.analysis.fitIteration
-    readonly property real analysisFitInterimChi2: activeBackend.analysis.fitInterimChi2
-    readonly property real analysisFitInterimReducedChi2: activeBackend.analysis.fitInterimReducedChi2
-    readonly property string analysisFitProgressMessage: activeBackend.analysis.fitProgressMessage
-    readonly property bool analysisFitHasInterimUpdate: activeBackend.analysis.fitHasInterimUpdate
-    readonly property bool analysisFitHasPreviewUpdate: activeBackend.analysis.fitHasPreviewUpdate
-    readonly property var analysisFitPreviewParameterValues: activeBackend.analysis.fitPreviewParameterValues
+    // Progress of the running fit or sampling: phase, fraction, count, unit, ...
+    // (Fitting.progress_snapshot); worded by Gui/Logic/FitProgressText.js.
+    readonly property var analysisFitProgress: activeBackend.analysis.fitProgress
+    // Shortest time (whole seconds) between two redraws of the curves during a fit; 0: no preview
+    readonly property int analysisFitPreviewInterval: activeBackend.analysis.fitPreviewInterval
+    function analysisSetFitPreviewInterval(value) { activeBackend.analysis.setFitPreviewInterval(value) }
+    function analysisResetFitPreviewInterval() { activeBackend.analysis.resetFitPreviewInterval() }
+    // A cancelled fit's best point waits to be kept or reverted; fitCancelledAt describes it
+    // (reducedChi2, count, unit), and the kept one while it is the project's last run ({} otherwise)
+    readonly property bool analysisFitCancelPending: activeBackend.analysis.fitCancelPending
+    readonly property var analysisFitCancelledAt: activeBackend.analysis.fitCancelledAt
+    function analysisKeepCancelledFit() { activeBackend.analysis.keepCancelledFit() }
+    function analysisRevertCancelledFit() { activeBackend.analysis.revertCancelledFit() }
     readonly property var analysisFitResults: activeBackend.analysis.fitResults
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
@@ -627,6 +631,11 @@ QtObject {
     readonly property var plottingSampleMinY: activeBackend.plotting.sampleMinY
     readonly property var plottingSampleMaxY: activeBackend.plotting.sampleMaxY
 
+    // [minX, maxX, minY, maxY] of the curves of the given models (null: every model); re-read
+    // on the plotting object's sampleChartRangesChanged / sldChartRangesChanged
+    function plottingSampleRangeForModels(models) { return activeBackend.plotting.sampleRangeForModels(models) }
+    function plottingSldRangeForModels(models) { return activeBackend.plotting.sldRangeForModels(models) }
+
     readonly property var plottingExperimentMinX: activeBackend.plotting.experimentMinX
     readonly property var plottingExperimentMaxX: activeBackend.plotting.experimentMaxX
     readonly property var plottingExperimentMinY: activeBackend.plotting.experimentMinY
@@ -644,6 +653,7 @@ QtObject {
 
     // Plot mode properties
     readonly property bool plottingPlotRQ4: activeBackend.plotting.plotRQ4
+    readonly property bool plottingYAxisLog: activeBackend.plotting.yAxisLog
     readonly property string plottingYAxisTitle: activeBackend.plotting.yMainAxisTitle
     readonly property bool plottingXAxisLog: activeBackend.plotting.xAxisLog
     readonly property string plottingXAxisType: activeBackend.plotting.xAxisType
@@ -661,6 +671,7 @@ QtObject {
 
     // Plot mode toggle functions
     function plottingTogglePlotRQ4() { activeBackend.plotting.togglePlotRQ4() }
+    function plottingToggleYAxisLog() { activeBackend.plotting.toggleYAxisLog() }
     function plottingToggleXAxisType() { activeBackend.plotting.toggleXAxisType() }
     function plottingReverseSldXData() { activeBackend.plotting.reverseSldXData() }
     function plottingFlipScaleShown() { activeBackend.plotting.flipScaleShown() }
@@ -1112,10 +1123,4 @@ QtObject {
             return []
         }
     }
-
-    // Bayesian sampling progress
-    readonly property int analysisSampleProgressStep: activeBackend.analysis.sampleProgressStep
-    readonly property string analysisSampleProgressMessage: activeBackend.analysis.sampleProgressMessage
-    readonly property bool analysisSampleProgressHasUpdate: activeBackend.analysis.sampleProgressHasUpdate
-    readonly property int analysisSampleProgressTotalSteps: activeBackend.analysis.sampleProgressTotalSteps
 }

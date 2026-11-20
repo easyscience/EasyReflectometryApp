@@ -10,6 +10,9 @@ from easyreflectometry.fit_settings import FitSettings
 class ValueHolder:
     def __init__(self, value):
         self.value = value
+        # Unbounded, so a value edit never moves a bound.
+        self.min = float('-inf')
+        self.max = float('inf')
 
 
 class FlaggedValueHolder(ValueHolder):

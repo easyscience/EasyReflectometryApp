@@ -7,6 +7,8 @@ import EasyApplication.Gui.Components as EaComponents
 
 import Gui.Globals as Globals
 
+import "Logic/FitProgressText.js" as FitProgressText
+
 
 EaElements.StatusBar {
 
@@ -33,7 +35,9 @@ EaElements.StatusBar {
         ToolTip.text: qsTr('Number of experiments added')
     }
 
+    // Calculator and Minimizer make room for the Fit item while a run is active.
     EaElements.StatusBarItem {
+        visible: !Globals.BackendWrapper.analysisFittingRunning
         keyIcon: 'calculator'
         keyText: qsTr('Calculator')
         valueText: Globals.BackendWrapper.statusCalculator ?? ''
@@ -41,6 +45,7 @@ EaElements.StatusBar {
     }
 
     EaElements.StatusBarItem {
+        visible: !Globals.BackendWrapper.analysisFittingRunning
         keyIcon: 'level-down-alt'
         keyText: qsTr('Minimizer')
         valueText: Globals.BackendWrapper.statusMinimizer ?? ''
@@ -88,44 +93,23 @@ EaElements.StatusBar {
         visible: Globals.BackendWrapper.analysisFittingRunning
         keyIcon: 'play-circle'
         keyText: qsTr('Fit')
-        valueText: {
-            if (Globals.BackendWrapper.analysisFitHasInterimUpdate) {
-                if (Globals.BackendWrapper.analysisIsBayesianSelected
-                    && Globals.BackendWrapper.analysisSampleProgressHasUpdate) {
-                    const step = Globals.BackendWrapper.analysisSampleProgressStep
-                    const total = Globals.BackendWrapper.analysisSampleProgressTotalSteps
-                    if (total > 0) {
-                        return qsTr('DREAM step %1 of %2').arg(step).arg(total)
-                    }
-                    return qsTr('DREAM step %1').arg(step)
-                }
-                const iter = Globals.BackendWrapper.analysisFitIteration
-                const rchi2 = Globals.BackendWrapper.analysisFitInterimReducedChi2.toFixed(4)
-                return qsTr('iter %1 · χ² %2').arg(iter).arg(rchi2)
-            }
-            if (Globals.BackendWrapper.analysisIsBayesianSelected) {
-                return qsTr('Sampling') + '.'.repeat(dotCount % 5)
-            }
-            return qsTr('Fitting') + '.'.repeat(dotCount % 5)
-        }
+        // Short text only; the progress strip above the status bar shows the activity.
+        valueText: FitProgressText.statusText(Globals.BackendWrapper.analysisFitProgress)
         ToolTip.text: qsTr('Current fitting progress')
-
-        property int dotCount: 0
-        Timer {
-            interval: 600
-            repeat: true
-            running: Globals.BackendWrapper.analysisFittingRunning
-                     && !Globals.BackendWrapper.analysisFitHasInterimUpdate
-            onTriggered: parent.dotCount++
-        }
-        onVisibleChanged: if (!visible) dotCount = 0
     }
 
     EaElements.StatusBarItem {
-        visible: !Globals.BackendWrapper.analysisFittingRunning && Globals.BackendWrapper.analysisFitChi2 > 0
+        // A kept cancelled fit has no statistics in its record: its own reduced chi² is shown instead
+        readonly property var cancelled: Globals.BackendWrapper.analysisFitCancelledAt
+        readonly property bool isCancelled: cancelled.reducedChi2 !== undefined
+        visible: !Globals.BackendWrapper.analysisFittingRunning && (Globals.BackendWrapper.analysisFitChi2 > 0 || isCancelled)
         keyIcon: 'chart-line'
         keyText: qsTr('Reduced Chi²')
-        valueText: Globals.BackendWrapper.analysisFitChi2.toFixed(2)
-        ToolTip.text: qsTr('Goodness of fit (reduced chi-squared)')
+        valueText: isCancelled
+                   ? qsTr('%1 (cancelled)').arg(Number(cancelled.reducedChi2).toFixed(2))
+                   : Globals.BackendWrapper.analysisFitChi2.toFixed(2)
+        ToolTip.text: isCancelled
+                      ? qsTr('Reduced chi-squared where the fit was cancelled, after %1 %2').arg(cancelled.count).arg(cancelled.unit)
+                      : qsTr('Goodness of fit (reduced chi-squared)')
     }
 }

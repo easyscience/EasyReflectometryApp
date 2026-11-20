@@ -1,3 +1,4 @@
+from EasyReflectometryApp.Backends.Py.logic import helpers as helpers_module
 from EasyReflectometryApp.Backends.Py.logic import parameters as parameters_module
 from tests.factories import FakeParameter
 from tests.factories import make_model
@@ -361,6 +362,78 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert aliases[4] == 'param'
     assert result[5]['dependency'] == 'external+1'
     assert result[6]['enabled'] is True
+
+
+def _dependency_row(monkeypatch, expression, dependency_map, **sources):
+    """The 'dependency' text of a dependent parameter whose variables are the `sources`."""
+    _patch_tree_types(monkeypatch)
+    dependent = make_parameter(
+        display_name='background',
+        unique_name='dep',
+        independent=False,
+        dependency_expression=expression,
+        dependency_map=dependency_map,
+    )
+    model = make_model(name='M1', unique_name='m1', user_data={'original_name': 'M1'})
+    model.instrument = FakeNode('Instrument', 'instr', background=dependent, **sources)
+    result = parameters_module._from_parameters_to_list_of_dicts([*sources.values(), dependent], make_model_collection(model))
+    return result[-1]['dependency']
+
+
+def test_dependency_text_replaces_the_variable_not_every_letter(monkeypatch):
+    """Issue #365: 'max(a, 0)' read 'mInstrument scalex(Instrument scale, 0)'."""
+    scale = make_parameter(display_name='scale', unique_name='scale')
+
+    text = _dependency_row(monkeypatch, 'max(a, 0) + abs(a)', {'a': scale}, scale=scale)
+
+    assert text == 'max(Instrument scale, 0) + abs(Instrument scale)'
+
+
+def test_dependency_text_shows_variables_with_any_name(monkeypatch):
+    """Issue #365: keys other than 'a' (aliases, 'rho_m', 't0'...) fell back to '= value'."""
+    scale = make_parameter(display_name='scale', unique_name='scale')
+    offset = make_parameter(display_name='offset', unique_name='offset')
+
+    text = _dependency_row(monkeypatch, 't0 * rho_m + t0', {'t0': scale, 'rho_m': offset}, scale=scale, offset=offset)
+
+    assert text == 'Instrument scale * Instrument offset + Instrument scale'
+
+
+def test_dependency_text_names_another_models_parameter_as_the_table_does(monkeypatch):
+    """Issue #366: a leader in another model (a linked contrast) read as its bare name, 'thickness'."""
+    _patch_tree_types(monkeypatch)
+    leader = make_parameter(display_name='thickness', unique_name='t1')
+    follower = make_parameter(
+        display_name='thickness',
+        unique_name='t2',
+        independent=False,
+        dependency_expression='a + 2 * b',
+        dependency_map={'a': leader, 'b': make_parameter(display_name='offset', unique_name='no_row')},
+    )
+
+    def build_model(unique_name, original_name, thickness):
+        model = make_model(
+            name=f'{original_name} internal', unique_name=unique_name, user_data={'original_name': original_name}
+        )
+        layer = FakeLayerNode('Layer', f'{unique_name}_layer', thickness=thickness, roughness=None)
+        model.sample = [FakeNode('LayerA', f'{unique_name}_asm', layers=[layer])]
+        return model
+
+    models = make_model_collection(build_model('m1', 'M1', leader), build_model('m2', 'M2', follower))
+
+    rows = parameters_module._from_parameters_to_list_of_dicts([leader, follower], models)
+
+    assert [row['display_name'] for row in rows] == ['M1 LayerA thickness', 'M2 LayerA thickness']
+    # The leader as the table names it, model prefix included; a parameter with no row by its own name.
+    assert rows[1]['dependency'] == 'M1 LayerA thickness + 2 * offset'
+    assert rows[0]['dependency'] == ''
+
+
+def test_display_expression_replaces_each_variable_once():
+    # 'a' -> 'b', then 'b' -> 'a' again would be a sequential replacement; one pass swaps them.
+    assert helpers_module.display_expression('a - b + ab', {'a': 'b', 'b': 'a', 'ab': 'x y'}) == 'b - a + x y'
+    # An empty display name leaves its variable as it is.
+    assert helpers_module.display_expression('2*a', {'a': ''}) == '2*a'
 
 
 def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False, kind='parameter', independent=True):

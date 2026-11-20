@@ -471,6 +471,19 @@ def test_moving_the_selected_model_keeps_it_selected(project_and_sample, start, 
     assert changed
 
 
+@pytest.mark.parametrize('add', ['addNewModel', 'duplicateSelectedModel'])
+def test_a_new_model_is_announced_as_the_current_one(project_and_sample, add):
+    # The GUI reads the current model from currentModelIndex (the Sample charts draw only it
+    # when not showing all models); a stale value would point at the previous model.
+    project, sample = project_and_sample
+    changed = []
+    sample.modelsIndexChanged.connect(lambda: changed.append(sample.currentModelIndex))
+
+    getattr(sample, add)()
+
+    assert changed == [1] and project.current_model_index == 1
+
+
 def test_a_model_left_out_of_the_fit_does_not_block_it(project_and_sample):
     from EasyReflectometryApp.Backends.Py.analysis import Analysis
 

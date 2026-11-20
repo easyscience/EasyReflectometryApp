@@ -7,6 +7,7 @@ import QtQuick
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Components as EaComponents
 
+import Gui as Gui
 import "./Groups" as Groups
 
 
@@ -17,4 +18,6 @@ EaComponents.SideBarColumn {
     Groups.Minimizer {}
 
     Groups.PlotControl {}
+
+    Gui.SldZRangeControl {}
 }

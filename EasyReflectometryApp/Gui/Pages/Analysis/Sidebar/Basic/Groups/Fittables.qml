@@ -316,10 +316,18 @@ EaElements.GroupBox {
                     text: (parameterRow.derived ? 'ƒ ' : '') + (sharedBy.length > 1 ? '⇄ ' : '') + parameterRow.param.name
                     textFormat: Text.PlainText
                     color: parameterRow.editable ? EaStyle.Colors.themeForeground : EaStyle.Colors.themeForegroundDisabled
-                    // The embedded TableViewLabel tooltip only appears while the
-                    // text is elided, so a hover on a truncated name (e.g.
-                    // 'Ni on Si L... roughness') reveals the full name. Derived and
-                    // inactive rows also say what they are computed from.
+                    // The tooltip gives the full name of a truncated one (e.g.
+                    // 'Ni on Si L... roughness'). Derived and inactive rows also say
+                    // what they are computed from, constrained rows their constraint
+                    // (e.g. 'M2 scale = M1 scale'), and shared or followed rows the
+                    // other models involved.
+                    readonly property string constraint: {
+                        const dependency = parameterRow.param.dependency || ''
+                        if ((parameterRow.param.independent ?? true) || dependency === '')
+                            return ''
+                        // A pin reads '= 1.5' already
+                        return parameterRow.param.name + (dependency.startsWith('=') ? ' ' : ' = ') + dependency
+                    }
                     ToolTip.text: parameterRow.derived
                                   ? qsTr("%1 — derived, read-only: %2")
                                         .arg(text)
@@ -329,8 +337,14 @@ EaElements.GroupBox {
                                         .arg(text)
                                         .arg(parameterRow.param.dependency || '')
                                   : text
-                                    + (sharedBy.length > 1 ? qsTr("\nOne parameter of %1: changing it changes all of them.").arg(sharedBy.join(', ')) : '')
-                                    + (followedBy > 0 ? qsTr("\nFollowed by %1 parameter(s) of other models.").arg(followedBy) : '')
+                                    + (constraint !== '' ? qsTr("\nConstrained, read-only: %1").arg(constraint) : '')
+                                    + (sharedBy.length > 1 ? qsTr("\nShared by %1: any change applies to each.").arg(sharedBy.join(', ')) : '')
+                                    + (followedBy > 0 ? qsTr("\n%1 parameter(s) in other models are tied to this one and change with it.").arg(followedBy) : '')
+                    // The embedded TableViewLabel tooltip appears only while the name
+                    // is elided. When it is not, show this one if it says more than
+                    // the name: never both at once.
+                    ToolTip.visible: hovered && !truncated && ToolTip.text !== text
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                 }
 
                 EaComponents.TableViewParameter {
@@ -382,10 +396,11 @@ EaElements.GroupBox {
                     enabled: !parameterRow.derived && parameterRow.editable
                     text: parameterRow.derived ? '' :
                           EaLogic.Utils.toDefaultPrecision(parameterRow.param.min).replace('Infinity', 'inf')
-                    // Missing bound of a free parameter while the minimizer needs finite ones
-                    warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
-                            parameterRow.param.fit &&
-                            !isFinite(parameterRow.param.min)
+                    readonly property string warning: parameterRow.derived ? '' : boundWarning(parameterRow.param, 'min')
+                    warned: warning !== ''
+                    ToolTip.text: warning
+                    ToolTip.visible: hovered && warned
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'min' field of fittable on Analysis page ***")
@@ -398,10 +413,11 @@ EaElements.GroupBox {
                     enabled: !parameterRow.derived && parameterRow.editable
                     text: parameterRow.derived ? '' :
                           EaLogic.Utils.toDefaultPrecision(parameterRow.param.max).replace('Infinity', 'inf')
-                    // Missing bound of a free parameter while the minimizer needs finite ones
-                    warned: Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds &&
-                            parameterRow.param.fit &&
-                            !isFinite(parameterRow.param.max)
+                    readonly property string warning: parameterRow.derived ? '' : boundWarning(parameterRow.param, 'max')
+                    warned: warning !== ''
+                    ToolTip.text: warning
+                    ToolTip.visible: hovered && warned
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                     onEditingFinished: {
                         focus = false
                         console.debug("*** Editing 'max' field of fittable on Analysis page ***")
@@ -579,6 +595,25 @@ EaElements.GroupBox {
         }
         fittables.parameterSlider.from = EaLogic.Utils.toDefaultPrecision(from)
         fittables.parameterSlider.to = EaLogic.Utils.toDefaultPrecision(to)
+    }
+
+    // Why a min ('min') or max ('max') cell is red, '' when it is not: a bound
+    // outside the physical range (kept, and used by the fit), or a missing bound
+    // of a fitted parameter while the minimizer needs finite ones.
+    function boundWarning(parameter, bound) {
+        if (parameter[bound + 'Unphysical']) {
+            const low = parameter.physicalRange[0]
+            const high = parameter.physicalRange[1]
+            const format = value => EaLogic.Utils.toDefaultPrecision(value)
+            const reason = !isFinite(high) ? qsTr("Below the physical minimum of %1.").arg(format(low))
+                         : !isFinite(low) ? qsTr("Above the physical maximum of %1.").arg(format(high))
+                         : qsTr("Outside the physical range %1 to %2.").arg(format(low)).arg(format(high))
+            return reason + ' ' + qsTr("Kept for the fit.")
+        }
+        if (Globals.BackendWrapper.analysisMinimizerRequiresFiniteBounds && parameter.fit && !isFinite(parameter[bound])) {
+            return qsTr("The selected minimizer needs a finite %1 for every fitted parameter.").arg(bound)
+        }
+        return ''
     }
 
     function formatError(value) {

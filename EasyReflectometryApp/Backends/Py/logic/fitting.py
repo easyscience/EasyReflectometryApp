@@ -1,4 +1,6 @@
 import logging
+import math
+import time
 import warnings
 from typing import TYPE_CHECKING
 from typing import List
@@ -19,6 +21,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: `Fitting.progress_snapshot()` while nothing runs. Every value is a number or a
+#: string: a Python None in a QVariantMap reaches QML as `undefined`.
+_IDLE_PROGRESS = {
+    'phase': '',
+    'kind': '',
+    'fraction': -1.0,
+    'count': 0,
+    'total': 0,
+    'unit': '',
+    'reducedChi2': 0.0,
+    'startedAtMs': 0.0,
+}
+
 
 class Fitting:
     def __init__(self, project_lib: ProjectLib):
@@ -35,14 +50,24 @@ class Fitting:
         self._fit_interim_chi2 = 0.0
         self._fit_interim_reduced_chi2 = 0.0
         self._fit_infeasible = False
-        self._fit_running_message = ''
-        self._fit_preview_parameter_values: dict = {}
-        self._fit_has_preview_update = False
         self._fit_has_interim_update = False
+        # (value, error) of every free parameter when the running classical fit started.
+        self._starting_values: dict[str, tuple] = {}
+        # A cancelled fit whose best point the parameters hold, until kept or reverted:
+        # {'reducedChi2', 'count', 'unit'}.
+        self._pending_cancel: dict | None = None
+        # (record, info) of the last kept cancelled fit; shown while that record is the project's.
+        self._cancelled_note: tuple | None = None
         self._sample_step = 0
         self._sample_total_steps = 0
-        self._sample_running_message = ''
         self._sample_has_update = False
+        # What the running operation is, captured when it starts: the editor's
+        # minimizer and Bayesian settings stay editable while a worker runs.
+        self._run_kind = ''  # 'fit' | 'sample'
+        self._run_unit = ''  # 'evaluations' | 'steps' | 'generations'
+        self._run_budget = 0  # the user's evaluation/step budget, 0 for the engine default
+        self._run_burn = 0
+        self._run_started_at_ms = 0.0
         # The run the worker executes, kept for its measured arrays at completion.
         self._prepared: 'PreparedFit | None' = None
         self._fit_notes: list[str] = []
@@ -106,18 +131,6 @@ class Fitting:
         return self._fit_infeasible
 
     @property
-    def fit_progress_message(self) -> str:
-        return self._fit_running_message
-
-    @property
-    def fit_preview_parameter_values(self) -> dict:
-        return dict(self._fit_preview_parameter_values)
-
-    @property
-    def fit_has_preview_update(self) -> bool:
-        return self._fit_has_preview_update
-
-    @property
     def fit_has_interim_update(self) -> bool:
         return self._fit_has_interim_update
 
@@ -130,16 +143,58 @@ class Fitting:
         return self._sample_step
 
     @property
-    def sample_progress_message(self) -> str:
-        return self._sample_running_message
-
-    @property
     def sample_has_update(self) -> bool:
         return self._sample_has_update
 
     @property
     def sample_total_steps(self) -> int:
         return self._sample_total_steps
+
+    # ------------------------------------------------------------------
+    # Progress of the running operation, for the progress bars
+    # ------------------------------------------------------------------
+
+    def _start_run(self, kind: str, unit: str, burn: int = 0) -> None:
+        self._run_kind = kind
+        self._run_unit = unit
+        self._run_budget = 0
+        self._run_burn = burn
+        self._run_started_at_ms = time.time() * 1000.0
+
+    def progress_snapshot(self) -> dict:
+        """The running operation's progress as one consistent map for QML.
+
+        ``phase`` is one of ``''`` (idle), ``'starting'``, ``'fitting'``, ``'burn'``,
+        ``'sampling'``, ``'cancelling'``. ``fraction`` is in ``[0, 1]`` while sampling
+        with a known total, ``-1.0`` otherwise (a fit has no knowable end). ``count``
+        is in ``unit``; ``total`` is the generation count of a sampling run, or the
+        user's budget of a fit (0 when the engine default applies).
+        """
+        if not self._running:
+            return dict(_IDLE_PROGRESS)
+        sampling = self._run_kind == 'sample'
+        count = max(self._sample_step if sampling else self._fit_iteration, 0)
+        total = max(self._sample_total_steps if sampling else self._run_budget, 0)
+        if self._stop_requested:
+            phase = 'cancelling'
+        elif not self._fit_has_interim_update:
+            phase = 'starting'
+        elif sampling:
+            phase = 'burn' if count <= self._run_burn else 'sampling'
+        else:
+            phase = 'fitting'
+        fraction = min(count / total, 1.0) if phase in ('burn', 'sampling') and total > 0 else -1.0
+        reduced_chi2 = self._fit_interim_reduced_chi2
+        return {
+            'phase': phase,
+            'kind': self._run_kind,
+            'fraction': fraction,
+            'count': count,
+            'total': total,
+            'unit': self._run_unit,
+            'reducedChi2': reduced_chi2 if math.isfinite(reduced_chi2) else 0.0,
+            'startedAtMs': self._run_started_at_ms,
+        }
 
     # ------------------------------------------------------------------
     # Progress handling
@@ -152,57 +207,147 @@ class Fitting:
         self._fit_interim_reduced_chi2 = float(
             payload.get('reduced_chi2', self._fit_interim_chi2) or self._fit_interim_chi2
         )
-        self._fit_preview_parameter_values = dict(payload.get('parameter_values', {}) or {})
-        self._fit_has_preview_update = bool(payload.get('refresh_plots', False))
         self._fit_has_interim_update = True
         # While an inequality constraint is violated BUMPS skips the model and
         # reports the 1e12 penalty as chi2 — meaningless, so don't show it.
         self._fit_infeasible = bool(payload.get('infeasible', False))
-
-        if self._fit_infeasible:
-            self._fit_running_message = (
-                f'Fitting... iter {self._fit_iteration}, outside the inequality constraints'
-            )
-        elif self._fit_iteration > 0:
-            self._fit_running_message = (
-                f'Fitting... iter {self._fit_iteration}, Chi2 = {self._fit_interim_chi2:.6g}'
-            )
-        else:
-            self._fit_running_message = 'Fitting...'
 
     def clear_fit_progress(self) -> None:
         self._fit_iteration = 0
         self._fit_interim_chi2 = 0.0
         self._fit_interim_reduced_chi2 = 0.0
         self._fit_infeasible = False
-        self._fit_running_message = ''
-        self._fit_preview_parameter_values = {}
-        self._fit_has_preview_update = False
         self._fit_has_interim_update = False
         self.clear_sample_progress()
 
     def on_fit_failed(self, error_message: str) -> None:
-        """Handle fitting failure callback.
+        """End a run that failed, or a cancelled one with nothing to keep or revert.
+
+        The parameters are left as the engine left them, and the results dialog
+        shows `error_message`. The prepared run is dropped: it is not recorded.
 
         :param error_message: The error message describing the failure.
         """
+        self._end_run(error_message)
+        self._prepared = None
+        self._starting_values = {}
+
+    def on_fit_cancelled(self, error_message: str, best: dict | None) -> None:
+        """End a run the user cancelled.
+
+        A classical fit with a best point (`best`, the worker's ``best_progress``)
+        puts it in the parameters with their errors cleared, since a cancelled fit
+        has none, and waits for ``keep_cancelled_fit`` or ``revert_cancelled_fit``
+        instead of showing the results dialog. A classical fit cancelled before
+        its first progress report goes back to its starting values. A sampling run
+        has no point to keep: it ends like a failure.
+
+        :param error_message: The message the results dialog shows.
+        :param best: The worker's ``best_progress``, or None.
+        """
+        if self._run_kind != 'fit' or not best:
+            if self._run_kind == 'fit':
+                self._restore_starting_values()
+            self.on_fit_failed(error_message)
+            return
+        pending = {
+            'reducedChi2': float(best['reduced_chi2']),
+            'count': int(best['iterations']),
+            'unit': self._run_unit,
+        }
+        self._end_run(error_message)
+        self.apply_parameter_values(best['parameter_values'], errors={})
+        self._pending_cancel = pending
+        self._show_results_dialog = False
+
+    def _end_run(self, error_message: str) -> None:
+        """The lifecycle state shared by every run that ends without results."""
         self._result = None
         self._results = []
-        self._prepared = None
         self._fit_error_message = error_message
         self._running = False
         self._finished = True
         self._show_results_dialog = True
         self.clear_fit_progress()
 
+    # ------------------------------------------------------------------
+    # Parameter values of a running or cancelled fit
+    # ------------------------------------------------------------------
+
+    def _snapshot_starting_values(self) -> None:
+        self._starting_values = {
+            parameter.unique_name: (parameter.value, parameter.error)
+            for parameter in self._project_lib.parameters
+            if parameter.independent and parameter.free
+        }
+
+    def apply_parameter_values(self, values: dict, errors: dict | None = None) -> None:
+        """Write ``{unique_name: value}`` to the project's independent parameters; dependents follow.
+
+        :param values: The values to write. Unknown and dependent parameters are skipped.
+        :param errors: ``{unique_name: error}`` for the same parameters, or None to leave
+            their errors as they are. A name missing from it gets no error (None).
+        """
+        parameters = {parameter.unique_name: parameter for parameter in self._project_lib.parameters}
+        for name, value in values.items():
+            parameter = parameters.get(name)
+            if parameter is None or not parameter.independent:
+                continue
+            parameter.value = value
+            if errors is not None:
+                parameter.error = errors.get(name)
+
+    def _restore_starting_values(self) -> None:
+        self.apply_parameter_values(
+            {name: value for name, (value, _) in self._starting_values.items()},
+            errors={name: error for name, (_, error) in self._starting_values.items()},
+        )
+
+    @property
+    def fit_cancel_pending(self) -> bool:
+        """A cancelled fit's best point is in the parameters, waiting for keep or revert."""
+        return self._pending_cancel is not None
+
+    def keep_cancelled_fit(self) -> None:
+        """Keep the cancelled fit's best point and record the run on the project as cancelled."""
+        if self._pending_cancel is None:
+            return
+        if self._prepared is not None:
+            run = self._project_lib.record_fit(self._prepared, None, status='cancelled')
+            self._cancelled_note = (run, self._pending_cancel)
+        self._resolve_cancel()
+
+    def revert_cancelled_fit(self) -> None:
+        """Put back the values and errors the cancelled fit started from; the record is unchanged."""
+        if self._pending_cancel is None:
+            return
+        self._restore_starting_values()
+        self._resolve_cancel()
+
+    def _resolve_cancel(self) -> None:
+        self._pending_cancel = None
+        self._prepared = None
+        self._starting_values = {}
+
+    @property
+    def fit_cancelled_at(self) -> dict:
+        """``{'reducedChi2', 'count', 'unit'}`` of the cancelled fit waiting for a choice, or of
+        the kept one while it is the project's last run; {} otherwise."""
+        if self._pending_cancel is not None:
+            return dict(self._pending_cancel)
+        if self._cancelled_note is not None and self._cancelled_note[0] is self._run:
+            return dict(self._cancelled_note[1])
+        return {}
+
     def stop_fit(self) -> None:
         """Request the running fit/sampling to stop.
 
         Only the stop/cancel flags are set here. The lifecycle state (running,
-        finished, results, dialog) is finalised by ``on_fit_failed`` when the
+        finished, results, dialog) is finalised by ``on_fit_cancelled`` when the
         worker thread actually exits. Keeping ``running`` True until then keeps
-        the UI locked, so a second fit cannot be started while a non-abortable
-        minimizer (lmfit, DFO) is still mutating the shared parameters.
+        the UI locked, so a second fit cannot be started while the stopping
+        engine (which finishes its current evaluation or step first) is still
+        writing the shared parameters.
         """
         self._stop_requested = True
         self._fit_cancelled = True
@@ -225,7 +370,10 @@ class Fitting:
         self._result = None
         self._results = []
         self.clear_fit_progress()
-        self._fit_running_message = 'Fitting...'
+        # What a cancel can revert to.
+        self._snapshot_starting_values()
+        # The unit and budget are known once the run is prepared (prepare_threaded_fit).
+        self._start_run('fit', '')
 
     _POLARIZED_SAMPLE_MESSAGE = (
         'Bayesian sampling of polarized experiments is not supported yet.'
@@ -330,7 +478,11 @@ class Fitting:
             self._fit_notes.extend(self._scope_notes(prepared))
             for note in self._fit_notes:
                 logger.warning(note)
-            logger.info('Fitting: prepared %s with objective %s', prepared.core_fitter.minimizer.name, prepared.objective)
+            core_fitter = prepared.core_fitter
+            logger.info('Fitting: prepared %s with objective %s', core_fitter.minimizer.name, prepared.objective)
+            # BUMPS reports (and budgets) optimizer steps; lmfit and DFO count evaluations.
+            self._run_unit = 'steps' if core_fitter.minimizer.package == 'bumps' else 'evaluations'
+            self._run_budget = core_fitter.max_evaluations or 0
             self._prepared = prepared
             return prepared
         except Exception as e:
@@ -466,9 +618,13 @@ class Fitting:
             logger.exception('Error preparing threaded sample')
             return None
 
-    def prepare_for_threaded_sample(self) -> None:
-        """Set running flags and sampling progress message before launching the worker."""
+    def prepare_for_threaded_sample(self, burn: int = 0) -> None:
+        """Set the running flags and start the progress of a sampling run before launching the worker.
+
+        :param burn: The burn-in generations the worker is given, for the burn-in phase.
+        """
         self._prepared = None  # a sampling run is not recorded as a classical one
+        self._starting_values = {}  # nor is it kept or reverted when cancelled
         self.reset_stop_flag()
         self._running = True
         self._finished = False
@@ -478,7 +634,7 @@ class Fitting:
         self._results = []
         self.clear_fit_progress()
         self.clear_sample_progress()
-        self._sample_running_message = 'Sampling… (this may take several minutes)'
+        self._start_run('sample', 'generations', burn)
 
     def on_sample_finished(self) -> None:
         """Handle successful Bayesian sampling completion without FitResults.
@@ -500,19 +656,10 @@ class Fitting:
         self._sample_total_steps = int(payload.get('total_steps', 0) or 0)
         self._sample_has_update = True
         self._fit_has_interim_update = True
-        total = self._sample_total_steps
-        if self._sample_step > 0:
-            if total > 0:
-                self._sample_running_message = f'DREAM step {self._sample_step} of {total}'
-            else:
-                self._sample_running_message = f'DREAM step {self._sample_step}'
-        else:
-            self._sample_running_message = 'Sampling…'
 
     def clear_sample_progress(self) -> None:
         self._sample_step = 0
         self._sample_total_steps = 0
-        self._sample_running_message = ''
         self._sample_has_update = False
 
     def on_fit_finished(self, results: FitResults | List[FitResults]) -> None:
@@ -524,6 +671,7 @@ class Fitting:
         self._finished = True
         self._show_results_dialog = True
         self._fit_error_message = None
+        self._starting_values = {}
         self.clear_fit_progress()
 
         # Store result(s) - handle both single and multiple results

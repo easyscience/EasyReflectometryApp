@@ -115,6 +115,7 @@ class StubAnalysis(QObject):
     posteriorPredictiveReady = Signal(object, object, object, object)
     posteriorPredictiveSldReady = Signal(object, object, object, object)
     posteriorPredictiveCleared = Signal()
+    fitPreviewReady = Signal()
 
     def __init__(self, _project_lib, parent=None, selection=None):
         super().__init__(parent)
@@ -262,6 +263,9 @@ class StubPlotting(QObject):
 
     def refreshAnalysisPage(self):
         self.refresh_calls['analysis'] += 1
+
+    def refreshFitPreview(self):
+        self.refresh_calls['preview'] = self.refresh_calls.get('preview', 0) + 1
 
 
 def _make_backend(monkeypatch):
@@ -413,6 +417,15 @@ def test_backend_fit_finished_refreshes_summary(monkeypatch, qcore_application):
     backend._analysis.externalFittingChanged.emit()
 
     assert counts['summary'] == 1
+
+
+def test_backend_fit_preview_redraws_the_analysis_page_only(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+
+    backend._analysis.fitPreviewReady.emit()
+
+    assert backend._plotting_1d.refresh_calls == {'sample': 0, 'experiment': 0, 'analysis': 0, 'preview': 1}
+    assert backend._plotting_1d.reset_calls == 0
 
 
 def test_backend_refresh_plots_emits_ranges_and_multi_signal(monkeypatch, qcore_application):

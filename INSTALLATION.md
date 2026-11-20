@@ -8,7 +8,7 @@ Download them from the [latest release](https://github.com/EasyScience/EasyRefle
 | Operating system | Release asset (zip file whose name contains) |
 | --- | --- |
 | Windows | `windows-2022` |
-| macOS (Apple Silicon) | `macos-14-AppleSilicon` |
+| macOS (Apple Silicon) | `macos-15-AppleSilicon` |
 | Linux, built on Ubuntu 22.04 | `ubuntu-22.04` |
 | Linux, built on Ubuntu 24.04 | `ubuntu-24.04` |
 
