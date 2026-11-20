@@ -193,6 +193,27 @@ def test_plotting_reference_lines_use_defaults_and_visibility(qcore_application)
     assert len(scale_analysis) == 2
 
 
+def test_analysis_curve_and_reference_lines_follow_the_experiments_model(qcore_application):
+    """Re-pairing the experiment in the Data Explorer leaves the Sample page's current model
+    alone; the Analysis curve and the background/scale lines must still be the new model's."""
+    plotting, project = _make_plotting()
+    project.model_data_for_model_at_index = lambda index, *args, **kwargs: FakeData(x=[0.1], y=[float(index + 1)])
+    project.current_model_index = 0
+    project._exp[0].model = project.models[1]  # experiment 0 re-paired with model 1
+    plotting.flipBkgShown()
+
+    assert list(plotting.model_data.y) == [2.0]
+    # Model 1's background (1e-6), not model 0's (0, drawn at the log floor)
+    assert plotting.getBackgroundDataForAnalysis()[0]['y'] == pytest.approx(-6.0)
+    assert plotting.getBackgroundData()[0]['y'] == pytest.approx(-6.0)
+
+    # Unpaired: no curve and no line, rather than another model's
+    project._exp[0].model = None
+    plotting._model_data = {}
+    assert plotting.model_data.y.size == 0
+    assert plotting.getBackgroundDataForAnalysis() == []
+
+
 def test_plotting_empty_range_fallbacks_and_experiment_min_y(qcore_application):
     plotting, project = _make_plotting()
     project._sample = {0: FakeData(), 1: FakeData()}

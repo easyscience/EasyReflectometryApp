@@ -345,14 +345,18 @@ class Plotting1d(QObject):
         self.referenceLineVisibilityChanged.emit()
 
     def _get_reference_line_data(self, param_attr: str, default_log: float, use_analysis_range: bool) -> list:
-        """Build a horizontal reference line for the given model parameter.
+        """Build a horizontal reference line for a parameter of the current experiment's model.
+
+        No line for an unpaired experiment: another model's value would pass for its own.
 
         :param param_attr: Model attribute name ('background' or 'scale')
         :param default_log: Where a parameter <= 0 goes on a log10 axis
         :param use_analysis_range: If True, use sample/analysis x-range; if False, use experimental data x-range
         """
         try:
-            model_idx = self._project_lib.current_model_index
+            model_idx = self._current_experiment_model_index()
+            if model_idx is None:
+                return []
             model = self._project_lib.models[model_idx]
 
             if use_analysis_range:
@@ -420,12 +424,23 @@ class Plotting1d(QObject):
 
     @property
     def model_data(self) -> DataSet1D:
-        idx = self._project_lib.current_model_index
+        """The calculated curve of the current experiment's model, for the Analysis chart.
+
+        The experiment's own pairing, not the Sample page's current model: re-pairing the
+        experiment in the Data Explorer leaves the current model alone, and the chart drew
+        the old model's curve in the new model's colour. Empty for an unpaired experiment,
+        as for its residuals (see `_get_experiment_model_index`).
+        """
+        idx = self._current_experiment_model_index()
         if idx in self._model_data and self._model_data[idx] is not None:
             return self._model_data[idx]
-        try:
-            data = self._project_lib.model_data_for_model_at_index(idx)
-        except IndexError:
+        data = None
+        if idx is not None:
+            try:
+                data = self._project_lib.model_data_for_model_at_index(idx)
+            except IndexError:
+                pass
+        if data is None:
             data = DataSet1D(
                 name='Model Data empty',
                 x=np.empty(0),
@@ -433,6 +448,15 @@ class Plotting1d(QObject):
             )
         self._model_data[idx] = data
         return data
+
+    def _current_experiment_model_index(self) -> int | None:
+        """Index of the model the current experiment is paired with; None without one."""
+        index = self._project_lib.current_experiment_index
+        try:
+            experiment = self._project_lib.experimental_data_for_model_at_index(index)
+        except IndexError:
+            return None
+        return self._get_experiment_model_index(index, experiment)
 
     @property
     def sld_data(self) -> DataSet1D:
