@@ -7,8 +7,8 @@ QtObject {
     property bool created: false
 
     readonly property var version: {
-        'number': '1.5.0',
-        'date': '19 Oct 2026',
+        'number': '1.6.0',
+        'date': '21 Nov 2026',
     }
 
     readonly property var urls: {

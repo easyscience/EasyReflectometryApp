@@ -1,4 +1,4 @@
-# Unreleased
+# Version 1.6.0 (21 Nov 2026)
 
 - Live preview of a running fit: the Analysis page's reflectivity, residual and
   SLD curves are redrawn with the best values found so far, at most once per
