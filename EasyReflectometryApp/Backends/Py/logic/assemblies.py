@@ -7,6 +7,7 @@ from easyreflectometry.sample import Sample
 from easyreflectometry.sample import SurfactantLayer
 
 from .helpers import get_original_name
+from .helpers import is_independent
 
 
 class Assemblies:
@@ -159,8 +160,10 @@ class Assemblies:
 
     def set_repeated_layer_repetitions(self, new_value: int) -> bool:
         if isinstance(self._assemblies[self.index], RepeatingMultilayer):
-            if new_value != self._assemblies[self.index].repetitions.value:
-                self._assemblies[self.index].repetitions.value = new_value
+            repetitions = self._assemblies[self.index].repetitions
+            # A dependent or pinned repetition count follows its constraint.
+            if is_independent(repetitions) and new_value != repetitions.value:
+                repetitions.value = new_value
                 return True
         return False
 

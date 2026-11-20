@@ -28,6 +28,9 @@ QtObject {
 
     property int modelCount: 1
 
+    function sampleRangeForModels(models) { return [sampleMinX, sampleMaxX, sampleMinY, sampleMaxY] }
+    function sldRangeForModels(models) { return [sldMinX, sldMaxX, sldMinY, sldMaxY] }
+
     // Polarized experiment (spin channel) support
     property bool currentExperimentIsPolarized: false
     property var experimentChannelList: []
@@ -87,7 +90,11 @@ QtObject {
 
     // Plot mode properties
     property bool plotRQ4: false
-    property string yMainAxisTitle: 'R(q)'
+    property bool yAxisLog: true
+    readonly property string yMainAxisTitle: {
+        const quantity = plotRQ4 ? 'R(q)×q<sup>4</sup>' : 'R(q)'
+        return yAxisLog ? 'log<sub>10</sub>(' + quantity + ')' : quantity
+    }
     property bool xAxisLog: false
     property string xAxisType: 'linear'
     property bool sldXDataReversed: false
@@ -115,6 +122,7 @@ QtObject {
     signal referenceLineVisibilityChanged()
     signal samplePageDataChanged()
     signal samplePageResetAxes()
+    signal fitPreviewChanged()
 
     function setQtChartsSerieRef(value1, value2, value3) {
         console.debug(`setQtChartsSerieRef ${value1}, ${value2}, ${value3}`)
@@ -146,7 +154,14 @@ QtObject {
     // Plot mode toggle functions
     function togglePlotRQ4() {
         plotRQ4 = !plotRQ4
-        yMainAxisTitle = plotRQ4 ? 'R(q)×q⁴' : 'R(q)'
+        // A log-axis view, as in the Python backend
+        yAxisLog = yAxisLog || plotRQ4
+        plotModeChanged()
+    }
+
+    function toggleYAxisLog() {
+        yAxisLog = !yAxisLog
+        plotRQ4 = plotRQ4 && yAxisLog
         plotModeChanged()
     }
 

@@ -116,40 +116,25 @@ EaElements.GroupBox {
             }
         }
 
-        // Control buttons below table
+        // Control buttons below table. No move up/down: layers reference
+        // materials by object, so the table order carries no meaning.
         Row {
             spacing: EaStyle.Sizes.fontPixelSize
 
             EaElements.SideBarButton {
                 enabled: true
-                width: (EaStyle.Sizes.sideBarContentWidth - (2 * (EaStyle.Sizes.tableRowHeight + EaStyle.Sizes.fontPixelSize)) - EaStyle.Sizes.fontPixelSize) / 2
+                width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2
                 fontIcon: "plus-circle"
                 text: qsTr("Add material")
                 onClicked: Globals.BackendWrapper.sampleAddNewMaterial()
             }
 
             EaElements.SideBarButton {
-                enabled: Globals.BackendWrapper.sampleMaterials.length// (Globals.BackendWrapper.sampleCurrentMaterialIndex > 0) ? true : false //When material is selected
-                width: (EaStyle.Sizes.sideBarContentWidth - (2 * (EaStyle.Sizes.tableRowHeight + EaStyle.Sizes.fontPixelSize)) - EaStyle.Sizes.fontPixelSize) / 2
+                enabled: Globals.BackendWrapper.sampleMaterials.length > 0
+                width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2
                 fontIcon: "clone"
                 text: qsTr("Duplicate material")
                 onClicked: Globals.BackendWrapper.sampleDuplicateSelectedMaterial()
-            }
-
-            EaElements.SideBarButton {
-                enabled: (Globals.BackendWrapper.sampleCurrentMaterialIndex !== 0 && Globals.BackendWrapper.sampleMaterials.length > 0) ? true : false//When item is selected
-                width: EaStyle.Sizes.tableRowHeight
-                fontIcon: "arrow-up"
-                ToolTip.text: qsTr("Move material up")
-                onClicked: Globals.BackendWrapper.sampleMoveSelectedMaterialUp()
-            }
-
-            EaElements.SideBarButton {
-                enabled: (Globals.BackendWrapper.sampleCurrentMaterialIndex + 1 !== Globals.BackendWrapper.sampleMaterials.length && Globals.BackendWrapper.sampleMaterials.length > 0) ? true : false//When item is selected
-                width: EaStyle.Sizes.tableRowHeight
-                fontIcon: "arrow-down"
-                ToolTip.text: qsTr("Move material down")
-                onClicked: Globals.BackendWrapper.sampleMoveSelectedMaterialDown()
             }
         }
 
@@ -286,6 +271,7 @@ EaElements.GroupBox {
                               qsTr("ρM %1 · N %2 Å⁻³")
                               .arg(densityMaterialSection.densityMaterial.rho_m)
                               .arg(densityMaterialSection.densityMaterial.number_density) : ''
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                     ToolTip.visible: rhoMHover.hovered
                     ToolTip.text: qsTr("Magnetic SLD (shown in 10⁻⁶ Å⁻²) = number density (Å⁻³) × moment × 2.6991·10⁻⁵ Å × 10⁶. Layers use it when 'ρM from material' is ticked in the Magnetism group.")
                     HoverHandler {

@@ -3,8 +3,8 @@ from types import ModuleType
 from types import SimpleNamespace
 
 import numpy as np
+from easyreflectometry import Minimizers as MinimizerEnum
 from easyreflectometry.fit_settings import FitSettings
-from easyscience import AvailableMinimizers
 
 from EasyReflectometryApp.Backends.Py.logic import fitting as fitting_module
 from tests.factories import make_experiment
@@ -96,7 +96,10 @@ def test_prepare_threaded_fit_asks_the_project_for_a_run_and_keeps_its_warnings(
         2: make_experiment('Exp A', model=model_a, x=np.array([1.0, 2.0, 3.0]), y=np.array([4.0, 5.0, 6.0]), ye=np.array([1.0, 0.0, 4.0])),
     }
     project = make_project(experiments=experiments)
-    prepared = SimpleNamespace(core_fitter=SimpleNamespace(minimizer=SimpleNamespace(name='Bumps_simplex')), objective='hybrid')
+    prepared = SimpleNamespace(
+        core_fitter=SimpleNamespace(minimizer=SimpleNamespace(name='Bumps_simplex', package='bumps'), max_evaluations=None),
+        objective='hybrid',
+    )
     seen = {}
 
     def prepare_fit():
@@ -210,7 +213,7 @@ def test_a_failure_or_a_sampling_run_cannot_be_recorded_against_a_previous_fit()
     assert recorded == []
 
 
-def test_fit_progress_updates_transient_state_and_message():
+def test_fit_progress_updates_transient_state():
     project = make_project()
     logic = fitting_module.Fitting(project)
 
@@ -221,7 +224,6 @@ def test_fit_progress_updates_transient_state_and_message():
             'chi2': 4.25,
             'reduced_chi2': 1.75,
             'parameter_values': {'alpha': 2.0},
-            'refresh_plots': True,
             'finished': False,
         }
     )
@@ -229,10 +231,7 @@ def test_fit_progress_updates_transient_state_and_message():
     assert logic.fit_iteration == 12
     assert logic.fit_interim_chi2 == 4.25
     assert logic.fit_interim_reduced_chi2 == 1.75
-    assert logic.fit_preview_parameter_values == {'alpha': 2.0}
-    assert logic.fit_has_preview_update is True
     assert logic.fit_has_interim_update is True
-    assert logic.fit_progress_message == 'Fitting... iter 12, Chi2 = 4.25'
 
 
 def test_fit_progress_state_resets_on_finish_failure_and_stop():
@@ -244,16 +243,14 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
     logic.on_fit_finished(make_fit_result(success=True, chi2=8.0, n_pars=1, x=[1, 2], reduced_chi2=4.0))
 
     assert logic.fit_iteration == 0
-    assert logic.fit_progress_message == ''
     assert logic.fit_has_interim_update is False
 
     logic.prepare_for_threaded_fit()
-    logic.on_fit_progress({'iteration': 4, 'chi2': 7.0, 'refresh_plots': True})
+    logic.on_fit_progress({'iteration': 4, 'chi2': 7.0})
     logic.on_fit_failed('boom')
 
     assert logic.fit_iteration == 0
-    assert logic.fit_preview_parameter_values == {}
-    assert logic.fit_has_preview_update is False
+    assert logic.fit_has_interim_update is False
 
     logic.prepare_for_threaded_fit()
     logic.on_fit_progress({'iteration': 5, 'chi2': 6.0})
@@ -262,11 +259,114 @@ def test_fit_progress_state_resets_on_finish_failure_and_stop():
     # stop_fit only requests cancellation; progress stays visible while the
     # worker thread is still winding down and is cleared when it exits.
     assert logic.fit_iteration == 5
-    logic.on_fit_failed('Fitting cancelled by user')
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
 
     assert logic.fit_iteration == 0
-    assert logic.fit_progress_message == ''
     assert logic.fit_has_interim_update is False
+
+
+def _cancel_scene():
+    """A project with a free, a fixed and a dependent parameter, a fit started and cancelled."""
+    from easyscience import Parameter
+
+    free = Parameter(10.0, display_name='thickness')
+    free.free = True
+    free.error = 0.5
+    fixed = Parameter(3.0, display_name='roughness')
+    fixed.free = False
+    dependent = Parameter(20.0, display_name='double')
+    dependent.make_dependent_on('2 * a', {'a': free})
+    project = make_project()
+    project.parameters = [free, fixed, dependent]
+    recorded = []
+    project.record_fit = lambda prepared, results, status='completed': recorded.append((prepared, results, status)) or 'run'
+    project.last_fit = None
+    logic = fitting_module.Fitting(project)
+    logic.prepare_for_threaded_fit()
+    logic._run_unit = 'steps'
+    logic._prepared = 'prepared-run'
+    # The engine moved the parameter before it was cancelled (lmfit and DFO put it back).
+    free.value = 12.0
+    logic.stop_fit()
+    return logic, project, free, fixed, dependent, recorded
+
+
+_BEST = {'chi2': 8.0, 'reduced_chi2': 0.8, 'parameter_values': {}, 'iterations': 42}
+
+
+def test_cancel_puts_the_best_point_in_the_parameters_and_asks():
+    logic, _project, free, fixed, dependent, _recorded = _cancel_scene()
+
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+
+    assert (free.value, free.error, dependent.value) == (11.0, None, 22.0)
+    assert fixed.value == 3.0
+    assert logic.fit_cancel_pending is True
+    assert logic.fit_cancelled_at == {'reducedChi2': 0.8, 'count': 42, 'unit': 'steps'}
+    # The question replaces the results dialog.
+    assert logic.show_results_dialog is False
+
+
+def test_keeping_a_cancelled_fit_records_it_as_cancelled():
+    logic, project, free, _fixed, _dependent, recorded = _cancel_scene()
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+
+    logic.keep_cancelled_fit()
+    project.last_fit = 'run'
+
+    assert recorded == [('prepared-run', None, 'cancelled')]
+    assert (free.value, free.error) == (11.0, None)
+    assert logic.fit_cancel_pending is False
+    # Shown while that record is the project's last run, not after the next one.
+    assert logic.fit_cancelled_at == {'reducedChi2': 0.8, 'count': 42, 'unit': 'steps'}
+    project.last_fit = 'a later run'
+    assert logic.fit_cancelled_at == {}
+
+
+def test_reverting_a_cancelled_fit_puts_back_the_starting_values_and_errors():
+    logic, _project, free, _fixed, dependent, recorded = _cancel_scene()
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+
+    logic.revert_cancelled_fit()
+
+    assert (free.value, free.error, dependent.value) == (10.0, 0.5, 20.0)
+    assert recorded == []
+    assert logic.fit_cancel_pending is False
+    assert logic.fit_cancelled_at == {}
+
+
+def test_a_cancel_before_any_progress_reverts_without_asking():
+    logic, _project, free, _fixed, _dependent, recorded = _cancel_scene()
+
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
+
+    assert (free.value, free.error) == (10.0, 0.5)
+    assert logic.fit_cancel_pending is False
+    assert logic.show_results_dialog is True
+    assert recorded == []
+
+
+def test_a_failure_leaves_the_parameters_where_the_engine_left_them():
+    logic, _project, free, _fixed, _dependent, recorded = _cancel_scene()
+
+    logic.on_fit_failed('boom')
+
+    assert (free.value, free.error) == (12.0, 0.5)
+    assert logic.fit_cancel_pending is False
+    assert logic.fit_error_message == 'boom'
+    assert recorded == []
+
+
+def test_a_cancelled_sampling_run_has_no_point_to_keep():
+    logic, _project, free, _fixed, _dependent, _recorded = _cancel_scene()
+    logic.prepare_for_threaded_sample(burn=10)
+    logic.stop_fit()
+
+    logic.on_fit_cancelled('Fitting cancelled by user', {**_BEST, 'parameter_values': {free.unique_name: 11.0}})
+
+    assert free.value == 12.0
+    assert logic.fit_cancel_pending is False
+    assert logic.show_results_dialog is True
 
 
 def test_fit_failure_and_cancellation_state_transitions():
@@ -281,19 +381,124 @@ def test_fit_failure_and_cancellation_state_transitions():
     logic.prepare_for_threaded_fit()
     logic.stop_fit()
     # stop_fit only requests cancellation; the lifecycle state is finalised by
-    # on_fit_failed when the worker thread actually exits. Keeping ``running``
+    # on_fit_cancelled when the worker thread actually exits. Keeping ``running``
     # True until then keeps the UI locked against starting a second fit.
     assert logic.fit_cancelled is True
     assert logic.running is True
     assert logic.fit_finished is False
 
-    logic.on_fit_failed('Fitting cancelled by user')
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
     assert logic.running is False
     assert logic.fit_finished is True
     assert logic.fit_error_message == 'Fitting cancelled by user'
 
     logic.reset_stop_flag()
     assert logic.fit_cancelled is False
+
+
+# ===================================================================
+# Progress snapshot
+# ===================================================================
+
+def _prepared_fit(package, max_evaluations):
+    core_fitter = SimpleNamespace(minimizer=SimpleNamespace(name='engine', package=package), max_evaluations=max_evaluations)
+    return SimpleNamespace(core_fitter=core_fitter, objective='hybrid')
+
+
+def _logic_with_prepared_fit(package='lmfit', max_evaluations=None):
+    """A fit started the way Analysis starts one, prepared with the given engine and budget."""
+    project = make_project(experiments={0: make_experiment('Exp A', model=make_model(name='A'))})
+    project.prepare_fit = lambda: _prepared_fit(package, max_evaluations)
+    logic = fitting_module.Fitting(project)
+    logic.reset_stop_flag()
+    logic.prepare_for_threaded_fit()
+    assert logic.prepare_threaded_fit(StubMinimizersLogic()) is not None
+    return logic
+
+
+def test_progress_snapshot_is_idle_when_nothing_runs():
+    logic = fitting_module.Fitting(make_project())
+
+    assert logic.progress_snapshot() == fitting_module._IDLE_PROGRESS
+    assert None not in logic.progress_snapshot().values()
+
+
+def test_progress_snapshot_of_a_fit_has_no_fraction():
+    logic = _logic_with_prepared_fit('lmfit', max_evaluations=1000)
+    assert logic.progress_snapshot()['phase'] == 'starting'
+    assert logic.progress_snapshot()['startedAtMs'] > 0
+
+    # lmfit counts evaluations from -1
+    logic.on_fit_progress({'iteration': -1, 'chi2': 4.0, 'reduced_chi2': 2.0})
+    assert logic.progress_snapshot()['count'] == 0
+    logic.on_fit_progress({'iteration': 132, 'chi2': 4.0, 'reduced_chi2': 2.0})
+
+    snapshot = logic.progress_snapshot()
+    assert snapshot == {
+        'phase': 'fitting',
+        'kind': 'fit',
+        'fraction': -1.0,
+        'count': 132,
+        'total': 1000,
+        'unit': 'evaluations',
+        'reducedChi2': 2.0,
+        'startedAtMs': snapshot['startedAtMs'],
+    }
+
+
+def test_progress_snapshot_unit_and_budget_come_from_the_prepared_run():
+    snapshot = _logic_with_prepared_fit('bumps', max_evaluations=None).progress_snapshot()
+
+    assert snapshot['unit'] == 'steps'
+    assert snapshot['total'] == 0  # engine default: not shown
+
+
+def test_progress_snapshot_replaces_a_non_finite_chi2():
+    logic = _logic_with_prepared_fit()
+    logic.on_fit_progress({'iteration': 3, 'chi2': float('nan'), 'reduced_chi2': float('inf')})
+
+    assert logic.progress_snapshot()['reducedChi2'] == 0.0
+
+
+def test_progress_snapshot_of_sampling_is_determinate_with_a_burn_in_phase():
+    logic = fitting_module.Fitting(make_project())
+    logic.prepare_for_threaded_sample(burn=400)
+    assert logic.progress_snapshot()['phase'] == 'starting'
+    assert logic.progress_snapshot()['fraction'] == -1.0
+
+    logic.on_sample_progress({'sampling': True, 'iteration': 400, 'total_steps': 2000})
+    snapshot = logic.progress_snapshot()
+    assert (snapshot['phase'], snapshot['fraction']) == ('burn', 0.2)
+    assert (snapshot['unit'], snapshot['kind']) == ('generations', 'sample')
+
+    logic.on_sample_progress({'sampling': True, 'iteration': 401, 'total_steps': 2000})
+    assert logic.progress_snapshot()['phase'] == 'sampling'
+
+    # A run can report one generation past its total: the fraction is clamped
+    logic.on_sample_progress({'sampling': True, 'iteration': 2001, 'total_steps': 2000})
+    assert logic.progress_snapshot()['fraction'] == 1.0
+
+
+def test_progress_snapshot_without_a_total_is_indeterminate():
+    logic = fitting_module.Fitting(make_project())
+    logic.prepare_for_threaded_sample(burn=10)
+    logic.on_sample_progress({'sampling': True, 'iteration': 50, 'total_steps': 0})
+
+    assert logic.progress_snapshot()['fraction'] == -1.0
+
+
+def test_progress_snapshot_cancelling_survives_later_payloads_and_ends_idle():
+    logic = fitting_module.Fitting(make_project())
+    logic.prepare_for_threaded_sample(burn=10)
+    logic.on_sample_progress({'sampling': True, 'iteration': 50, 'total_steps': 100})
+
+    logic.stop_fit()
+    logic.on_sample_progress({'sampling': True, 'iteration': 51, 'total_steps': 100})
+
+    assert logic.progress_snapshot()['phase'] == 'cancelling'
+    assert logic.progress_snapshot()['fraction'] == -1.0
+    logic.on_fit_cancelled('Fitting cancelled by user', None)
+    assert logic.progress_snapshot()['phase'] == ''
 
 
 # ===================================================================
@@ -320,7 +525,7 @@ def test_prepare_threaded_sample_asks_the_project_for_an_experiment_fitter(monke
                            x=np.array([1.0, 2.0]), y=np.array([4.0, 5.0]), ye=np.array([0.1, 0.2])),
     }
     project = make_project(experiments=experiments)
-    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    project.fit_settings = FitSettings(minimizer=MinimizerEnum.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
     multi_fitter = logic.prepare_threaded_sample(StubMinimizersLogic())
@@ -332,11 +537,11 @@ def test_prepare_threaded_sample_asks_the_project_for_an_experiment_fitter(monke
     assert multi_fitter.fit_datasets == [experiments[0]]
     # Sampled with a snapshot of the project's settings, taken before the worker starts
     assert multi_fitter.settings == project.fit_settings
-    project.fit_settings.minimizer = AvailableMinimizers.LMFit_leastsq
+    project.fit_settings.minimizer = MinimizerEnum.LMFit_leastsq
     project.fit_settings.mode = 'minimize'
     project.fit_settings.objective = 'mighell'
     project.fit_settings.engine_options['LMFit_leastsq'] = {'epsfcn': 1e-3}
-    assert multi_fitter.settings == FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    assert multi_fitter.settings == FitSettings(minimizer=MinimizerEnum.Bumps_simplex, mode='sample')
 
 
 def test_sampling_covers_the_included_experiments_only(monkeypatch):
@@ -344,7 +549,7 @@ def test_sampling_covers_the_included_experiments_only(monkeypatch):
     model_a, model_b = make_model(name='A'), make_model(name='B')
     experiments = {0: make_experiment('Exp A', model=model_a), 1: make_experiment('Exp B', model=model_b)}
     project = make_project(experiments=experiments)
-    project.fit_settings = FitSettings(minimizer=AvailableMinimizers.Bumps_simplex, mode='sample')
+    project.fit_settings = FitSettings(minimizer=MinimizerEnum.Bumps_simplex, mode='sample')
     logic = fitting_module.Fitting(project)
 
     experiments[0].include_in_fit = False
@@ -377,7 +582,7 @@ def test_a_project_refusal_is_reported_not_raised(monkeypatch):
     assert 'cannot be sampled' in logic.fit_error_message
 
 
-def test_prepare_for_threaded_sample_sets_flags_and_message():
+def test_prepare_for_threaded_sample_sets_flags_and_starts_the_progress():
     project = make_project()
     logic = fitting_module.Fitting(project)
     # A previously cancelled fit must not leak its cancel flag into sampling.
@@ -389,7 +594,7 @@ def test_prepare_for_threaded_sample_sets_flags_and_message():
     assert logic.fit_finished is False
     assert logic.show_results_dialog is False
     assert logic.fit_cancelled is False
-    assert logic.sample_progress_message == 'Sampling… (this may take several minutes)'
+    assert (logic.progress_snapshot()['phase'], logic.progress_snapshot()['kind']) == ('starting', 'sample')
 
 
 # ===================================================================
@@ -472,4 +677,4 @@ def test_clear_sample_progress_works():
 
     assert logic.sample_step == 0
     assert logic.sample_total_steps == 0
-    assert logic.sample_progress_message == ''
+    assert logic.sample_has_update is False

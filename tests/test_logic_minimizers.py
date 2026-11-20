@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
+from easyreflectometry import Minimizers as MinimizerEnum
 from easyreflectometry.fit_settings import FitSettings
-from easyscience import AvailableMinimizers
 
 from EasyReflectometryApp.Backends.Py.logic import minimizers as minimizers_module
 
@@ -31,14 +31,14 @@ def test_index_is_computed_from_the_settings():
     logic = minimizers_module.Minimizers(project)
 
     # A loaded project's minimizer shows without anyone touching the combo
-    project.fit_settings.minimizer = AvailableMinimizers.LMFit_powell
+    project.fit_settings.minimizer = MinimizerEnum.LMFit_powell
     assert logic.minimizer_current_index() == _index(logic, 'LMFit_powell')
 
     # An alias set directly on the project shows as the member it stands for
-    project.fit_settings.minimizer = AvailableMinimizers.Bumps
+    project.fit_settings.minimizer = MinimizerEnum.Bumps
     assert logic.minimizer_current_index() == _index(logic, 'Bumps_simplex')
 
-    project.fit_settings.minimizer = AvailableMinimizers.Bumps_simplex
+    project.fit_settings.minimizer = MinimizerEnum.Bumps_simplex
     project.fit_settings.mode = 'sample'
     assert logic.minimizer_current_index() == 0
     assert logic.is_bayesian_selected() is True
@@ -49,10 +49,10 @@ def test_selecting_writes_the_settings():
     logic = minimizers_module.Minimizers(project)
 
     assert logic.set_minimizer_current_index(0) is True
-    assert (project.fit_settings.mode, project.fit_settings.minimizer) == ('sample', AvailableMinimizers.Bumps_simplex)
+    assert (project.fit_settings.mode, project.fit_settings.minimizer) == ('sample', MinimizerEnum.Bumps_simplex)
 
     assert logic.set_minimizer_current_index(_index(logic, 'DFO_leastsq')) is True
-    assert (project.fit_settings.mode, project.fit_settings.minimizer) == ('minimize', AvailableMinimizers.DFO_leastsq)
+    assert (project.fit_settings.mode, project.fit_settings.minimizer) == ('minimize', MinimizerEnum.DFO_leastsq)
     assert logic.set_minimizer_current_index(_index(logic, 'DFO_leastsq')) is False
 
 
@@ -68,13 +68,13 @@ def test_index_mapping_edges():
         assert (project.fit_settings.mode, project.fit_settings.minimizer) == before
 
     # The last entry is a real minimizer, one past the Bayesian choice at 0.
-    last_member = AvailableMinimizers[logic.minimizers_available()[last]]
+    last_member = MinimizerEnum[logic.minimizers_available()[last]]
     assert logic.set_minimizer_current_index(last) is True
     assert (project.fit_settings.mode, project.fit_settings.minimizer) == ('minimize', last_member)
     assert logic.minimizer_current_index() == last
 
     # Index 1 is the first real minimizer.
-    first_member = AvailableMinimizers[logic.minimizers_available()[1]]
+    first_member = MinimizerEnum[logic.minimizers_available()[1]]
     assert logic.set_minimizer_current_index(1) is True
     assert project.fit_settings.minimizer is first_member
     assert logic.minimizer_current_index() == 1
@@ -120,14 +120,14 @@ def test_finite_bounds_follow_the_engine_not_the_label():
     project = _project()
     logic = minimizers_module.Minimizers(project)
 
-    project.fit_settings.minimizer = AvailableMinimizers.LMFit_differential_evolution
+    project.fit_settings.minimizer = MinimizerEnum.LMFit_differential_evolution
     assert logic.requires_finite_bounds() is True
-    project.fit_settings.minimizer = AvailableMinimizers.Bumps_simplex
+    project.fit_settings.minimizer = MinimizerEnum.Bumps_simplex
     assert logic.requires_finite_bounds() is False
 
 
 def test_options_of_the_selected_minimizer():
-    project = _project(FitSettings(minimizer=AvailableMinimizers.LMFit_differential_evolution))
+    project = _project(FitSettings(minimizer=MinimizerEnum.LMFit_differential_evolution))
     logic = minimizers_module.Minimizers(project)
 
     assert logic.set_option('seed', 3) is True
@@ -142,7 +142,7 @@ def test_options_of_the_selected_minimizer():
 @pytest.mark.parametrize('tolerance_first', [True, False])
 def test_an_option_conflicting_with_another_field_is_refused_in_either_order(tolerance_first):
     # DFO-LS: rhobeg must exceed the tolerance, whichever is edited last
-    project = _project(FitSettings(minimizer=AvailableMinimizers.DFO_leastsq))
+    project = _project(FitSettings(minimizer=MinimizerEnum.DFO_leastsq))
     logic = minimizers_module.Minimizers(project)
     if tolerance_first:
         assert logic.set_tolerance(0.1) is True
@@ -158,7 +158,7 @@ def test_an_option_conflicting_with_another_field_is_refused_in_either_order(tol
 
 
 def test_a_refused_option_keeps_the_previous_value():
-    project = _project(FitSettings(minimizer=AvailableMinimizers.DFO_leastsq, tolerance=0.01))
+    project = _project(FitSettings(minimizer=MinimizerEnum.DFO_leastsq, tolerance=0.01))
     logic = minimizers_module.Minimizers(project)
     assert logic.set_option('rhobeg', 0.5) is True
 
@@ -169,20 +169,20 @@ def test_a_refused_option_keeps_the_previous_value():
 
 
 def test_a_switch_is_allowed_but_reports_settings_that_do_not_suit_the_new_minimizer():
-    project = _project(FitSettings(minimizer=AvailableMinimizers.LMFit_leastsq))
+    project = _project(FitSettings(minimizer=MinimizerEnum.LMFit_leastsq))
     logic = minimizers_module.Minimizers(project)
     assert logic.set_tolerance(0.5) is True  # fine for LMFit
     assert logic.settings_error() is None
 
     assert logic.set_minimizer_current_index(_index(logic, 'DFO_leastsq')) is True
 
-    assert project.fit_settings.minimizer is AvailableMinimizers.DFO_leastsq
+    assert project.fit_settings.minimizer is MinimizerEnum.DFO_leastsq
     assert project.fit_settings.tolerance == 0.5
     assert '0.1' in logic.settings_error()
 
 
 def test_app_defaults_give_a_new_project_bumps():
-    project = _project(FitSettings(minimizer=AvailableMinimizers.LMFit_leastsq, mode='sample'))
+    project = _project(FitSettings(minimizer=MinimizerEnum.LMFit_leastsq, mode='sample'))
 
     minimizers_module.apply_app_defaults(project)
 

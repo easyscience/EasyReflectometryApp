@@ -11,6 +11,7 @@ import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 import EasyApplication.Gui.Charts as EaCharts
 
+import Gui as Gui
 import Gui.Globals as Globals
 import "../../../Logic/MeasuredScatter.js" as MeasuredScatter
 
@@ -31,6 +32,8 @@ Rectangle {
         )
 
         calcSerie.color: currentExperimentColor
+        // The error bounds share the colour of the points they belong to
+        measSerie.color: currentExperimentColor
         bkgSerie.color: measSerie.color
         measSerie.width: 1
         bkgSerie.width: 1
@@ -231,28 +234,13 @@ Rectangle {
                                                        xAxis, chartView.axisY,
                                                        channelRow.color, Globals.Variables.experimentMarkerStyle)
 
-            var errorColor = Qt.darker(channelRow.color, 1.3)
-
-            var errorUpperSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                         `${name} - Error Upper`,
-                                                         xAxis, chartView.axisY)
-            errorUpperSerie.color = errorColor
-            errorUpperSerie.width = 1
-            errorUpperSerie.style = Qt.DashLine
-            errorUpperSerie.useOpenGL = chartView.useOpenGL
-
-            var errorLowerSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                         `${name} - Error Lower`,
-                                                         xAxis, chartView.axisY)
-            errorLowerSerie.color = errorColor
-            errorLowerSerie.width = 1
-            errorLowerSerie.style = Qt.DashLine
-            errorLowerSerie.useOpenGL = chartView.useOpenGL
+            var errorBounds = MeasuredScatter.createErrorBounds(chartView, ChartView, name,
+                                                                xAxis, chartView.axisY, channelRow.color)
 
             var seriesSet = {
                 measuredSerie: measuredSerie,
-                errorUpperSerie: errorUpperSerie,
-                errorLowerSerie: errorLowerSerie,
+                errorUpperSerie: errorBounds.upper,
+                errorLowerSerie: errorBounds.lower,
                 channel: channelRow.channel,
                 color: channelRow.color
             }
@@ -405,13 +393,12 @@ Rectangle {
         property bool useLogQAxis: Globals.Variables.logarithmicQAxis
         axisX.visible: !useLogQAxis
 
-        LogValueAxis {
+        Gui.LogQAxis {
             id: axisXLog
             visible: chartView.useLogQAxis
             titleText: "q (Å⁻¹)"
             property double minAfterReset: Math.max(Globals.BackendWrapper.plottingExperimentMinX, 1e-6)
             property double maxAfterReset: Globals.BackendWrapper.plottingExperimentMaxX * 1.1
-            base: 10
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -523,13 +510,101 @@ Rectangle {
         }
 
         property double yRange: Globals.BackendWrapper.plottingExperimentMaxY - Globals.BackendWrapper.plottingExperimentMinY
-        axisY.title: "Log10 " + Globals.BackendWrapper.plottingYAxisTitle
+        axisY.title: Globals.BackendWrapper.plottingYAxisTitle
         axisY.min: Globals.BackendWrapper.plottingExperimentMinY - yRange * 0.01
         axisY.max: Globals.BackendWrapper.plottingExperimentMaxY + yRange * 0.01
         axisY.minAfterReset: Globals.BackendWrapper.plottingExperimentMinY - yRange * 0.01
         axisY.maxAfterReset: Globals.BackendWrapper.plottingExperimentMaxY + yRange * 0.01
 
-        calcSerie.onHovered: (point, state) => showMainTooltip(chartView, point, state)
+        // Coordinates tooltip. Series-level `hovered` signals only fire when the
+        // cursor is exactly over a (tiny) marker, so instead track the cursor
+        // over the whole chart and snap to the nearest visible data point
+        // within `hoverRadius` pixels.
+        property real hoverRadius: EaStyle.Sizes.fontPixelSize
+
+        HoverHandler {
+            id: coordHoverHandler
+            enabled: chartView.allowHover
+            onPointChanged: chartView.updateHoverTooltip(point.position)
+            onHoveredChanged: if (!hovered) dataToolTip.visible = false
+            onEnabledChanged: if (!enabled) dataToolTip.visible = false
+        }
+
+        // Series currently showing measured data (calcSerie is kept hidden).
+        function activeMeasuredSeries() {
+            var list = []
+            if (isMultiExperimentMode && multiExperimentSeries.length > 0) {
+                for (var i = 0; i < multiExperimentSeries.length; i++)
+                    list.push(multiExperimentSeries[i].measuredSerie)
+            } else if (isPolarizedMode) {
+                for (var j = 0; j < channelSeries.length; j++)
+                    list.push(channelSeries[j].measuredSerie)
+            } else if (useLogQAxis && logModeSeries) {
+                list.push(logModeSeries.measuredSerie)
+            } else if (measuredScatterSerie) {
+                list.push(measuredScatterSerie)
+            }
+            return list.filter(s => s && s.visible && s.count > 0)
+        }
+
+        // First index whose x >= value, assuming x is ascending.
+        function lowerBound(serie, value) {
+            var lo = 0
+            var hi = serie.count
+            while (lo < hi) {
+                var mid = (lo + hi) >> 1
+                if (serie.at(mid).x < value) lo = mid + 1
+                else hi = mid
+            }
+            return lo
+        }
+
+        function updateHoverTooltip(mousePos) {
+            var area = plotArea
+            var inPlot = mousePos.x >= area.x && mousePos.x <= area.x + area.width &&
+                         mousePos.y >= area.y && mousePos.y <= area.y + area.height
+            if (!allowHover || !inPlot) {
+                dataToolTip.visible = false
+                return
+            }
+            var r2 = hoverRadius * hoverRadius
+            var best = null
+            var bestSerie = null
+            var bestPos = null
+            var bestD2 = r2
+            var series = activeMeasuredSeries()
+            for (var s = 0; s < series.length; s++) {
+                var serie = series[s]
+                var first = 0
+                var last = serie.count - 1
+                // Restrict the scan to the x-window around the cursor when
+                // the data is sorted (it normally is, q ascending).
+                if (serie.at(0).x <= serie.at(last).x) {
+                    var xLo = mapToValue(Qt.point(mousePos.x - hoverRadius, mousePos.y), serie).x
+                    var xHi = mapToValue(Qt.point(mousePos.x + hoverRadius, mousePos.y), serie).x
+                    first = Math.max(0, lowerBound(serie, xLo) - 1)
+                    last = Math.min(serie.count - 1, lowerBound(serie, xHi))
+                }
+                for (var i = first; i <= last; i++) {
+                    var p = serie.at(i)
+                    var pos = mapToPosition(p, serie)
+                    var dx = pos.x - mousePos.x
+                    var dy = pos.y - mousePos.y
+                    var d2 = dx * dx + dy * dy
+                    if (d2 <= bestD2) {
+                        bestD2 = d2
+                        best = p
+                        bestSerie = serie
+                        bestPos = pos
+                    }
+                }
+            }
+            if (!best) {
+                dataToolTip.visible = false
+                return
+            }
+            showMainTooltip(chartView, best, true, bestSerie, bestPos)
+        }
 
         // Multi-experiment series management
         function updateMultiExperimentSeries() {
@@ -635,30 +710,14 @@ Rectangle {
                                                        xAxis, chartView.axisY,
                                                        color, Globals.Variables.experimentMarkerStyle)
 
-            // Create error bound series (lighter colors)
-            var errorColor = Qt.darker(color, 1.3)
-
-            var errorUpperSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                        `${expName} - Error Upper`,
-                                                        xAxis, chartView.axisY)
-            errorUpperSerie.color = errorColor
-            errorUpperSerie.width = 1
-            errorUpperSerie.style = Qt.DashLine
-            errorUpperSerie.useOpenGL = chartView.useOpenGL
-
-            var errorLowerSerie = chartView.createSeries(ChartView.SeriesTypeLine,
-                                                        `${expName} - Error Lower`,
-                                                        xAxis, chartView.axisY)
-            errorLowerSerie.color = errorColor
-            errorLowerSerie.width = 1
-            errorLowerSerie.style = Qt.DashLine
-            errorLowerSerie.useOpenGL = chartView.useOpenGL
+            var errorBounds = MeasuredScatter.createErrorBounds(chartView, ChartView, expName,
+                                                                xAxis, chartView.axisY, color)
 
             // Store references
             var seriesSet = {
                 measuredSerie: measuredSerie,
-                errorUpperSerie: errorUpperSerie,
-                errorLowerSerie: errorLowerSerie,
+                errorUpperSerie: errorBounds.upper,
+                errorLowerSerie: errorBounds.lower,
                 expIndex: expIndex,
                 expName: expName,
                 color: color,
@@ -821,7 +880,7 @@ Rectangle {
                 // Single experiment legend
                 EaElements.Label {
                     visible: !chartView.isMultiExperimentMode && !chartView.isPolarizedMode
-                    text: Globals.Variables.lineStyleSymbol(chartView.calcSerie.style) + '  I (Measured)'
+                    text: Globals.Variables.markerStyleSymbol(Globals.Variables.experimentMarkerStyle) + '  I (Measured)'
                     color: chartView.calcSerie.color
                 }
                 EaElements.Label {
@@ -919,6 +978,8 @@ Rectangle {
 
             arrowLength: 0
             textFormat: Text.RichText
+            enterAnimationDuration: 150
+            exitAnimationDuration: 150
         }
 
         // Data is set in python backend (plotting_1d.py)
@@ -966,15 +1027,25 @@ Rectangle {
 
     // Logic
 
-    function showMainTooltip(chart, point, state) {
+    function showMainTooltip(chart, point, state, serie, pos) {
         if (!chartView.allowHover) {
             return
         }
-        const pos = chart.mapToPosition(Qt.point(point.x, point.y))
-        dataToolTip.x = pos.x
-        dataToolTip.y = pos.y
         dataToolTip.text = `<p align="left">x: ${point.x.toFixed(3)}<br\>y: ${point.y.toFixed(3)}</p>`
         dataToolTip.parent = chart
+        // Put the tooltip above-right of the point, further away than the
+        // hover radius, so it never sits under the cursor (which would steal
+        // the hover and make it flicker). Flip sides near the plot edges.
+        const gap = chart.hoverRadius + 0.5 * EaStyle.Sizes.fontPixelSize
+        const area = chart.plotArea
+        let tx = pos.x + gap
+        let ty = pos.y - gap - dataToolTip.implicitHeight
+        if (tx + dataToolTip.implicitWidth > area.x + area.width)
+            tx = pos.x - gap - dataToolTip.implicitWidth
+        if (ty < area.y)
+            ty = pos.y + gap
+        dataToolTip.x = tx
+        dataToolTip.y = ty
         dataToolTip.visible = state
     }
 }

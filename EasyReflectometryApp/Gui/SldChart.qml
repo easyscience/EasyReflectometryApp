@@ -12,6 +12,8 @@ import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
+import "Logic/ShownModels.js" as ShownModels
+
 
 Rectangle {
     id: root
@@ -21,8 +23,54 @@ Rectangle {
     // Whether to show the legend (caller binds to the right page variable)
     property bool showLegend: false
 
+    // Indices of the models to draw (caller binds to its page's selection); null draws all
+    property var shownModels: null
+    onShownModelsChanged: {
+        ShownModels.apply(shownModels, sldSeries, magneticSeries)
+        // Fit the axes to the models now shown
+        Qt.callLater(chartView.resetAxes)
+    }
+
+    // [minX, maxX, minY, maxY] of the shown models' curves. The backend announces new ranges
+    // with a signal, which bumps rangeRevision; reading it re-evaluates this binding.
+    property int rangeRevision: 0
+    readonly property var shownRange: {
+        rangeRevision
+        return Globals.BackendWrapper.plottingSldRangeForModels(shownModels)
+    }
+
+    Connections {
+        target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+        enabled: target !== null
+        ignoreUnknownSignals: true  // the mock backend has no range signals
+        function onSldChartRangesChanged() { root.rangeRevision++ }
+        // During a fit the model may only be read while the fit waits: redraw now,
+        // not through scheduleChartRefresh (Qt.callLater).
+        function onFitPreviewChanged() { root.dispatchChartRefresh() }
+    }
+
     // Whether to show the z-axis reversed
     property bool reverseZAxis: false
+
+    // User-set z range (global, Globals.Variables), used instead of the
+    // calculated profiles' extent when Auto is off.
+    readonly property bool manualZRange: !Globals.Variables.sldZAuto
+                                         && isFinite(Globals.Variables.sldZMin)
+                                         && isFinite(Globals.Variables.sldZMax)
+                                         && Globals.Variables.sldZMin < Globals.Variables.sldZMax
+
+    // A new range re-pads the curves (see padSeriesToZRange) and refits the axis.
+    onManualZRangeChanged: Qt.callLater(applyZRange)
+    Connections {
+        target: Globals.Variables
+        function onSldZMinChanged() { if (root.manualZRange) Qt.callLater(root.applyZRange) }
+        function onSldZMaxChanged() { if (root.manualZRange) Qt.callLater(root.applyZRange) }
+    }
+
+    function applyZRange() {
+        refreshAllCharts()
+        chartView.resetAxes()
+    }
 
     // Expose the ChartView so callers can store a reference / call resetAxes
     readonly property alias chartView: chartView
@@ -103,13 +151,15 @@ Rectangle {
         property bool allowZoom: true
         property bool allowHover: true
 
-        property double xRange: Globals.BackendWrapper.plottingSldMaxX - Globals.BackendWrapper.plottingSldMinX
+        property double xRange: root.shownRange[1] - root.shownRange[0]
 
         ValueAxis {
             id: axisX
             titleText: "z (Å)"
-            property double minAfterReset: Globals.BackendWrapper.plottingSldMinX - chartView.xRange * 0.01
-            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxX + chartView.xRange * 0.01
+            property double minAfterReset: root.manualZRange ? Globals.Variables.sldZMin
+                                                             : root.shownRange[0] - chartView.xRange * 0.01
+            property double maxAfterReset: root.manualZRange ? Globals.Variables.sldZMax
+                                                             : root.shownRange[1] + chartView.xRange * 0.01
             reverse: root.reverseZAxis
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
@@ -122,13 +172,13 @@ Rectangle {
             }
         }
 
-        property double yRange: Globals.BackendWrapper.plottingSldMaxY - Globals.BackendWrapper.plottingSldMinY
+        property double yRange: root.shownRange[3] - root.shownRange[2]
 
         ValueAxis {
             id: axisY
             titleText: "SLD (10⁻⁶Å⁻²)"
-            property double minAfterReset: Globals.BackendWrapper.plottingSldMinY - chartView.yRange * 0.01
-            property double maxAfterReset: Globals.BackendWrapper.plottingSldMaxY + chartView.yRange * 0.01
+            property double minAfterReset: root.shownRange[2] - chartView.yRange * 0.01
+            property double maxAfterReset: root.shownRange[3] + chartView.yRange * 0.01
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -160,6 +210,37 @@ Rectangle {
             axisX.max = axisX.maxAfterReset
             axisY.min = axisY.minAfterReset
             axisY.max = axisY.maxAfterReset
+        }
+
+        // SLD = 0 reference line. Declared before every other series so it is
+        // drawn underneath them (the model curves are created later and stack
+        // on top); thin, dashed and half-transparent so it never hides a
+        // curve. Not hover-connected, so it gives no coordinates tooltip. Its
+        // two points track the visible z range, so it spans the plot at any
+        // zoom or pan.
+        LineSeries {
+            id: zeroSldLine
+            // root aliases: inside a series, a bare `axisX` is its own property.
+            axisX: root.chartAxisX
+            axisY: root.chartAxisY
+            width: 1
+            style: Qt.DashLine
+            color: Qt.rgba(EaStyle.Colors.chartAxis.r, EaStyle.Colors.chartAxis.g,
+                           EaStyle.Colors.chartAxis.b, 1.0)
+
+            function span() {
+                clear()
+                append(root.chartAxisX.min, 0)
+                append(root.chartAxisX.max, 0)
+            }
+
+            Component.onCompleted: span()
+        }
+
+        Connections {
+            target: axisX
+            function onMinChanged() { zeroSldLine.span() }
+            function onMaxChanged() { zeroSldLine.span() }
         }
 
         // Tool buttons
@@ -252,6 +333,8 @@ Rectangle {
                 Repeater {
                     model: root.modelCount
                     EaElements.Label {
+                        visible: ShownModels.includes(root.shownModels, index)
+                        height: visible ? implicitHeight : 0
                         text: '━  SLD ' + Globals.BackendWrapper.sampleModels[index].label
                         color: Globals.BackendWrapper.sampleModels[index].color
                     }
@@ -263,7 +346,7 @@ Rectangle {
                     model: root.magneticSeries.length
                     EaElements.Label {
                         readonly property var entry: root.magneticSeries[index]
-                        visible: entry.inLegend
+                        visible: entry.inLegend && ShownModels.includes(root.shownModels, entry.modelIndex)
                         height: visible ? implicitHeight : 0
                         text: '┄  ' + root.magneticCurveStyle(entry.curve).label + ' '
                               + (Globals.BackendWrapper.sampleModels[entry.modelIndex]
@@ -529,6 +612,7 @@ Rectangle {
 
         sldSeries = newSldSeries
         magneticSeries = newMagneticSeries
+        ShownModels.apply(shownModels, sldSeries, magneticSeries)
         drawnMagneticSignature = magneticSeriesSignature()
         refreshAllCharts()
     }
@@ -584,14 +668,14 @@ Rectangle {
             }
             // The backend fills the series in one call; the append() loop is
             // the fallback for a backend without the fill API (mock).
-            if (Globals.BackendWrapper.plottingFillSldSeriesForModel(series, i)) {
-                continue
+            if (!Globals.BackendWrapper.plottingFillSldSeriesForModel(series, i)) {
+                series.clear()
+                const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(i)
+                for (let p = 0; p < points.length; p++) {
+                    series.append(points[p].x, points[p].y)
+                }
             }
-            series.clear()
-            const points = Globals.BackendWrapper.plottingGetSldDataPointsForModel(i)
-            for (let p = 0; p < points.length; p++) {
-                series.append(points[p].x, points[p].y)
-            }
+            padSeriesToZRange(series)
         }
 
         for (let m = 0; m < magneticSeries.length; m++) {
@@ -599,17 +683,47 @@ Rectangle {
             if (!entry.series) {
                 continue
             }
-            if (Globals.BackendWrapper.plottingFillMagneticSldSegmentSeries(entry.series, entry.modelIndex,
-                                                                            entry.curve, entry.segment)) {
-                continue
+            if (!Globals.BackendWrapper.plottingFillMagneticSldSegmentSeries(entry.series, entry.modelIndex,
+                                                                             entry.curve, entry.segment)) {
+                entry.series.clear()
+                const magneticPoints = Globals.BackendWrapper.plottingGetMagneticSldSegment(entry.modelIndex,
+                                                                                            entry.curve,
+                                                                                            entry.segment)
+                for (let q = 0; q < magneticPoints.length; q++) {
+                    entry.series.append(magneticPoints[q].x, magneticPoints[q].y)
+                }
             }
-            entry.series.clear()
-            const magneticPoints = Globals.BackendWrapper.plottingGetMagneticSldSegment(entry.modelIndex,
-                                                                                        entry.curve,
-                                                                                        entry.segment)
-            for (let q = 0; q < magneticPoints.length; q++) {
-                entry.series.append(magneticPoints[q].x, magneticPoints[q].y)
+            // θM exists only where there is a moment; extending it would draw
+            // an angle through vacuum. The other curves span the full z grid
+            // in a single piece.
+            if (entry.curve !== 'theta_m') {
+                padSeriesToZRange(entry.series)
             }
+        }
+    }
+
+    // With a manual z range wider than the calculator's z grid, extend the
+    // curve flat with its end values so it reaches the axis edges. Both
+    // engines pad the grid at least 3σ past the outermost interface, so the
+    // profile there is already the fronting / backing SLD.
+    function padSeriesToZRange(series) {
+        if (!manualZRange || !series || series.count === 0) {
+            return
+        }
+        const first = series.at(0)
+        const last = series.at(series.count - 1)
+        const ascending = first.x <= last.x
+        const lowPoint = ascending ? first : last
+        const highPoint = ascending ? last : first
+        const zMin = Globals.Variables.sldZMin
+        const zMax = Globals.Variables.sldZMax
+        if (zMax > highPoint.x) {
+            if (ascending) series.append(zMax, highPoint.y)
+            else series.insert(0, zMax, highPoint.y)
+        }
+        if (zMin < lowPoint.x) {
+            if (ascending) series.insert(0, zMin, lowPoint.y)
+            else series.append(zMin, lowPoint.y)
         }
     }
 

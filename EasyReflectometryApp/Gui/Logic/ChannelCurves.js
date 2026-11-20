@@ -3,8 +3,7 @@
 // © 2026 Contributors to the EasyReflectometry project <https://github.com/easyscience/EasyReflectometry>
 //
 // The model spin cross-sections drawn next to the model curve on the sample
-// page reflectivity charts (SampleView and the combined view). Shared so the
-// two views cannot drift apart.
+// page reflectivity chart (CombinedView).
 
 // Cross-section series of one model, as {series, modelIndex, channel, label}
 // entries. Empty unless the model is magnetic and the user asked for the split,

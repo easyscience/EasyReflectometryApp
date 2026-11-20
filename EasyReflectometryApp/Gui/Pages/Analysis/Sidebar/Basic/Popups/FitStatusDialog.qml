@@ -125,7 +125,8 @@ EaElements.Dialog {
             visible: !Globals.BackendWrapper.bayesianResultAvailable && (Globals.BackendWrapper.analysisFitResults.message ?? '') !== ''
             text: "Minimizer: " + Globals.BackendWrapper.analysisFitResults.message
             wrapMode: Text.WordWrap
-            width: EaStyle.Sizes.sideBarContentWidth
+            // As wide as the text, so a short message does not widen the dialog; a long one wraps.
+            width: Math.min(implicitWidth, EaStyle.Sizes.sideBarContentWidth)
         }
 
         // Warnings raised while preparing the fit (masked points, a parameter on a bound, ...).
@@ -133,7 +134,7 @@ EaElements.Dialog {
             visible: !Globals.BackendWrapper.bayesianResultAvailable && (Globals.BackendWrapper.analysisFitResults.notes ?? '') !== ''
             text: "Notes: " + Globals.BackendWrapper.analysisFitResults.notes
             wrapMode: Text.WordWrap
-            width: EaStyle.Sizes.sideBarContentWidth
+            width: Math.min(implicitWidth, EaStyle.Sizes.sideBarContentWidth)
         }
 
         EaElements.Label {

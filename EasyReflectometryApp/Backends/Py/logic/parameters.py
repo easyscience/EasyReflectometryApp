@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 from collections.abc import MutableSequence
 from typing import Any
@@ -6,6 +7,8 @@ from typing import List
 from typing import Tuple
 
 from easyreflectometry import Project as ProjectLib
+from easyreflectometry.limits import SCALE_LIMITS
+from easyreflectometry.limits import SLD_LIMITS
 from easyreflectometry.sample import Layer
 from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.utils import count_fixed_parameters
@@ -13,7 +16,10 @@ from easyreflectometry.utils import count_free_parameters
 from easyscience.base_classes import ModelBase
 from easyscience.variable import Parameter
 
+from .helpers import display_expression
 from .helpers import get_original_name
+from .helpers import is_independent
+from .helpers import set_bound
 from .material import coupled_material_ids
 from .material import inactive_density_knobs
 
@@ -21,13 +27,28 @@ logger = logging.getLogger(__name__)
 
 RESERVED_ALIAS_NAMES = {'np', 'numpy', 'math', 'pi', 'e'}
 
+# Choices of the table's variability filter. 'active' (the default) hides the
+# rows that cannot be edited or fitted; only 'all' shows them.
+VARIABILITY_FILTERS = ('active', 'all', 'free', 'fixed')
+DEFAULT_VARIABILITY_FILTER = 'active'
+
+
+def is_active_row(parameter: dict[str, Any]) -> bool:
+    """True for a row the user can edit and fit (shown greyed otherwise).
+
+    Constrained (dependent) and derived parameters take their value from
+    others, and an inactive knob no longer affects the reflectivity. Mirrors
+    ``isEditable`` in the Analysis page's Fittables.qml.
+    """
+    return parameter.get('kind', 'parameter') == 'parameter' and parameter.get('independent', True)
+
 
 class Parameters:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
         self._current_index = 0
         self._name_filter_criteria = ''
-        self._variability_filter_criteria = 'all'
+        self._variability_filter_criteria = DEFAULT_VARIABILITY_FILTER
 
     @property
     def as_status_string(self) -> str:
@@ -58,22 +79,36 @@ class Parameters:
         return True
 
     def set_variability_filter_criteria(self, criteria: str) -> bool:
-        normalized = (criteria or 'all').strip().lower()
-        if normalized not in {'all', 'free', 'fixed'}:
-            normalized = 'all'
+        normalized = (criteria or DEFAULT_VARIABILITY_FILTER).strip().lower()
+        if normalized not in VARIABILITY_FILTERS:
+            normalized = DEFAULT_VARIABILITY_FILTER
         if normalized == self._variability_filter_criteria:
             return False
         self._variability_filter_criteria = normalized
         self._current_index = 0
         return True
 
+    def variability_counts(self) -> dict[str, int]:
+        """Rows each variability choice shows, whatever the name filter."""
+        rows = [parameter for parameter in self.all_parameters() if parameter.get('enabled', True)]
+        return {
+            criteria: sum(1 for parameter in rows if _matches_variability(parameter, criteria))
+            for criteria in VARIABILITY_FILTERS
+        }
+
+    def count_rows_matching_variability(self, rows: list[dict[str, Any]]) -> int:
+        """How many of ``rows`` the current variability filter keeps."""
+        return sum(
+            1
+            for parameter in rows
+            if parameter.get('enabled', True) and _matches_variability(parameter, self._variability_filter_criteria)
+        )
+
     def _parameter_matches_filters(self, parameter: dict[str, Any]) -> bool:
         if not parameter.get('enabled', True):
             return False
 
-        if self._variability_filter_criteria == 'free' and not parameter.get('fit', False):
-            return False
-        if self._variability_filter_criteria == 'fixed' and parameter.get('fit', False):
+        if not _matches_variability(parameter, self._variability_filter_criteria):
             return False
 
         criteria = self._name_filter_criteria
@@ -166,55 +201,38 @@ class Parameters:
         return None
 
     def set_current_parameter_value(self, new_value: str) -> bool:
-        parameter = self._get_current_parameter()
-        if parameter is None:
-            return False
-        try:
-            float_value = float(new_value)
-        except ValueError:
-            return False
-        if float_value != parameter.value:
-            try:
-                parameter.value = float_value
-            except (ValueError, TypeError):
-                logger.exception('Failed to set parameter value to %s', float_value)
-                return False
-            return True
-        return False
+        return self._set_current_parameter('value', new_value)
 
     def set_current_parameter_min(self, new_value: str) -> bool:
-        parameter = self._get_current_parameter()
-        if parameter is None:
-            return False
-        try:
-            float_value = float(new_value)
-        except ValueError:
-            return False
-        if float_value != parameter.min:
-            try:
-                parameter.min = float_value
-            except (ValueError, TypeError):
-                logger.exception('Failed to set parameter min to %s', float_value)
-                return False
-            return True
-        return False
+        return self._set_current_parameter('min', new_value)
 
     def set_current_parameter_max(self, new_value: str) -> bool:
+        return self._set_current_parameter('max', new_value)
+
+    def _set_current_parameter(self, attribute: str, new_value: str) -> bool:
+        """Set the current row's value or bound as entered; False for no change or bad input.
+
+        A bound is kept whatever it is, moving the value onto it when it lies past
+        it (`set_bound`). A value is clamped to the bounds next to it in the table.
+        """
         parameter = self._get_current_parameter()
-        if parameter is None:
+        if parameter is None or not is_independent(parameter):
             return False
         try:
             float_value = float(new_value)
         except ValueError:
             return False
-        if float_value != parameter.max:
-            try:
-                parameter.max = float_value
-            except (ValueError, TypeError):
-                logger.exception('Failed to set parameter max to %s', float_value)
-                return False
-            return True
-        return False
+        if float_value == getattr(parameter, attribute):
+            return False
+        try:
+            if attribute == 'value':
+                parameter.value = float_value
+            else:
+                set_bound(parameter, attribute, float_value)
+        except (ValueError, TypeError):
+            logger.exception('Failed to set parameter %s to %s', attribute, float_value)
+            return False
+        return True
 
     def set_current_parameter_fit(self, new_value: bool) -> bool:
         entry = self._get_current_parameter_entry()
@@ -226,6 +244,10 @@ class Parameters:
             # be tickable into the fit through any caller, QML or not.
             return False
         parameter = entry['object']
+        if not is_independent(parameter):
+            # A pin is the value and `free = False`: freeing it would undo the pin while
+            # leaving the parameter locked. A dependent parameter is never fitted.
+            return False
         if bool(new_value) != parameter.free:
             parameter.free = bool(new_value)
             # The data only constrain the product of these two: freeing one
@@ -246,6 +268,18 @@ class Parameters:
 
     def constraint_arithmetic(self) -> List[str]:
         return ['', '*', '/', '+', '-']
+
+
+def _matches_variability(parameter: dict[str, Any], criteria: str) -> bool:
+    if criteria == 'all':
+        return True
+    if not is_active_row(parameter):
+        return False
+    if criteria == 'free':
+        return bool(parameter.get('fit', False))
+    if criteria == 'fixed':
+        return not parameter.get('fit', False)
+    return True  # 'active'
 
 
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:
@@ -280,7 +314,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         in the Model Editor is reflected in the Analysis parameters table.
         """
         if path is not None and len(path) >= 2:
-            param_name = _DISPLAY_NAMES.get(path[-1].name, path[-1].name)
+            param_name = _DISPLAY_NAMES.get(path[-1].display_name, path[-1].display_name)
             # For layer parameters the path is:
             # Model -> Sample -> Assembly -> LayerCollection -> Layer -> param
             # Use the assembly name (path[-4]) instead of the layer name (path[-2])
@@ -294,21 +328,31 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             else:
                 parent_name = path[-2].name
             return f'{parent_name} {param_name}', parent_name
-        return param.name, ''  # Fallback to parameter name without group
+        return param.display_name, ''  # Fallback to the parameter's own name, without group
 
-    def _get_dependency_expression(param: Parameter, paths: dict) -> str:
-        """Get simplified dependency expression."""
-        if param.independent:
+    def _get_dependency_expression(param: Parameter, display_names: dict) -> str:
+        """The dependency expression with each variable shown by its display name,
+        e.g. ``max(M1 scale, 0)``; ``= <value>`` when there is none to show.
+
+        :param display_names: ``{unique_name: display_name}`` of every row of the table.
+        """
+        if is_independent(param):
             return ''
 
-        # Check if parameter has dependency map with 'a' key (parameter dependency)
-        if hasattr(param, 'dependency_map') and 'a' in param.dependency_map:
-            dependent_param = param.dependency_map['a']
-            if isinstance(dependent_param, Parameter):
-                dep_name, _ = _get_parameter_display_data(dependent_param, paths.get(dependent_param.unique_name))
-            else:
-                dep_name = str(dependent_param)
-            return param.dependency_expression.replace('a', dep_name)
+        # Whatever the variables are called: 'a', a constraint's aliases (Sample),
+        # the library's own keys ('rho_m' in Layer, 't0' ... 'tn' for the total thickness).
+        expression = getattr(param, 'dependency_expression', None)
+        dependency_map = getattr(param, 'dependency_map', None)
+        if expression and dependency_map:
+            names = {}
+            for variable, dependency in dependency_map.items():
+                unique_name = getattr(dependency, 'unique_name', None)
+                if unique_name is None:
+                    names[variable] = str(dependency)
+                else:
+                    # A parameter with no row of its own keeps its library name.
+                    names[variable] = display_names.get(unique_name) or dependency.display_name
+            return display_expression(expression, names)
 
         # Simple numerical dependency
         return f'= {param.value}'
@@ -336,8 +380,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
 
     # The models each parameter belongs to (several when contrasts share an object), and
     # how many parameters of other models follow it (equality ties between contrasts).
-    # Object paths replace the global_object.map graph, which the new
-    # easyscience core no longer populates with parent->child edges.
+    # The core keeps no parent->child graph; the paths are walked here.
     model_paths = [_build_param_object_paths(model) for model in models]
     owners: dict[str, list[int]] = {}
     for model_idx, paths in enumerate(model_paths):
@@ -378,15 +421,16 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
             else:
                 prefixed_display_name = display_name
 
-            alias = _make_alias(prefixed_display_name or parameter.name)
+            alias = _make_alias(prefixed_display_name or parameter.display_name)
             param_value = float(parameter.value)
             is_derived = _is_derived_parameter(parameter, models[model_idx])
+            physical_min, physical_max = physical_range(parameter, path, models[model_idx])
             # A density material's input knobs (density, mw, scattering
             # lengths) stop affecting the reflectivity once the material's
             # sld/isld are decoupled, and a material's moment does nothing
-            # while no layer is coupled to it — shown greyed with a note, never
-            # hidden (enabled must stay True: _parameter_matches_filters drops
-            # enabled=False rows from the list entirely).
+            # while no layer is coupled to it — hidden by the default 'active'
+            # filter, shown greyed with a note under 'all' (enabled must stay
+            # True: _parameter_matches_filters drops enabled=False rows always).
             inactive_note = _inactive_note(parameter, path, coupled_materials)
             is_inactive = inactive_note is not None
             parameter_list.append(
@@ -403,15 +447,21 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'error': float(parameter.error) if parameter.error is not None else None,
                     'max': float(parameter.max),
                     'min': float(parameter.min),
+                    # A bound the user set outside what is physically sensible: kept and
+                    # used by the fit, shown red so it is not mistaken for a sensible one.
+                    'minUnphysical': _is_unphysical(parameter.min, physical_min, physical_max),
+                    'maxUnphysical': _is_unphysical(parameter.max, physical_min, physical_max),
+                    # For the table's explanation of a red bound
+                    'physicalRange': [physical_min, physical_max],
                     'units': parameter.unit,
                     'fit': False if (is_derived or is_inactive) else parameter.free,
-                    'independent': parameter.independent,
+                    'independent': is_independent(parameter),
                     'dependency': (
                         inactive_note
                         if is_inactive
-                        else _DERIVED_DESCRIPTIONS.get(parameter.name, 'derived')
+                        else _DERIVED_DESCRIPTIONS.get(parameter.display_name, 'derived')
                         if is_derived
-                        else _get_dependency_expression(parameter, paths)
+                        else ''  # filled in once every row is built, see below
                     ),
                     # Derived "calculation" parameters (e.g. the model's total film
                     # thickness) are computed from the layers: shown read-only, never
@@ -425,7 +475,7 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                     'sharedByIndices': shared_by if len(shared_by) > 1 else [],
                     # A shared layer parameter can be given to one model alone (its assembly is
                     # copied); a material's cannot: materials belong to the project's palette.
-                    'detachable': len(shared_by) > 1 and is_layer_param and parameter.independent,
+                    'detachable': len(shared_by) > 1 and is_layer_param and is_independent(parameter),
                     'followedBy': followed_by.get(parameter.unique_name, 0),
                     'object': parameter,  # Direct reference to the Parameter object
                     # Decided under the first model that owns the parameter. That is
@@ -437,6 +487,14 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
                 }
             )
 
+    # A constrained row names the parameters it depends on as the table does, model
+    # prefix included, whichever model they belong to (a linked contrast follows
+    # another model's parameters): known only once every row is built.
+    display_names = {row['unique_name']: row['display_name'] for row in parameter_list}
+    for row in parameter_list:
+        if row['kind'] == 'parameter':
+            row['dependency'] = _get_dependency_expression(row['object'], display_names)
+
     return parameter_list
 
 
@@ -444,14 +502,40 @@ _DERIVED_DESCRIPTIONS = {
     'total_thickness': 'Σ film layer thicknesses',
 }
 
-# Table names for parameters whose own name is forced by something else. A
-# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' because the
-# calculators bind by name (a material parameter called 'rho_m' would be
-# bound to its layer's magnetic SLD slot); the table calls it what it is.
+# Table names for parameters whose library name says something else. A
+# MaterialMagnetic's rho_m Parameter is named 'magnetic_sld' by the library;
+# the table calls it what it is.
 _DISPLAY_NAMES = {'magnetic_sld': 'material rho_m'}
 
 # What the 'magnetic' name filter shows.
 MAGNETIC_PARAMETER_NAMES = ('rho_m', 'theta_m', 'magnetic_moment', 'magnetic_sld', 'guide_field_angle', 'applied_field')
+
+#: Parameters whose physical scale is an SLD's, by library name: the window the
+#: library opens around a new one is the same.
+_SLD_PARAMETER_NAMES = ('sld', 'isld', 'rho_m', 'magnetic_sld')
+
+
+def physical_range(parameter: Parameter, path, model) -> Tuple[float, float]:
+    """The values a parameter can physically take, (-inf, inf) when no rule applies.
+
+    The SLD and scale windows are the library's default limits. Thickness and
+    roughness only have to be non-negative: the library's window around them
+    (50 % to 200 % of the starting value) is a search range, not physics.
+    """
+    if parameter is model.scale:
+        return SCALE_LIMITS
+    owner = path[-2] if path is not None and len(path) >= 2 else None
+    if isinstance(owner, Layer) and (parameter is owner.thickness or parameter is owner.roughness):
+        return 0.0, math.inf
+    if parameter.display_name in _SLD_PARAMETER_NAMES:
+        return SLD_LIMITS
+    return -math.inf, math.inf
+
+
+def _is_unphysical(bound: float, low: float, high: float) -> bool:
+    """A finite bound outside [low, high]. An infinite one sets no limit, so it has no value to judge."""
+    return math.isfinite(bound) and not low <= bound <= high
+
 
 _INACTIVE_KNOB_NOTE = 'unused (SLD is fitted directly)'
 _UNUSED_MOMENT_NOTE = 'unused (no layer takes ρM from this material)'
@@ -470,9 +554,10 @@ def _inactive_note(parameter: Parameter, path, coupled_materials: set[int]):
         return None
     owner = path[-2]
     drives_magnetism = id(owner) in coupled_materials
-    if getattr(owner, 'sld_coupled', True) is False and parameter.name in inactive_density_knobs(owner, drives_magnetism):
+    knobs = inactive_density_knobs(owner, drives_magnetism)
+    if getattr(owner, 'sld_coupled', True) is False and parameter.display_name in knobs:
         return _INACTIVE_KNOB_NOTE
-    if parameter.name == 'magnetic_moment' and id(owner) not in coupled_materials:
+    if parameter.display_name == 'magnetic_moment' and id(owner) not in coupled_materials:
         return _UNUSED_MOMENT_NOTE
     return None
 
@@ -490,7 +575,7 @@ def _exclusive_partner(parameter: Parameter, path):
     if getattr(owner, 'magnetic_moment', None) is None or owner.sld_coupled:
         return None
     partners = {'density': owner.magnetic_moment, 'magnetic_moment': owner.density}
-    return partners.get(parameter.name)
+    return partners.get(parameter.display_name)
 
 
 def _is_derived_parameter(parameter: Parameter, model) -> bool:
@@ -507,10 +592,8 @@ def _is_derived_parameter(parameter: Parameter, model) -> bool:
 def _build_param_object_paths(model) -> dict:
     """Map each parameter's ``unique_name`` to its object chain ``[model, ..., parameter]``.
 
-    Replaces ``global_object.map.find_path``: the new easyscience core
-    (``NewBase`` / ``ModelBase`` / ``EasyList``) registers vertices but no
-    parent->child edges, so the map graph can no longer be walked. The chain
-    mirrors the old map path, e.g.
+    The easyscience core keeps no parent->child graph to look this up in. The
+    chain reads, e.g.
     ``Model -> Sample -> Assembly -> LayerCollection -> Layer -> [Material ->] Parameter``,
     so the existing index logic (``path[-4]`` for the assembly, ``path[-2]``
     for the immediate parent) keeps working.

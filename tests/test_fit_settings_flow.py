@@ -6,8 +6,8 @@ dropped before the first fit, a saved minimizer not shown after a load).
 
 import numpy as np
 import pytest
+from easyreflectometry import Minimizers as MinimizerEnum
 from easyreflectometry import Project as RealProject
-from easyscience import AvailableMinimizers
 from easyscience import global_object
 
 from EasyReflectometryApp.Backends.Py.analysis import Analysis
@@ -19,9 +19,9 @@ from EasyReflectometryApp.Backends.Py.logic.project import Project as ProjectLog
 
 @pytest.fixture(autouse=True)
 def _clean_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 def _project_with_experiment(tmp_path) -> RealProject:
@@ -95,7 +95,7 @@ def test_a_saved_minimizer_is_shown_after_loading(tmp_path):
     minimizers.set_tolerance(1e-5)
     project_dict = project.as_dict()
 
-    global_object.map._clear()
+    global_object.registry.clear()
     loaded = RealProject()
     loaded.from_dict(project_dict)
     loaded_minimizers = Minimizers(loaded)
@@ -110,7 +110,7 @@ def test_bayesian_choice_survives_a_save():
     Minimizers(project).set_minimizer_current_index(0)
     project_dict = project.as_dict()
 
-    global_object.map._clear()
+    global_object.registry.clear()
     loaded = RealProject()
     loaded.from_dict(project_dict)
 
@@ -122,7 +122,7 @@ def test_new_and_reset_projects_get_the_app_default_but_a_load_keeps_its_own():
     logic = ProjectLogic(project)
     assert project.minimizer is APP_DEFAULT_MINIMIZER
 
-    project.minimizer = AvailableMinimizers.LMFit_powell
+    project.minimizer = MinimizerEnum.LMFit_powell
     logic.reset()
     assert project.minimizer is APP_DEFAULT_MINIMIZER
 

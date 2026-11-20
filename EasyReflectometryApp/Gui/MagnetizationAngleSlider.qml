@@ -8,6 +8,8 @@ import QtQuick.Controls
 import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Elements as EaElements
 
+import Gui.Globals as Globals
+
 // The selected layer's moment angle as a slider across the full 0-360° range,
 // with the guide field reference and the resulting arrow beside it.
 //
@@ -103,6 +105,7 @@ Row {
         outlineColor: "transparent"
     }
 
+    ToolTip.delay: Globals.Variables.toolTipDelay
     ToolTip.visible: hover.hovered
     ToolTip.text: root.hasMoment
                   ? qsTr("Moment: %1° in the sample plane (θM %2°)").arg(root.phi.toFixed(1)).arg(root.thetaM.toFixed(1))

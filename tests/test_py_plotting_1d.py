@@ -6,6 +6,7 @@ import pytest
 
 from EasyReflectometryApp.Backends.Py import plotting_1d as plotting_module
 from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
+from EasyReflectometryApp.Backends.Py.plotting_1d import MEASURED_SERIES
 from EasyReflectometryApp.Backends.Py.plotting_1d import Plotting1d
 
 
@@ -20,6 +21,9 @@ class FakeSeries:
 
     def append(self, x, y):
         self.points.append((x, y))
+
+    def replaceNp(self, x, y):
+        self.points = list(zip(x, y, strict=True))
 
 
 class FakeData:
@@ -78,10 +82,9 @@ def _make_plotting(selected=None):
     project = FakeProject()
     selection = ExperimentSelection([0] if selected is None else selected)
     plotting = Plotting1d(project, selection=selection)
-    plotting._chartRefs['QtCharts']['experimentPage']['measuredSerie'] = FakeSeries()
-    plotting._chartRefs['QtCharts']['experimentPage']['errorUpperSerie'] = FakeSeries()
-    plotting._chartRefs['QtCharts']['experimentPage']['errorLowerSerie'] = FakeSeries()
-    plotting._chartRefs['QtCharts']['analysisPage']['measuredSerie'] = FakeSeries()
+    for page in ('experimentPage', 'analysisPage'):
+        for serie in MEASURED_SERIES:
+            plotting._chartRefs['QtCharts'][page][serie] = FakeSeries()
     plotting._chartRefs['QtCharts']['analysisPage']['calculatedSerie'] = FakeSeries()
     return plotting, project
 
@@ -95,10 +98,10 @@ def test_plotting_mode_and_axis_toggles_emit_signals(qcore_application):
     plotting.referenceLineVisibilityChanged.connect(lambda: counts.__setitem__('ref', counts['ref'] + 1))
 
     assert plotting.plotRQ4 is False
-    assert plotting.yMainAxisTitle == 'R(q)'
+    assert plotting.yMainAxisTitle == 'log<sub>10</sub>(R(q))'
     plotting.togglePlotRQ4()
     assert plotting.plotRQ4 is True
-    assert plotting.yMainAxisTitle == 'R(q)×q⁴'
+    assert plotting.yMainAxisTitle == 'log<sub>10</sub>(R(q)×q<sup>4</sup>)'
 
     assert plotting.xAxisType == 'linear'
     plotting.toggleXAxisType()
@@ -115,6 +118,57 @@ def test_plotting_mode_and_axis_toggles_emit_signals(qcore_application):
     assert plotting.scaleShown is True
     assert plotting.bkgShown is True
     assert counts == {'plot': 1, 'axis': 1, 'sld': 1, 'ref': 2}
+
+
+def test_fit_preview_redraws_the_analysis_page_at_once_and_keeps_other_caches(qcore_application):
+    """The fit waits only while refreshFitPreview runs: every signal it emits must be
+    drawn synchronously, and caches it does not redraw keep serving their data."""
+    plotting, _project = _make_plotting()
+    sample_cache = {0: 'pre-fit sample curve'}
+    plotting._sample_data = sample_cache
+    plotting._magnetic_profile_cache = {0: 'pre-fit profile'}
+    emitted = []
+    for name in ('sampleChartRangesChanged', 'sldChartRangesChanged', 'fitPreviewChanged', 'samplePageDataChanged'):
+        getattr(plotting, name).connect(lambda name=name: emitted.append(name))
+
+    plotting.refreshFitPreview()
+
+    assert sorted(emitted) == ['fitPreviewChanged', 'sampleChartRangesChanged', 'sldChartRangesChanged']
+    assert plotting._chartRefs['QtCharts']['analysisPage']['calculatedSerie'].points  # refilled
+    assert plotting._sample_data is sample_cache
+    assert plotting._magnetic_profile_cache == {}
+
+
+def test_linear_y_axis_and_rq4_are_mutually_exclusive(qcore_application):
+    plotting, _project = _make_plotting()
+    changes = []
+    plotting.plotModeChanged.connect(lambda: changes.append(None))
+
+    plotting.togglePlotRQ4()
+    plotting.toggleYAxisLog()
+    assert (plotting.yAxisLog, plotting.plotRQ4, plotting.yMainAxisTitle) == (False, False, 'R(q)')
+
+    plotting.togglePlotRQ4()
+    assert (plotting.yAxisLog, plotting.plotRQ4) == (True, True)
+    assert len(changes) == 3
+
+
+def test_linear_y_axis_draws_reflectivity_unchanged(qcore_application):
+    plotting, project = _make_plotting()
+    project._exp[0] = FakeData(x=[0.1, 0.2], y=[-1e-6, 1e-5], ye=[4e-12, 1e-12], model=project.models[0])
+    plotting.toggleYAxisLog()
+
+    assert plotting.getSampleDataPointsForModel(0) == [{'x': 0.1, 'y': 1.0}, {'x': 0.2, 'y': 2.0}]
+    assert (plotting.sampleMinY, plotting.sampleMaxY) == (1.0, 4.0)
+    # A linear axis keeps the non-positive points a log axis drops, and their full error bars
+    points = plotting.getExperimentDataPoints(0)
+    assert [point['y'] for point in points] == [-1e-6, 1e-5]
+    assert points[0]['errorLower'] == pytest.approx(-3e-6)
+    assert (plotting.experimentMinY, plotting.experimentMaxY) == (-1e-6, 1e-5)
+
+    plotting.toggleYAxisLog()
+    assert [point['y'] for point in plotting.getExperimentDataPoints(0)] == [pytest.approx(-5.0)]
+    assert plotting.experimentMinY == pytest.approx(-5.0)
 
 
 def test_plotting_reference_lines_use_defaults_and_visibility(qcore_application):
@@ -139,6 +193,27 @@ def test_plotting_reference_lines_use_defaults_and_visibility(qcore_application)
     assert len(scale_analysis) == 2
 
 
+def test_analysis_curve_and_reference_lines_follow_the_experiments_model(qcore_application):
+    """Re-pairing the experiment in the Data Explorer leaves the Sample page's current model
+    alone; the Analysis curve and the background/scale lines must still be the new model's."""
+    plotting, project = _make_plotting()
+    project.model_data_for_model_at_index = lambda index, *args, **kwargs: FakeData(x=[0.1], y=[float(index + 1)])
+    project.current_model_index = 0
+    project._exp[0].model = project.models[1]  # experiment 0 re-paired with model 1
+    plotting.flipBkgShown()
+
+    assert list(plotting.model_data.y) == [2.0]
+    # Model 1's background (1e-6), not model 0's (0, drawn at the log floor)
+    assert plotting.getBackgroundDataForAnalysis()[0]['y'] == pytest.approx(-6.0)
+    assert plotting.getBackgroundData()[0]['y'] == pytest.approx(-6.0)
+
+    # Unpaired: no curve and no line, rather than another model's
+    project._exp[0].model = None
+    plotting._model_data = {}
+    assert plotting.model_data.y.size == 0
+    assert plotting.getBackgroundDataForAnalysis() == []
+
+
 def test_plotting_empty_range_fallbacks_and_experiment_min_y(qcore_application):
     plotting, project = _make_plotting()
     project._sample = {0: FakeData(), 1: FakeData()}
@@ -156,6 +231,17 @@ def test_plotting_empty_range_fallbacks_and_experiment_min_y(qcore_application):
     assert plotting.sldMaxY == 1.0
 
     assert plotting.experimentMinY == -10.0
+
+
+def test_chart_ranges_cover_only_the_shown_models(qcore_application):
+    # A chart showing one model fits its axes to that model, not to all of them
+    plotting, _project = _make_plotting()
+
+    assert plotting.sldRangeForModels(None) == pytest.approx([1.0, 3.0, -1.0, 1.0])
+    assert plotting.sldRangeForModels([0]) == pytest.approx([1.0, 2.0, -0.5, 0.5])
+    # -1: an experiment without a model, which draws no SLD curve
+    assert plotting.sldRangeForModels([1, -1]) == pytest.approx([1.5, 3.0, -1.0, 1.0])
+    assert plotting.sampleRangeForModels([1]) == pytest.approx([0.05, 0.4, np.log10(3.0), np.log10(4.0)])
 
 
 def test_plotting_multi_experiment_mode_refreshes_via_signal(qcore_application):
@@ -416,6 +502,15 @@ class TestGetAnalysisDataPoints:
         assert len(result) == 1
         assert pytest.approx(result[0]['measured'], rel=1e-6) == np.log10(1e-2)
         assert pytest.approx(result[0]['calculated'], rel=1e-6) == np.log10(2e-2)
+
+    def test_error_bounds_are_one_sigma_around_the_measured_point(self):
+        # ye holds the variance: σ = 1e-3
+        proj = _make_project_stub(np.array([0.10]), np.array([1e-2]), np.array([2e-2]), ye=np.array([1e-6]))
+        p = _make_plotting_stub(proj)
+
+        point = p.getAnalysisDataPoints(0)[0]
+        assert point['errorUpper'] == pytest.approx(np.log10(1.1e-2))
+        assert point['errorLower'] == pytest.approx(np.log10(0.9e-2))
 
     def test_returns_empty_on_error(self):
         proj = MagicMock()

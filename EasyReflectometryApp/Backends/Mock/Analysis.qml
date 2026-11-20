@@ -33,13 +33,14 @@ QtObject {
     readonly property string fitErrorMessage: ''
     readonly property int fitNumRefinedParams: 3
     readonly property real fitChi2: 1.2345
-    readonly property int fitIteration: 0
-    readonly property real fitInterimChi2: 0.0
-    readonly property real fitInterimReducedChi2: 0.0
-    readonly property string fitProgressMessage: ''
-    readonly property bool fitHasInterimUpdate: false
-    readonly property bool fitHasPreviewUpdate: false
-    readonly property var fitPreviewParameterValues: ({})
+    readonly property var fitProgress: ({ phase: '', kind: '', fraction: -1, count: 0, total: 0, unit: '', reducedChi2: 0.0, startedAtMs: 0 })
+    property int fitPreviewInterval: 1
+    function setFitPreviewInterval(value) { if (Number.isInteger(value) && value >= 0) fitPreviewInterval = value }
+    function resetFitPreviewInterval() { fitPreviewInterval = 1 }
+    readonly property bool fitCancelPending: false
+    readonly property var fitCancelledAt: ({})
+    function keepCancelledFit() { console.debug('keepCancelledFit') }
+    function revertCancelledFit() { console.debug('revertCancelledFit') }
     readonly property var fitResults: ({ success: true, nvarys: 3, chi2: 1.2345 })
 
     // Bayesian sampling
@@ -90,6 +91,8 @@ QtObject {
     readonly property int experimentParametersCount: 20
     readonly property int freeParametersCount: 100
     readonly property int fixedParametersCount: 200
+    readonly property int activeParametersCount: 300
+    readonly property int allParametersCount: 320
     readonly property var enabledParameters: [
         {
             'name': 'name 1',

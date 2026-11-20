@@ -92,6 +92,28 @@ function create(chartView, chartViewType, scatterSeriesType, name, axisX, axisY,
     return serie
 }
 
+// Create the error bounds (±1σ) of a measured series: an upper and a lower
+// thin dashed line in the points' own colour, so they read as part of them.
+//   chartView, chartViewType, axisX, axisY -- as for create()
+//   name                                   -- the measured series' name
+//   color                                  -- the measured points' colour
+// Returns {upper, lower}; either is null if creation failed.
+function createErrorBounds(chartView, chartViewType, name, axisX, axisY, color) {
+    function bound(side) {
+        var serie = chartView.createSeries(chartViewType.SeriesTypeLine, name + " - Error " + side, axisX, axisY)
+        if (!serie) {
+            console.warn("MeasuredScatter.createErrorBounds: createSeries returned null for '" + name + "'")
+            return null
+        }
+        serie.color = color
+        serie.width = 1
+        serie.style = Qt.DashLine
+        serie.useOpenGL = chartView.useOpenGL
+        return serie
+    }
+    return { upper: bound("Upper"), lower: bound("Lower") }
+}
+
 // Update color + borderColor in lockstep. Useful when the selected experiment
 // changes and the series should track the new color.
 function setColor(serie, color) {

@@ -142,6 +142,7 @@ EaElements.GroupBox {
                 model: Globals.BackendWrapper.analysisFitObjectives
                 currentIndex: model.indexOf(Globals.BackendWrapper.analysisFitObjective)
                 onActivated: Globals.BackendWrapper.analysisSetFitObjective(model[currentIndex])
+                ToolTip.delay: Globals.Variables.toolTipDelay
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("hybrid: Mighell substitution for zero-variance points, weighted least squares elsewhere.\n" +
                                    "mighell: Mighell transform for all points.\n" +
@@ -149,6 +150,29 @@ EaElements.GroupBox {
                 EaElements.Label {
                     id: objectiveLabel
                     text: qsTr("Zero-variance points")
+                    color: EaStyle.Colors.themeForegroundMinor
+                }
+            }
+
+            // How often the curves are redrawn with the best values while a fit runs.
+            EaElements.TextField {
+                id: previewIntervalField
+                width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
+                topInset: previewIntervalLabel.height
+                topPadding: topInset + padding
+                horizontalAlignment: TextInput.AlignLeft
+                text: formatNumber(Globals.BackendWrapper.analysisFitPreviewInterval)
+                // Empty text: back to the default.
+                onEditingFinished: submitNumber(previewIntervalField,
+                                                Globals.BackendWrapper.analysisSetFitPreviewInterval,
+                                                Globals.BackendWrapper.analysisResetFitPreviewInterval,
+                                                function() { return formatNumber(Globals.BackendWrapper.analysisFitPreviewInterval) })
+                ToolTip.delay: Globals.Variables.toolTipDelay
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("While a fit runs, the curves are redrawn with its best values at most this often (in whole seconds). 0 turns this off. Applies to the next fit.")
+                EaElements.Label {
+                    id: previewIntervalLabel
+                    text: qsTr("Preview every (s)")
                     color: EaStyle.Colors.themeForegroundMinor
                 }
             }
@@ -188,6 +212,7 @@ EaElements.GroupBox {
                                     Globals.BackendWrapper.analysisSetMinimizerOption(optionLoader.modelData.name, text)
                                 focus = false
                             }
+                            ToolTip.delay: Globals.Variables.toolTipDelay
                             ToolTip.visible: hovered
                             ToolTip.text: optionLoader.modelData.doc
                             EaElements.Label {
@@ -208,6 +233,7 @@ EaElements.GroupBox {
                             currentIndex: optionLoader.modelData.isSet ? optionLoader.modelData.choices.indexOf(optionLoader.modelData.value) + 1 : 0
                             onActivated: Globals.BackendWrapper.analysisSetMinimizerOption(
                                              optionLoader.modelData.name, currentIndex === 0 ? '' : optionLoader.modelData.choices[currentIndex - 1])
+                            ToolTip.delay: Globals.Variables.toolTipDelay
                             ToolTip.visible: hovered
                             ToolTip.text: optionLoader.modelData.doc
                             EaElements.Label {
