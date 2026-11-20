@@ -109,16 +109,6 @@ class Material:
     def duplicate_selected(self) -> None:
         self._materials.duplicate_material(self.index)
 
-    def move_selected_up(self) -> None:
-        if self.index > 0:
-            self._materials.move_up(self.index)
-            self.index = self.index - 1
-
-    def move_selected_down(self) -> None:
-        if self.index < len(self._materials) - 1:
-            self._materials.move_down(self.index)
-            self.index = self.index + 1
-
     def set_name_at_current_index(self, new_value: str) -> bool:
         if self._materials[self.index].name != new_value:
             self._materials[self.index].name = new_value

@@ -67,10 +67,33 @@
   two are exclusive, so checking one unchecks the other. The log axis is now
   titled log₁₀(R(q)) or log₁₀(R(q)×q⁴). (#378)
 - **Cancel fitting** now stops every minimizer within one evaluation or step.
-  LMFit and DFO fits used to run to the end before the cancellation took effect;
-  they now stop at once and put the parameters back to their values before the
-  fit. A cancelled Bayesian sampling run is reported as cancelled instead of as
-  a failed fit.
+  LMFit and DFO fits used to run to the end before the cancellation took effect.
+  What happens to the parameters is described under the cancel dialog above. A
+  cancelled Bayesian sampling run is reported as cancelled instead of as a
+  failed fit.
+- Sample page: picking a model in the Models table draws only that model in the
+  reflectivity and SLD charts, with the axes fitted to it. **Show all models**,
+  under the table, draws every model again.
+- Analysis page: the SLD chart shows the models of the experiments selected in
+  the Data Explorer, like the reflectivity chart, instead of every model. (#462)
+- Measured data legends: the symbol matches the chosen marker style (dots,
+  circles or line), and the error bounds have their own legend entry. (#457)
+- Error bounds (±1σ) are drawn in the colour of their measured points instead of
+  a darker shade, and the Analysis reflectivity chart now draws them too. (#460)
+- Material editor:
+  - **Add material** creates `New material` with its SLD and iSLD entered
+    directly, so they can be typed into the table at once. Tick **SLD computed
+    from formula and density** to compute them from the formula again.
+  - The material move up and move down buttons are removed: layers refer to
+    materials directly, so the order of the table has no effect.
+- Analysis parameter table, constrained and shared parameters:
+  - The dependency of a constrained parameter shows the other parameters by
+    their table names, also for a parameter of another model, and replaces
+    only whole variable names, so an expression such as `max(a, 0)` is no
+    longer garbled. (#365, #366)
+  - Hovering the name shows the constraint (`Constrained, read-only: …`), the
+    models sharing the parameter, and how many parameters of other models are
+    tied to it, even when the name is not shortened.
 - A new project now fits with `Bumps_lm` (Levenberg–Marquardt) by default,
   instead of `Bumps_simplex`. Loaded projects keep their own minimizer.
 - **Create a new project** now asks first when the session already holds a

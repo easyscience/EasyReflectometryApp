@@ -88,12 +88,6 @@ QtObject {
     function duplicateSelectedMaterial() {
         console.debug(`duplicateSelectedMaterial ${currentMaterialIndex}`)
     }
-    function moveSelectedMaterialUp() {
-        console.debug(`moveSelectedMaterialUp ${currentMaterialIndex}`)
-    }
-    function moveSelectedMaterialDown() {
-        console.debug(`moveSelectedMaterialDown ${currentMaterialIndex}`)
-    }
     // MODELS
     property int currentModelIndex: -1
     property string currentModelName: 'currentModelName'

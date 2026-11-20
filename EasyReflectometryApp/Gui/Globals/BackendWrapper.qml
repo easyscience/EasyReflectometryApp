@@ -178,8 +178,6 @@ QtObject {
     function sampleAddNewMagneticMaterial() { activeBackend.sample.addNewMagneticMaterial() }
     function sampleSetMaterialMagneticMomentAtIndex(index, value) { activeBackend.sample.setMaterialMagneticMomentAtIndex(index, value) }
     function sampleDuplicateSelectedMaterial() { activeBackend.sample.duplicateSelectedMaterial() }
-    function sampleMoveSelectedMaterialUp() { activeBackend.sample.moveSelectedMaterialUp() }
-    function sampleMoveSelectedMaterialDown() { activeBackend.sample.moveSelectedMaterialDown() }
 
     // Model
     readonly property var sampleModels: activeBackend.sample.models

@@ -328,16 +328,6 @@ class Sample(QObject):
         self.materialsTableChanged.emit()
         self.externalSampleChanged.emit()
 
-    @Slot()
-    def moveSelectedMaterialUp(self) -> None:
-        self._material_logic.move_selected_up()
-        self.materialsTableChanged.emit()
-
-    @Slot()
-    def moveSelectedMaterialDown(self) -> None:
-        self._material_logic.move_selected_down()
-        self.materialsTableChanged.emit()
-
     # # #
     # Models
     # # #

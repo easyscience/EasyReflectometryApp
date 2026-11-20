@@ -161,12 +161,6 @@ def test_material_logic_add_duplicate_move_and_remove():
     assert len(project._materials) == 4
     assert project._materials[2].name == 'Si'
 
-    logic.move_selected_up()
-    assert project.current_material_index == 0
-
-    logic.move_selected_down()
-    assert project.current_material_index == 1
-
     logic.remove_at_index(3)
     assert len(project._materials) == 3
 
