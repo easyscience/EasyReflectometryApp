@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _plain_project():
     from easyreflectometry import Project as RealProject
 
-    global_object.map._clear()
+    global_object.registry.clear()
     project = RealProject()
     project.calculator = 'refl1d'
     project.default_model()
@@ -175,13 +175,12 @@ class TestGuiWiring:
         # Hidden entirely until a layer is magnetic, like the SLD controls.
         assert 'plottingAnyModelHasMagnetism' in group
 
-    def test_both_sample_charts_draw_the_cross_sections(self):
-        """The sample page has two reflectivity views; neither may be missed."""
-        main_content = ROOT / 'EasyReflectometryApp' / 'Gui' / 'Pages' / 'Sample' / 'MainContent'
-        for name in ('SampleView.qml', 'CombinedView.qml'):
-            view = (main_content / name).read_text(encoding='utf-8')
-            assert 'ChannelCurves.js' in view, name
-            assert 'ChannelCurves.create' in view, name
-            assert 'ChannelCurves.refresh' in view, name
-            # Toggling the split must rebuild the series, not just refill them.
-            assert 'function onMagneticProfileChanged' in view, name
+    def test_sample_chart_draws_the_cross_sections(self):
+        view = (ROOT / 'EasyReflectometryApp' / 'Gui' / 'Pages' / 'Sample' / 'MainContent' / 'CombinedView.qml').read_text(
+            encoding='utf-8'
+        )
+        assert 'ChannelCurves.js' in view
+        assert 'ChannelCurves.create' in view
+        assert 'ChannelCurves.refresh' in view
+        # Toggling the split must rebuild the series, not just refill them.
+        assert 'function onMagneticProfileChanged' in view

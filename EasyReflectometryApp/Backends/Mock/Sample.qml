@@ -88,12 +88,6 @@ QtObject {
     function duplicateSelectedMaterial() {
         console.debug(`duplicateSelectedMaterial ${currentMaterialIndex}`)
     }
-    function moveSelectedMaterialUp() {
-        console.debug(`moveSelectedMaterialUp ${currentMaterialIndex}`)
-    }
-    function moveSelectedMaterialDown() {
-        console.debug(`moveSelectedMaterialDown ${currentMaterialIndex}`)
-    }
     // MODELS
     property int currentModelIndex: -1
     property string currentModelName: 'currentModelName'
@@ -143,7 +137,7 @@ QtObject {
     property int currentAssemblyIndex: -1
     property bool constrainAPM: false
     property bool conformalRoughness: false
-    property int repeatedLayerReptitions: 1
+    property int repeatedLayerRepetitions: 1
 
     property string currentAssemblyName: 'currentAssemblyName'
     property string currentAssemblyType: 'Surfactant Layer'
@@ -200,10 +194,10 @@ QtObject {
     }
 
     // Assembly specific
-    property int currentAssemblyRepeatedLayerReptitions: 3
+    property int currentAssemblyRepeatedLayerRepetitions: 3
 
-    function setCurrentAssemblyRepeatedLayerReptitions(value) {
-        console.debug(`setCurrentAssemblyRepeatedLayerReptitions ${value}`)
+    function setCurrentAssemblyRepeatedLayerRepetitions(value) {
+        console.debug(`setCurrentAssemblyRepeatedLayerRepetitions ${value}`)
     }
 
     function setCurrentAssemblyConstrainAPM(value) {
@@ -226,36 +220,33 @@ QtObject {
             'material': 'label 1',
             'solvent': 'label 1',
             'thickness': '1',
-            'thickness_enabled': 'True',
+            'thickness_enabled': true,
             'roughness': '1',
-            'roughness_enabled': 'True',
+            'roughness_enabled': true,
             'solvation': '1',
             'apm': '1',
-            'apm_enabled': 'True',
         },
         {
             'formula': 'formula 2',
             'material': 'label 2',
             'solvent': 'label 2',
             'thickness': ' 2',
-            'thickness_enabled': 'False',
+            'thickness_enabled': false,
             'roughness': '2',
-            'roughness_enabled': 'False',
+            'roughness_enabled': false,
             'solvation': '2',
             'apm': '2',
-            'apm_enabled': 'False',
         },
         {
             'formula': 'formula 3',
             'material': 'label 3',
             'solvent': 'label 3',
             'thickness': '3',
-            'thickness_enabled': 'False',
+            'thickness_enabled': false,
             'roughness': '3',
-            'roughness_enabled': 'False',
+            'roughness_enabled': false,
             'solvation': '3',
             'apm': '3',
-            'apm_enabled': 'False',
         },
     ]
 
@@ -306,9 +297,12 @@ QtObject {
     // Layer magnetism (polarized analysis)
     readonly property bool magnetismSupported: true
     readonly property var layersMagnetism: [
-        { 'label': 'label 1', 'magnetic': 'True', 'rho_m': '5.0', 'theta_m': '40.0', 'phi': '130.0', 'editable': 'True' },
-        { 'label': 'label 2', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
-        { 'label': 'label 3', 'magnetic': 'False', 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': '' },
+        { 'label': 'label 1', 'magnetic': true, 'rho_m': '5.0', 'theta_m': '40.0', 'phi': '130.0', 'editable': true,
+          'material_magnetic': false, 'rho_m_coupled': false },
+        { 'label': 'label 2', 'magnetic': false, 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': false,
+          'material_magnetic': false, 'rho_m_coupled': false },
+        { 'label': 'label 3', 'magnetic': false, 'rho_m': '0.0', 'theta_m': '270.0', 'phi': '', 'editable': false,
+          'material_magnetic': false, 'rho_m_coupled': false },
     ]
     function setLayerMagneticAtIndex(index, value) {
         console.debug(`setLayerMagneticAtIndex ${index} ${value}`)
@@ -364,7 +358,7 @@ QtObject {
         { value: '>', text: '≥' },
         { value: '<', text: '≤' }
     ]
-    readonly property var arithmicOperators: ['', '*', '/', '+', '-']
+    readonly property var arithmeticOperators: ['', '*', '/', '+', '-']
     readonly property var constraintParametersMetadata: [
         { alias: 'parameter_1', displayName: 'parameter 1', independent: true },
         { alias: 'parameter_2', displayName: 'parameter 2', independent: true },
@@ -450,6 +444,28 @@ QtObject {
             constraintsChanged()
         }
     }
+
+    // Model links (contrasts tied to a reference model)
+    function planModelLink(modelIndices, referenceIndex, tieMaterials) {
+        console.debug(`planModelLink ${modelIndices} ${referenceIndex} ${tieMaterials}`)
+        const reference = referenceIndex >= 0 ? referenceIndex : Math.min.apply(null, modelIndices)
+        var rows = []
+        for (const follower of modelIndices) {
+            if (follower === reference) continue
+            rows.push({ key: `${follower}:sample/1/layers/0/thickness`, path: 'sample/1/layers/0/thickness',
+                        name: 'Film thickness', action: 'tie', reason: '', selectable: true, selected: true })
+            rows.push({ key: `${follower}:sample/1/layers/0/material/sld`, path: 'sample/1/layers/0/material/sld',
+                        name: 'Film sld', action: 'undecided', reason: 'material chemistry', selectable: true, selected: tieMaterials })
+            rows.push({ key: `${follower}:scale`, path: 'scale',
+                        name: 'scale', action: 'skip', reason: 'per contrast', selectable: false, selected: false })
+        }
+        return { reference: reference, rows: rows, messages: [] }
+    }
+    function linkModels(modelIndices, referenceIndex, selectedKeys) {
+        console.debug(`linkModels ${modelIndices} ${referenceIndex} ${selectedKeys}`)
+        return { tied: selectedKeys.length, messages: [] }
+    }
+    function removeLinkedParameter(uniqueName) { console.debug(`removeLinkedParameter ${uniqueName}`) }
 
     // Inequality constraints (BUMPS-only fit penalties)
     readonly property int inequalityConstraintsCount: 0

@@ -16,6 +16,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
 from .helpers import IO
+from .helpers import from_qml
 from .logic.experiment_data import concatenated_experiment_data
 from .logic.experiment_data import individual_experiment_data_list
 from .logic.experiment_selection import ExperimentSelection
@@ -27,6 +28,12 @@ from .logic.experiments import flatten_polarized
 
 PLOT_BACKEND = 'QtCharts'
 
+#: Where a non-positive reflectivity goes on a log10 y axis, which has no place for it.
+LOG_FLOOR = -10.0
+
+#: A page's single-experiment measured points and their upper and lower error bounds.
+MEASURED_SERIES = ('measuredSerie', 'errorUpperSerie', 'errorLowerSerie')
+
 
 class Plotting1d(QObject):
     chartRefsChanged = Signal()
@@ -36,6 +43,8 @@ class Plotting1d(QObject):
     experimentDataChanged = Signal()
     samplePageDataChanged = Signal()  # Signal for QML to refresh sample page charts
     samplePageResetAxes = Signal()  # Signal for QML to reset chart axes after data load
+    # A fit preview: redraw from the model *now* (no Qt.callLater), while the fit waits.
+    fitPreviewChanged = Signal()
 
     # New signals for plot mode properties
     plotModeChanged = Signal()
@@ -80,6 +89,8 @@ class Plotting1d(QObject):
     _show_model_channels: bool = False
     # Cached result of the library channel-API check (None = not checked yet).
     _channel_api_error = None
+    # Reflectivity y axis: log10 (the default) or linear. Class-level default for test stubs.
+    _y_axis_log: bool = True
 
     def __init__(self, project_lib: ProjectLib, parent=None, selection: ExperimentSelection | None = None):
         super().__init__(parent)
@@ -95,6 +106,7 @@ class Plotting1d(QObject):
 
         # Plot mode state
         self._plot_rq4 = False
+        self._y_axis_log = True
         self._x_axis_log = False
         self._sld_x_reversed = False
         self._scale_shown = False
@@ -139,6 +151,8 @@ class Plotting1d(QObject):
                 'analysisPage': {
                     'calculatedSerie': None,
                     'measuredSerie': None,
+                    'errorUpperSerie': None,
+                    'errorLowerSerie': None,
                     'sldSerie': None,
                 },
             }
@@ -171,6 +185,40 @@ class Plotting1d(QObject):
         if self._plot_rq4:
             return y * (x**4)
         return y
+
+    def _axis_y(self, y, floor: float = LOG_FLOOR):
+        """Place reflectivity values on the y axis: log10 of them, or unchanged on a linear axis.
+
+        On a log axis a non-positive value goes to `floor`.
+        """
+        if not self._y_axis_log:
+            return y
+        y = np.asarray(y, dtype=float)
+        positive = y > 0
+        return np.where(positive, np.log10(np.where(positive, y, 1.0)), floor)
+
+    def _to_chart_y(self, x, y):
+        """Reflectivity as drawn: R(q)×q⁴ if asked for, then placed on the y axis."""
+        return self._axis_y(self._apply_rq4(np.asarray(x, dtype=float), np.asarray(y, dtype=float)))
+
+    def _chart_y_extent(self, x, y) -> tuple | None:
+        """(min, max) of a reflectivity curve as drawn, None when nothing of it is drawn.
+
+        A log axis draws the positive values only; they are the ones that set its range.
+        """
+        y = np.asarray(y, dtype=float)
+        if y.size == 0:
+            return None
+        y = self._apply_rq4(np.asarray(x, dtype=float), y)
+        y = y[y > 0] if self._y_axis_log else y[np.isfinite(y)]
+        if y.size == 0:
+            return None
+        return float(self._axis_y(y.min())), float(self._axis_y(y.max()))
+
+    def _reflectivity_points(self, data) -> list:
+        """{x, y} points of a reflectivity curve as drawn."""
+        y = self._to_chart_y(data.x, data.y)
+        return [{'x': float(x), 'y': float(value)} for x, value in zip(data.x, y)]
 
     def _qtcharts_series_ref(self, page: str, serie: str):
         return self._chartRefs['QtCharts'].get(page, {}).get(serie)
@@ -205,21 +253,43 @@ class Plotting1d(QObject):
 
     @Slot()
     def togglePlotRQ4(self) -> None:
-        """Toggle R(q)×q⁴ plotting mode."""
-        self._plot_rq4 = not self._plot_rq4
+        """Toggle R(q)×q⁴ plotting mode. It is a log-axis view, so turning it on makes the y axis log."""
+        rq4 = not self._plot_rq4
+        self._set_plot_mode(rq4=rq4, y_axis_log=self._y_axis_log or rq4)
+
+    # Y-axis type (log/linear)
+    @Property(bool, notify=plotModeChanged)
+    def yAxisLog(self) -> bool:
+        """Return whether the reflectivity y axis is log10."""
+        return self._y_axis_log
+
+    @Slot()
+    def toggleYAxisLog(self) -> None:
+        """Toggle between a log10 and a linear reflectivity y axis. A linear one turns R(q)×q⁴ off."""
+        y_axis_log = not self._y_axis_log
+        self._set_plot_mode(rq4=self._plot_rq4 and y_axis_log, y_axis_log=y_axis_log)
+
+    def _set_plot_mode(self, rq4: bool, y_axis_log: bool) -> None:
+        """Set how reflectivity is drawn and redraw every chart that shows it."""
+        self._plot_rq4 = rq4
+        self._y_axis_log = y_axis_log
         self.plotModeChanged.emit()
         # Refresh all charts with new mode
         self.sampleChartRangesChanged.emit()
         self.experimentChartRangesChanged.emit()
         self.samplePageDataChanged.emit()
         # Notify QML to re-read posterior predictive properties
-        # so transforms are re-applied with the new RQ4 setting.
+        # so transforms are re-applied with the new plot mode.
         self.posteriorPredictiveDataChanged.emit()
 
     @Property(str, notify=plotModeChanged)
     def yMainAxisTitle(self) -> str:
-        """Return Y-axis title based on current plot mode."""
-        return 'R(q)×q⁴' if self._plot_rq4 else 'R(q)'
+        """Return Y-axis title based on current plot mode.
+
+        Rich text, as chart axis titles render it: the app font has no ₀ or ⁴ glyph.
+        """
+        quantity = 'R(q)×q<sup>4</sup>' if self._plot_rq4 else 'R(q)'
+        return f'log<sub>10</sub>({quantity})' if self._y_axis_log else quantity
 
     # X-axis type (log/linear)
     @Property(bool, notify=axisTypeChanged)
@@ -275,14 +345,18 @@ class Plotting1d(QObject):
         self.referenceLineVisibilityChanged.emit()
 
     def _get_reference_line_data(self, param_attr: str, default_log: float, use_analysis_range: bool) -> list:
-        """Build a horizontal reference line for the given model parameter.
+        """Build a horizontal reference line for a parameter of the current experiment's model.
+
+        No line for an unpaired experiment: another model's value would pass for its own.
 
         :param param_attr: Model attribute name ('background' or 'scale')
-        :param default_log: Default log10 value if parameter <= 0
+        :param default_log: Where a parameter <= 0 goes on a log10 axis
         :param use_analysis_range: If True, use sample/analysis x-range; if False, use experimental data x-range
         """
         try:
-            model_idx = self._project_lib.current_model_index
+            model_idx = self._current_experiment_model_index()
+            if model_idx is None:
+                return []
             model = self._project_lib.models[model_idx]
 
             if use_analysis_range:
@@ -298,9 +372,8 @@ class Plotting1d(QObject):
                     return []
                 x_min, x_max = float(exp_data.x[0]), float(exp_data.x[-1])
 
-            param_value = getattr(model, param_attr).value
-            y_log = float(np.log10(param_value)) if param_value > 0 else default_log
-            return [{'x': float(x_min), 'y': y_log}, {'x': float(x_max), 'y': y_log}]
+            y = float(self._axis_y(getattr(model, param_attr).value, floor=default_log))
+            return [{'x': float(x_min), 'y': y}, {'x': float(x_max), 'y': y}]
         except (IndexError, AttributeError, TypeError) as e:
             console.debug(f'Error getting {param_attr} reference line data: {e}')
             return []
@@ -310,7 +383,7 @@ class Plotting1d(QObject):
         """Return background reference line data for the Experiment chart."""
         if not self._bkg_shown:
             return []
-        return self._get_reference_line_data('background', -10.0, use_analysis_range=False)
+        return self._get_reference_line_data('background', LOG_FLOOR, use_analysis_range=False)
 
     @Slot(result='QVariantList')
     def getScaleData(self) -> list:
@@ -324,7 +397,7 @@ class Plotting1d(QObject):
         """Return background reference line data for the Analysis chart (sample x-range)."""
         if not self._bkg_shown:
             return []
-        return self._get_reference_line_data('background', -10.0, use_analysis_range=True)
+        return self._get_reference_line_data('background', LOG_FLOOR, use_analysis_range=True)
 
     @Slot(result='QVariantList')
     def getScaleDataForAnalysis(self) -> list:
@@ -351,12 +424,23 @@ class Plotting1d(QObject):
 
     @property
     def model_data(self) -> DataSet1D:
-        idx = self._project_lib.current_model_index
+        """The calculated curve of the current experiment's model, for the Analysis chart.
+
+        The experiment's own pairing, not the Sample page's current model: re-pairing the
+        experiment in the Data Explorer leaves the current model alone, and the chart drew
+        the old model's curve in the new model's colour. Empty for an unpaired experiment,
+        as for its residuals (see `_get_experiment_model_index`).
+        """
+        idx = self._current_experiment_model_index()
         if idx in self._model_data and self._model_data[idx] is not None:
             return self._model_data[idx]
-        try:
-            data = self._project_lib.model_data_for_model_at_index(idx)
-        except IndexError:
+        data = None
+        if idx is not None:
+            try:
+                data = self._project_lib.model_data_for_model_at_index(idx)
+            except IndexError:
+                pass
+        if data is None:
             data = DataSet1D(
                 name='Model Data empty',
                 x=np.empty(0),
@@ -364,6 +448,15 @@ class Plotting1d(QObject):
             )
         self._model_data[idx] = data
         return data
+
+    def _current_experiment_model_index(self) -> int | None:
+        """Index of the model the current experiment is paired with; None without one."""
+        index = self._project_lib.current_experiment_index
+        try:
+            experiment = self._project_lib.experimental_data_for_model_at_index(index)
+        except IndexError:
+            return None
+        return self._get_experiment_model_index(index, experiment)
 
     @property
     def sld_data(self) -> DataSet1D:
@@ -451,24 +544,40 @@ class Plotting1d(QObject):
     def sampleMinY(self):
         return self._get_all_models_sample_range()[2]
 
-    def _get_all_models_sample_range(self):
-        """Get combined X/Y ranges for all models' sample data."""
+    def _model_indices(self, models=None) -> list:
+        """The indices in `models` that name a model, or every model when it is None."""
+        count = len(self._project_lib.models)
+        models = from_qml(models)
+        if models is None:
+            return list(range(count))
+        return [int(index) for index in models if 0 <= int(index) < count]
+
+    @Slot('QVariant', result='QVariantList')
+    def sampleRangeForModels(self, models) -> list:
+        """[min_x, max_x, min_y, max_y] of the reflectivity curves of `models` (None: every model)."""
+        # float(): numpy scalars do not reach QML through a QVariantList
+        return [float(value) for value in self._get_all_models_sample_range(models)]
+
+    @Slot('QVariant', result='QVariantList')
+    def sldRangeForModels(self, models) -> list:
+        """[min_x, max_x, min_y, max_y] of the SLD curves of `models` (None: every model)."""
+        return [float(value) for value in self._get_all_models_sld_range(models)]
+
+    def _get_all_models_sample_range(self, models=None):
+        """Get combined X/Y ranges of the models' sample data (all models unless `models` is given)."""
         min_x, max_x = float('inf'), float('-inf')
         min_y, max_y = float('inf'), float('-inf')
 
-        for idx in range(len(self._project_lib.models)):
+        for idx in self._model_indices(models):
             try:
                 data = self._project_lib.sample_data_for_model_at_index(idx)
                 if data.x.size > 0:
                     min_x = min(min_x, data.x.min())
                     max_x = max(max_x, data.x.max())
-                if data.y.size > 0:
-                    valid_mask = data.y > 0
-                    valid_y = data.y[valid_mask]
-                    if valid_y.size > 0:
-                        valid_y = self._apply_rq4(data.x[valid_mask], valid_y)
-                        min_y = min(min_y, np.log10(valid_y.min()))
-                        max_y = max(max_y, np.log10(valid_y.max()))
+                extent = self._chart_y_extent(data.x, data.y)
+                if extent is not None:
+                    min_y = min(min_y, extent[0])
+                    max_y = max(max_y, extent[1])
             except (IndexError, ValueError):
                 continue
 
@@ -478,11 +587,8 @@ class Plotting1d(QObject):
         if max_x == float('-inf'):
             max_x = self.sample_data.x.max() if self.sample_data.x.size > 0 else 1.0
         if min_y == float('inf'):
-            valid_y = self.sample_data.y[self.sample_data.y > 0] if self.sample_data.y.size > 0 else np.array([])
-            min_y = np.log10(valid_y.min()) if valid_y.size > 0 else -10.0
-        if max_y == float('-inf'):
-            valid_y = self.sample_data.y[self.sample_data.y > 0] if self.sample_data.y.size > 0 else np.array([])
-            max_y = np.log10(valid_y.max()) if valid_y.size > 0 else 0.0
+            # min_y and max_y are always set together
+            min_y, max_y = self._chart_y_extent(self.sample_data.x, self.sample_data.y) or (LOG_FLOOR, 0.0)
 
         return (min_x, max_x, min_y, max_y)
 
@@ -527,12 +633,12 @@ class Plotting1d(QObject):
     def sldThetaMaxY(self) -> float:
         return self._get_all_models_theta_range()[1]
 
-    def _get_all_models_sld_range(self):
-        """Get combined X/Y ranges for all models' SLD data."""
+    def _get_all_models_sld_range(self, models=None):
+        """Get combined X/Y ranges of the models' SLD data (all models unless `models` is given)."""
         min_x, max_x = float('inf'), float('-inf')
         min_y, max_y = float('inf'), float('-inf')
 
-        for idx in range(len(self._project_lib.models)):
+        for idx in self._model_indices(models):
             try:
                 datasets = [self._project_lib.sld_data_for_model_at_index(idx)]
                 # The magnetic curves are drawn on the same axes and rho + rhoM
@@ -599,31 +705,17 @@ class Plotting1d(QObject):
         values = [data.x.min() for data in self._experiment_range_datasets() if data.x.size > 0]
         return min(values) if values else 0.0
 
+    def _experiment_y_extents(self) -> list:
+        extents = (self._chart_y_extent(data.x, data.y) for data in self._experiment_range_datasets())
+        return [extent for extent in extents if extent is not None]
+
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMaxY(self):
-        values = []
-        for data in self._experiment_range_datasets():
-            if data.y.size == 0:
-                continue
-            y_values = self._apply_rq4(data.x, data.y)
-            y_values = y_values[y_values > 0]
-            if y_values.size > 0:
-                values.append(np.log10(y_values.max()))
-        return max(values) if values else 1.0
+        return max((extent[1] for extent in self._experiment_y_extents()), default=1.0)
 
     @Property(float, notify=experimentChartRangesChanged)
     def experimentMinY(self):
-        values = []
-        for data in self._experiment_range_datasets():
-            if data.y.size == 0:
-                continue
-            positive = data.y > 0
-            valid_y = self._apply_rq4(data.x[positive], data.y[positive])
-            # Filter again after transformation to avoid log of zero/negative
-            valid_y = valid_y[valid_y > 0]
-            if valid_y.size > 0:
-                values.append(np.log10(valid_y.min()))
-        return min(values) if values else -10.0
+        return min((extent[0] for extent in self._experiment_y_extents()), default=LOG_FLOOR)
 
     # Residual ranges
     def _invalidate_residual_range_cache(self):
@@ -735,14 +827,9 @@ class Plotting1d(QObject):
     def residualMaxY(self) -> float:
         return self._get_residual_range()[3]
 
-    @Property('QVariant', notify=chartRefsChanged)
-    def chartRefs(self):
+    @Property('QVariantMap', notify=chartRefsChanged)
+    def chartRefs(self) -> dict:
         return self._chartRefs
-
-    @Property(str)
-    def calcSerieColor(self):
-        return '#00FF00'
-        # return self._calcSerieColor
 
     @Property(bool, notify=experimentDataChanged)
     def isMultiExperimentMode(self) -> bool:
@@ -804,16 +891,7 @@ class Plotting1d(QObject):
     def getSampleDataPointsForModel(self, model_index: int) -> list:
         """Get sample data points for a specific model for plotting."""
         try:
-            data = self._project_lib.sample_data_for_model_at_index(model_index)
-            points = []
-            for point in data.data_points():
-                x_val = float(point[0])
-                y_val = float(point[1])
-                if y_val > 0:
-                    y_val = self._apply_rq4(x_val, y_val)
-                y_log = float(np.log10(y_val)) if y_val > 0 else -10.0
-                points.append({'x': x_val, 'y': y_log})
-            return points
+            return self._reflectivity_points(self._project_lib.sample_data_for_model_at_index(model_index))
         except Exception as e:
             console.debug(f'Error getting sample data points for model {model_index}: {e}')
             return []
@@ -838,24 +916,21 @@ class Plotting1d(QObject):
         """Fill a QML-owned series with a model's reflectivity in one call."""
         if series is None:
             return
-        points = self.getSampleDataPointsForModel(model_index)
-        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+        self._replace_series_points(series, self._xy(self.getSampleDataPointsForModel(model_index)))
 
     @Slot('QVariant', int)
     def fillSldSeriesForModel(self, series, model_index: int) -> None:
         """Fill a QML-owned series with a model's nuclear SLD profile in one call."""
         if series is None:
             return
-        points = self.getSldDataPointsForModel(model_index)
-        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+        self._replace_series_points(series, self._xy(self.getSldDataPointsForModel(model_index)))
 
     @Slot('QVariant', int, str, int)
     def fillMagneticSldSegmentSeries(self, series, model_index: int, curve: str, segment: int) -> None:
         """Fill a QML-owned series with one piece of a magnetic curve in one call."""
         if series is None:
             return
-        points = self.getMagneticSldSegment(model_index, curve, segment)
-        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+        self._replace_series_points(series, self._xy(self.getMagneticSldSegment(model_index, curve, segment)))
 
     # Magnetic depth profiles (Phase 5a)
     MAGNETIC_SLD_CURVES = ('spin_up', 'spin_down', 'rho_m', 'theta_m')
@@ -1057,28 +1132,19 @@ class Plotting1d(QObject):
         """Points of one model cross-section, [] when not applicable.
 
         Same transformation as `getSampleDataPointsForModel`, so a cross-section
-        sits on the plain curve's axis: R(q)q⁴ if asked for, then log10.
+        sits on the plain curve's axis.
         """
         data = self._model_channel_data(model_index, channel)
         if data is None:
             return []
-        points = []
-        for x_value, y_value in zip(data.x, data.y):
-            x_value = float(x_value)
-            y_value = float(y_value)
-            if y_value > 0:
-                y_value = self._apply_rq4(x_value, y_value)
-            y_log = float(np.log10(y_value)) if y_value > 0 else -10.0
-            points.append({'x': x_value, 'y': y_log})
-        return points
+        return self._reflectivity_points(data)
 
     @Slot('QVariant', int, str)
     def fillSampleChannelSeriesForModel(self, series, model_index: int, channel: str) -> None:
         """Fill a QML-owned series with one model cross-section in one call."""
         if series is None:
             return
-        points = self.getSampleChannelDataPointsForModel(model_index, channel)
-        self._replace_series_points(series, ((point['x'], point['y']) for point in points))
+        self._replace_series_points(series, self._xy(self.getSampleChannelDataPointsForModel(model_index, channel)))
 
     @Property(bool, notify=magneticProfileChanged)
     def showModelChannels(self) -> bool:
@@ -1257,27 +1323,25 @@ class Plotting1d(QObject):
         return len(self._project_lib.models)
 
     def _measured_points_from_dataset(self, data) -> list:
-        """Log-space measured points with error bands from one flat dataset."""
-        points = []
-        for point in data.data_points():
-            q = point[0]
-            r = point[1]
-            if r <= 0:
-                continue
-            error_var = point[2]
-            error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
-            r_val = self._apply_rq4(q, r)
-            error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
-            error_lower = self._apply_rq4(q, error_lower_linear)
-            points.append(
-                {
-                    'x': float(q),
-                    'y': float(np.log10(r_val)),
-                    'errorUpper': float(np.log10(error_upper)),
-                    'errorLower': float(np.log10(error_lower)),
-                }
-            )
-        return points
+        """Measured points with error bands from one flat dataset, as drawn.
+
+        A log axis drops the non-positive points and keeps the lower error bound positive.
+        """
+        q = np.asarray(data.x, dtype=float)
+        r = np.asarray(data.y, dtype=float)
+        # ye holds variances; the error band is one standard deviation.
+        sigma = np.sqrt(np.clip(np.asarray(data.ye, dtype=float), 0.0, None))
+        if sigma.size != r.size:
+            sigma = np.zeros_like(r)
+        lower = r - sigma
+        if self._y_axis_log:
+            keep = r > 0
+            q, r, sigma, lower = q[keep], r[keep], sigma[keep], np.maximum(lower[keep], 1e-10)
+        y, upper, lower = (self._to_chart_y(q, values) for values in (r, r + sigma, lower))
+        return [
+            {'x': float(x), 'y': float(value), 'errorUpper': float(high), 'errorLower': float(low)}
+            for x, value, high, low in zip(q, y, upper, lower)
+        ]
 
     @Slot(int, result='QVariantList')
     def getExperimentDataPoints(self, experiment_index: int) -> list:
@@ -1595,11 +1659,14 @@ class Plotting1d(QObject):
             for point in self._get_aligned_analysis_values(experiment_index, channel):
                 measured = point['measured']
                 calculated = point['calculated']
+                sigma = point['sigma']
                 points.append(
                     {
                         'x': point['q'],
-                        'measured': float(np.log10(measured)) if measured > 0 else -10.0,
-                        'calculated': float(np.log10(calculated)) if calculated > 0 else -10.0,
+                        'measured': float(self._axis_y(measured)),
+                        'errorUpper': float(self._axis_y(measured + sigma)),
+                        'errorLower': float(self._axis_y(measured - sigma)),
+                        'calculated': float(self._axis_y(calculated)),
                         'hasCalculated': bool(point['has_calculated']),
                     }
                 )
@@ -1649,6 +1716,22 @@ class Plotting1d(QObject):
         self.drawCalculatedAndMeasuredOnAnalysisChart()
         self.sampleChartRangesChanged.emit()
 
+    def refreshFitPreview(self):
+        """Redraw the Analysis page from a running fit's best point, while the fit waits.
+
+        Every model read must happen before this returns, so only signals whose QML
+        handlers draw synchronously are emitted: the single-experiment curves and
+        the residuals (refreshAnalysisPage), the SLD range, and fitPreviewChanged
+        for the SLD and multi-experiment charts.
+
+        Only the caches redrawn here are dropped: the others keep serving their
+        pre-fit data to lazy readers instead of reading the model mid-evaluation.
+        """
+        self._magnetic_profile_cache = {}
+        self.refreshAnalysisPage()
+        self.sldChartRangesChanged.emit()
+        self.fitPreviewChanged.emit()
+
     def refreshExperimentRanges(self):
         """Emit signal to update experiment chart ranges when selection changes."""
         self.experimentChartRangesChanged.emit()
@@ -1676,13 +1759,16 @@ class Plotting1d(QObject):
         series.replaceNp(x, y)
         return len(pts)
 
+    @staticmethod
+    def _xy(points: list, y_key: str = 'y'):
+        """(x, y) pairs of chart point maps, for `_replace_series_points`."""
+        return ((point['x'], point[y_key]) for point in points)
+
     def qtchartsReplaceCalculatedOnSampleChartAndRedraw(self):
         if not self._clear_qtcharts_series('samplePage', 'sampleSerie'):
             return
         series = self._qtcharts_series_ref('samplePage', 'sampleSerie')
-        nr_points = self._replace_series_points(
-            series, ((point[0], np.log10(point[1])) for point in self.sample_data.data_points() if point[1] > 0)
-        )
+        nr_points = self._replace_series_points(series, self._xy(self._reflectivity_points(self.sample_data)))
         console.debug(IO.formatMsg('sub', 'Calc curve', f'{nr_points} points', 'on sample page', 'replaced'))
 
     @Slot()
@@ -1711,41 +1797,26 @@ class Plotting1d(QObject):
             else:
                 self.qtchartsReplaceMeasuredOnExperimentChartAndRedraw()
 
+    def _replace_measured_series(self, page: str) -> int:
+        """Draw the current experiment's points and their error bounds on a page's measured series."""
+        points = self._measured_points_from_dataset(self.experiment_data)
+        for serie, y_key in zip(MEASURED_SERIES, ('y', 'errorUpper', 'errorLower')):
+            self._replace_series_points(self._qtcharts_series_ref(page, serie), self._xy(points, y_key))
+        return len(points)
+
     def qtchartsReplaceMeasuredOnExperimentChartAndRedraw(self):
-        if not self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie'):
+        if not self._clear_qtcharts_series('experimentPage', *MEASURED_SERIES):
             return
 
-        series_measured = self._qtcharts_series_ref('experimentPage', 'measuredSerie')
-        series_error_upper = self._qtcharts_series_ref('experimentPage', 'errorUpperSerie')
-        series_error_lower = self._qtcharts_series_ref('experimentPage', 'errorLowerSerie')
-        measured_points = []
-        error_upper_points = []
-        error_lower_points = []
-        for point in self.experiment_data.data_points():
-            q = point[0]
-            r = point[1]
-            if r <= 0:
-                continue
-            error_var = point[2]
-            error_lower_linear = max(r - np.sqrt(error_var), 1e-10)
-            r_val = self._apply_rq4(q, r)
-            error_upper = self._apply_rq4(q, r + np.sqrt(error_var))
-            error_lower = self._apply_rq4(q, error_lower_linear)
-            measured_points.append((q, np.log10(r_val)))
-            error_upper_points.append((q, np.log10(error_upper)))
-            error_lower_points.append((q, np.log10(error_lower)))
-        self._replace_series_points(series_measured, measured_points)
-        self._replace_series_points(series_error_upper, error_upper_points)
-        self._replace_series_points(series_error_lower, error_lower_points)
-
-        console.debug(IO.formatMsg('sub', 'Measured curve', f'{len(measured_points)} points', 'on experiment page', 'replaced'))
+        nr_points = self._replace_measured_series('experimentPage')
+        console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on experiment page', 'replaced'))
 
     def qtchartsReplaceMultiExperimentChartAndRedraw(self):
         """Draw multiple experiment series with distinct colors."""
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines'))
 
         # Clear default series but don't use them for multi-experiment mode
-        self._clear_qtcharts_series('experimentPage', 'measuredSerie', 'errorUpperSerie', 'errorLowerSerie')
+        self._clear_qtcharts_series('experimentPage', *MEASURED_SERIES)
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
@@ -1764,32 +1835,21 @@ class Plotting1d(QObject):
         console.debug(IO.formatMsg('sub', 'Multi-experiment mode', 'drawing separate lines on analysis page'))
 
         # Clear default series but don't use them for multi-experiment mode
-        self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie')
+        self._clear_qtcharts_series('analysisPage', *MEASURED_SERIES, 'calculatedSerie')
 
         # Individual experiment series are managed by QML
         # This method is called to trigger the refresh, actual drawing is handled by QML
         self.experimentDataChanged.emit()
 
     def qtchartsReplaceCalculatedAndMeasuredOnAnalysisChartAndRedraw(self):
-        if not self._clear_qtcharts_series('analysisPage', 'measuredSerie', 'calculatedSerie'):
+        if not self._clear_qtcharts_series('analysisPage', *MEASURED_SERIES, 'calculatedSerie'):
             return
 
-        series_measured = self._qtcharts_series_ref('analysisPage', 'measuredSerie')
         series_calculated = self._qtcharts_series_ref('analysisPage', 'calculatedSerie')
-        nr_points = self._replace_series_points(
-            series_measured,
-            (
-                (point[0], np.log10(self._apply_rq4(point[0], point[1])))
-                for point in self.experiment_data.data_points()
-                if point[1] > 0
-            ),
-        )
+        nr_points = self._replace_measured_series('analysisPage')
         console.debug(IO.formatMsg('sub', 'Measured curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
-        nr_points = self._replace_series_points(
-            series_calculated,
-            ((point[0], np.log10(self._apply_rq4(point[0], point[1]))) for point in self.model_data.data_points()),
-        )
+        nr_points = self._replace_series_points(series_calculated, self._xy(self._reflectivity_points(self.model_data)))
         console.debug(IO.formatMsg('sub', 'Calculated curve', f'{nr_points} points', 'on analysis page', 'replaced'))
 
     # ------------------------------------------------------------------
@@ -1816,28 +1876,22 @@ class Plotting1d(QObject):
             self._posterior_q, self._posterior_upper)
 
     def _transform_posterior_series(self, q_list: list, y_list: list) -> list:
-        """Apply RQ4 and log10 transforms to a posterior predictive series.
+        """Place a posterior predictive series on the chart's y axis.
 
         Transforms are applied at read time so that toggling plot mode
-        (RQ4 on/off) is reflected without re-publishing the data.
+        (RQ4, log/linear) is reflected without re-publishing the data.
         """
         if not y_list:
             return []
-        q = np.asarray(q_list, dtype=float)
-        y = np.asarray(y_list, dtype=float)
-        y = self._apply_rq4(q, y)
-        eps = 1e-30
-        return np.where(y > 0, np.log10(y), np.log10(eps)).tolist()
+        return np.asarray(self._to_chart_y(q_list, y_list), dtype=float).tolist()
 
     def set_posterior_predictive(self, q, median, lower, upper) -> None:
         """Publish posterior predictive reflectivity curves to QML.
 
-        Applies the same chart-space transforms (R(q)×q⁴, log10) used by
+        Applies the same chart-space transforms (R(q)×q⁴, log10 or linear) used by
         the existing analysis series, so the posterior overlay stays in sync
         with plot-mode toggles.
         """
-        import numpy as np
-
         q = np.asarray(q, dtype=float)
         median = np.asarray(median, dtype=float)
         lower = np.asarray(lower, dtype=float)
@@ -1885,8 +1939,6 @@ class Plotting1d(QObject):
         Unlike reflectivity, SLD data is published without any chart-space
         transform, matching the existing SLD chart series convention.
         """
-        import numpy as np
-
         z = np.asarray(z, dtype=float)
         median = np.asarray(median, dtype=float)
         lower = np.asarray(lower, dtype=float)

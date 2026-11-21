@@ -8,12 +8,22 @@ Download them from the [latest release](https://github.com/EasyScience/EasyRefle
 | Operating system | Release asset (zip file whose name contains) |
 | --- | --- |
 | Windows | `windows-2022` |
-| macOS (Apple Silicon) | `macos-14-AppleSilicon` |
+| macOS (Apple Silicon) | `macos-15-AppleSilicon` |
 | Linux, built on Ubuntu 22.04 | `ubuntu-22.04` |
 | Linux, built on Ubuntu 24.04 | `ubuntu-24.04` |
 
 Unzip the archive and run the installer inside it. On Linux, make the installer executable first (`chmod +x <installer>`).
 On macOS, see the note on unidentified developers in the [README](./README.md#installing).
+
+### Upgrading from an earlier version
+
+When the chosen folder already holds an earlier version, the installer asks whether to remove it first.
+Choose _Yes_ to replace the earlier version with the new one in the same folder.
+Choose _No_ to keep the earlier version; the new one is then installed into a separate folder named after its version, such as `EasyReflectometryApp-1.6.0`.
+Close EasyReflectometry before upgrading; an earlier version that is still running cannot be removed.
+
+Installers of version 1.5.0 and older cannot install over an existing installation, and stop with the message _"The directory you selected already exists and contains an installation"_.
+With those, remove the earlier version first: run **MaintenanceTool** from its installation folder, select _Remove all components_ and follow the instructions. Alternatively, choose a different installation folder.
 
 If no installer works on your system, install from source as described below.
 
@@ -53,7 +63,7 @@ See [Qt's Linux requirements](https://doc.qt.io/qt-6/linux-requirements.html) fo
 
 ## Development installation
 
-Development happens on the `develop` branch, which installs the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library from its `develop` branch on GitHub, so **git** must be available.
+Development happens on the `develop` branch, which installs the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library from GitHub (its `core-3.0` branch, built on easyscience 3, until that branch is merged into `develop`), so **git** must be available.
 In the cloned repository, switch to `develop` and install the app with the test dependencies and the linter, then run the test suite:
 
 ```
@@ -62,7 +72,7 @@ pip install -e ".[test]" ruff
 python -m pytest tests
 ```
 
-When a change also touches the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library or the [easyscience](https://github.com/easyscience/core) core, install local checkouts of them in editable mode, after installing the app:
+When a change also touches the [easyreflectometry](https://github.com/easyscience/reflectometry-lib) library or the [easyscience](https://github.com/easyscience/core) core, install local checkouts of them in editable mode, after installing the app (the core checkout must be easyscience 3.0.2 or later):
 
 ```
 pip install -e ../reflectometry-lib

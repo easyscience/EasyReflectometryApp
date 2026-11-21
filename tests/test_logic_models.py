@@ -37,8 +37,8 @@ def test_model_properties_and_resolution_handling(monkeypatch):
     assert logic.models_names == ['Model A', 'Model B']
 
     assert logic.set_name_at_current_index('Renamed') is True
-    assert logic.set_scaling_at_current_index('2.5') is True
-    assert logic.set_background_at_current_index('0.7') is True
+    assert logic.set_scaling_at_current_index(2.5) is True
+    assert logic.set_background_at_current_index(0.7) is True
     assert logic.set_resolution_at_current_index('3.3') is True
     assert models[0].resolution_function.constant == 3.3
 

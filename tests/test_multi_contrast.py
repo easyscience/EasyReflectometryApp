@@ -20,9 +20,9 @@ Q = np.linspace(0.01, 0.25, 30)
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 @pytest.fixture
@@ -47,6 +47,15 @@ def _data(project, index, noise=0.01) -> DataSet1D:
     y = project.model_data_for_model_at_index(index, q_range=Q).y
     y = y * (1 + noise * np.random.default_rng(index).standard_normal(Q.size))
     return DataSet1D(name=f'data {index}', x=Q, y=y, ye=(0.02 * y) ** 2, model=project.models[index], auto_background=False)
+
+
+def _default_keys(sample, indices, reference=-1) -> list:
+    """The keys of the rows the link preview ticks by default."""
+    return [row['key'] for row in sample.planModelLink(indices, reference, False)['rows'] if row['selected']]
+
+
+def _link_rows(sample) -> list:
+    return [row for row in sample.constraintsList if row['type'] == 'link']
 
 
 class TestContrast:
@@ -77,7 +86,9 @@ class TestContrast:
         _contrast(project, sample)
         roughness = project.models[0].sample[2].layers[0].roughness  # substrate, shared
         constrain_equal(roughness, project.models[1].sample[1].layers[0].roughness)
-        row = next(row for row in Parameters(project).parameters if row['unique_name'] == roughness.unique_name)
+        table = Parameters(project)
+        table.set_variability_filter_criteria('all')  # a tied row is not active: hidden by default
+        row = next(row for row in table.parameters if row['unique_name'] == roughness.unique_name)
         assert not row['detachable']
         assert sample.detachParameter(roughness.unique_name, 1)['success'] is False
         assert not roughness.independent
@@ -139,18 +150,140 @@ class TestLinkModels:
         assert list(film.thickness.dependency_map.values()) == [reference.sample[1].layers[0].thickness]
         assert film.material.sld.independent
 
-    def test_removing_a_linked_row_restores_the_parameter(self, project_and_sample):
+    def test_a_link_is_listed_as_one_row(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        result = sample.constrainModelsParameters([0, 1], False)
+
+        rows = sample.constraintsList
+        links = [row for row in rows if row['type'] == 'link']
+        assert len(links) == 1
+        assert links[0]['count'] == result['tied'] == len(links[0]['pairs'])
+        assert links[0]['dependentName'] == project.models[1].name
+        assert links[0]['referenceName'] == project.models[0].name
+        tied = {pair['uniqueName'] for pair in links[0]['pairs']}
+        assert not any(row.get('uniqueName') in tied for row in rows if row['type'] != 'link')
+
+    def test_removing_the_link_row_restores_every_parameter(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        film.thickness.value = 120.0
+        film.roughness.value = 4.5
+        sample.constrainModelsParameters([0, 1], False)
+        index = next(i for i, row in enumerate(sample.constraintsList) if row['type'] == 'link')
+
+        sample.removeConstraintByIndex(index)
+
+        assert film.thickness.independent and film.roughness.independent
+        assert film.thickness.value == pytest.approx(120.0)
+        assert film.roughness.value == pytest.approx(4.5)
+        assert project.links == []
+
+    def test_removing_one_tie_of_a_link_keeps_the_others(self, project_and_sample):
         project, sample = project_and_sample
         project.models.duplicate_model(0)
         film = project.models[1].sample[1].layers[0]
         film.thickness.value = 120.0
         sample.constrainModelsParameters([0, 1], False)
-        index = next(i for i, row in enumerate(sample.constraintsList) if row.get('uniqueName') == film.thickness.unique_name)
 
-        sample.removeConstraintByIndex(index)
+        sample.removeLinkedParameter(film.thickness.unique_name)
 
         assert film.thickness.independent
         assert film.thickness.value == pytest.approx(120.0)
+        assert not film.roughness.independent
+        (link,) = [row for row in sample.constraintsList if row['type'] == 'link']
+        assert film.thickness.unique_name not in {pair['uniqueName'] for pair in link['pairs']}
+
+    def test_the_plan_lists_every_row_with_its_default(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+
+        plan = sample.planModelLink([0, 1], -1, False)
+
+        assert plan['reference'] == 0 and plan['messages'] == []
+        rows = {row['path']: row for row in plan['rows']}
+        thickness = rows['sample/1/layers/0/thickness']
+        assert thickness['selectable'] and thickness['selected'] and thickness['key'].startswith('1:')
+        sld = rows['sample/1/layers/0/material/sld']
+        assert sld['action'] == 'undecided' and sld['selectable'] and not sld['selected']
+        assert not rows['scale']['selectable'] and rows['scale']['reason'] == 'per contrast'
+        assert {row['path']: row['selected'] for row in sample.planModelLink([0, 1], -1, True)['rows']}[
+            'sample/1/layers/0/material/sld'
+        ]
+        assert film.thickness.independent  # planning changes nothing
+        assert project.links == []
+
+    def test_a_pinned_follower_is_not_tied(self, project_and_sample):
+        """The library cannot see a pin (it is the app's mark) and would tie the parameter,
+        leaving it dependent and still marked as pinned."""
+        from EasyReflectometryApp.Backends.Py.logic.helpers import is_independent
+
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        index = next(i for i, e in enumerate(sample._constrainable_parameter_entries()) if e['object'] is film.thickness)
+        assert sample.addConstraint(index, '=', '120')['success']
+
+        rows = {row['path']: row for row in sample.planModelLink([0, 1], -1, False)['rows']}
+        thickness = rows['sample/1/layers/0/thickness']
+        assert not thickness['selectable'] and thickness['reason'] == 'pinned to a value'
+
+        assert sample.constrainModelsParameters([0, 1], False)['tied'] > 0
+        assert film.thickness.independent and film.thickness.value == 120.0
+        assert not is_independent(film.thickness)  # still pinned
+        assert not film.roughness.independent
+
+    def test_unticked_rows_stay_free(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        plan = sample.planModelLink([0, 1], -1, False)
+        keys = [row['key'] for row in plan['rows'] if row['selected'] and not row['path'].endswith('/thickness')]
+
+        result = sample.linkModels([0, 1], -1, keys)
+
+        assert result['tied'] == len(keys)
+        assert film.thickness.independent
+        assert not film.roughness.independent
+
+    def test_a_ticked_material_row_is_tied_without_tie_materials(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        plan = sample.planModelLink([0, 1], -1, False)
+        key = next(row['key'] for row in plan['rows'] if row['path'] == 'sample/1/layers/0/material/sld')
+
+        sample.linkModels([0, 1], -1, [key])
+
+        assert list(film.material.sld.dependency_map.values()) == [project.models[0].sample[1].layers[0].material.sld]
+        assert film.thickness.independent
+
+    def test_the_reference_model_can_be_chosen(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        first, second = (model.sample[1].layers[0] for model in project.models)
+
+        assert sample.linkModels([0, 1], 1, _default_keys(sample, [0, 1], 1))['tied'] > 0
+
+        assert list(first.thickness.dependency_map.values()) == [second.thickness]
+        assert second.thickness.independent
+
+    def test_the_reference_must_be_selected(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        project.models.duplicate_model(0)
+        result = sample.linkModels([0, 1], 2, [])
+        assert result['tied'] == 0 and 'reference' in result['messages'][0]
+        assert project.links == []
+
+    def test_nothing_ticked_links_nothing(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        result = sample.linkModels([0, 1], -1, [])
+        assert result['tied'] == 0 and result['messages']
+        assert project.links == []
 
     def test_different_layouts_are_reported(self, project_and_sample):
         project, sample = project_and_sample
@@ -168,6 +301,81 @@ class TestLinkModels:
         assert result['tied'] == 0 and 'No model was linked.' in result['messages']
         assert project.links == []
         assert project.models[1].sample[1].layers[0].thickness.independent
+
+    def test_removing_the_last_tie_removes_the_link(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        key = next(key for key in _default_keys(sample, [0, 1]) if key.endswith('sample/1/layers/0/roughness'))
+        assert sample.linkModels([0, 1], -1, [key])['tied'] == 1
+
+        sample.removeLinkedParameter(film.roughness.unique_name)
+
+        assert film.roughness.independent
+        assert _link_rows(sample) == []
+        assert project.links == []
+
+    def test_three_models_with_partial_ticks(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        project.models.duplicate_model(0)
+        reference, second, third = (model.sample[1].layers[0] for model in project.models)
+        keys = [key for key in _default_keys(sample, [0, 1, 2]) if key != '2:sample/1/layers/0/thickness']
+
+        result = sample.linkModels([0, 1, 2], -1, keys)
+
+        assert result['tied'] == len(keys) and result['messages'] == []
+        assert [link.follower for link in project.links] == [project.models[1], project.models[2]]
+        assert list(second.thickness.dependency_map.values()) == [reference.thickness]
+        assert third.thickness.independent
+        assert list(third.roughness.dependency_map.values()) == [reference.roughness]
+        first, second_link = (row['count'] for row in _link_rows(sample))
+        assert first == second_link + 1 and first + second_link == len(keys)
+
+    def test_removing_the_second_of_two_links(self, project_and_sample):
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        project.models.duplicate_model(0)
+        assert sample.constrainModelsParameters([0, 1])['tied']
+        assert sample.constrainModelsParameters([0, 2])['tied']
+        index = [i for i, row in enumerate(sample.constraintsList) if row['type'] == 'link'][1]
+
+        sample.removeConstraintByIndex(index)
+
+        assert [link.follower for link in project.links] == [project.models[1]]
+        assert project.models[2].sample[1].layers[0].thickness.independent
+        assert not project.models[1].sample[1].layers[0].thickness.independent
+        (link,) = _link_rows(sample)
+        assert link['linkIndex'] == 0
+
+    def test_a_tie_constrained_otherwise_leaves_the_link(self, project_and_sample):
+        from easyreflectometry.constraints import constrain_equal
+
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        key = next(key for key in _default_keys(sample, [0, 1]) if key.endswith('sample/1/layers/0/thickness'))
+        sample.linkModels([0, 1], -1, [key])
+
+        constrain_equal(film.thickness, project.models[0].sample[1].layers[0].roughness)
+
+        assert _link_rows(sample) == []
+        assert any(row.get('uniqueName') == film.thickness.unique_name for row in sample.constraintsList)
+
+    @pytest.mark.xfail(strict=True, reason='a link none of whose ties hold stays in Project.links (PR #363 review, finding B)')
+    def test_a_link_without_ties_is_dropped(self, project_and_sample):
+        from easyreflectometry.constraints import constrain_equal
+
+        project, sample = project_and_sample
+        project.models.duplicate_model(0)
+        film = project.models[1].sample[1].layers[0]
+        key = next(key for key in _default_keys(sample, [0, 1]) if key.endswith('sample/1/layers/0/thickness'))
+        sample.linkModels([0, 1], -1, [key])
+
+        constrain_equal(film.thickness, project.models[0].sample[1].layers[0].roughness)
+
+        assert _link_rows(sample) == []  # listing the constraints is where a dead link could be dropped
+        assert project.links == []
 
 
 class TestExperiments:
@@ -263,6 +471,19 @@ def test_moving_the_selected_model_keeps_it_selected(project_and_sample, start, 
     assert changed
 
 
+@pytest.mark.parametrize('add', ['addNewModel', 'duplicateSelectedModel'])
+def test_a_new_model_is_announced_as_the_current_one(project_and_sample, add):
+    # The GUI reads the current model from currentModelIndex (the Sample charts draw only it
+    # when not showing all models); a stale value would point at the previous model.
+    project, sample = project_and_sample
+    changed = []
+    sample.modelsIndexChanged.connect(lambda: changed.append(sample.currentModelIndex))
+
+    getattr(sample, add)()
+
+    assert changed == [1] and project.current_model_index == 1
+
+
 def test_a_model_left_out_of_the_fit_does_not_block_it(project_and_sample):
     from EasyReflectometryApp.Backends.Py.analysis import Analysis
 
@@ -278,7 +499,7 @@ def test_a_model_left_out_of_the_fit_does_not_block_it(project_and_sample):
     excluded_film.max = np.inf
     names = analysis._minimizers_logic.minimizers_available()
     analysis.setMinimizerCurrentIndex(names.index('LMFit_differential_evolution'))
-    analysis._chached_parameters = None
+    analysis._cached_enabled_parameters = None
 
     assert analysis._prefit_errors() == []
     assert analysis.unboundedFreeParametersCount == 0

@@ -16,7 +16,7 @@ FE_RHO_M = 5.042
 @pytest.fixture
 def project():
     """A refl1d project whose film layer (assembly 1, layer 0) is iron and magnetic."""
-    global_object.map._clear()
+    global_object.registry.clear()
     project = RealProject()
     project.calculator = 'refl1d'
     project.default_model()
@@ -43,13 +43,13 @@ class TestCoupling:
     def test_rows_report_the_material_and_the_coupling(self, project):
         logic = Layers(project)
         row = logic.magnetism[0]
-        assert (row['material_magnetic'], row['rho_m_coupled']) == ('True', 'False')
+        assert (row['material_magnetic'], row['rho_m_coupled']) == (True, False)
 
         assert logic.set_rho_m_coupled_at_index(0, True) is True
         assert logic.set_rho_m_coupled_at_index(0, True) is False
 
         row = logic.magnetism[0]
-        assert row['rho_m_coupled'] == 'True'
+        assert row['rho_m_coupled'] is True
         assert float(row['rho_m']) == pytest.approx(FE_RHO_M, abs=1e-3)
 
     def test_coupled_rho_m_cannot_be_typed(self, project):
@@ -64,8 +64,8 @@ class TestCoupling:
         film = _film(project)
         film.material.magnetic_moment = 1.1
 
-        wrapper = project.models[0].interface()._wrapper
-        assert wrapper.get_layer_value(film.unique_name, 'magnetism_rhoM') == pytest.approx(FE_RHO_M / 2, abs=1e-3)
+        # The calculator reads the model when it calculates, so the layer's value is what it uses.
+        assert film.magnetism.rho_m.value == pytest.approx(FE_RHO_M / 2, abs=1e-3)
 
 
 class TestField:
@@ -150,6 +150,9 @@ class TestParameterTable:
 
     def test_magnetic_filter_includes_moment_and_field(self, project):
         logic = Parameters(project)
+        # The moment is inactive here (no layer coupled), so the default
+        # 'active' filter would hide it; this checks the name matching alone.
+        logic.set_variability_filter_criteria('all')
         logic.set_name_filter_criteria('magnetic')
         names = {row['name'] for row in logic.parameters}
         assert any('magnetic_moment' in name for name in names)
@@ -158,7 +161,7 @@ class TestParameterTable:
 
 
 def _in_fit(project, parameter):
-    return any(candidate is parameter for model in project.models for candidate in model.get_fit_parameters())
+    return any(candidate is parameter for model in project.models for candidate in model.get_free_parameters())
 
 
 class TestInactiveMeansOutOfTheFit:

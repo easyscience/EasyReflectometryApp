@@ -8,18 +8,11 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
-from PySide6.QtQml import QJSValue
 
 from .helpers import IO
+from .helpers import from_qml as _from_qml
 from .logic.models import Models as ModelsLogic
 from .logic.project import Project as ProjectLogic
-
-
-def _from_qml(value):
-    """Unwrap a QJSValue handed over by QML into plain Python data."""
-    if isinstance(value, QJSValue):
-        return value.toVariant()
-    return value
 
 
 def _local_path(path) -> str:

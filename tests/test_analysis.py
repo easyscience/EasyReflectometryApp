@@ -67,16 +67,19 @@ class StubWorker(QObject):
     finished = Signal(list)
     failed = Signal(str)
     progressDetail = Signal(dict)
+    previewRequested = Signal(dict)
 
     instances = []
 
-    def __init__(self, fitter, method_name, args=(), kwargs=None, parent=None):
+    def __init__(self, fitter, method_name, args=(), kwargs=None, parent=None, preview_interval_s=0.0):
         super().__init__(parent)
         self.fitter = fitter
         self.method_name = method_name
         self.args = args
         self.kwargs = kwargs or {}
         self.parent = parent
+        self.preview_interval_s = preview_interval_s
+        self.best_progress = None
         self.stop_calls = 0
         self.start_calls = 0
         self.delete_calls = 0
@@ -112,13 +115,13 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
     analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
-    fitting_changed = {'count': 0}
-    analysis.fittingChanged.connect(
-        lambda: fitting_changed.__setitem__('count', fitting_changed['count'] + 1)
-    )
 
     analysis._start_threaded_fit()
 
+    emitted = []
+    analysis.fittingChanged.connect(lambda: emitted.append('fitting'))
+    analysis.fitProgressChanged.connect(lambda: emitted.append('progress'))
+    analysis.externalFittingChanged.connect(lambda: emitted.append('external'))
     worker = StubWorker.instances[-1]
     worker.progressDetail.emit(
         {
@@ -126,7 +129,6 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
             'chi2': 3.5,
             'reduced_chi2': 1.4,
             'parameter_values': {'thickness': 12.0},
-            'refresh_plots': False,
             'finished': False,
         }
     )
@@ -135,30 +137,48 @@ def test_start_threaded_fit_propagates_progress_to_properties(monkeypatch, qcore
     assert worker.fitter == 'fake-fitter'
     assert worker.kwargs == {'weights': ['w']}
     assert worker.start_calls == 1
+    assert worker.preview_interval_s == analysis.fitPreviewInterval == 1.0
     assert analysis.fittingRunning is True
-    assert analysis.fitIteration == 9
-    assert analysis.fitInterimChi2 == 3.5
-    assert analysis.fitInterimReducedChi2 == 1.4
-    assert analysis.fitProgressMessage == 'Fitting... iter 9, Chi2 = 3.5'
-    assert analysis.fitHasInterimUpdate is True
-    assert analysis.fitHasPreviewUpdate is False
-    assert analysis.fitPreviewParameterValues == {'thickness': 12.0}
-    assert fitting_changed['count'] >= 2
+    assert analysis.fitProgress['phase'] == 'fitting'
+    assert analysis.fitProgress['count'] == 9
+    assert analysis.fitProgress['reducedChi2'] == 1.4
+    # A progress tick re-reads the progress only: not the results, not the plots
+    assert emitted == ['progress']
+
+
+def test_lifecycle_transitions_notify_the_progress_too(monkeypatch, qcore_application):
+    StubWorker.instances = []
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
+    phases = []
+    analysis.fitProgressChanged.connect(lambda: phases.append(analysis.fitProgress['phase']))
+
+    analysis._start_threaded_fit()
+    analysis._onStopFit()
+    StubWorker.instances[-1].failed.emit('Fitting cancelled by user')
+
+    assert phases[0] == 'starting'
+    assert 'cancelling' in phases
+    assert phases[-1] == ''
 
 
 def test_on_stop_fit_requests_worker_stop_and_keeps_ui_locked_until_thread_exits(monkeypatch, qcore_application):
     """Cancel only requests a cooperative stop; ``running`` stays True until the
-    worker thread actually exits, so a second fit cannot start while a
-    non-abortable minimizer is still mutating the shared parameters."""
+    worker thread actually exits, so a second fit cannot start while the
+    stopping engine is still finishing its current evaluation or step."""
     StubWorker.instances = []
     analysis = _make_analysis(monkeypatch)
     analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
 
     analysis._start_threaded_fit()
     worker = StubWorker.instances[-1]
+    refreshes = []
+    analysis.externalFittingChanged.connect(lambda: refreshes.append('refresh'))
 
     analysis._onStopFit()
 
+    # The parameters are refreshed when the worker exits, not while it may still write them
+    assert refreshes == []
     assert worker.stop_calls == 1
     assert analysis._fitter_thread is worker
     # UI stays locked: the thread has not exited yet.
@@ -272,8 +292,8 @@ def test_finite_bounds_checks_ignore_the_table_filters(monkeypatch, qcore_applic
     for name_filter, variability, rows in (('', 'all', 4), ('', 'fixed', 1), ('zzz', 'free', 0)):
         table.set_name_filter_criteria(name_filter)
         table.set_variability_filter_criteria(variability)
-        analysis._chached_parameters = None
-        assert len(analysis.fitableParameters) == rows
+        analysis._cached_enabled_parameters = None
+        assert len(analysis.enabledParameters) == rows
 
         assert analysis.unboundedFreeParametersCount == 2
         errors = analysis._prefit_errors()
@@ -313,6 +333,86 @@ def test_cancelled_worker_failure_does_not_emit_fit_failed(monkeypatch, qcore_ap
     assert analysis.fitErrorMessage == 'Fitting cancelled by user'
     assert received == []
     analysis._clearCacheAndEmitParametersChanged.assert_called_once_with()
+
+
+def test_a_user_cancel_hands_the_workers_best_point_to_the_logic(monkeypatch, qcore_application):
+    StubWorker.instances = []
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
+    analysis._start_threaded_fit()
+    worker = StubWorker.instances[-1]
+    worker.best_progress = {'chi2': 1.0, 'reduced_chi2': 0.1, 'parameter_values': {'a': 2.0}, 'iterations': 7}
+    on_fit_failed = MagicMock()
+    on_fit_cancelled = MagicMock()
+    analysis._fitting_logic.on_fit_failed = on_fit_failed
+    analysis._fitting_logic.on_fit_cancelled = on_fit_cancelled
+
+    analysis._onStopFit()
+    worker.failed.emit('Fitting cancelled by user')
+
+    on_fit_cancelled.assert_called_once_with('Fitting cancelled by user', worker.best_progress)
+    on_fit_failed.assert_not_called()
+
+
+def test_an_error_is_not_a_cancel_and_keeps_no_best_point(monkeypatch, qcore_application):
+    StubWorker.instances = []
+    analysis = _make_analysis(monkeypatch)
+    analysis._fitting_logic.prepare_threaded_fit = MagicMock(return_value=_prepared())
+    analysis._start_threaded_fit()
+    worker = StubWorker.instances[-1]
+    worker.best_progress = {'chi2': 1.0, 'reduced_chi2': 0.1, 'parameter_values': {'a': 2.0}, 'iterations': 7}
+    on_fit_failed = MagicMock()
+    on_fit_cancelled = MagicMock()
+    analysis._fitting_logic.on_fit_failed = on_fit_failed
+    analysis._fitting_logic.on_fit_cancelled = on_fit_cancelled
+
+    worker.failed.emit('boom')
+
+    on_fit_failed.assert_called_once_with('boom')
+    on_fit_cancelled.assert_not_called()
+
+
+def test_a_preview_writes_the_best_values_then_asks_for_a_redraw(monkeypatch, qcore_application):
+    analysis = _make_analysis(monkeypatch)
+    events = []
+    analysis._fitting_logic.apply_parameter_values = lambda values: events.append(('apply', values))
+    analysis.fitPreviewReady.connect(lambda: events.append('redraw'))
+
+    # Called as the worker's blocking connection would, from the GUI thread.
+    analysis._on_fit_preview({'a': 2.0})
+
+    assert events == [('apply', {'a': 2.0}), 'redraw']
+
+
+def test_the_preview_interval_takes_whole_seconds_and_resets_to_one_second(monkeypatch, qcore_application):
+    analysis = _make_analysis(monkeypatch)
+    notified = []
+    analysis.fitPreviewIntervalChanged.connect(lambda: notified.append(analysis.fitPreviewInterval))
+
+    analysis.setFitPreviewInterval(2.0)
+    for rejected in (2.5, 0.001, -1.0, float('nan'), float('inf')):
+        analysis.setFitPreviewInterval(rejected)
+    analysis.setFitPreviewInterval(0.0)
+    analysis.resetFitPreviewInterval()
+
+    # A rejected value re-notifies too, so the field shows the stored one again.
+    assert notified == [2, 2, 2, 2, 2, 2, 0, 1]
+    assert isinstance(analysis.fitPreviewInterval, int)
+
+
+def test_keeping_or_reverting_a_cancelled_fit_refreshes_like_a_finished_fit(monkeypatch, qcore_application):
+    analysis = _make_analysis(monkeypatch)
+    calls = []
+    analysis._fitting_logic.keep_cancelled_fit = lambda: calls.append('keep')
+    analysis._fitting_logic.revert_cancelled_fit = lambda: calls.append('revert')
+    analysis.fittingChanged.connect(lambda: calls.append('fitting'))
+    analysis.externalFittingChanged.connect(lambda: calls.append('plots'))
+
+    analysis.keepCancelledFit()
+    analysis.revertCancelledFit()
+
+    assert calls == ['keep', 'fitting', 'plots', 'revert', 'fitting', 'plots']
+    assert analysis._clearCacheAndEmitParametersChanged.call_count == 2
 
 
 def test_a_completed_run_is_recorded_and_a_failed_one_is_not(monkeypatch, qcore_application):
@@ -413,7 +513,7 @@ def test_start_threaded_sample_uses_defaults_when_not_set(monkeypatch, qcore_app
 
 
 def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_application):
-    """Progress payloads with sampling=True update Bayesian-specific progress properties."""
+    """Progress payloads with sampling=True make a determinate sampling progress."""
     StubWorker.instances = []
     analysis = _make_analysis_bayesian(monkeypatch)
     analysis._fitting_logic.prepare_threaded_sample = MagicMock(
@@ -430,9 +530,8 @@ def test_start_threaded_sample_propagates_sampling_progress(monkeypatch, qcore_a
         'sampling': True,
     })
 
-    assert analysis.sampleProgressStep == 25
-    assert analysis.sampleProgressMessage != ''
-    assert analysis.sampleProgressHasUpdate is True
+    progress = analysis.fitProgress
+    assert (progress['kind'], progress['count'], progress['total'], progress['fraction']) == ('sample', 25, 100, 0.25)
 
 
 def test_fitting_start_stop_dispatches_to_sample_when_bayesian(monkeypatch, qcore_application):

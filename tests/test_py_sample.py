@@ -1,3 +1,5 @@
+import pytest
+
 from EasyReflectometryApp.Backends.Py.sample import Sample
 from tests.factories import FakeLayerMagnetism
 from tests.factories import make_assembly
@@ -35,7 +37,7 @@ def test_remove_selected_assembly_refreshes_cached_layers_and_clamps_layer_index
     assert backend.currentAssemblyType == 'Surfactant Layer'
     assert backend.currentLayerIndex == 1
 
-    backend.removeAssembly('1')
+    backend.removeAssembly(1)
 
     assert backend.currentAssemblyIndex == 1
     assert backend.currentAssemblyType == 'Multi-layer'
@@ -99,7 +101,7 @@ def test_set_current_model_index_refreshes_layers_and_selection(qcore_applicatio
     assert [layer['material'] for layer in backend.layers] == ['Si']
 
     fired = []
-    for name in ('assembliesIndexChanged', 'layersIndexChanged', 'layersChange'):
+    for name in ('assembliesIndexChanged', 'layersIndexChanged', 'layersChanged'):
         getattr(backend, name).connect(lambda name=name: fired.append(name))
 
     backend.setCurrentModelIndex(1)
@@ -108,7 +110,7 @@ def test_set_current_model_index_refreshes_layers_and_selection(qcore_applicatio
     assert backend.currentAssemblyIndex == 0
     assert backend.currentLayerIndex == 0
     assert [layer['material'] for layer in backend.layers] == ['D2O']
-    assert set(fired) == {'assembliesIndexChanged', 'layersIndexChanged', 'layersChange'}
+    assert set(fired) == {'assembliesIndexChanged', 'layersIndexChanged', 'layersChanged'}
 
 
 def test_magnetism_edits_invalidate_the_structure_cache(qcore_application):
@@ -174,3 +176,26 @@ def test_attaching_and_detaching_magnetism_rebuilds_the_structure(qcore_applicat
     backend.setLayerMagneticAtIndex(0, False)
     assert emitted == [True, True]
     assert 'magnetic' not in backend.structure[1]
+
+
+@pytest.mark.parametrize(
+    'rename',
+    [
+        lambda backend: backend.setMaterialNameAtIndex(1, 'Silicon'),
+        lambda backend: (backend.setCurrentMaterialIndex(1), backend.setCurrentMaterialName('Silicon')),
+    ],
+    ids=['at index', 'current'],
+)
+def test_material_rename_refreshes_layer_table_and_analysis_names(qcore_application, rename):
+    materials = make_material_collection(make_material('Air'), make_material('Si'))
+    sample = make_sample(make_assembly(name='Substrate', layers=[make_layer(name='Si Layer', material=materials[1])]))
+    backend = Sample(make_project(materials=materials, models=make_model_collection(make_model(sample=sample))))
+    assert [layer['material'] for layer in backend.layers] == ['Si']  # the layer table is now cached
+    sample_changed = []
+    backend.externalSampleChanged.connect(lambda: sample_changed.append(True))
+
+    rename(backend)
+
+    assert [layer['material'] for layer in backend.layers] == ['Silicon']
+    # Relayed to the Analysis page, whose parameter names include the material's name.
+    assert sample_changed == [True]

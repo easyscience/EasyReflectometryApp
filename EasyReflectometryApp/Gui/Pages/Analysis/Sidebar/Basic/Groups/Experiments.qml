@@ -101,6 +101,7 @@ EaElements.GroupBox {
                 value: Globals.Variables.analysisStaggerDecades
                 enabled: staggeredCheckBox.checked
                 ToolTip.text: qsTr("Shift between experiments: %1 decades").arg(Number(value).toFixed(2))
+                ToolTip.delay: Globals.Variables.toolTipDelay
                 ToolTip.visible: hovered
                 onMoved: Globals.Variables.analysisStaggerDecades = value
             }

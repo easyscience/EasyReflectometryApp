@@ -6,10 +6,11 @@ from easyreflectometry import Project as ProjectLib
 from easyreflectometry.sample import LayerAreaPerMolecule
 from easyreflectometry.sample import LayerCollection
 from easyreflectometry.sample import LayerMagnetism
-from easyreflectometry.sample import Material
 from easyreflectometry.sample import Sample
 from easyreflectometry.sample.elements.layers.layer_magnetism import DEFAULTS as MAGNETISM_DEFAULTS
 
+from .helpers import is_independent
+from .helpers import set_value_widening_bounds
 from .structure import guide_field_reference
 from .structure import magnetic_vector_for_layer
 
@@ -41,18 +42,6 @@ class Layers:
         return self._sample[self._project_lib.current_assembly_index].layers
 
     @property
-    def _assembly_type(self) -> str:
-        """Determine if current assembly is superphase, subphase, or regular."""
-        current_index = self._project_lib.current_assembly_index
-        total_assemblies = len(self._sample)
-        if current_index == 0:
-            return 'superphase'
-        elif current_index == total_assemblies - 1:
-            return 'subphase'
-        else:
-            return 'regular'
-
-    @property
     def index(self) -> int:
         return self._project_lib.current_layer_index
 
@@ -65,27 +54,30 @@ class Layers:
         return self._layers[self.index].name
 
     @property
-    def layers(self) -> list[dict[str, str]]:
-        return _from_layers_collection_to_list_of_dicts(self._layers, self._assembly_type)
+    def layers(self) -> list[dict[str, str | bool]]:
+        return _from_layers_collection_to_list_of_dicts(self._layers)
 
     @property
     def layers_names(self) -> list[str]:
         return [element['label'] for element in self.layers]
 
-    def remove_at_index(self, value: str) -> None:
-        self._layers.remove_at(int(value))
+    def remove_at_index(self, index: int) -> None:
+        self._layers.remove_at(index)
         # A removed coupled layer can leave its material's moment, or the
         # model's field, acting on nothing; the project fixes those.
         self._project_lib._sync_parameter_states()
 
-    def add_new(self) -> None:
-        if 'Si' not in [material.name for material in self._project_lib._materials]:
-            self._project_lib._materials.add_material(Material(name='Si', sld=2.07, isld=0.0))
-        index_si = [material.name for material in self._project_lib._materials].index('Si')
+    def add_new(self) -> bool:
+        """Append a Si layer; return whether the Si material had to be added to the project."""
+        materials = self._project_lib._materials
+        count_before = len(materials)
+        # The library adds Si to the project's materials when it is missing.
+        si = materials[self._project_lib.get_index_si()]
         self._layers.add_layer()
-        self._layers[-1].material = self._project_lib._materials[index_si]
+        self._layers[-1].material = si
         # Set layer name based on material name
-        self._layers[-1].name = self._project_lib._materials[index_si].name + ' Layer'
+        self._layers[-1].name = si.name + ' Layer'
+        return len(materials) > count_before
 
     def duplicate_selected(self) -> None:
         self._layers.duplicate_layer(self.index)
@@ -115,32 +107,20 @@ class Layers:
         return False
 
     def set_thickness_at_current_index(self, new_value: float) -> bool:
-        if self._layers[self.index].thickness.value != new_value:
-            self._layers[self.index].thickness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[self.index].thickness, new_value)
 
     def set_thickness_at_index(self, index: int, new_value: float) -> bool:
         if not self._has_valid_layer_index(index):
             return False
-        if self._layers[index].thickness.value != new_value:
-            self._layers[index].thickness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[index].thickness, new_value)
 
     def set_roughness_at_current_index(self, new_value: float) -> bool:
-        if self._layers[self.index].roughness.value != new_value:
-            self._layers[self.index].roughness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[self.index].roughness, new_value)
 
     def set_roughness_at_index(self, index: int, new_value: float) -> bool:
         if not self._has_valid_layer_index(index):
             return False
-        if self._layers[index].roughness.value != new_value:
-            self._layers[index].roughness.value = new_value
-            return True
-        return False
+        return _set_layer_parameter(self._layers[index].roughness, new_value)
 
     def set_material_at_current_index(self, new_value: int) -> bool:
         if self._layers[self.index].material != self._project_lib._materials[new_value]:
@@ -229,19 +209,20 @@ class Layers:
         return bool(self._project_lib.calculator_supports_magnetism)
 
     @property
-    def magnetism(self) -> list[dict[str, str]]:
+    def magnetism(self) -> list[dict[str, str | bool]]:
         """One row per layer of the current assembly, describing its magnetism.
 
-        ``magnetic`` is 'True'/'False'; ``rho_m``/``theta_m`` carry the defaults
+        ``magnetic`` is a bool; ``rho_m``/``theta_m`` carry the defaults
         of a fresh :class:`LayerMagnetism` for non-magnetic layers so the fields
         show what attaching magnetism would start from. ``phi`` is the direction
         the moment points, in degrees from the guide field - what the compass
-        draws - and ``editable`` whether that direction can be set by dragging
-        it (a constrained ``theta_m`` follows its expression, not the pointer).
-        Both are empty for a non-magnetic layer, which has no direction.
-        ``material_magnetic`` says whether the layer's material carries a
-        moment (a ``MaterialMagnetic``), and ``rho_m_coupled`` whether the
-        layer takes ``rho_m`` from it.
+        draws - and is empty for a non-magnetic layer, which has no direction.
+        ``editable`` says whether that direction can be set by dragging it (a
+        constrained ``theta_m`` follows its expression, not the pointer); it is
+        False for a non-magnetic layer. ``material_magnetic`` says whether the
+        layer's material carries a moment (a ``MaterialMagnetic``), and
+        ``rho_m_coupled`` whether the layer takes ``rho_m`` from it; both are
+        bools.
         """
         rows = []
         for layer in self._layers:
@@ -249,13 +230,13 @@ class Layers:
             rows.append(
                 {
                     'label': layer.name,
-                    'magnetic': str(magnetism is not None),
+                    'magnetic': magnetism is not None,
                     'rho_m': str(magnetism.rho_m.value if magnetism is not None else _DEFAULT_RHO_M),
                     'theta_m': str(magnetism.theta_m.value if magnetism is not None else _DEFAULT_THETA_M),
                     'phi': '' if magnetism is None else str(magnetic_vector_for_layer(magnetism)['phi']),
-                    'editable': '' if magnetism is None else str(magnetism.theta_m.independent),
-                    'material_magnetic': str(getattr(layer.material, 'rho_m', None) is not None),
-                    'rho_m_coupled': str(layer.rho_m_coupled),
+                    'editable': magnetism is not None and is_independent(magnetism.theta_m),
+                    'material_magnetic': getattr(layer.material, 'rho_m', None) is not None,
+                    'rho_m_coupled': bool(layer.rho_m_coupled),
                 }
             )
         return rows
@@ -361,7 +342,8 @@ class Layers:
         magnetism = self.magnetism_at_index(index)
         if magnetism is None:
             return False
-        return _set_parameter_value(getattr(magnetism, attribute), new_value)
+        # theta_m's 0-360 bounds are the angle's domain, not a default window to widen.
+        return _set_parameter_value(getattr(magnetism, attribute), new_value, widen_bounds=attribute == 'rho_m')
 
     def magnetism_at_index(self, index: int) -> Optional[LayerMagnetism]:
         """The layer's magnetism, or None when the layer is not magnetic/valid."""
@@ -374,10 +356,23 @@ class Layers:
 DEFAULT_FIELD = {'guide_field_angle': 270.0, 'applied_field': 0.0, 'model_magnetic': False, 'in_plane': True, 'phi': 0.0}
 
 
-def _set_parameter_value(parameter, new_value) -> bool:
+def _set_layer_parameter(parameter, new_value) -> bool:
+    """Set a layer's thickness or roughness; False for no change or a dependent or pinned
+    parameter. The library knows nothing of a pin, so it would accept the write and leave
+    the parameter locked with no constraint row to unlock it by."""
+    if not is_independent(parameter) or parameter.value == new_value:
+        return False
+    set_value_widening_bounds(parameter, new_value)
+    return True
+
+
+def _set_parameter_value(parameter, new_value, widen_bounds: bool = False) -> bool:
     """Set a parameter from an edit; False for no change, bad input or a
-    dependent parameter (a coupled rho_m follows its material)."""
-    if not parameter.independent:
+    dependent or pinned parameter (a coupled rho_m follows its material).
+
+    With `widen_bounds`, a value past a bound moves it; otherwise the value is
+    clamped to the bounds."""
+    if not is_independent(parameter):
         return False
     try:
         value = float(new_value)
@@ -386,35 +381,30 @@ def _set_parameter_value(parameter, new_value) -> bool:
     if parameter.value == value:
         return False
     try:
-        parameter.value = value
+        if widen_bounds:
+            set_value_widening_bounds(parameter, value)
+        else:
+            parameter.value = value
     except (ValueError, TypeError):
-        logger.exception('Failed to set %s to %s', parameter.name, value)
+        logger.exception('Failed to set %s to %s', parameter.display_name, value)
         return False
     return True
 
 
-def _from_layers_collection_to_list_of_dicts(
-    layers_collection: LayerCollection, assembly_type: str = 'regular'
-) -> list[dict[str, str]]:
+def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection) -> list[dict[str, str | bool]]:
     """Convert layers collection to list of dicts.
 
-    :param layers_collection: The collection of layers.
-    :param assembly_type: Type of assembly - 'superphase', 'subphase', or 'regular'.
-        - superphase: Neither thickness nor roughness should be editable
-        - subphase: Only roughness should be editable
-        - regular: Both thickness and roughness should be editable
-    """
-    # Determine enabled states based on assembly type
-    if assembly_type == 'superphase':
-        thickness_enabled = 'False'
-        roughness_enabled = 'False'
-    elif assembly_type == 'subphase':
-        thickness_enabled = 'False'
-        roughness_enabled = 'True'
-    else:  # regular
-        thickness_enabled = 'True'
-        roughness_enabled = 'True'
+    Editability of thickness and roughness mirrors each parameter's ``enabled``
+    flag, which ``Project._update_enablement_of_fixed_layers_for_model`` keeps
+    in step with the superphase (first layer of the first assembly) and the
+    subphase (last layer of the last assembly). Reading the flag rather than
+    re-deriving it from the assembly position keeps the table and the
+    parameters in agreement (issue #329). A dependent or pinned parameter is not
+    editable either: it follows its constraint. Only area-per-molecule layers carry
+    ``formula``, ``apm``, ``solvent`` and ``solvation``.
 
+    :param layers_collection: The collection of layers.
+    """
     layers_list = []
     for layer in layers_collection:
         layers_list.append(
@@ -423,13 +413,10 @@ def _from_layers_collection_to_list_of_dicts(
                 'roughness': str(layer.roughness.value),
                 'thickness': str(layer.thickness.value),
                 'material': layer.material.name,
-                'formula': 'formula',
-                'apm': '0.1',
-                'solvent': 'solvent',
-                'solvation': '0.2',
-                'apm_enabled': 'True',
-                'thickness_enabled': thickness_enabled,
-                'roughness_enabled': roughness_enabled,
+                # `enabled` is set on a parameter only once enablement has run
+                # over it; until then it counts as enabled, as in the library.
+                'thickness_enabled': bool(getattr(layer.thickness, 'enabled', True)) and is_independent(layer.thickness),
+                'roughness_enabled': bool(getattr(layer.roughness, 'enabled', True)) and is_independent(layer.roughness),
             }
         )
         if isinstance(layer, LayerAreaPerMolecule):

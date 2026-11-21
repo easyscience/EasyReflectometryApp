@@ -13,6 +13,7 @@ from easyreflectometry.sample import LayerMagnetism
 from EasyReflectometryApp.Backends.Py.logic.experiment_selection import ExperimentSelection
 from EasyReflectometryApp.Backends.Py.logic.fitting import Fitting as FittingLogic
 from EasyReflectometryApp.Backends.Py.logic.layers import Layers as LayersLogic
+from EasyReflectometryApp.Backends.Py.logic.models import Models as ModelsLogic
 from EasyReflectometryApp.Backends.Py.logic.parameters import Parameters as ParametersLogic
 from EasyReflectometryApp.Backends.Py.plotting_1d import Plotting1d
 
@@ -54,7 +55,7 @@ class TestLayerMagnetismEditing:
         rows = logic.magnetism
 
         assert len(rows) == len(logic.layers)
-        assert rows[0]['magnetic'] == 'False'
+        assert rows[0]['magnetic'] is False
         # A non-magnetic layer previews what attaching magnetism would create.
         assert float(rows[0]['rho_m']) == 0.0
         assert float(rows[0]['theta_m']) == 270.0
@@ -65,7 +66,7 @@ class TestLayerMagnetismEditing:
 
         assert logic.set_magnetic_at_index(0, True) is True
 
-        assert logic.magnetism[0]['magnetic'] == 'True'
+        assert logic.magnetism[0]['magnetic'] is True
         assert project.models[0].has_magnetism is True
         assert project._calculator().include_magnetism is True
 
@@ -76,7 +77,7 @@ class TestLayerMagnetismEditing:
 
         assert logic.set_magnetic_at_index(0, False) is True
 
-        assert logic.magnetism[0]['magnetic'] == 'False'
+        assert logic.magnetism[0]['magnetic'] is False
         assert project.models[0].has_magnetism is False
         assert project._calculator().include_magnetism is False
 
@@ -216,6 +217,30 @@ class TestMagneticParametersInTheTable:
         logic.set_name_filter_criteria('model')
 
         assert 'Model D2O rho_m' in [row['name'] for row in logic.parameters]
+
+    @pytest.mark.parametrize('action', ['add_new', 'duplicate_selected_model'])
+    def test_field_stays_out_of_an_unpolarized_table_for_a_model_added_from_the_gui(self, action):
+        # Add/Duplicate model go through the collection, past the project's own
+        # parameter-state sync; the new model's guide field angle and applied
+        # field then carried no `enabled` flag, read as enabled, and showed up
+        # as fittable polarisation parameters in a non-magnetic project.
+        project = _project()
+        getattr(ModelsLogic(project), action)()
+        assert len(project.models) == 2
+
+        # all_parameters() lists every row; the table drops the enabled=False ones.
+        field_rows = [
+            row
+            for row in ParametersLogic(project).all_parameters()
+            if 'guide_field_angle' in row['name'] or 'applied_field' in row['name']
+        ]
+
+        assert field_rows
+        assert all(row['enabled'] is False and row['fit'] is False for row in field_rows)
+        for model in project.models:
+            for parameter in (model.guide_field_angle, model.applied_field):
+                assert parameter.enabled is False
+                assert parameter.free is False
 
 
 class TestPolarizedFitting:
@@ -375,7 +400,7 @@ class TestSampleBackendSlots:
         backend.setLayerThetaMAtIndex(0, 45.0)
 
         assert backend.magnetismSupported is True
-        assert backend.layersMagnetism[0]['magnetic'] == 'True'
+        assert backend.layersMagnetism[0]['magnetic'] is True
         assert float(backend.layersMagnetism[0]['rho_m']) == 3.0
         assert len(changed) == 3
 
@@ -395,7 +420,7 @@ class TestSampleBackendSlots:
         assert backend.magnetismSupported is False
         assert requests == [(0, 'refl1d')]
         assert failures == []
-        assert backend.layersMagnetism[0]['magnetic'] == 'False'
+        assert backend.layersMagnetism[0]['magnetic'] is False
 
     def test_confirmed_switch_changes_the_engine_and_attaches_magnetism(self, qcore_application):
         from EasyReflectometryApp.Backends.Py.sample import Sample
@@ -408,7 +433,7 @@ class TestSampleBackendSlots:
 
         assert backend.magnetismSupported is True
         assert backend.calculationEngines[backend.calculationEngineIndex] == 'refl1d'
-        assert backend.layersMagnetism[0]['magnetic'] == 'True'
+        assert backend.layersMagnetism[0]['magnetic'] is True
         assert engine_changes == [True]
 
     def test_engine_that_cannot_carry_the_magnetism_is_refused(self, qcore_application):
@@ -425,7 +450,7 @@ class TestSampleBackendSlots:
         # The refusal goes to the engine selector's dialog, not the log.
         assert len(rejections) == 1 and 'refnx' in rejections[0]
         assert backend.calculationEngines[backend.calculationEngineIndex] == 'refl1d'
-        assert backend.layersMagnetism[0]['magnetic'] == 'True'
+        assert backend.layersMagnetism[0]['magnetic'] is True
 
 
 class _StubMinimizers:

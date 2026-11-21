@@ -1,4 +1,4 @@
-# 5SPDX-FileCopyrightText: 2026 EasyApp contributors
+# SPDX-FileCopyrightText: 2026 EasyApp contributors
 # SPDX-License-Identifier: BSD-3-Clause
 # © 2026 Contributors to the EasyApp project <https://github.com/easyscience/EasyApp>
 
@@ -67,8 +67,8 @@ class Summary(QObject):
     def plotFileUrl(self) -> str:
         return IO.localFileToUrl(str(self._logic.plot_file_path))
 
-    @Property('QVariant', notify=plotFileNameChanged)
-    def plotExportFormats(self):
+    @Property('QVariantList', notify=plotFileNameChanged)
+    def plotExportFormats(self) -> list[str]:
         return ['PDF', 'PNG', 'SVG', 'PICKLE']
 
     @Property(str, notify=summaryChanged)
@@ -84,8 +84,8 @@ class Summary(QObject):
             logger.exception('Failed to compile the HTML summary')
             return f'<html><body><h3>The summary could not be generated</h3><p>{escape(str(exception))}</p></body></html>'
 
-    @Property('QVariant', notify=summaryChanged)
-    def exportFormats(self):
+    @Property('QVariantList', notify=summaryChanged)
+    def exportFormats(self) -> list[str]:
         return ['HTML', 'PDF']
 
     @Slot()

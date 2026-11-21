@@ -51,10 +51,10 @@ def test_project_metadata_and_q_properties_delegate():
     assert logic.description == 'Updated Description'
     assert logic.creation_date == '2026-03-19'
 
-    assert logic.set_q_min('0.02') is True
-    assert logic.set_q_min('0.02') is False
-    assert logic.set_q_max('0.7') is True
-    assert logic.set_q_resolution('400') is True
+    assert logic.set_q_min(0.02) is True
+    assert logic.set_q_min(0.02) is False
+    assert logic.set_q_max(0.7) is True
+    assert logic.set_q_resolution(400) is True
     assert logic.q_min == 0.02
     assert logic.q_max == 0.7
     assert logic.q_resolution == 400
@@ -133,7 +133,7 @@ def test_save_and_create_propagate_library_failures():
 
 def test_pre_save_hooks_run_before_every_write_and_fingerprint():
     project_lib = make_project_with_sample()
-    project_lib.as_dict = lambda include_materials_not_in_model=False: {'calls': len(project_lib.calls)}
+    project_lib.as_dict = lambda: {'calls': len(project_lib.calls)}
     logic = Project(project_lib)
     logic.add_pre_save_hook(lambda: project_lib.calls.append(('hook',)))
     project_lib.calls.clear()

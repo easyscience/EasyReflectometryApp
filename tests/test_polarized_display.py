@@ -327,7 +327,7 @@ class TestEndToEndPolarizedImport:
         ProjectLogic(project_lib=project).save()
         assert project.path_json.exists()
 
-        global_object.map._clear()
+        global_object.registry.clear()
         reloaded_project = RealProject()
         ProjectLogic(project_lib=reloaded_project).load(str(project.path_json))
         reloaded = reloaded_project.experiments[0]

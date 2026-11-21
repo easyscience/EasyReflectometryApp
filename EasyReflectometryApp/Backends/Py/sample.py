@@ -11,6 +11,7 @@ from asteval import Interpreter
 from easyreflectometry import Project as ProjectLib
 from easyreflectometry.constraints import USER_CONSTRAINT_FLAG
 from easyreflectometry.constraints import constrain
+from easyreflectometry.contrasts import follows
 from easyreflectometry.inequality_constraints import InequalitySpec
 from easyreflectometry.inequality_constraints import check_units
 from easyreflectometry.inequality_constraints import evaluate_spec
@@ -24,6 +25,10 @@ from PySide6.QtCore import Slot
 
 from .logic.assemblies import Assemblies as AssembliesLogic
 from .logic.calculators import Calculators as CalculatorsLogic
+from .logic.helpers import PINNED_FLAG
+from .logic.helpers import display_expression
+from .logic.helpers import is_independent
+from .logic.helpers import set_bound
 from .logic.layers import Layers as LayersLogic
 from .logic.material import Material as MaterialLogic
 from .logic.models import Models as ModelsLogic
@@ -81,7 +86,7 @@ class Sample(QObject):
     assembliesTableChanged = Signal()
     assembliesIndexChanged = Signal()
 
-    layersChange = Signal()
+    layersChanged = Signal()
     layersIndexChanged = Signal()
 
     structureChanged = Signal()
@@ -104,6 +109,9 @@ class Sample(QObject):
 
     externalRefreshPlot = Signal()
     externalSampleChanged = Signal()
+    # Emitted synchronously, with the reason, just before an action that replaces a lot of
+    # content (a calculation engine switch). PyBackend connects it to Project.autosave.
+    checkpointRequested = Signal(str)
 
     def __init__(self, project_lib: ProjectLib, parent=None):
         super().__init__(parent)
@@ -118,7 +126,7 @@ class Sample(QObject):
         self._project_logic = ProjectLogic(project_lib)
         self._parameters_logic = ParametersLogic(project_lib)
 
-        self._chached_layers = None
+        self._cached_layers = None
         self._cached_structure = None
         self._constraint_states: Dict[str, dict[str, Any]] = {}
         # Child of self (not QTimer.singleShot) so a pending notification can
@@ -136,9 +144,9 @@ class Sample(QObject):
         # Inequality rows carry a "satisfied" flag evaluated at the current
         # values, so parameter edits must refresh the constraints list too.
         # `constraintsList` is expensive (asteval of every expression, recipe
-        # ownership across all assemblies), so bursts of layersChange within one
+        # ownership across all assemblies), so bursts of layersChanged within one
         # event-loop turn are coalesced into a single constraintsChanged.
-        self.layersChange.connect(self._scheduleConstraintsChanged)
+        self.layersChanged.connect(self._scheduleConstraintsChanged)
         # The magnetism table lists the current assembly's layers, and the
         # field controls show the current model's field.
         self.assembliesIndexChanged.connect(self.magnetismChanged)
@@ -175,12 +183,19 @@ class Sample(QObject):
     @Slot(str)
     def setCurrentMaterialName(self, new_value: str) -> None:
         if self._material_logic.set_name_at_current_index(new_value):
-            self.materialsTableChanged.emit()
+            self._emitMaterialRenamed()
 
     @Slot(int, str)
     def setMaterialNameAtIndex(self, index: int, new_value: str) -> None:
         if self._material_logic.set_name_at_index(index, new_value):
-            self.materialsTableChanged.emit()
+            self._emitMaterialRenamed()
+
+    def _emitMaterialRenamed(self) -> None:
+        # The layer table and the Analysis parameter names show the material's name too,
+        # and both are cached: refresh them as a layer rename does.
+        self.materialsTableChanged.emit()
+        self._clearCacheAndEmitLayersChanged()
+        self.externalSampleChanged.emit()
 
     @Slot(float)
     def setCurrentMaterialSld(self, new_value: float) -> None:
@@ -256,9 +271,13 @@ class Sample(QObject):
         if getattr(material, 'sld_coupled', True):
             return  # already coupled: no user constraint to have been overwritten
         for parameter in (getattr(material, 'sld', None), getattr(material, 'isld', None)):
-            # The density dependency replacing the user's must not be saved as theirs.
-            if parameter is not None and hasattr(parameter, USER_CONSTRAINT_FLAG):
-                delattr(parameter, USER_CONSTRAINT_FLAG)
+            if parameter is not None:
+                # The density dependency replacing the user's must not be saved as theirs,
+                # and a pin must not outlive it: decoupling again would leave the parameter
+                # locked with no row to unlock it by.
+                for flag in (USER_CONSTRAINT_FLAG, PINNED_FLAG):
+                    if hasattr(parameter, flag):
+                        delattr(parameter, flag)
             unique_name = getattr(parameter, 'unique_name', None)
             if unique_name and self._constraint_states.pop(unique_name, None) is not None:
                 logger.warning(
@@ -277,9 +296,9 @@ class Sample(QObject):
             self._emitDensityMaterialChanged(index)
 
     # Actions
-    @Slot(str)
-    def removeMaterial(self, value: str) -> None:
-        self._material_logic.remove_at_index(value)
+    @Slot(int)
+    def removeMaterial(self, index: int) -> None:
+        self._material_logic.remove_at_index(index)
         self._detach_unreachable_constraints()
         self.materialsTableChanged.emit()
         self.externalRefreshPlot.emit()
@@ -309,16 +328,6 @@ class Sample(QObject):
         self.materialsTableChanged.emit()
         self.externalSampleChanged.emit()
 
-    @Slot()
-    def moveSelectedMaterialUp(self) -> None:
-        self._material_logic.move_selected_up()
-        self.materialsTableChanged.emit()
-
-    @Slot()
-    def moveSelectedMaterialDown(self) -> None:
-        self._material_logic.move_selected_down()
-        self.materialsTableChanged.emit()
-
     # # #
     # Models
     # # #
@@ -343,17 +352,21 @@ class Sample(QObject):
     def setCurrentModelIndex(self, new_value: int) -> None:
         if self._project_lib.current_model_index != new_value:
             self._project_lib.current_model_index = new_value
-            self.modelsIndexChanged.emit()
-            # A model switch starts from the first assembly and layer of the new model
-            # (the lib does the same). The layer table is cached, so the assembly/layer
-            # side has to be refreshed too, or the layer editor keeps showing the
-            # previous model's layers (#407).
-            self._project_lib.current_assembly_index = 0
-            self._project_lib.current_layer_index = 0
-            self._refreshCurrentAssemblySelectionState()
-            self.assembliesTableChanged.emit()
-            self.externalRefreshPlot.emit()
-            self.externalSampleChanged.emit()
+            self._announce_current_model()
+
+    def _announce_current_model(self) -> None:
+        """Tell the GUI that another model became the current one."""
+        self.modelsIndexChanged.emit()
+        # A model switch starts from the first assembly and layer of the new model
+        # (the lib does the same). The layer table is cached, so the assembly/layer
+        # side has to be refreshed too, or the layer editor keeps showing the
+        # previous model's layers (#407).
+        self._project_lib.current_assembly_index = 0
+        self._project_lib.current_layer_index = 0
+        self._refreshCurrentAssemblySelectionState()
+        self.assembliesTableChanged.emit()
+        self.externalRefreshPlot.emit()
+        self.externalSampleChanged.emit()
 
     @Slot(str)
     def setCurrentModelName(self, value: str) -> None:
@@ -399,7 +412,7 @@ class Sample(QObject):
         parameter = self._find_parameter_object_by_unique_name(unique_name)
         if parameter is None:
             return {'success': False, 'message': self.tr('The parameter no longer exists.')}
-        if not parameter.independent:
+        if not is_independent(parameter):
             return {'success': False, 'message': self.tr('Remove its constraint first.')}
         try:
             self._project_lib.detach(parameter, model_index)
@@ -431,11 +444,14 @@ class Sample(QObject):
         if removed:
             self.experimentsRekeyed.emit(removal.remap)
         self.modelsTableChanged.emit()
+        # The models after it moved up, so the current one may have a new index
+        self.modelsIndexChanged.emit()
         self.externalRefreshPlot.emit()
         return removed
 
     def _drop_constraint_states_that_no_longer_hold(self) -> None:
-        """Forget the rows of constraints the library removed (a tie freed with its model)."""
+        """Forget the rows of constraints the library removed or replaced (a tie freed with
+        its model, a pin overwritten by a physics recipe or a coupling), with their pins."""
         objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
         stale = [
             unique_name
@@ -443,7 +459,7 @@ class Sample(QObject):
             if unique_name not in objects or not self._constraint_state_holds(objects[unique_name], state)
         ]
         for unique_name in stale:
-            del self._constraint_states[unique_name]
+            self._forget_constraint_state(unique_name, objects.get(unique_name))
         if stale:
             self._scheduleConstraintsChanged()
 
@@ -453,12 +469,14 @@ class Sample(QObject):
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
         self.materialsTableChanged.emit()
+        self._announce_current_model()  # the new model is the current one
 
     @Slot()
     def duplicateSelectedModel(self) -> None:
         self._models_logic.duplicate_selected_model()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.modelsTableChanged.emit()
+        self._announce_current_model()  # the copy is the current one
 
     @Slot()
     def moveSelectedModelUp(self) -> None:
@@ -476,7 +494,7 @@ class Sample(QObject):
     # Assemblies
     # # #
     @Property('QVariantList', notify=assembliesTableChanged)
-    def assemblies(self) -> list[dict[str, str]]:
+    def assemblies(self) -> list[dict[str, str | list[str]]]:
         return self._assemblies_logic.assemblies
 
     @Property(int, notify=assembliesIndexChanged)
@@ -555,13 +573,13 @@ class Sample(QObject):
             self.externalSampleChanged.emit()
 
     # Assembly specific
-    @Property(str, notify=assembliesTableChanged)
-    def currentAssemblyRepeatedLayerReptitions(self) -> str:
+    @Property(int, notify=assembliesTableChanged)
+    def currentAssemblyRepeatedLayerRepetitions(self) -> int:
         return self._assemblies_logic.repetitions_at_current_index
 
     @Slot(int)
-    def setCurrentAssemblyRepeatedLayerReptitions(self, new_value: int) -> None:
-        if self._assemblies_logic.set_repeated_layer_reptitions(new_value):
+    def setCurrentAssemblyRepeatedLayerRepetitions(self, new_value: int) -> None:
+        if self._assemblies_logic.set_repeated_layer_repetitions(new_value):
             self.assembliesTableChanged.emit()
             self.externalRefreshPlot.emit()
 
@@ -580,9 +598,9 @@ class Sample(QObject):
             self.externalSampleChanged.emit()
 
     # Actions
-    @Slot(str)
-    def removeAssembly(self, value: str) -> None:
-        self._assemblies_logic.remove_at_index(value)
+    @Slot(int)
+    def removeAssembly(self, index: int) -> None:
+        self._assemblies_logic.remove_at_index(index)
         self._refreshCurrentAssemblySelectionState()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._detach_unreachable_constraints()
@@ -592,7 +610,8 @@ class Sample(QObject):
 
     @Slot()
     def addNewAssembly(self) -> None:
-        self._assemblies_logic.add_new()
+        if self._assemblies_logic.add_new():
+            self.materialsTableChanged.emit()
         self._refreshCurrentAssemblySelectionState()
         self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self.assembliesTableChanged.emit()
@@ -630,21 +649,21 @@ class Sample(QObject):
     def layersConnectChanges(self) -> None:
         self._clearCacheAndEmitLayersChanged()
 
-    @Property('QVariantList', notify=layersChange)
-    def layers(self) -> list[dict[str, str]]:
-        if self._chached_layers is None:
-            self._chached_layers = self._layers_logic.layers
-        return self._chached_layers
+    @Property('QVariantList', notify=layersChanged)
+    def layers(self) -> list[dict[str, str | bool]]:
+        if self._cached_layers is None:
+            self._cached_layers = self._layers_logic.layers
+        return self._cached_layers
 
     @Property(int, notify=layersIndexChanged)
     def currentLayerIndex(self) -> int:
         return self._layers_logic.index
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def layersNames(self) -> list[str]:
         return self._layers_logic.layers_names
 
-    @Property(str, notify=layersChange)
+    @Property(str, notify=layersChanged)
     def currentLayerName(self) -> str:
         return self._layers_logic.name_at_current_index
 
@@ -655,7 +674,7 @@ class Sample(QObject):
         self.layersIndexChanged.emit()
 
     # A rename is project content and shows up in the Analysis parameter names, so it emits
-    # externalSampleChanged like the assembly rename does; layersChange alone would only reach
+    # externalSampleChanged like the assembly rename does; layersChanged alone would only reach
     # dirty tracking through the deferred constraintsChanged relay, by accident.
     @Slot(str)
     def setCurrentLayerName(self, new_value: str) -> None:
@@ -771,9 +790,10 @@ class Sample(QObject):
             self.externalSampleChanged.emit()
 
     # Actions
-    @Slot(str)
-    def removeLayer(self, value: str) -> None:
-        self._layers_logic.remove_at_index(value)
+    @Slot(int)
+    def removeLayer(self, index: int) -> None:
+        self._layers_logic.remove_at_index(index)
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._detach_unreachable_constraints()
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
@@ -781,7 +801,9 @@ class Sample(QObject):
 
     @Slot()
     def addNewLayer(self) -> None:
-        self._layers_logic.add_new()
+        if self._layers_logic.add_new():
+            self.materialsTableChanged.emit()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -789,6 +811,7 @@ class Sample(QObject):
     @Slot()
     def duplicateSelectedLayer(self) -> None:
         self._layers_logic.duplicate_selected()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
@@ -796,18 +819,20 @@ class Sample(QObject):
     @Slot()
     def moveSelectedLayerUp(self) -> None:
         self._layers_logic.move_selected_up()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
 
     @Slot()
     def moveSelectedLayerDown(self) -> None:
         self._layers_logic.move_selected_down()
+        self._project_logic._update_enablement_of_fixed_layers_for_model(self._models_logic.index)
         self._clearCacheAndEmitLayersChanged()
         self.externalRefreshPlot.emit()
 
     def _clearCacheAndEmitLayersChanged(self):
-        self._chached_layers = None
-        self.layersChange.emit()
+        self._cached_layers = None
+        self.layersChanged.emit()
         # The magnetism table lists the same layers, so it goes stale whenever
         # a layer is added, removed, reordered or renamed.
         self.magnetismChanged.emit()
@@ -834,6 +859,8 @@ class Sample(QObject):
     @Slot(int)
     def setCalculationEngineIndex(self, new_value: int) -> None:
         """Switch the project's calculation engine from the Sample page."""
+        if new_value != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         try:
             changed = self._calculators_logic.set_current_index(new_value)
         except NotImplementedError as exception:
@@ -854,7 +881,7 @@ class Sample(QObject):
         return self._layers_logic.magnetism_supported
 
     @Property('QVariantList', notify=magnetismChanged)
-    def layersMagnetism(self) -> list[dict[str, str]]:
+    def layersMagnetism(self) -> list[dict[str, str | bool]]:
         """Per-layer magnetism of the current assembly, one row per layer."""
         return self._layers_logic.magnetism
 
@@ -897,6 +924,8 @@ class Sample(QObject):
         if engine_index < 0:
             self.magnetismFailed.emit(f'The {engine} calculation engine is not available.')
             return
+        if engine_index != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         previous_calculator = self._project_lib.calculator
         engine_switched = False
         try:
@@ -926,6 +955,8 @@ class Sample(QObject):
     @Slot(int, bool)
     def setLayerRhoMCoupledAtIndex(self, index: int, coupled: bool) -> None:
         if self._layers_logic.set_rho_m_coupled_at_index(index, coupled):
+            # Coupling makes rho_m follow the material, replacing a pin on it.
+            self._drop_constraint_states_that_no_longer_hold()
             self._emitMagnetismChanged()
 
     @Property('QVariantMap', notify=magnetismChanged)
@@ -1073,17 +1104,6 @@ class Sample(QObject):
         raise TypeError('Expression must evaluate to a numeric value.')
 
     @staticmethod
-    def _pretty_expression(expression: str, alias_display: Dict[str, str]) -> str:
-        pretty_expression = expression
-        for alias in sorted(alias_display.keys(), key=len, reverse=True):
-            replacement = alias_display[alias]
-            if not replacement:
-                continue
-            pattern = rf'\b{re.escape(alias)}\b'
-            pretty_expression = re.sub(pattern, replacement, pretty_expression)
-        return pretty_expression
-
-    @staticmethod
     def _sanitize_relation(operator: str) -> str:
         mapping = {
             '=': '=',
@@ -1102,11 +1122,11 @@ class Sample(QObject):
     def _format_numeric(value: float) -> str:
         return f'{value:.6g}'
 
-    def _get_independent_parameter_entries(self) -> list[dict]:
-        """Return the filtered list of independent+enabled parameter entries.
+    def _constrainable_parameter_entries(self) -> list[dict]:
+        """The parameters a new constraint can make dependent: independent and enabled.
 
-        This must match the same filtering as dependentParameterNames so that
-        the QML dropdown index maps to the correct parameter object.
+        ``constrainableParameterNames`` lists their names, so an index into the
+        QML dropdown is an index into this list.
         """
         entries = []
         for parameter in self._parameters_logic.parameters:
@@ -1123,7 +1143,7 @@ class Sample(QObject):
         relation_operator: str,
         expression: str,
     ) -> dict[str, Any]:
-        independent_entries = self._get_independent_parameter_entries()
+        independent_entries = self._constrainable_parameter_entries()
         if dependent_index < 0 or dependent_index >= len(independent_entries):
             raise ValueError('Select a dependent parameter before defining a constraint.')
 
@@ -1163,7 +1183,7 @@ class Sample(QObject):
                 # conflict instead of the fallback's symptom.
                 raise RuntimeError(str(error)) from None
 
-        pretty_expression = self._pretty_expression(expression_text, display_lookup)
+        pretty_expression = display_expression(expression_text, display_lookup)
 
         if relation == '=':
             if dependency_map:
@@ -1293,8 +1313,8 @@ class Sample(QObject):
                     # layer was removed); keep the alias so the user can tell
                     # which term broke, but label it clearly.
                     alias_display[alias] = f'{alias} (missing)'
-            lhs_display = self._pretty_expression(spec.lhs_expression, alias_display)
-            rhs_display = self._pretty_expression(spec.rhs_expression, alias_display)
+            lhs_display = display_expression(spec.lhs_expression, alias_display)
+            rhs_display = display_expression(spec.rhs_expression, alias_display)
             try:
                 satisfied = evaluate_spec(spec, self._project_lib.resolve_parameter_path).satisfied
             except Exception:  # noqa: BLE001 - unresolved path: shown, flagged, never crashes the list
@@ -1316,24 +1336,40 @@ class Sample(QObject):
 
     @staticmethod
     def _ensure_parameter_independent(parameter: DescriptorNumber) -> None:
-        """Drop any dependency, together with the library's mark that it is a user constraint.
+        """Drop any dependency or pin, together with the library's mark that it is a user constraint.
 
         A mark left on an independent parameter is ignored by the library, but would be picked
         up again (and saved as the user's) if something internal later made it dependent.
         """
-        try:
+        if not getattr(parameter, 'independent', True):
             parameter.make_independent()
-        except AttributeError:
-            parameter._independent = True
-        if hasattr(parameter, USER_CONSTRAINT_FLAG):
-            delattr(parameter, USER_CONSTRAINT_FLAG)
+        for flag in (USER_CONSTRAINT_FLAG, PINNED_FLAG):
+            if hasattr(parameter, flag):
+                delattr(parameter, flag)
+
+    @staticmethod
+    def _release_pin(parameter: DescriptorNumber | None) -> None:
+        """Drop the app's pin mark, which the library does not know about."""
+        if parameter is not None and hasattr(parameter, PINNED_FLAG):
+            delattr(parameter, PINNED_FLAG)
+
+    def _forget_constraint_state(self, unique_name: str, parameter: DescriptorNumber | None) -> None:
+        """Forget a constraint row that no longer holds, releasing its pin.
+
+        A pin is only the app's mark (see `PINNED_FLAG`), so nothing else would ever clear it:
+        a parameter whose pinned value or fixed state was changed past the guards, or that the
+        library took over, would stay locked with no row left to unlock it by.
+        """
+        state = self._constraint_states.pop(unique_name, None)
+        if state is not None and state.get('mode') == 'static':
+            self._release_pin(parameter)
 
     @staticmethod
     def _apply_static_constraint(parameter: DescriptorNumber, value: float) -> None:
-        """Pin `parameter` to `value`: fixed, and marked non-independent so it reads as constrained."""
+        """Pin `parameter` to `value`: fixed, and flagged so that it reads as constrained."""
         parameter.value = value
         parameter.free = False
-        parameter._independent = False
+        setattr(parameter, PINNED_FLAG, True)
 
     def _infer_constraint_state(
         self,
@@ -1354,27 +1390,14 @@ class Sample(QObject):
         if getattr(parameter_obj, 'independent', True) or not getattr(parameter_obj, USER_CONSTRAINT_FLAG, False):
             return None
 
-        try:
-            raw_expression = parameter_obj.dependency_expression
-        except AttributeError:
-            value = float(parameter_obj.value)
-            formatted = self._format_numeric(value)
-            return {
-                'mode': 'static',
-                'relation': '=',
-                'expression': formatted,
-                'raw_expression': formatted,
-                'pretty_expression': formatted,
-                'value': value,
-            }
-
+        raw_expression = parameter_obj.dependency_expression
         dependency_map = getattr(parameter_obj, 'dependency_map', {}) or {}
         display_by_object = display_by_object or {}
         alias_display_subset = {
             alias: display_by_object.get(id(dependency), display_lookup.get(alias, alias))
             for alias, dependency in dependency_map.items()
         }
-        pretty_expression = self._pretty_expression(raw_expression, alias_display_subset)
+        pretty_expression = display_expression(raw_expression, alias_display_subset)
         return {
             'mode': 'dynamic',
             'relation': '=',
@@ -1395,8 +1418,11 @@ class Sample(QObject):
             stored = self._constraint_states.get(unique_name)
             # A stale state (the constraint was replaced or undone elsewhere) must not describe
             # the parameter; it is not saved either (see store_constraint_metadata).
-            if stored is not None and self._constraint_state_holds(parameter_obj, stored):
-                return stored
+            if stored is not None:
+                if self._constraint_state_holds(parameter_obj, stored):
+                    return stored
+                if stored.get('mode') == 'static':
+                    self._forget_constraint_state(unique_name, parameter_obj)
         return self._infer_constraint_state(parameter_obj, display_lookup, display_by_object)
 
     @staticmethod
@@ -1406,7 +1432,6 @@ class Sample(QObject):
             'unit': str(parameter.unit),
             'free': bool(parameter.free),
             'independent': getattr(parameter, 'independent', True),
-            '_independent': getattr(parameter, '_independent', True),
         }
         if hasattr(parameter, 'min'):
             try:
@@ -1440,14 +1465,12 @@ class Sample(QObject):
             parameter.max = state['max']
         if 'free' in state and state['free'] is not None:
             parameter.free = state['free']
-        if '_independent' in state and state['_independent'] is not None:
-            parameter._independent = state['_independent']
 
-    @Property('QVariantList', notify=layersChange)
-    def parameterNames(self) -> list[dict[str, str]]:
+    @Property('QVariantList', notify=layersChanged)
+    def parameterNames(self) -> list[str]:
         return [parameter['name'] for parameter in self._parameters_logic.parameters]
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def enabledParameterNames(self) -> list[str]:
         enabled_param_names = []
         for parameter in self._parameters_logic.parameters:
@@ -1456,27 +1479,20 @@ class Sample(QObject):
             enabled_param_names.append(parameter['name'])
         return enabled_param_names
 
-    @Property('QVariantList', notify=layersChange)
-    def dependentParameterNames(self) -> list[str]:
-        dep_param_names = []
-        for parameter in self._parameters_logic.parameters:
-            if not parameter['independent']:
-                continue
-            if hasattr(parameter['object'], 'enabled') and not parameter['object'].enabled:
-                continue
-            dep_param_names.append(parameter['name'])
-        return dep_param_names
+    @Property('QVariantList', notify=layersChanged)
+    def constrainableParameterNames(self) -> list[str]:
+        return [parameter['name'] for parameter in self._constrainable_parameter_entries()]
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def constraintParametersMetadata(self) -> list[dict[str, Any]]:
         return self._parameters_logic.constraint_metadata()
 
-    @Property('QVariantList', notify=layersChange)
+    @Property('QVariantList', notify=layersChanged)
     def relationOperators(self) -> list[dict[str, str]]:
         return self._parameters_logic.constraint_relations()
 
-    @Property('QVariantList', notify=layersChange)
-    def arithmicOperators(self) -> list[str]:
+    @Property('QVariantList', notify=layersChanged)
+    def arithmeticOperators(self) -> list[str]:
         return self._parameters_logic.constraint_arithmetic()
 
     @Property('QVariantList', notify=constraintsChanged)
@@ -1487,6 +1503,8 @@ class Sample(QObject):
         display_by_object = {id(entry['object']): entry['display_name'] for entry in context}
         owned = self._physics_constraints_logic.owned_parameters()
         recipe_rows: dict[tuple, dict[str, Any]] = {}
+        linked = self._linked_followers()
+        link_rows: dict[int, dict[str, Any]] = {}
 
         for entry in context:
             parameter_obj = entry['object']
@@ -1516,6 +1534,32 @@ class Sample(QObject):
                         'members': [],
                     }
                 recipe_rows[key]['members'].append(entry['display_name'])
+                continue
+            link_index = linked.get(id(parameter_obj))
+            if link_index is not None:
+                # One row per model link instead of one per tied parameter.
+                if link_index not in link_rows:
+                    record = self._project_lib.links[link_index]
+                    link_rows[link_index] = {
+                        'dependentName': record.follower.name,
+                        'uniqueName': f'link:{link_index}',
+                        'linkIndex': link_index,
+                        'referenceName': record.reference.name,
+                        'expression': '',
+                        'rawExpression': '',
+                        'relation': '',
+                        'type': 'link',
+                        'enabled': True,
+                        'satisfied': True,
+                        'count': 0,
+                        'members': [],
+                        'pairs': [],
+                    }
+                link_row = link_rows[link_index]
+                link_row['members'].append(entry['display_name'])
+                link_row['pairs'].append(
+                    {'name': entry['display_name'], 'uniqueName': getattr(parameter_obj, 'unique_name', '') or ''}
+                )
                 continue
             state = self._resolve_constraint_state(parameter_obj, display_lookup, display_by_object)
             if state is None:
@@ -1550,9 +1594,26 @@ class Sample(QObject):
                 }
             )
 
+        for link_index in sorted(link_rows):
+            link_row = link_rows[link_index]
+            count = len(link_row['pairs'])
+            link_row['count'] = count
+            link_row['expression'] = f"linked to {link_row['referenceName']} ({count} tied parameter(s))"
+            link_row['rawExpression'] = link_row['expression']
+            constraints.append(link_row)
         constraints.extend(recipe_rows.values())
         constraints.extend(self._inequality_constraint_rows(display_lookup))
         return constraints
+
+    def _linked_followers(self) -> Dict[int, int]:
+        """``{id(follower parameter): index in Project.links}`` for the ties model links made
+        that still hold; a follower the user constrained otherwise since is listed on its own."""
+        linked: Dict[int, int] = {}
+        for link_index, record in enumerate(self._project_lib.links):
+            for follower, reference, _ in record.pairs:
+                if follows(follower, reference):
+                    linked[id(follower)] = link_index
+        return linked
 
     # ----- physics-constraint recipes -----
 
@@ -1572,6 +1633,8 @@ class Sample(QObject):
         except Exception as error:  # noqa: BLE001
             return {'success': False, 'message': str(error)}
         if changed:
+            # A recipe overwrites what its parameters followed, a pin included.
+            self._drop_constraint_states_that_no_longer_hold()
             self._emit_constraints_changed()
         return {'success': True, 'message': ''}
 
@@ -1588,13 +1651,15 @@ class Sample(QObject):
     def _emit_constraints_changed(self) -> None:
         """Constraints move parameter values, so the curves and tables change too.
 
-        `layersChange` already forwards (coalesced) to `constraintsChanged`, so
+        `layersChanged` already forwards (coalesced) to `constraintsChanged`, so
         it is not emitted here as well — that would evaluate the expensive
         constraints list twice per change.
         """
         self.externalRefreshPlot.emit()
         self.externalSampleChanged.emit()
-        self.layersChange.emit()
+        # The layer table shows constrained values and disables pinned/dependent fields.
+        self._cached_layers = None
+        self.layersChanged.emit()
 
     @Property(int, notify=constraintsChanged)
     def inequalityConstraintsCount(self) -> int:
@@ -1618,12 +1683,6 @@ class Sample(QObject):
     @Slot(int)
     def removeConstraintByIndex(self, index: int) -> None:
         """Remove constraint by index by making the parameter independent."""
-        if not isinstance(index, int):
-            try:
-                index = int(index)
-            except (TypeError, ValueError):
-                return
-
         constraints_list = self.constraintsList
         if not 0 <= index < len(constraints_list):
             return
@@ -1639,6 +1698,16 @@ class Sample(QObject):
                 logger.warning(
                     'Removing physics constraint %s failed: %s', row.get('recipeId'), result.get('message', '')
                 )
+            return
+        if row.get('type') == 'link':
+            links = self._project_lib.links
+            link_index = int(row['linkIndex'])
+            if 0 <= link_index < len(links):
+                for pair in row.get('pairs', []):
+                    self._constraint_states.pop(pair.get('uniqueName'), None)
+                # Every follower gets back its state from before the link.
+                self._project_lib.unlink(links[link_index])
+                self._emit_constraints_changed()
             return
 
         # Resolve by unique_name (parameter identity), not display name, so two
@@ -1659,7 +1728,18 @@ class Sample(QObject):
             # A tie made by a model link gets back its state from before the link.
             self._project_lib.detach(param_obj)
         else:
-            self._make_parameter_independent(param_obj)
+            self._ensure_parameter_independent(param_obj)
+        self._emit_constraints_changed()
+
+    @Slot(str)
+    def removeLinkedParameter(self, unique_name: str) -> None:
+        """Remove one tie of a model link (a ``pairs`` entry of a ``'link'`` row); the parameter
+        gets back its state from before the link and the rest of the link stays."""
+        param_obj = self._find_parameter_object_by_unique_name(unique_name)
+        if param_obj is None or id(param_obj) not in self._linked_followers():
+            return
+        self._constraint_states.pop(unique_name, None)
+        self._project_lib.detach(param_obj)
         self._emit_constraints_changed()
 
     def _find_parameter_object_by_unique_name(self, unique_name: str):
@@ -1740,7 +1820,7 @@ class Sample(QObject):
                 parameter.free = bool(previous_free)
             logger.warning(
                 'The constraint on %s was removed: it, or a parameter it depends on, is no longer part of a model.',
-                getattr(parameter, 'name', '?'),
+                parameter.display_name,
             )
             detached += 1
         if detached:
@@ -1784,8 +1864,15 @@ class Sample(QObject):
         if mode == 'dynamic':
             return not getattr(parameter, 'independent', True) and self._same_dependency(parameter, state)
         if mode == 'static':
-            # A loaded project keeps only the value and the fixed state, not the marker.
-            return state.get('value') is not None and not parameter.free and float(parameter.value) == float(state['value'])
+            # A loaded project keeps only the value and the fixed state, not the marker. A pin
+            # is not a dependency: one the library has made dependent (a recipe, a coupling)
+            # was replaced.
+            return (
+                state.get('value') is not None
+                and getattr(parameter, 'independent', True)
+                and not parameter.free
+                and float(parameter.value) == float(state['value'])
+            )
         if mode == 'lower_bound':
             return state.get('value') is not None and float(parameter.min) == float(state['value'])
         if mode == 'upper_bound':
@@ -1808,9 +1895,12 @@ class Sample(QObject):
         # All parameters, not the filtered table list: disabled ones keep their constraints.
         objects = {entry.get('unique_name'): entry['object'] for entry in self._parameters_logic.all_parameters()}
         records = []
+        stale_pins = []
         for unique_name, state in self._constraint_states.items():
             parameter = objects.get(unique_name)
             if parameter is None or not self._constraint_state_holds(parameter, state):
+                if state.get('mode') == 'static':
+                    stale_pins.append(unique_name)
                 continue
             path = self._project_lib.parameter_path(parameter)
             if path is None:
@@ -1823,6 +1913,10 @@ class Sample(QObject):
                 record['dependency_paths'] = dependency_paths
             record['path'] = path
             records.append(record)
+        for unique_name in stale_pins:
+            self._forget_constraint_state(unique_name, objects.get(unique_name))
+        if stale_pins:
+            self._scheduleConstraintsChanged()
         info = self._project_lib._info
         if records:
             info[APP_CONSTRAINTS_INFO_KEY] = records
@@ -1845,6 +1939,8 @@ class Sample(QObject):
                 continue
             state = {key: value for key, value in record.items() if key != 'path'}
             if not self._constraint_state_holds(parameter, state):
+                if state.get('mode') == 'static':
+                    self._release_pin(parameter)
                 continue
             if state.get('mode') == 'dynamic':
                 state['dependency_map'] = dict(getattr(parameter, 'dependency_map', {}) or {})
@@ -1857,10 +1953,6 @@ class Sample(QObject):
         # Coalesced (next event-loop turn): this runs inside a load, before the clean state is
         # recorded, and constraintsChanged marks the project dirty.
         self._scheduleConstraintsChanged()
-
-    def _make_parameter_independent(self, param_obj) -> None:
-        """Make a parameter independent, handling different parameter types."""
-        self._ensure_parameter_independent(param_obj)
 
     @Slot(int, str, str, result='QVariant')
     def validateConstraintExpression(self, dependent_index: int, relation: str, expression: str):
@@ -1901,7 +1993,7 @@ class Sample(QObject):
                 'warning': instruction.get('warning', ''),
             }
 
-        dependent = self._get_independent_parameter_entries()[dependent_index]['object']
+        dependent = self._constrainable_parameter_entries()[dependent_index]['object']
         previous_state = self._capture_parameter_state(dependent)
         self._ensure_parameter_independent(dependent)
 
@@ -1920,15 +2012,13 @@ class Sample(QObject):
                         'Use a numeric constraint ("= value") instead.'
                     )
             elif mode == 'static':
-                # Not a dependency on a constant: that would set min == max, which the library
-                # then refuses to load. The value and fixed state are saved with the parameter;
-                # the row itself is restored from `store_constraint_metadata`.
+                # Not a dependency on a constant (see `PINNED_FLAG`). The value and fixed state
+                # are saved with the parameter; the row itself is restored from
+                # `store_constraint_metadata`.
                 self._apply_static_constraint(dependent, instruction['value'])
-            elif mode == 'lower_bound':
-                dependent.min = instruction['value']
-                dependent.free = True
-            elif mode == 'upper_bound':
-                dependent.max = instruction['value']
+            elif mode in ('lower_bound', 'upper_bound'):
+                # Kept whatever it is: a bound past the value moves the value onto it.
+                set_bound(dependent, 'min' if mode == 'lower_bound' else 'max', instruction['value'])
                 dependent.free = True
             else:
                 raise ValueError(f'Unsupported constraint mode: {mode}')
@@ -1938,7 +2028,7 @@ class Sample(QObject):
             try:
                 self._restore_parameter_state(dependent, previous_state)
             except Exception:  # noqa: BLE001
-                logger.exception('Could not roll back %s after a failed constraint', getattr(dependent, 'name', '?'))
+                logger.exception('Could not roll back %s after a failed constraint', dependent.display_name)
             return {'success': False, 'message': str(error)}
 
         unique_name = getattr(dependent, 'unique_name', None)
@@ -1979,31 +2069,105 @@ class Sample(QObject):
             'type': mode,
         }
 
-    @Slot('QVariantList', bool, result='QVariant')
     def constrainModelsParameters(self, model_indices: list, tie_materials: bool = False) -> dict:
-        """Tie the parameters of the selected models to those of the first one (the lowest index).
+        """Tie the default rows of :meth:`planModelLink` to the first selected model (the lowest index).
 
-        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``):
-        scale and background stay per model; material chemistry (SLDs, densities, scattering
-        lengths) is tied only with `tie_materials`, since contrasts usually differ in it.
-        Ties are listed with the other constraints; removing one restores the parameter.
+        The one-step form of :meth:`linkModels`, without a reference choice or a deselection.
 
         :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
+        """
+        plan = self.planModelLink(model_indices, -1, tie_materials)
+        return self.linkModels(model_indices, -1, [row['key'] for row in plan['rows'] if row['selected']])
+
+    def _plan_model_links(self, model_indices: list, reference_index: int) -> Tuple[int, list, list[str]]:
+        """``(reference, [(follower, plan), ...], messages)`` for tying the selected models to one.
+
+        A `reference_index` below 0 picks the lowest selected index. Chemistry rows are left
+        ``'undecided'``, so the caller decides them; nothing is changed.
         """
         indices = sorted({int(index) for index in model_indices})
         models = self._project_lib.models
         if len(indices) < 2 or not all(0 <= index < len(models) for index in indices):
-            return {'tied': 0, 'messages': [self.tr('Select at least two models.')]}
-        reference, plans, messages = indices[0], [], []
-        materials = 'tie' if tie_materials else 'skip'
-        # One action: every follower is planned first, and linked only if all of them can be.
-        for follower in indices[1:]:
+            return -1, [], [self.tr('Select at least two models.')]
+        reference = int(reference_index)
+        if reference < 0:
+            reference = indices[0]
+        if reference not in indices:
+            return -1, [], [self.tr('The reference model must be one of the selected models.')]
+        plans, messages = [], []
+        for follower in indices:
+            if follower == reference:
+                continue
             try:
-                plans.append((follower, self._project_lib.plan_link(follower, reference, materials=materials)))
+                plan = self._project_lib.plan_link(follower, reference)
             except ValueError as error:
                 messages.append(str(error))
+                continue
+            for row in plan.rows:
+                # The library sees a pinned parameter as independent and would tie it, leaving
+                # it dependent and still marked as pinned. Before pins were app-side it skipped
+                # them as derived; keep that.
+                if row.action in ('tie', 'undecided') and getattr(row.follower, PINNED_FLAG, False):
+                    row.action, row.reason = 'skip', self.tr('pinned to a value')
+            plans.append((follower, plan))
+        return reference, plans, messages
+
+    @staticmethod
+    def _link_row_key(follower: int, path: str) -> str:
+        return f'{follower}:{path}'
+
+    @Slot('QVariantList', int, bool, result='QVariant')
+    def planModelLink(self, model_indices: list, reference_index: int, tie_materials: bool = False) -> dict:
+        """What :meth:`linkModels` would tie, row by row, for the GUI to preview; nothing is changed.
+
+        Each row is one parameter of a follower model: ``selectable`` rows can be ticked or
+        unticked, ``selected`` is the default (every tieable row; chemistry rows only with
+        `tie_materials`), and the others carry the ``reason`` they cannot be tied.
+
+        :return: ``{'reference': index, 'rows': [...], 'messages': [...]}``.
+        """
+        reference, plans, messages = self._plan_model_links(model_indices, reference_index)
+        display = {id(entry['object']): entry['display_name'] for entry in self._parameters_logic.constraint_context()}
+        rows = []
+        for follower, plan in plans:
+            for row in plan.rows:
+                selectable = row.action in ('tie', 'undecided')
+                rows.append(
+                    {
+                        'key': self._link_row_key(follower, row.path),
+                        'path': row.path,
+                        'name': display.get(id(row.follower), row.path),
+                        'action': row.action,
+                        'reason': row.reason,
+                        'selectable': selectable,
+                        'selected': row.action == 'tie' or (row.action == 'undecided' and bool(tie_materials)),
+                    }
+                )
+        return {'reference': reference, 'rows': rows, 'messages': messages}
+
+    @Slot('QVariantList', int, 'QVariantList', result='QVariant')
+    def linkModels(self, model_indices: list, reference_index: int, selected_keys: list) -> dict:
+        """Tie the parameters of the selected models to those of the reference model.
+
+        Corresponding parameters are tied by the library (``Project.plan_link``/``apply_link``).
+        Exactly the rows listed in `selected_keys` (the ``key`` values of :meth:`planModelLink`
+        rows) are tied and every other one is skipped.
+        Each link is listed as one constraint row; removing it restores the parameters.
+
+        :return: ``{'tied': n, 'messages': [...]}`` -- what could not be linked, and why.
+        """
+        reference, plans, messages = self._plan_model_links(model_indices, reference_index)
         if messages:
-            return {'tied': 0, 'messages': messages + [self.tr('No model was linked.')]}
+            return {'tied': 0, 'messages': messages + ([self.tr('No model was linked.')] if reference >= 0 else [])}
+        selected = {str(key) for key in selected_keys}
+        for follower, plan in plans:
+            for row in plan.rows:
+                if row.action in ('tie', 'undecided'):
+                    row.action = 'tie' if self._link_row_key(follower, row.path) in selected else 'skip'
+        plans = [(follower, plan) for follower, plan in plans if any(row.action == 'tie' for row in plan.rows)]
+        if not plans:
+            return {'tied': 0, 'messages': [self.tr('No parameter is selected to tie.')]}
+        # One action: every follower was planned first, and is linked only if all of them can be.
         records = []
         try:
             for _, plan in plans:
@@ -2012,6 +2176,7 @@ class Sample(QObject):
             for record in records:
                 self._project_lib.unlink(record)
             return {'tied': 0, 'messages': [str(error), self.tr('No model was linked.')]}
+        models = self._project_lib.models
         for follower, plan in plans:
             conflicts = [row for row in plan.rows if row.action == 'conflict']
             messages.extend(f"'{models[follower].name}' {row.path}: {row.reason}" for row in conflicts)
@@ -2054,7 +2219,7 @@ class Sample(QObject):
             self.externalRefreshPlot.emit()
 
     @Slot(int)
-    def setQElements(self, new_value: float) -> None:
+    def setQElements(self, new_value: int) -> None:
         if self._project_logic.set_q_resolution(new_value):
             self.qRangeChanged.emit()
             self.externalRefreshPlot.emit()

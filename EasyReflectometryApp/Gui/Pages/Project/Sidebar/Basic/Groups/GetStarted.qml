@@ -22,7 +22,11 @@ Grid {
 
         onClicked: {
             console.debug(`Clicking '${text}' button ::: ${this}`)
-            EaGlobals.Vars.showProjectDescriptionDialog = true
+            if (Globals.BackendWrapper.projectHasCustomContent()) {
+                newProjectChoiceDialog.open()
+            } else {
+                openProjectDescription(false)
+            }
         }
 
         Loader {
@@ -30,6 +34,70 @@ Grid {
         }
     }
     // button 1
+
+    function openProjectDescription(startFromScratch) {
+        Globals.References.pages.project.sidebar.basic.popups.projectDescriptionDialog.startFromScratch = startFromScratch
+        EaGlobals.Vars.showProjectDescriptionDialog = true
+    }
+
+    // A new project would otherwise silently take over whatever the session holds (a sample
+    // built before any project existed, or another project's data), so ask first.
+    EaElements.Dialog {
+        id: newProjectChoiceDialog
+        title: qsTr('Create a new project')
+        modal: true
+        closePolicy: Popup.CloseOnEscape
+
+        Column {
+            spacing: EaStyle.Sizes.fontPixelSize
+
+            EaElements.Label {
+                width: EaStyle.Sizes.fontPixelSize * 32
+                wrapMode: Text.WordWrap
+                text: qsTr('This session already contains your own sample model, measured data or fit settings.') + '\n\n' +
+                      qsTr('Would you like the new project to start with them, or start from scratch with the default sample and no data?')
+            }
+
+            EaElements.Label {
+                width: EaStyle.Sizes.fontPixelSize * 32
+                wrapMode: Text.WordWrap
+                font.italic: true
+                text: {
+                    if (!Globals.BackendWrapper.projectCreated) {
+                        return qsTr('This work has not been saved to a project yet, so starting from scratch discards it.')
+                    }
+                    const name = Globals.BackendWrapper.projectName
+                    if (Globals.BackendWrapper.projectHasUnsavedChanges) {
+                        return qsTr('The current project "%1" has unsaved changes.').arg(name)
+                    }
+                    return qsTr('The current project "%1" has been saved.').arg(name)
+                }
+            }
+        }
+
+        footer: EaElements.DialogButtonBox {
+            EaElements.Button {
+                text: qsTr('Cancel')
+                onClicked: newProjectChoiceDialog.close()
+            }
+
+            EaElements.Button {
+                text: qsTr('Start from scratch')
+                onClicked: {
+                    newProjectChoiceDialog.close()
+                    openProjectDescription(true)
+                }
+            }
+
+            EaElements.Button {
+                text: qsTr('Keep sample and data')
+                onClicked: {
+                    newProjectChoiceDialog.close()
+                    openProjectDescription(false)
+                }
+            }
+        }
+    }
 /*
     // button 2
     EaElements.SideBarButton {

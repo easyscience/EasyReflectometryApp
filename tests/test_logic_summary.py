@@ -198,7 +198,6 @@ def test_summary_ordering_and_empty_sections(tmp_path, monkeypatch):
     project._experiments = {}
     logic = summary_module.Summary(project)
 
-    assert logic._ordered_experiments() == []
     assert logic._all_models_section_html() == '<h3>All Samples</h3><p>No samples available.</p>'
 
 

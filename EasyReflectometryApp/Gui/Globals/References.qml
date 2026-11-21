@@ -13,6 +13,7 @@ QtObject {
 
     // Populated in ApplicationWindows.qml
     readonly property var applicationWindow: {
+        'resetToInitialState': null,
         'appBarCentralTabs': {
             'homeButton': null,
             'projectButton': null,

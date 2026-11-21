@@ -5,17 +5,21 @@ from pathlib import Path
 from typing import List
 from typing import Optional
 
+import numpy as np
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
+from PySide6.QtCore import Qt
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
+from .logic.bayesian import VALID_INITIALIZERS
 from .logic.bayesian import Bayesian as BayesianLogic
 from .logic.calculators import Calculators as CalculatorsLogic
 from .logic.experiment_selection import ExperimentSelection
 from .logic.experiments import Experiments as ExperimentLogic
+from .logic.experiments import ordered_experiments
 from .logic.fitting import Fitting as FittingLogic
 from .logic.helpers import get_original_name
 from .logic.minimizers import Minimizers as MinimizersLogic
@@ -26,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 #: Shown for an experiment that has no model.
 NO_MODEL_COLOR = '#A5A5A5'
+
+DEFAULT_PREVIEW_INTERVAL_S = FitterWorker.DEFAULT_PREVIEW_INTERVAL_S
 
 
 def _lacks_finite_bounds(param: dict) -> bool:
@@ -49,9 +55,25 @@ class Analysis(QObject):
     parametersChanged = Signal()
     parametersIndexChanged = Signal()
     fittingChanged = Signal()
+    # The running operation's progress. Kept apart from fittingChanged, which also
+    # notifies the results and the posterior: a progress tick re-reads only these.
+    # Every fittingChanged (a lifecycle transition) emits it too.
+    fitProgressChanged = Signal()
+    fitPreviewIntervalChanged = Signal()
+    # The parameters hold a running fit's best point and the worker waits (blocking
+    # connection) until the slot emitting this returns. PyBackend redraws the Analysis
+    # page from them synchronously: a model read deferred with Qt.callLater would run
+    # after the worker resumed, while it writes the parameters again.
+    fitPreviewReady = Signal()
+    heatmapChanged = Signal()
     fitFailed = Signal(str)  # Emitted with error message when fitting fails
     prefitCheckFailed = Signal(str, str)  # Emitted with (title, message) when a fit is refused before starting
     stopFit = Signal()  # Signal to request fitting stop
+    # A good moment for an automatic save, with the reason: just before a fit or a calculator
+    # switch rewrites the models, and right after a successful run. Emitted synchronously, so a
+    # "before" checkpoint has finished when the action starts. PyBackend connects it to
+    # Project.autosave, which decides whether anything is written.
+    checkpointRequested = Signal(str)
     # Posterior predictive curves for the charts, as numpy arrays: (q, median, lower, upper) and
     # (z, median, lower, upper). PyBackend connects them to Plotting1d.
     posteriorPredictiveReady = Signal(object, object, object, object)
@@ -76,36 +98,19 @@ class Analysis(QObject):
         self._experiments_logic = ExperimentLogic(project_lib)
         self._minimizers_logic = MinimizersLogic(project_lib)
         self._bayesian_logic = BayesianLogic()
-        self._chached_parameters = None
-        self._chached_enabled_parameters = None
+        self._cached_enabled_parameters = None
         # Thread management for background fitting
         self._fitter_thread = None
+        self._fit_preview_interval_s = DEFAULT_PREVIEW_INTERVAL_S
         # Connect stopFit signal to slot
         self.stopFit.connect(self._onStopFit)
+        # Start, stop, finish and failure change the progress as well.
+        self.fittingChanged.connect(self.fitProgressChanged)
         # A minimizer switch changes the inequality-constraint notices too.
         self.minimizerChanged.connect(self.inequalityContextChanged)
         # The selected experiments, shared with Plotting1d (PyBackend passes the same instance).
         self._selection = selection if selection is not None else ExperimentSelection()
         self._selection.set_indices([0], len(self._experiments_logic.available()))
-
-    def _ordered_experiments(self) -> list:
-        """Return experiments as an ordered list of experiment objects.
-
-        Handles mapping-like storage without assuming contiguous integer keys.
-        """
-        experiments = self._experiments_logic._project_lib._experiments
-        if not experiments:
-            return []
-
-        if hasattr(experiments, 'items'):
-            items = list(experiments.items())
-            try:
-                items.sort(key=lambda item: item[0])
-            except TypeError:
-                pass
-            return [experiment for _, experiment in items]
-
-        return list(experiments)
 
     ########################
     ## Fitting
@@ -146,35 +151,59 @@ class Analysis(QObject):
     def fitChi2(self) -> float:
         return self._fitting_logic.fit_chi2
 
-    @Property(int, notify=fittingChanged)
-    def fitIteration(self) -> int:
-        return self._fitting_logic.fit_iteration
+    @Property('QVariantMap', notify=fitProgressChanged)
+    def fitProgress(self) -> dict:
+        """The running operation's progress (phase, fraction, count, ...), see ``Fitting.progress_snapshot``."""
+        return self._fitting_logic.progress_snapshot()
 
-    @Property(float, notify=fittingChanged)
-    def fitInterimChi2(self) -> float:
-        return self._fitting_logic.fit_interim_chi2
+    @Property(int, notify=fitPreviewIntervalChanged)
+    def fitPreviewInterval(self) -> int:
+        """Shortest time (whole seconds) between two redraws of the curves during a fit; 0: no preview."""
+        return self._fit_preview_interval_s
 
-    @Property(float, notify=fittingChanged)
-    def fitInterimReducedChi2(self) -> float:
-        return self._fitting_logic.fit_interim_reduced_chi2
+    # A float slot, so that QML's 2.5 arrives as 2.5 and is rejected instead of truncated.
+    @Slot(float)
+    def setFitPreviewInterval(self, value: float) -> None:
+        """Set the preview interval of the next fit, in whole seconds.
 
-    @Property(str, notify=fittingChanged)
-    def fitProgressMessage(self) -> str:
-        return self._fitting_logic.fit_progress_message
+        Anything but a non-negative whole number is ignored: each preview pauses the
+        fit for a full redraw, so a fraction of a second would slow it down too much.
+        """
+        if float(value).is_integer() and value >= 0 and value != self._fit_preview_interval_s:
+            self._fit_preview_interval_s = int(value)
+        # Also on a rejected value, so the field shows the stored one again.
+        self.fitPreviewIntervalChanged.emit()
+
+    @Slot()
+    def resetFitPreviewInterval(self) -> None:
+        self.setFitPreviewInterval(DEFAULT_PREVIEW_INTERVAL_S)
 
     @Property(bool, notify=fittingChanged)
-    def fitHasInterimUpdate(self) -> bool:
-        return self._fitting_logic.fit_has_interim_update
+    def fitCancelPending(self) -> bool:
+        """A cancelled fit's best point is in the parameters; QML asks to keep or revert it."""
+        return self._fitting_logic.fit_cancel_pending
 
-    @Property(bool, notify=fittingChanged)
-    def fitHasPreviewUpdate(self) -> bool:
-        return self._fitting_logic.fit_has_preview_update
+    @Property('QVariantMap', notify=fittingChanged)
+    def fitCancelledAt(self) -> dict:
+        """``reducedChi2``, ``count`` and ``unit`` of the cancelled fit asked about or kept; {} otherwise."""
+        return self._fitting_logic.fit_cancelled_at
 
-    @Property('QVariant', notify=fittingChanged)
-    def fitPreviewParameterValues(self) -> dict:
-        return self._fitting_logic.fit_preview_parameter_values
+    @Slot()
+    def keepCancelledFit(self) -> None:
+        self._fitting_logic.keep_cancelled_fit()
+        self._on_cancelled_fit_resolved()
 
-    @Property('QVariant', notify=fittingChanged)
+    @Slot()
+    def revertCancelledFit(self) -> None:
+        self._fitting_logic.revert_cancelled_fit()
+        self._on_cancelled_fit_resolved()
+
+    def _on_cancelled_fit_resolved(self) -> None:
+        self.fittingChanged.emit()
+        self._clearCacheAndEmitParametersChanged()
+        self.externalFittingChanged.emit()
+
+    @Property('QVariantMap', notify=fittingChanged)
     def fitResults(self) -> dict:
         """Return fit results as a dict for QML consumption."""
         return {
@@ -215,22 +244,6 @@ class Analysis(QObject):
     def fitInfeasible(self) -> bool:
         """Whether the last progress report came from the BUMPS penalty plateau."""
         return self._fitting_logic.fit_infeasible
-
-    # ------------------------------------------------------------------
-    # Bayesian sampling progress properties
-    # ------------------------------------------------------------------
-
-    @Property(int, notify=fittingChanged)
-    def sampleProgressStep(self) -> int:
-        return self._fitting_logic.sample_step
-
-    @Property(str, notify=fittingChanged)
-    def sampleProgressMessage(self) -> str:
-        return self._fitting_logic.sample_progress_message
-
-    @Property(bool, notify=fittingChanged)
-    def sampleProgressHasUpdate(self) -> bool:
-        return self._fitting_logic.sample_has_update
 
     # ------------------------------------------------------------------
     # Bayesian sampling parameter properties
@@ -293,12 +306,13 @@ class Analysis(QObject):
 
     @Property('QVariantList', notify=minimizerChanged)
     def bayesianInitializerOptions(self) -> list:
-        return ['eps', 'cov', 'lhs', 'random']
+        return list(VALID_INITIALIZERS)
 
     @Property(bool, notify=fittingChanged)
     def bayesianResultAvailable(self) -> bool:
         return self._bayesian_logic.has_result
 
+    # 'QVariant', not 'QVariantMap': None must reach QML as undefined.
     @Property('QVariant', notify=fittingChanged)
     def bayesianPosterior(self) -> dict | None:
         p = self._bayesian_logic.posterior
@@ -309,11 +323,10 @@ class Analysis(QObject):
             'nDraws': int(p['draws'].shape[0]),
         }
 
-    @Property('QVariant', notify=fittingChanged)
+    @Property('QVariantList', notify=fittingChanged)
     def bayesianMarginals(self) -> list:
         if not self._bayesian_logic.has_result:
             return []
-        import numpy as np
 
         p = self._bayesian_logic.posterior
         display_names = self._bayesian_display_name_list()
@@ -368,32 +381,20 @@ class Analysis(QObject):
 
     @Property(str, notify=fittingChanged)
     def bayesianCornerPlotUrl(self) -> str:
-        """Return a file URL for the corner plot PNG, or empty string."""
-        if not self._bayesian_logic.has_result:
-            return ''
-        if not self._bayesian_logic.corner_plot_url:
-            self._render_corner_plot()
+        """File URL of the corner plot HTML, or ''; rendered when sampling finishes, never on read."""
         return self._bayesian_logic.corner_plot_url
 
     @Property(str, notify=fittingChanged)
     def bayesianTracePlotUrl(self) -> str:
-        """Return a file URL for the trace plot PNG, or empty string."""
-        if not self._bayesian_logic.has_result:
-            return ''
-        if not self._bayesian_logic.trace_plot_url:
-            self._render_trace_plot()
+        """File URL of the trace plot HTML, or ''; rendered when sampling finishes, never on read."""
         return self._bayesian_logic.trace_plot_url
 
     @Property(str, notify=fittingChanged)
     def bayesianDistributionPlotUrl(self) -> str:
-        """Return a file URL for the interactive distribution HTML, or empty string."""
-        if not self._bayesian_logic.has_result:
-            return ''
-        if not self._bayesian_logic.distribution_plot_url:
-            self._render_distribution_plot()
+        """File URL of the distribution plot HTML, or ''; rendered when sampling finishes, never on read."""
         return self._bayesian_logic.distribution_plot_url
 
-    @Property('QVariant', notify=fittingChanged)
+    @Property('QVariantMap', notify=fittingChanged)
     def bayesianDiagnostics(self) -> dict:
         """Return convergence diagnostics dict."""
         if self._bayesian_logic.has_result and not self._bayesian_logic.diagnostics:
@@ -405,8 +406,7 @@ class Analysis(QObject):
         """Return parameter names for heatmap axis dropdowns (display names)."""
         return self._bayesian_display_name_list()
 
-    heatmapChanged = Signal()
-
+    # 'QVariant', not 'QVariantMap': None must reach QML as undefined.
     @Property('QVariant', notify=heatmapChanged)
     def bayesianHeatmapData(self) -> dict | None:
         """Return 2D histogram data for the heatmap view."""
@@ -420,8 +420,6 @@ class Analysis(QObject):
     @Slot(int, int)
     def computeBayesianHeatmap(self, paramX: int, paramY: int) -> None:
         """Compute 2D histogram for the selected parameter pair."""
-        import numpy as np
-
         posterior = self._bayesian_logic.posterior
         if posterior is None:
             return
@@ -446,7 +444,7 @@ class Analysis(QObject):
     # Fitting start / stop (classical + Bayesian dispatch)
     # ------------------------------------------------------------------
 
-    @Slot(None)
+    @Slot()
     def fittingStartStop(self) -> None:
         # If already running, stop the fit
         if self._fitting_logic.running:
@@ -458,6 +456,9 @@ class Analysis(QObject):
         if errors:
             self.prefitCheckFailed.emit('Invalid Parameter Bounds', '\n\n'.join(errors))
             return
+
+        # The fit overwrites the parameter values: put the starting point on disk first.
+        self.checkpointRequested.emit('before a fit')
 
         # Use threaded fitting for non-blocking UI
         self._start_threaded_fit()
@@ -497,10 +498,14 @@ class Analysis(QObject):
             args=(prepared.x, prepared.y),
             kwargs={'weights': prepared.weights, **prepared.call_kwargs(**self._constraints_kwargs())},
             parent=self,
+            preview_interval_s=self._fit_preview_interval_s,
         )
         self._fitter_thread.finished.connect(self._on_fit_finished)
         self._fitter_thread.failed.connect(self._on_fit_failed)
         self._fitter_thread.progressDetail.connect(self._on_fit_progress)
+        # Blocking: the worker waits between evaluations until the preview is drawn,
+        # so nothing writes the parameters while the GUI reads the model.
+        self._fitter_thread.previewRequested.connect(self._on_fit_preview, Qt.BlockingQueuedConnection)
         self._fitter_thread.finished.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.failed.connect(self._fitter_thread.deleteLater)
         self._fitter_thread.start()
@@ -517,10 +522,10 @@ class Analysis(QObject):
     def _is_stale_worker_signal(self) -> bool:
         """Return True when a worker signal comes from a superseded worker.
 
-        A cancelled fit's thread may outlive the cancellation (lmfit/DFO cannot
-        abort mid-run); its late signals must not clobber the state of a newer
-        run. Signals from the current worker — and direct calls, where
-        ``sender()`` is None — are processed normally.
+        A cancelled run's thread outlives the cancellation until the engine
+        finishes its current evaluation or step; its late signals must not
+        clobber the state of a newer run. Signals from the current worker — and
+        direct calls, where ``sender()`` is None — are processed normally.
         """
         sender = self.sender()
         if sender is not None and sender is not self._fitter_thread:
@@ -537,7 +542,22 @@ class Analysis(QObject):
             self._fitting_logic.on_sample_progress(payload)
         else:
             self._fitting_logic.on_fit_progress(payload)
-        self.fittingChanged.emit()
+        # Progress only: neither fittingChanged (results, posterior) nor
+        # externalFittingChanged (plot refresh).
+        self.fitProgressChanged.emit()
+
+    @Slot(dict)
+    def _on_fit_preview(self, values: dict) -> None:
+        """Draw the running fit's best point. The worker waits until this returns
+        (blocking connection), and its next evaluation overwrites the values again."""
+        if self._is_stale_worker_signal():
+            return
+        try:
+            self._fitting_logic.apply_parameter_values(values)
+            self.fitPreviewReady.emit()
+        except Exception:
+            # The fit must go on whatever the preview does.
+            logger.exception('Fit preview failed')
 
     @Slot(list)
     def _on_fit_finished(self, results: list) -> None:
@@ -555,6 +575,11 @@ class Analysis(QObject):
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
         self.externalFittingChanged.emit()
+        # After externalFittingChanged, which marks the project dirty. A fit that ran to the end
+        # without converging still rewrote the parameters, but is not a result worth keeping
+        # unasked.
+        if self._fitting_logic.fit_success:
+            self.checkpointRequested.emit('after a successful fit')
 
     @Slot(str)
     def _on_fit_failed(self, error_message: str) -> None:
@@ -562,11 +587,16 @@ class Analysis(QObject):
         if self._is_stale_worker_signal():
             return
         is_user_cancel = self._fitting_logic.fit_cancelled and 'cancel' in error_message.lower()
+        # Not recorded on the project here: a failure leaves the record describing the last
+        # completed fit; a cancelled one is recorded if the user keeps it (keepCancelledFit).
         if is_user_cancel:
             error_message = 'Fitting cancelled by user'
-        # Not recorded on the project: its record keeps describing the last completed fit,
-        # which the parameters still hold. The dialog shows this error.
-        self._fitting_logic.on_fit_failed(error_message)
+            # The worker has finished, so its best point can be put in the parameters.
+            # None for a sampling worker, and when called with no worker.
+            best = getattr(self._fitter_thread, 'best_progress', None)
+            self._fitting_logic.on_fit_cancelled(error_message, best)
+        else:
+            self._fitting_logic.on_fit_failed(error_message)
         self._fitter_thread = None
         self.fittingChanged.emit()
         self._clearCacheAndEmitParametersChanged()
@@ -576,12 +606,15 @@ class Analysis(QObject):
 
     @Slot()
     def _onStopFit(self) -> None:
-        """Stop fitting and clean up."""
+        """Request the running fit or sampling to stop.
+
+        The parameters are not refreshed here: the worker may still be writing
+        them until it exits, and its exit handlers emit externalFittingChanged.
+        """
         self._fitting_logic.stop_fit()
         if self._fitter_thread is not None:
             self._fitter_thread.stop()
         self.fittingChanged.emit()
-        self.externalFittingChanged.emit()
 
     # ------------------------------------------------------------------
     # Bayesian sampling dispatch and result handling
@@ -615,7 +648,7 @@ class Analysis(QObject):
         # A fresh run invalidates the previous posterior immediately; if the
         # run fails, the UI must not keep presenting the old result as current.
         self._clear_bayesian_results()
-        self._fitting_logic.prepare_for_threaded_sample()
+        self._fitting_logic.prepare_for_threaded_sample(self._bayesian_logic.burn)
         self.fittingChanged.emit()
 
         multi_fitter = self._fitting_logic.prepare_threaded_sample(self._minimizers_logic)
@@ -679,6 +712,7 @@ class Analysis(QObject):
             self._compute_diagnostics,
             self._render_corner_plot,
             self._render_trace_plot,
+            self._render_distribution_plot,
         ):
             try:
                 step()
@@ -686,10 +720,12 @@ class Analysis(QObject):
                 logger.exception('Bayesian post-processing step %s failed', getattr(step, '__name__', step))
         self.fittingChanged.emit()
         self.externalFittingChanged.emit()
+        # The posterior itself is not part of the project file; this keeps whatever the run
+        # left in the project (it saves nothing when the project is unchanged).
+        self.checkpointRequested.emit('after Bayesian sampling')
 
     def _compute_and_publish_posterior_predictive(self) -> None:
         """Compute posterior predictive reflectivity and SLD, publish to plotting."""
-        import numpy as np
         from easyreflectometry.analysis.bayesian import posterior_predictive_reflectivity
         from easyreflectometry.analysis.bayesian import posterior_predictive_sld_profile
 
@@ -698,7 +734,7 @@ class Analysis(QObject):
             logger.warning('_compute_and_publish_posterior_predictive: no posterior available')
             return
 
-        experiments = self._ordered_experiments()
+        experiments = ordered_experiments(self._project_lib)
         if not experiments:
             logger.warning('_compute_and_publish_posterior_predictive: no experiments available')
             return
@@ -790,8 +826,6 @@ class Analysis(QObject):
         if acceptance_rate is not None:
             try:
                 if callable(acceptance_rate):
-                    import numpy as np
-
                     # BUMPS MCMCDraw.acceptance_rate() returns (generation ids, rate in percent)
                     # for the kept portion of the run.
                     _generations, rates = acceptance_rate()
@@ -809,8 +843,6 @@ class Analysis(QObject):
             draws_3d = draws
         elif state is not None and hasattr(state, 'chains'):
             try:
-                import numpy as np
-
                 _draw_counts, chains_3d, _logp_3d = state.chains()
                 # chains_3d: (n_generations, n_chains, n_params)
                 if chains_3d.shape[1] >= 2:  # at least 2 chains
@@ -826,8 +858,6 @@ class Analysis(QObject):
                 import arviz as _arviz
 
                 # Build arviz InferenceData from 3D draws (n_chains, n_draws, n_params)
-                import numpy as np
-
                 posterior_dict = {}
                 for i, name in enumerate(posterior['param_names']):
                     posterior_dict[name] = draws_3d[:, :, i]
@@ -858,10 +888,6 @@ class Analysis(QObject):
 
         self._bayesian_logic.diagnostics = diagnostics
 
-    @Property(int, notify=fittingChanged)
-    def sampleProgressTotalSteps(self) -> int:
-        return self._fitting_logic.sample_total_steps
-
     def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""
         import tempfile
@@ -884,7 +910,6 @@ class Analysis(QObject):
             from easyreflectometry.analysis.bayesian import plot_corner
 
             display_names = self._bayesian_display_name_list()
-            import numpy as np
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 3:
                 draws = draws.reshape(-1, draws.shape[-1])
@@ -920,7 +945,6 @@ class Analysis(QObject):
             from easyreflectometry.analysis.bayesian import plot_distribution
 
             display_names = self._bayesian_display_name_list()
-            import numpy as np
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 3:
                 draws = draws.reshape(-1, draws.shape[-1])
@@ -953,7 +977,6 @@ class Analysis(QObject):
             self._bayesian_logic.trace_plot_url = ''
             return
         try:
-            import numpy as np
             from easyreflectometry.analysis.bayesian import plot_trace
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 2:
@@ -992,7 +1015,6 @@ class Analysis(QObject):
             import matplotlib
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
-            import numpy as np
 
             draws = np.asarray(posterior['draws'])
             if draws.ndim == 3:
@@ -1078,6 +1100,8 @@ class Analysis(QObject):
 
     @Slot(int)
     def setCalculatorCurrentIndex(self, new_value: int) -> None:
+        if new_value != self._calculators_logic.current_index():
+            self.checkpointRequested.emit('before switching the calculation engine')
         try:
             changed = self._calculators_logic.set_current_index(new_value)
         except NotImplementedError as exception:
@@ -1159,13 +1183,13 @@ class Analysis(QObject):
     @Property('QVariantList', notify=experimentsChanged)
     def modelNamesForExperiment(self) -> list:
         """Per experiment, its model's name ('' when it has none)."""
-        experiments = self._ordered_experiments()
+        experiments = ordered_experiments(self._project_lib)
         return [get_original_name(experiment.model) if experiment.model is not None else '' for experiment in experiments]
 
     @Property('QVariantList', notify=experimentsChanged)
     def modelColorsForExperiment(self) -> list:
         """Per experiment, its model's colour (grey when it has none)."""
-        experiments = self._ordered_experiments()
+        experiments = ordered_experiments(self._project_lib)
         return [experiment.model.color if experiment.model is not None else NO_MODEL_COLOR for experiment in experiments]
 
     @Slot(int)
@@ -1362,21 +1386,17 @@ class Analysis(QObject):
     def onProjectLoaded(self) -> None:
         """A loaded or reset project brings its own fit settings: re-read every bound control."""
         self.minimizerChanged.emit()
+        # ... and no fit record: the status bar's chi² (or cancelled note) is the old project's.
+        self.fittingChanged.emit()
 
     #############
     ## Parameters
     @Property('QVariantList', notify=parametersChanged)
-    def fitableParameters(self) -> List[dict[str]]:
-        if self._chached_parameters is None:
-            self._chached_parameters = self._parameters_logic.parameters
-        return self._chached_parameters
-
-    @Property('QVariantList', notify=parametersChanged)
     def enabledParameters(self) -> list[dict[str]]:
-        if self._chached_enabled_parameters is not None:
-            return self._chached_enabled_parameters
-        self._chached_enabled_parameters = self._parameters_logic.parameters
-        return self._chached_enabled_parameters
+        if self._cached_enabled_parameters is not None:
+            return self._cached_enabled_parameters
+        self._cached_enabled_parameters = self._parameters_logic.parameters
+        return self._cached_enabled_parameters
 
     @Property(str, notify=parametersChanged)
     def nameFilterCriteria(self) -> str:
@@ -1407,33 +1427,35 @@ class Analysis(QObject):
 
     @Property(int, notify=parametersChanged)
     def freeParametersCount(self) -> int:
-        result = self._parameters_logic.count_free_parameters()
-        return result
+        """Rows the 'free' variability choice shows (free counts in the table, not the library)."""
+        return self._parameters_logic.variability_counts()['free']
 
     @Property(int, notify=parametersChanged)
     def fixedParametersCount(self) -> int:
-        result = self._parameters_logic.count_fixed_parameters()
-        return result
+        """Rows the 'fixed' variability choice shows: active parameters left out of the fit."""
+        return self._parameters_logic.variability_counts()['fixed']
 
     @Property(int, notify=parametersChanged)
+    def activeParametersCount(self) -> int:
+        """Rows the default 'active' choice shows: those that can be edited and fitted."""
+        return self._parameters_logic.variability_counts()['active']
+
+    @Property(int, notify=parametersChanged)
+    def allParametersCount(self) -> int:
+        """Rows the 'all' choice shows, including constrained, derived and inactive ones."""
+        return self._parameters_logic.variability_counts()['all']
+
+    # The name filter counts follow the variability filter, so each choice is
+    # labelled with the number of rows it would show.
+    @Property(int, notify=parametersChanged)
     def modelParametersCount(self) -> int:
-        return len(
-            [
-                parameter
-                for parameter in self._parameters_logic.all_parameters()
-                if parameter.get('enabled', True) and not self._parameters_logic.is_experiment_parameter(parameter)
-            ]
-        )
+        rows = [parameter for parameter in self._parameters_logic.all_parameters() if not parameter['experiment']]
+        return self._parameters_logic.count_rows_matching_variability(rows)
 
     @Property(int, notify=parametersChanged)
     def experimentParametersCount(self) -> int:
-        return len(
-            [
-                parameter
-                for parameter in self._parameters_logic.all_parameters()
-                if parameter.get('enabled', True) and self._parameters_logic.is_experiment_parameter(parameter)
-            ]
-        )
+        rows = [parameter for parameter in self._parameters_logic.all_parameters() if parameter['experiment']]
+        return self._parameters_logic.count_rows_matching_variability(rows)
 
     @Slot(float)
     def setCurrentParameterValue(self, new_value: float) -> None:
@@ -1457,8 +1479,7 @@ class Analysis(QObject):
             self._clearCacheAndEmitParametersChanged()
 
     def _clearCacheAndEmitParametersChanged(self):
-        self._chached_parameters = None
-        self._chached_enabled_parameters = None
+        self._cached_enabled_parameters = None
         parameters_length = len(self.enabledParameters)
         current_index = self._parameters_logic.current_index()
         if parameters_length == 0 and current_index != 0:

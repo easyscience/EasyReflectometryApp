@@ -7,6 +7,7 @@ from easyreflectometry.sample import Sample
 from easyreflectometry.sample import SurfactantLayer
 
 from .helpers import get_original_name
+from .helpers import is_independent
 
 
 class Assemblies:
@@ -57,7 +58,7 @@ class Assemblies:
         return self._assemblies[self.index].type
 
     @property
-    def assemblies(self) -> list[dict[str, str]]:
+    def assemblies(self) -> list[dict[str, str | list[str]]]:
         rows = _from_assemblies_collection_to_list_of_dicts(self._assemblies)
         # An assembly is one object in every model sharing it (contrasts): editing it edits all.
         current = self._project_lib.current_model_index
@@ -73,18 +74,22 @@ class Assemblies:
     def assemblies_names(self) -> list[str]:
         return [element['label'] for element in self.assemblies]
 
-    def remove_at_index(self, value: str) -> None:
-        self._assemblies.remove_assembly(int(value))
+    def remove_at_index(self, index: int) -> None:
+        self._assemblies.remove_assembly(index)
 
-    def add_new(self) -> None:
+    def add_new(self) -> bool:
+        """Insert an assembly with a Si layer; return whether the Si material had to be added to the project."""
         previous_length = len(self._assemblies)
         target_index = self._target_insert_index(self.index, previous_length)
         existing_ids = {id(assembly) for assembly in self._assemblies}
         self._assemblies.add_assembly()
         new_index = self._move_new_assembly_into_position(existing_ids, target_index)
+        materials_before = len(self._project_lib._materials)
+        # The library adds Si to the project's materials when it is missing.
         index_si = self._project_lib.get_index_si()
         if new_index is not None:
             self._assemblies[new_index].layers[0].material = self._project_lib._materials[index_si]
+        return len(self._project_lib._materials) > materials_before
 
     def duplicate_selected(self) -> None:
         if not self._has_valid_assembly_index(self.index):
@@ -148,27 +153,29 @@ class Assemblies:
 
     # Only for repeating multilayer
     @property
-    def repetitions_at_current_index(self) -> str:
+    def repetitions_at_current_index(self) -> int:
         if isinstance(self._assemblies[self.index], RepeatingMultilayer):
-            return str(int(self._assemblies[self.index].repetitions.value))
-        return '1'
+            return int(self._assemblies[self.index].repetitions.value)
+        return 1
 
-    def set_repeated_layer_reptitions(self, new_value: int) -> bool:
+    def set_repeated_layer_repetitions(self, new_value: int) -> bool:
         if isinstance(self._assemblies[self.index], RepeatingMultilayer):
-            if new_value != self._assemblies[self.index].repetitions.value:
-                self._assemblies[self.index].repetitions.value = new_value
+            repetitions = self._assemblies[self.index].repetitions
+            # A dependent or pinned repetition count follows its constraint.
+            if is_independent(repetitions) and new_value != repetitions.value:
+                repetitions.value = new_value
                 return True
         return False
 
     # # Only for surfactant layer
-    def set_constrain_apm(self, new_value: str) -> bool:
+    def set_constrain_apm(self, new_value: bool) -> bool:
         if isinstance(self._assemblies[self.index], SurfactantLayer):
             if self._assemblies[self.index].constrain_area_per_molecule != new_value:
                 self._assemblies[self.index].constrain_area_per_molecule = new_value
                 return True
         return False
 
-    def set_conformal_roughness(self, new_value: str) -> bool:
+    def set_conformal_roughness(self, new_value: bool) -> bool:
         if isinstance(self._assemblies[self.index], SurfactantLayer):
             if self._assemblies[self.index].conformal_roughness != new_value:
                 self._assemblies[self.index].conformal_roughness = new_value
@@ -176,23 +183,6 @@ class Assemblies:
         return False
 
 
-def _from_assemblies_collection_to_list_of_dicts(assemblies_collection: Sample) -> list[dict[str, str]]:
-    assemblies_list = []
-    for assembly in assemblies_collection:
-        assemblies_list.append(
-            {
-                'label': assembly.name,
-                'type': assembly.type,
-                'repetitions': 1,
-                'constrain_apm': 'False',
-                'conformal_roughness': 'False',
-            }
-        )
-        if isinstance(assembly, RepeatingMultilayer):
-            assemblies_list[-1]['repetitions'] = assembly.repetitions
-
-        if isinstance(assembly, SurfactantLayer):
-            assemblies_list[-1]['constrain_apm'] = assembly.constrain_area_per_molecule
-            assemblies_list[-1]['conformal_roughness'] = assembly.conformal_roughness
-
-    return assemblies_list
+def _from_assemblies_collection_to_list_of_dicts(assemblies_collection: Sample) -> list[dict[str, str | list[str]]]:
+    # Repetitions and the surfactant flags have their own current-index properties.
+    return [{'label': assembly.name, 'type': assembly.type} for assembly in assemblies_collection]

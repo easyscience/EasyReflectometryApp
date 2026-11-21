@@ -8,6 +8,11 @@ import QtQuick
 // whose id is stored here can be accessed from any other qml file.
 
 QtObject {
+    // Hover delay (ms) before a tooltip appears, so it doesn't pop up over the
+    // control the moment the cursor crosses it. Matches Qt's desktop default
+    // (QStyleHints::toolTipWakeUpDelay). Chart data readouts stay instant.
+    readonly property int toolTipDelay: 700
+
     property bool showLegendOnSamplePage: false
     property bool showLegendOnExperimentPage: false
     property bool showLegendOnAnalysisPage: false
@@ -19,9 +24,18 @@ QtObject {
     property double analysisStaggerDecades: 1.0
 
     // Sample page plot control settings
+    // Draw every model, or only the one picked in the Models selector
+    property bool showAllSampleModels: true
     property bool reverseSldZAxis: false
     property bool logarithmicQAxis: false
     property int experimentMarkerStyle: 0  // 0: dots, 1: circles, 2: line
+
+    // SLD chart z range, shared by the Sample and Analysis SLD charts.
+    // Auto: fit the calculated profiles. Otherwise [sldZMin, sldZMax]; NaN until
+    // first set (seeded from the auto range when Auto is switched off).
+    property bool sldZAuto: true
+    property real sldZMin: NaN
+    property real sldZMax: NaN
 
     // Shared experiment color palette — used by Data Explorer table, Experiment chart, and Analysis charts
     // Muted/pastel palette to match the application's professional aesthetic
@@ -40,6 +54,15 @@ QtObject {
         case Qt.DashDotLine:    return '\u2504\u22c5\u2504'
         case Qt.DashDotDotLine: return '\u2504\u22c5\u22c5\u2504'
         default:                return '\u2501'
+        }
+    }
+
+    // Legend symbol for the measured-data series, matching experimentMarkerStyle
+    function markerStyleSymbol(markerStyle) {
+        switch (markerStyle) {
+        case 0:  return '\u2022'   // dots: small bullet
+        case 1:  return '\u25cf'   // circles: large filled circle
+        default: return '\u2501'   // line
         }
     }
 }

@@ -1,3 +1,175 @@
+# Version 1.6.0 (21 Nov 2026)
+
+- Live preview of a running fit: the Analysis page's reflectivity, residual and
+  SLD curves are redrawn with the best values found so far, at most once per
+  second and only when the fit has improved. **Preview every (s)**, in the
+  Minimization method group of the `Extra controls` tab, sets the interval in
+  whole seconds (empty: back to 1 s, 0: no preview); it applies from the next fit.
+- **Cancel fitting** no longer throws away the progress of a fit. A dialog
+  reports the reduced χ² and the number of evaluations (steps for BUMPS) reached,
+  with the parameters already at the best values found, and asks:
+  - **Keep current values**: the values stay, their uncertainties are cleared (a
+    cancelled fit has none), and the run is recorded as cancelled; the status
+    bar shows its reduced χ² marked `(cancelled)`.
+  - **Revert to starting values**: values and uncertainties go back to what they
+    were when the fit started, and the last completed fit stays the recorded one.
+
+  Before, LMFit and DFO went back to the starting values and BUMPS kept its last
+  point, with uncertainties. A fit cancelled before its first progress report
+  goes back to the starting values without asking.
+- The status bar no longer shows the previous project's reduced χ² after a
+  project is loaded or reset.
+- SLD charts: the z range can be set by hand. A new **SLD z range** group in
+  the `Advanced controls` tab of the Sample and Analysis pages has an **Auto**
+  box, on by default, which fits the z axis to the calculated profiles as
+  before. With **Auto** unchecked, **z-min** and **z-max** set the range that
+  **Reset axes** returns to; the first time, they start from the calculated
+  range. A range wider than the calculated profile extends the SLD, ρ ± ρM∥
+  and ρM curves flat with the fronting and backing values. The setting is
+  shared by both pages and is not saved in the project.
+- Automatic saving: once a project has been created, it is saved when you leave
+  a page, after a successful fit or a Bayesian sampling run, and just before a
+  fit, a calculation engine switch or replacing the sample from an ORSO file.
+  Each automatic save keeps the file it replaces as `project.json.bak`. The
+  status bar marks an automatic save with `(auto)` and shows **Autosave failed**
+  while one is failing. **Save automatically**, in the new `Advanced controls`
+  tab of the Project page, switches it off.
+- Parameter limits are kept as entered (#374):
+  - A min or max typed in the Analysis table is no longer refused when the
+    current value lies outside it; the value is moved onto the new limit.
+  - A value typed on the Sample page (thickness, roughness, SLD, ρM) is no
+    longer clamped to the default limits; the limit it passes is moved out.
+  - A limit outside the physical range (a negative thickness or roughness, an
+    SLD outside -1 to 10, a scale outside 0 to 10) is shown in red, with the
+    reason in its tooltip, and is still used by the fit.
+- Analysis parameter table: the variability filter has a new default choice,
+  **Active parameters**, which hides the greyed rows (constrained, derived and
+  unused parameters). **All parameters** shows them as before.
+- The new project dialog has a **Cancel** button. (#371)
+- Experiment chart: the coordinates tooltip snaps to the nearest measured point,
+  so the cursor no longer has to be exactly on a marker.
+- Progress of a fit or a Bayesian sampling run:
+  - A thin bar along the top of the status bar shows it on every page except
+    Home. For sampling it fills up with the generations run so far; a fit has
+    no knowable end, so its bar only shows that it is running.
+  - Under the **Start/Cancel** button of the Analysis sidebar, now on both the
+    `Basic controls` and `Extra controls` tabs: the same bar and a line of text
+    with the phase (**Burn-in**, **Sampling**, **Fitting**, **Cancelling…**),
+    the generation or evaluation count, the reduced χ² of a fit, and the time
+    elapsed. It replaces the bar of the `Basic controls` Fitting group, which
+    stood at a fixed 50 % during a fit.
+  - The status bar shows the short form (`Sampling 42 %`,
+    `132 evaluations · reduced χ² 1.2345`) and hides the Calculator and
+    Minimizer items during a run. A sampling run is labelled as one even if
+    the minimizer selection is changed while it runs.
+- Reflectivity plots on the Sample, Experiment and Analysis pages can show
+  R(q) on a linear y-axis: **Linear R(q)-axis** next to **Plot R(q)×q⁴**. The
+  two are exclusive, so checking one unchecks the other. The log axis is now
+  titled log₁₀(R(q)) or log₁₀(R(q)×q⁴). (#378)
+- **Cancel fitting** now stops every minimizer within one evaluation or step.
+  LMFit and DFO fits used to run to the end before the cancellation took effect.
+  What happens to the parameters is described under the cancel dialog above. A
+  cancelled Bayesian sampling run is reported as cancelled instead of as a
+  failed fit.
+- Sample page: picking a model in the Models table draws only that model in the
+  reflectivity and SLD charts, with the axes fitted to it. **Show all models**,
+  under the table, draws every model again.
+- Analysis page: the SLD chart shows the models of the experiments selected in
+  the Data Explorer, like the reflectivity chart, instead of every model. (#462)
+- Measured data legends: the symbol matches the chosen marker style (dots,
+  circles or line), and the error bounds have their own legend entry. (#457)
+- Error bounds (±1σ) are drawn in the colour of their measured points instead of
+  a darker shade, and the Analysis reflectivity chart now draws them too. (#460)
+- Material editor:
+  - **Add material** creates `New material` with its SLD and iSLD entered
+    directly, so they can be typed into the table at once. Tick **SLD computed
+    from formula and density** to compute them from the formula again.
+  - The material move up and move down buttons are removed: layers refer to
+    materials directly, so the order of the table has no effect.
+- Analysis parameter table, constrained and shared parameters:
+  - The dependency of a constrained parameter shows the other parameters by
+    their table names, also for a parameter of another model, and replaces
+    only whole variable names, so an expression such as `max(a, 0)` is no
+    longer garbled. (#365, #366)
+  - Hovering the name shows the constraint (`Constrained, read-only: …`), the
+    models sharing the parameter, and how many parameters of other models are
+    tied to it, even when the name is not shortened.
+- A new project now fits with `Bumps_lm` (Levenberg–Marquardt) by default,
+  instead of `Bumps_simplex`. Loaded projects keep their own minimizer.
+- **Create a new project** now asks first when the session already holds a
+  sample, data or fit settings of your own: **Keep sample and data** starts the
+  new project with them (as before), **Start from scratch** begins with the
+  default sample and no data. The reset only happens once the new project's
+  details are confirmed, so cancelling keeps everything as it was.
+- Installing over an earlier version:
+  the installer no longer stops with "The directory you selected already exists
+  and contains an installation". When the chosen folder holds an earlier
+  version, it offers to remove that version with its own MaintenanceTool and
+  install in its place; declining, or a failed removal, sets a separate folder
+  named after the new version instead (e.g. `EasyReflectometryApp-1.6.0`).
+- Link contrasts: preview, choose and undo ties:
+  - A preview table, **Parameters to tie (n of m ticked)**, lists every parameter
+    of the following models that linking would tie, each with a tick box. Untick the
+    ones that should stay free, or tick a single material row to tie only that
+    material. **Tick all** and **Untick all** set every row; **Show the parameters
+    that cannot be tied** adds the rows linking leaves alone, with the reason
+    (`per contrast`, `not used`, `material chemistry`, ...).
+  - **Reference model** picks which of the ticked models the others follow;
+    before, it was always the ticked model highest in the list. The reference is
+    marked `(reference)` in the model table.
+  - **Also tie material SLDs and densities** now ticks the material rows of the
+    preview, so its effect is visible before linking.
+  - The preview follows the project: it is updated when the ticked models, the
+    reference or the constraints change, and keeps the user's ticks. Why models
+    cannot be linked (different layouts) is shown before **Link selected models**
+    is pressed. Adding, removing or renaming a model clears the selection.
+  - Each link is one row of the new *Model links* table (e.g.
+    `Film in CMSi → Film in D2O (5 tied)`) and one row of type `link` in
+    *Active Constraints*, instead of one row per tied parameter. Removing it
+    removes the whole link; selecting it lists its parameters under **Tied
+    parameters of link n**, where each one can be untied on its own. An untied
+    parameter gets back the value and bounds it had before the link.
+  - The *Model links* table replaces the *Model Constraints* table, which listed
+    every constraint of the project, not only the links.
+- Equality constraints: the expression placeholder shows a parameter alias
+  (`2 * model_d2o_roughness`) instead of `np.sqrt(1 / sld_ni) + 4`, and the
+  model-definition tutorial now explains aliases and what an `=` expression may
+  contain (units, plain numbers, `pi`, `e`, `sqrt`, ...).
+- Superphase and subphase stay fixed when layers change:
+  the layer table decided which thicknesses and roughnesses could be edited from
+  the assembly alone, locking every layer of the first and last assemblies, and
+  adding, removing, duplicating or moving a layer did not move the lock to the
+  new first or last layer. Now only the superphase (first layer of the first
+  assembly: thickness and roughness) and the subphase (last layer of the last
+  assembly: thickness) are locked, the table shows exactly what the fit uses,
+  and the lock is set again after every layer change.
+- Adding a layer or an assembly to a project that has no `Si` material still
+  creates one for the new layer, and the Materials table now shows it at once
+  instead of after the next unrelated refresh.
+- Bayesian results: the marginal-distribution plot is rendered together with the
+  corner and trace plots when sampling finishes, so its tab no longer renders on
+  first open, and a plot that failed to render is not retried on every redraw.
+- Analysis parameter filters: **model** and **experiment** now go by what owns a
+  parameter. Only a model's scale and background are experiment parameters;
+  before, any parameter whose name or group contained words such as `scale` or
+  `background` (for example one of a material named "Background Material") was
+  counted as one. A parameter that is only named `thickness` or `roughness`,
+  outside a layer, is no longer labelled with its assembly's name.
+- Source cleanup : duplicated
+  code and dead code removed (one shared plot-control group for the Experiment,
+  Sample and Analysis pages, one definition of the experiment order), typed
+  backend slots and properties, and misspelt names corrected. No change in
+  behaviour, except that converged R̂ values in the Bayesian diagnostics are now
+  shown in green rather than the blue accent colour.
+- Built on easyreflectometry 2 and easyscience 3:
+  - Projects saved by EasyReflectometry 1.5 or earlier no longer open. Re-create
+    them, or open them with EasyReflectometry 1.5.
+  - The refl1d engine now smears the curve properly (it oversamples the
+    resolution kernel), so refl1d fits give different, more accurate results,
+    and they take longer.
+  - Removing the last magnetic layer, its assembly or its model now always
+    switches magnetism off in the calculation engine.
+
 # Version 1.5.0 (19 Oct 2026)
 
 - Magnetism parameterisation and guide field ([#425](https://github.com/easyscience/reflectometry-lib/issues/425), requirement 4):

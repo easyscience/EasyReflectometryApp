@@ -10,6 +10,7 @@ import EasyApplication.Gui.Style as EaStyle
 import EasyApplication.Gui.Globals as EaGlobals
 import EasyApplication.Gui.Elements as EaElements
 
+import Gui as Gui
 import Gui.Globals as Globals
 
 
@@ -64,13 +65,12 @@ Rectangle {
             }
         }
 
-        LogValueAxis {
+        Gui.LogQAxis {
             id: axisXLog
             visible: chartView.useLogQAxis
             titleText: "q (Å⁻¹)"
             property double minAfterReset: Math.max(Globals.BackendWrapper.plottingResidualMinX, 1e-6)
             property double maxAfterReset: Globals.BackendWrapper.plottingResidualMaxX * 1.1
-            base: 10
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine

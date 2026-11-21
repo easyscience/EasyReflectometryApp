@@ -15,6 +15,10 @@ import Gui.Globals as Globals
 Rectangle {
     id: container
 
+    // Gelman-Rubin R̂ below this counts as converged: the usual rule of thumb
+    // (Gelman et al., Bayesian Data Analysis, 3rd ed., §11.4).
+    readonly property real rhatThreshold: 1.1
+
     color: EaStyle.Colors.chartBackground
 
     Flickable {
@@ -140,9 +144,9 @@ Rectangle {
                                 color: {
                                     var diag = Globals.BackendWrapper.bayesianDiagnostics
                                     if (diag && diag.rhat && diag.rhat[modelData] !== undefined) {
-                                        return diag.rhat[modelData] < 1.1
-                                            ? (EaStyle.Colors.themeAccent || "#27ae60")
-                                            : (EaStyle.Colors.warning || "#e67e22")
+                                        return diag.rhat[modelData] < container.rhatThreshold
+                                            ? EaStyle.Colors.green
+                                            : EaStyle.Colors.orange
                                     }
                                     return EaStyle.Colors.themeForegroundMinor
                                 }

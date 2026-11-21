@@ -6,6 +6,9 @@ from easyreflectometry.sample import MaterialCollection
 from easyreflectometry.sample import MaterialDensity
 from easyreflectometry.sample import MaterialMagnetic
 
+from .helpers import is_independent
+from .helpers import set_value_widening_bounds
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +23,7 @@ def _parameter_is_writable(parameter) -> bool:
     the dependent parameter would raise, so the setters refuse instead.
     Checked per-parameter (not just `sld`): the lib guards sld and isld
     individually since they can disagree mid-toggle."""
-    return getattr(parameter, 'independent', True)
+    return is_independent(parameter)
 
 
 # A density material's fittable input knobs; cleared (free = False) when the
@@ -79,8 +82,8 @@ class Material:
     def material_names(self) -> list[str]:
         return [element['label'] for element in self.materials]
 
-    def remove_at_index(self, value: str) -> None:
-        self._materials.pop(int(value))
+    def remove_at_index(self, index: int) -> None:
+        self._materials.pop(index)
 
     def add_new(self) -> None:
         # A material added from the GUI is a density material, so that the Material editor's
@@ -90,25 +93,21 @@ class Material:
         # unchecking the coupling hands the SLD back for direct entry and fitting, which is what
         # a plain `Material` offers. The library's defaults (Si at 2.33 g/cm3) also start the
         # material at a physical SLD rather than the zero a plain `Material` would carry.
-        self._materials.add_material(MaterialDensity(name='Material added'))
+        # It starts decoupled: SLD/iSLD are typed straight into the table row, which is what a
+        # user adding a material expects. The coupled state locks those cells, and the only way
+        # out was a checkbox shown just for the *selected* row, so a freshly added material
+        # looked uneditable. Ticking 'SLD computed from formula and density' recouples it.
+        material = MaterialDensity(name='New material')
+        material.sld_coupled = False
+        self._materials.add_material(material)
 
     def add_new_magnetic(self) -> None:
         # Bulk iron (the MaterialMagnetic defaults): a physical starting point,
         # like the Si of `add_new`. Layers take its rho_m once coupled to it.
-        self._materials.add_material(MaterialMagnetic(name='Magnetic material added'))
+        self._materials.add_material(MaterialMagnetic(name='New magnetic material'))
 
     def duplicate_selected(self) -> None:
         self._materials.duplicate_material(self.index)
-
-    def move_selected_up(self) -> None:
-        if self.index > 0:
-            self._materials.move_up(self.index)
-            self.index = self.index - 1
-
-    def move_selected_down(self) -> None:
-        if self.index < len(self._materials) - 1:
-            self._materials.move_down(self.index)
-            self.index = self.index + 1
 
     def set_name_at_current_index(self, new_value: str) -> bool:
         if self._materials[self.index].name != new_value:
@@ -129,7 +128,7 @@ class Material:
         if not _parameter_is_writable(material.sld):
             return False
         if material.sld.value != new_value:
-            material.sld.value = new_value
+            set_value_widening_bounds(material.sld, new_value)
             return True
         return False
 
@@ -140,7 +139,7 @@ class Material:
         if not _parameter_is_writable(material.sld):
             return False
         if material.sld.value != new_value:
-            material.sld.value = new_value
+            set_value_widening_bounds(material.sld, new_value)
             return True
         return False
 
@@ -149,7 +148,7 @@ class Material:
         if not _parameter_is_writable(material.isld):
             return False
         if material.isld.value != new_value:
-            material.isld.value = new_value
+            set_value_widening_bounds(material.isld, new_value)
             return True
         return False
 
@@ -160,7 +159,7 @@ class Material:
         if not _parameter_is_writable(material.isld):
             return False
         if material.isld.value != new_value:
-            material.isld.value = new_value
+            set_value_widening_bounds(material.isld, new_value)
             return True
         return False
 

@@ -77,7 +77,7 @@ EaElements.GroupColumn {
 
             EaComponents.TableViewTextInput {
                 horizontalAlignment: Text.AlignHCenter
-                enabled: Globals.BackendWrapper.sampleLayers[index].thickness_enabled === "True"
+                enabled: Globals.BackendWrapper.sampleLayers[index].thickness_enabled
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].thickness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].thickness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetLayerThicknessAtIndex(index, text)
@@ -85,7 +85,7 @@ EaElements.GroupColumn {
 
             EaComponents.TableViewTextInput {
                 horizontalAlignment: Text.AlignHCenter
-                enabled: Globals.BackendWrapper.sampleLayers[index].roughness_enabled === "True"
+                enabled: Globals.BackendWrapper.sampleLayers[index].roughness_enabled
                 text: (isNaN(Globals.BackendWrapper.sampleLayers[index].roughness)) ? '--' : Number(Globals.BackendWrapper.sampleLayers[index].roughness).toFixed(2)
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetLayerRoughnessAtIndex(index, text)

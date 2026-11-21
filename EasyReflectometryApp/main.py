@@ -1,4 +1,4 @@
-# 5SPDX-FileCopyrightText: 2026 EasyReflectometryApp contributors
+# SPDX-FileCopyrightText: 2026 EasyReflectometryApp contributors
 # SPDX-License-Identifier: BSD-3-Clause
 # © 2026 Contributors to the EasyReflectometryApp project <https://github.com/easyscience/EasyReflectometryApp>
 import argparse

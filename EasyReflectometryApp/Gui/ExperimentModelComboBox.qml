@@ -27,6 +27,7 @@ EaComponents.TableViewComboBox {
     }
 
     // The whole name of a shortened one
+    ToolTip.delay: Globals.Variables.toolTipDelay
     ToolTip.visible: hovered && !popup.visible && contentItemLabel.truncated
     ToolTip.text: displayText
 

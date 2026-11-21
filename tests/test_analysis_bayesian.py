@@ -66,7 +66,6 @@ class StubFittingLogic:
     def __init__(self):
         self.sample_step = 0
         self.sample_total_steps = 0
-        self.sample_progress_message = ''
         self.sample_has_update = False
         self.running = False
         self.fit_error_message = ''
@@ -76,8 +75,8 @@ class StubFittingLogic:
     def snapshot_constraints_factory(self):
         return None
 
-    def prepare_for_threaded_sample(self):
-        pass
+    def prepare_for_threaded_sample(self, burn=0):
+        self.prepared_burn = burn
 
     def prepare_threaded_sample(self, minimizers_logic):
         return 'fake-multi-fitter'
@@ -101,6 +100,9 @@ class StubFittingLogic:
         self.fit_cancelled = True
 
     def on_fit_failed(self, msg):
+        self.fit_error_message = msg
+
+    def on_fit_cancelled(self, msg, best):
         self.fit_error_message = msg
 
 
@@ -144,10 +146,11 @@ class StubWorker(QObject):
     finished = Signal(list)
     failed = Signal(str)
     progressDetail = Signal(dict)
+    previewRequested = Signal(dict)
 
     instances = []
 
-    def __init__(self, fitter, method_name, args=(), kwargs=None, parent=None):
+    def __init__(self, fitter, method_name, args=(), kwargs=None, parent=None, preview_interval_s=0.0):
         super().__init__(parent)
         self.fitter = fitter
         self.method_name = method_name
@@ -312,22 +315,6 @@ class TestBayesianHyperParameterSignals:
         assert 'minimizerChanged' in emissions
 
 
-class TestBayesianProgressProperties:
-    """Sampling progress properties from fitting stub."""
-
-    def test_sample_progress_step(self, analysis):
-        assert analysis.sampleProgressStep == 0
-
-    def test_sample_progress_message(self, analysis):
-        assert analysis.sampleProgressMessage == ''
-
-    def test_sample_progress_has_update(self, analysis):
-        assert analysis.sampleProgressHasUpdate is False
-
-    def test_sample_total_steps(self, analysis):
-        assert analysis.sampleProgressTotalSteps == 0
-
-
 # ===================================================================
 # Bayesian result availability and posterior
 # ===================================================================
@@ -466,13 +453,10 @@ class TestBayesianCornerPlotUrl:
     def test_empty_when_no_posterior(self, analysis):
         assert analysis.bayesianCornerPlotUrl == ''
 
-    def test_lazy_renders_once(self, analysis_with_posterior):
-        # Pre-set a cached URL so the second access doesn't re-trigger rendering
-        analysis_with_posterior._bayesian_logic.corner_plot_url = 'file:///cached.png'
+    def test_reading_never_renders(self, analysis_with_posterior):
         with patch.object(analysis_with_posterior, '_render_corner_plot') as mock:
-            url1 = analysis_with_posterior.bayesianCornerPlotUrl
-            url2 = analysis_with_posterior.bayesianCornerPlotUrl
-            assert mock.call_count == 0  # already cached, no call needed
+            assert analysis_with_posterior.bayesianCornerPlotUrl == ''
+            mock.assert_not_called()
 
     def test_returns_cached_url(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.corner_plot_url = 'file:///cached.png'
@@ -488,13 +472,10 @@ class TestBayesianTracePlotUrl:
     def test_empty_when_no_posterior(self, analysis):
         assert analysis.bayesianTracePlotUrl == ''
 
-    def test_lazy_renders_once(self, analysis_with_posterior):
-        # Pre-set a cached URL so the second access doesn't re-trigger rendering
-        analysis_with_posterior._bayesian_logic.trace_plot_url = 'file:///cached_trace.png'
+    def test_reading_never_renders(self, analysis_with_posterior):
         with patch.object(analysis_with_posterior, '_render_trace_plot') as mock:
-            url1 = analysis_with_posterior.bayesianTracePlotUrl
-            url2 = analysis_with_posterior.bayesianTracePlotUrl
-            assert mock.call_count == 0  # already cached, no call needed
+            assert analysis_with_posterior.bayesianTracePlotUrl == ''
+            mock.assert_not_called()
 
     def test_returns_cached_url(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.trace_plot_url = 'file:///cached_trace.png'
@@ -510,12 +491,10 @@ class TestBayesianDistributionPlotUrl:
     def test_empty_when_no_posterior(self, analysis):
         assert analysis.bayesianDistributionPlotUrl == ''
 
-    def test_lazy_renders_once(self, analysis_with_posterior):
-        analysis_with_posterior._bayesian_logic.distribution_plot_url = 'file:///cached_dist.html'
+    def test_reading_never_renders(self, analysis_with_posterior):
         with patch.object(analysis_with_posterior, '_render_distribution_plot') as mock:
-            url1 = analysis_with_posterior.bayesianDistributionPlotUrl
-            url2 = analysis_with_posterior.bayesianDistributionPlotUrl
-            assert mock.call_count == 0  # already cached, no call needed
+            assert analysis_with_posterior.bayesianDistributionPlotUrl == ''
+            mock.assert_not_called()
 
     def test_returns_cached_url(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.distribution_plot_url = 'file:///cached_dist.html'
@@ -818,13 +797,10 @@ class TestPosteriorPredictive:
         # Should not raise
         analysis_with_posterior._compute_and_publish_posterior_predictive()
 
-    def test_noop_when_no_experiments(self, analysis_with_posterior):
-        # Make _ordered_experiments return empty via analysis-level method
-        original = analysis_with_posterior._ordered_experiments
-        analysis_with_posterior._ordered_experiments = lambda: []
+    def test_noop_when_no_experiments(self, analysis_with_posterior, monkeypatch):
+        monkeypatch.setattr(analysis_module, 'ordered_experiments', lambda project_lib: [])
         # Should not raise
         analysis_with_posterior._compute_and_publish_posterior_predictive()
-        analysis_with_posterior._ordered_experiments = original
 
     def test_noop_when_posterior_cleared(self, analysis_with_posterior):
         analysis_with_posterior._bayesian_logic.clear()
@@ -923,6 +899,8 @@ class TestStartThreadedSample:
         assert worker.kwargs['burn'] == 1000
         assert worker.kwargs['thin'] == 2
         assert worker.kwargs['population'] == 5
+        # The burn-in phase of the progress uses the burn the worker was given
+        assert analysis._fitting_logic.prepared_burn == 1000
 
     def test_worker_has_progress_and_delete_connections(self, analysis):
         StubWorker.instances = []
@@ -961,12 +939,15 @@ class TestOnSampleFinished:
         with patch.object(analysis, '_compute_and_publish_posterior_predictive') as mock_pp:
             with patch.object(analysis, '_compute_diagnostics') as mock_diag:
                 with patch.object(analysis, '_render_corner_plot') as mock_corner:
-                    with patch.object(analysis, '_render_trace_plot') as mock_trace:
+                    with patch.object(analysis, '_render_trace_plot') as mock_trace, patch.object(
+                        analysis, '_render_distribution_plot'
+                    ) as mock_distribution:
                         analysis._on_sample_finished([SAMPLE_POSTERIOR_2D])
                         mock_pp.assert_called_once()
                         mock_diag.assert_called_once()
                         mock_corner.assert_called_once()
                         mock_trace.assert_called_once()
+                        mock_distribution.assert_called_once()
 
     def test_emits_fitting_signals(self, analysis):
         emissions = {'fitting': 0, 'external': 0}
@@ -995,11 +976,14 @@ class TestOnSampleFinished:
         with patch.object(analysis, '_compute_and_publish_posterior_predictive', side_effect=RuntimeError('boom')):
             with patch.object(analysis, '_compute_diagnostics') as mock_diag:
                 with patch.object(analysis, '_render_corner_plot') as mock_corner:
-                    with patch.object(analysis, '_render_trace_plot') as mock_trace:
+                    with patch.object(analysis, '_render_trace_plot') as mock_trace, patch.object(
+                        analysis, '_render_distribution_plot'
+                    ) as mock_distribution:
                         analysis._on_sample_finished([SAMPLE_POSTERIOR_2D])
                         mock_diag.assert_called_once()
                         mock_corner.assert_called_once()
                         mock_trace.assert_called_once()
+                        mock_distribution.assert_called_once()
         assert analysis._bayesian_logic.posterior is SAMPLE_POSTERIOR_2D
 
 
@@ -1090,8 +1074,9 @@ class TestSamplingProgress:
         assert analysis._fitting_logic.sample_step == 42
         assert analysis._fitting_logic.sample_total_steps == 1000
 
-    def test_fitting_changed_emitted_on_progress(self, analysis):
+    def test_only_fit_progress_changed_emitted_on_progress(self, analysis):
         emissions = []
-        analysis.fittingChanged.connect(lambda: emissions.append('emitted'))
+        analysis.fittingChanged.connect(lambda: emissions.append('fitting'))
+        analysis.fitProgressChanged.connect(lambda: emissions.append('progress'))
         analysis._on_fit_progress({'sampling': True, 'iteration': 1, 'total_steps': 100})
-        assert 'emitted' in emissions
+        assert emissions == ['progress']

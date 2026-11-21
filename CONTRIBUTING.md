@@ -14,7 +14,7 @@ Many features need changes in more than one repository:
 - [`core`](https://github.com/easyscience/core) (the `easyscience` package): parameters, constraints and minimizers.
 - [`gui-components`](https://github.com/easyscience/gui-components) (the `EasyApplication` package): shared QML components and styling.
 
-The app depends on the `develop` branch of `reflectometry-lib` (see `pyproject.toml`).
+The app depends on the `core-3.0` branch of `reflectometry-lib` (see `pyproject.toml`), which is built on `easyscience` 3; switch back to `develop` once that branch is merged there.
 When a change spans repositories, install local checkouts of them in editable mode, and open a pull request in each repository.
 Merge the library change first, so the app's CI, which installs the library from GitHub, can pass.
 

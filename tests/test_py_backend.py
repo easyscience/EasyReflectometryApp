@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Signal
 
@@ -27,6 +28,11 @@ class StubProject(QObject):
         self.dirty_calls = 0
         self.pre_save_hooks = []
         self.post_load_hooks = []
+        # (pre-save, post-load) hook counts at each record_default_content call
+        self.default_content_recorded_with = []
+
+    def record_default_content(self):
+        self.default_content_recorded_with.append((len(self.pre_save_hooks), len(self.post_load_hooks)))
 
     def markDirty(self):
         self.dirty_calls += 1
@@ -37,8 +43,15 @@ class StubProject(QObject):
     def add_post_load_hook(self, hook):
         self.post_load_hooks.append(hook)
 
+    def add_autosave_blocker(self, is_blocking):
+        self.autosave_blockers = getattr(self, 'autosave_blockers', []) + [is_blocking]
+
+    def checkpoint(self, reason):
+        self.checkpoints = getattr(self, 'checkpoints', []) + [reason]
+
 
 class StubSample(QObject):
+    checkpointRequested = Signal(str)
     externalSampleChanged = Signal()
     experimentsRekeyed = Signal(object)
     calculationEngineChanged = Signal()
@@ -48,7 +61,7 @@ class StubSample(QObject):
     modelsIndexChanged = Signal()
     assembliesTableChanged = Signal()
     assembliesIndexChanged = Signal()
-    layersChange = Signal()
+    layersChanged = Signal()
     structureChanged = Signal()
     qRangeChanged = Signal()
     magnetismChanged = Signal()
@@ -83,7 +96,12 @@ class StubExperiment(QObject):
         super().__init__()
 
 
+class StubFittingLogic:
+    running = False
+
+
 class StubAnalysis(QObject):
+    checkpointRequested = Signal(str)
     calculatorChanged = Signal()
     externalMinimizerChanged = Signal()
     externalFitSettingsChanged = Signal()
@@ -97,11 +115,13 @@ class StubAnalysis(QObject):
     posteriorPredictiveReady = Signal(object, object, object, object)
     posteriorPredictiveSldReady = Signal(object, object, object, object)
     posteriorPredictiveCleared = Signal()
+    fitPreviewReady = Signal()
 
     def __init__(self, _project_lib, parent=None, selection=None):
         super().__init__(parent)
         self.selection = selection
         self._minimizers_logic = object()
+        self._fitting_logic = StubFittingLogic()
         self._selected = [0]
         self.received_indices = None
         self.clear_calls = 0
@@ -244,6 +264,9 @@ class StubPlotting(QObject):
     def refreshAnalysisPage(self):
         self.refresh_calls['analysis'] += 1
 
+    def refreshFitPreview(self):
+        self.refresh_calls['preview'] = self.refresh_calls.get('preview', 0) + 1
+
 
 def _make_backend(monkeypatch):
     monkeypatch.setattr(backend_module, 'ProjectLib', lambda: object())
@@ -275,6 +298,32 @@ def test_backend_constructor_hooks_constraint_state_into_save_and_load(monkeypat
         # A loaded or reset project starts with only its current experiment selected.
         backend._analysis.reset_selected_experiments,
     ]
+
+
+def test_backend_constructor_records_the_new_project_content_once_wired(monkeypatch, qcore_application):
+    """Recorded too early, a fresh session would already count as holding custom content."""
+    backend = _make_backend(monkeypatch)
+
+    project = backend._project
+    assert project.default_content_recorded_with == [(len(project.pre_save_hooks), len(project.post_load_hooks))]
+
+
+def test_backend_routes_save_checkpoints_to_the_project(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+
+    backend._sample.checkpointRequested.emit('engine switch')
+    backend._analysis.checkpointRequested.emit('fit')
+
+    assert backend._project.checkpoints == ['engine switch', 'fit']
+
+
+def test_a_running_fit_blocks_automatic_saves(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+    (is_blocking,) = backend._project.autosave_blockers
+
+    assert is_blocking() is False
+    backend._analysis._fitting_logic.running = True
+    assert is_blocking() is True
 
 
 def test_analysis_and_plotting_share_one_experiment_selection(monkeypatch, qcore_application):
@@ -368,6 +417,15 @@ def test_backend_fit_finished_refreshes_summary(monkeypatch, qcore_application):
     backend._analysis.externalFittingChanged.emit()
 
     assert counts['summary'] == 1
+
+
+def test_backend_fit_preview_redraws_the_analysis_page_only(monkeypatch, qcore_application):
+    backend = _make_backend(monkeypatch)
+
+    backend._analysis.fitPreviewReady.emit()
+
+    assert backend._plotting_1d.refresh_calls == {'sample': 0, 'experiment': 0, 'analysis': 0, 'preview': 1}
+    assert backend._plotting_1d.reset_calls == 0
 
 
 def test_backend_refresh_plots_emits_ranges_and_multi_signal(monkeypatch, qcore_application):
@@ -510,7 +568,7 @@ def test_backend_wires_structure_refresh_to_sample_and_analysis_signals(monkeypa
     backend = _make_backend(monkeypatch)
 
     for signal in (
-        backend._sample.layersChange,
+        backend._sample.layersChanged,
         backend._sample.assembliesTableChanged,
         backend._sample.materialsTableChanged,
         backend._sample.modelsIndexChanged,
@@ -522,3 +580,18 @@ def test_backend_wires_structure_refresh_to_sample_and_analysis_signals(monkeypa
         signal.emit()
 
     assert backend._sample.structure_clear_calls == 8
+
+
+@pytest.mark.parametrize('signal_name', ['externalParametersChanged', 'externalFittingChanged'])
+def test_analysis_parameter_changes_refresh_the_sample_tables(monkeypatch, qcore_application, signal_name):
+    # An SLD edited in the parameters table, or fitted, is shown by the Sample page's material
+    # editor too, and a fitted thickness or roughness by its (cached) layer table.
+    backend = _make_backend(monkeypatch)
+    materials_refreshed = []
+    backend._sample.materialsTableChanged.connect(lambda: materials_refreshed.append(True))
+
+    getattr(backend._analysis, signal_name).emit()
+
+    assert materials_refreshed == [True]
+    assert backend._sample.clear_calls == 1
+    assert backend._sample.structure_clear_calls == 1

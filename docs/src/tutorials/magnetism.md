@@ -54,7 +54,9 @@ when the last such layer stops doing so the moment is taken out of the fit. If t
 material's SLD is set directly (unticked **SLD computed from formula and density**), its
 density still sets `ρM` while a layer takes `ρM` from it; the data then constrain only
 density × moment, so ticking one of the two for fitting unticks the other. Without such a
-layer the density sets nothing and is greyed out too.
+layer the density sets nothing and is greyed out too. Greyed rows are only listed when the
+table's variability filter is set to **All parameters**; the default, **Active
+parameters**, hides them.
 
 A layer whose `ρM` is given a constraint in the `Analysis` page no longer takes it from the
 material: **ρM from material** is unticked, and the constraint is kept when the layer's

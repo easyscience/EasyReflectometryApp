@@ -10,6 +10,9 @@ from easyreflectometry.fit_settings import FitSettings
 class ValueHolder:
     def __init__(self, value):
         self.value = value
+        # Unbounded, so a value edit never moves a bound.
+        self.min = float('-inf')
+        self.max = float('inf')
 
 
 class FlaggedValueHolder(ValueHolder):
@@ -300,7 +303,7 @@ class FakeMinimizerValue:
 class FakeParameter:
     def __init__(
         self,
-        name,
+        display_name,
         unique_name,
         value=0.0,
         variance=0.0,
@@ -313,7 +316,7 @@ class FakeParameter:
         dependency_expression='',
         dependency_map=None,
     ):
-        self.name = name
+        self.display_name = display_name
         self.unique_name = unique_name
         self.value = value
         self.variance = variance
@@ -537,6 +540,9 @@ class FakeProject:
         return [material.name for material in self._materials].index('Air')
 
     def get_index_si(self):
+        # As in the library: Si is added to the materials when it is missing.
+        if 'Si' not in [material.name for material in self._materials]:
+            self._materials.add_material(FakeMaterial('Si', 2.07, 0.0))
         return [material.name for material in self._materials].index('Si')
 
     def get_index_sio2(self):

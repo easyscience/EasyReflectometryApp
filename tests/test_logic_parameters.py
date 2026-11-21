@@ -1,5 +1,4 @@
-import logging
-
+from EasyReflectometryApp.Backends.Py.logic import helpers as helpers_module
 from EasyReflectometryApp.Backends.Py.logic import parameters as parameters_module
 from tests.factories import FakeParameter
 from tests.factories import make_model
@@ -25,26 +24,37 @@ class FakeNode:
             setattr(self, key, value)
 
 
+class FakeLayerNode(FakeNode):
+    """Stand-in for a library ``Layer``: its thickness and roughness are per-layer parameters."""
+
+
+class FakeMagnetismNode(FakeNode):
+    """Stand-in for a library ``LayerMagnetism``."""
+
+
 def _patch_tree_types(monkeypatch):
     # The traversal uses module-level `Parameter`/`ModelBase` for isinstance
-    # checks; point them at the test fakes so the fake tree is walkable.
+    # checks, and `Layer`/`LayerMagnetism` to classify parameters; point them
+    # at the test fakes so the fake tree is walkable.
     monkeypatch.setattr(parameters_module, 'Parameter', FakeParameter)
     monkeypatch.setattr(parameters_module, 'ModelBase', FakeNode)
+    monkeypatch.setattr(parameters_module, 'Layer', FakeLayerNode)
+    monkeypatch.setattr(parameters_module, 'LayerMagnetism', FakeMagnetismNode)
 
 
 def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive(monkeypatch):
     _patch_tree_types(monkeypatch)
 
-    density = make_parameter(name='density', unique_name='density', value=2.33, free=True, enabled=True)
+    density = make_parameter(display_name='density', unique_name='density', value=2.33, free=True, enabled=True)
     # molecular_weight is intentionally absent: in the lib it is a
     # DescriptorNumber (a formula constant), so the Parameter tree walk
     # never yields it. The scattering length stands in as the second knob.
-    b_real = make_parameter(name='scattering_length_real', unique_name='b_real', value=4.15, free=False, enabled=True)
-    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+    b_real = make_parameter(display_name='scattering_length_real', unique_name='b_real', value=4.15, free=False, enabled=True)
+    thickness = make_parameter(display_name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
 
     def build_model(sld_coupled):
         model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
-        layer = FakeNode('Layer', 'm1_layer', thickness=thickness)
+        layer = FakeLayerNode('Layer', 'm1_layer', thickness=thickness, roughness=None)
         assembly = FakeNode('LayerA', 'm1_asm', layers=[layer])
         model.sample = [assembly]
         # Density-material knobs live under the material node, which carries
@@ -80,10 +90,10 @@ def test_from_parameters_to_list_of_dicts_marks_decoupled_density_knobs_inactive
 def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_shared_params(monkeypatch):
     _patch_tree_types(monkeypatch)
 
-    scale = make_parameter(name='scale', unique_name='scale', value=1.5, free=False, enabled=True)
-    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+    scale = make_parameter(display_name='scale', unique_name='scale', value=1.5, free=False, enabled=True)
+    thickness = make_parameter(display_name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
     dependent = make_parameter(
-        name='background',
+        display_name='background',
         unique_name='dep',
         value=0.2,
         free=False,
@@ -98,7 +108,7 @@ def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_share
             name=f'{original_name} internal', unique_name=unique_name, user_data={'original_name': original_name}
         )
         # Model -> sample -> assembly -> layers -> layer -> thickness (a layer parameter)
-        layer = FakeNode('Layer', f'{unique_name}_layer', thickness=thickness)
+        layer = FakeLayerNode('Layer', f'{unique_name}_layer', thickness=thickness, roughness=None)
         assembly = FakeNode('LayerA', f'{unique_name}_asm', layers=[layer])
         model.sample = [assembly]
         # Non-layer params (scale, background) live under a shared 'Instrument' parent
@@ -137,11 +147,11 @@ def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
     ancestor and superphase/subphase parameters get mislabelled."""
     _patch_tree_types(monkeypatch)
 
-    thickness = make_parameter(name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
-    roughness = make_parameter(name='roughness', unique_name='roughness', value=3.0, free=True, enabled=True)
+    thickness = make_parameter(display_name='thickness', unique_name='thickness', value=20.0, free=True, enabled=True)
+    roughness = make_parameter(display_name='roughness', unique_name='roughness', value=3.0, free=True, enabled=True)
 
     model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
-    layer = FakeNode('Layer', 'layer', thickness=thickness, roughness=roughness)
+    layer = FakeLayerNode('Layer', 'layer', thickness=thickness, roughness=roughness)
     assembly = FakeNode(
         'Superphase', 'asm',
         back_layer=layer,   # alias, sorts before 'layers'
@@ -160,13 +170,46 @@ def test_layer_alias_attributes_do_not_shortcut_the_canonical_path(monkeypatch):
     assert all(entry['group'] == 'Superphase' for entry in result)
 
 
+def test_from_parameters_to_list_of_dicts_classifies_by_owner_not_by_name(monkeypatch):
+    _patch_tree_types(monkeypatch)
+
+    scale = make_parameter(display_name='scale', unique_name='scale')
+    background = make_parameter(display_name='background', unique_name='background')
+    thickness = make_parameter(display_name='thickness', unique_name='thickness')
+    rho_m = make_parameter(display_name='rho_m', unique_name='rho_m')
+    # Named like experiment and layer parameters, but owned by a material.
+    impostor = make_parameter(display_name='thickness', unique_name='impostor')
+    scale_named = make_parameter(display_name='scale', unique_name='scale_named')
+
+    model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
+    model.scale = scale
+    model.background = background
+    magnetism = FakeMagnetismNode('EasyLayerMagnetism', 'mag', rho_m=rho_m)
+    layer = FakeLayerNode('Layer', 'layer', thickness=thickness, roughness=None, magnetism=magnetism)
+    model.sample = [FakeNode('Film', 'asm', layers=[layer])]
+    model.material = FakeNode('Background Material', 'mat', thickness=impostor, scale=scale_named)
+
+    result = parameters_module._from_parameters_to_list_of_dicts(
+        [scale, background, thickness, rho_m, impostor, scale_named], make_model_collection(model)
+    )
+    rows = {entry['unique_name']: entry for entry in result}
+
+    assert {name for name, row in rows.items() if row['experiment']} == {'scale', 'background'}
+    assert rows['thickness']['display_name'] == 'M1 Film thickness'
+    assert rows['rho_m']['display_name'] == 'M1 Film rho_m'
+    assert rows['impostor']['display_name'] == 'Background Material thickness'
+    assert rows['scale_named']['display_name'] == 'Background Material scale'
+
+
 def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch):
     monkeypatch.setattr(parameters_module, 'count_free_parameters', lambda project: 2)
     monkeypatch.setattr(parameters_module, 'count_fixed_parameters', lambda project: 1)
     project = make_project()
     logic = parameters_module.Parameters(project)
-    free_parameter = make_parameter(name='Scale', unique_name='scale', value=1.0, minimum=0.0, maximum=2.0, free=True)
-    fixed_parameter = make_parameter(name='Thickness', unique_name='layer.thickness', value=10.0, minimum=1.0, maximum=50.0)
+    free_parameter = make_parameter(display_name='Scale', unique_name='scale', value=1.0, minimum=0.0, maximum=2.0, free=True)
+    fixed_parameter = make_parameter(
+        display_name='Thickness', unique_name='layer.thickness', value=10.0, minimum=1.0, maximum=50.0
+    )
     mocked_parameters = [
         {
             'name': 'Instrument scale',
@@ -199,7 +242,7 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
             'enabled': False,
             'independent': True,
             'alias': 'hidden_background',
-            'object': make_parameter(name='Background', unique_name='background'),
+            'object': make_parameter(display_name='Background', unique_name='background'),
         },
     ]
     monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
@@ -209,7 +252,10 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
     assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale']
     assert logic.set_variability_filter_criteria('fixed') is True
     logic.set_name_filter_criteria('')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Layer thickness']
+    # The only fixed row is constrained (dependent): not active, so 'fixed' hides it
+    assert [entry['display_name'] for entry in logic.parameters] == []
+    assert logic.set_variability_filter_criteria('all') is True
+    assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale', 'Layer thickness']
 
     metadata = logic.constraint_metadata()
     assert metadata == [
@@ -227,7 +273,13 @@ def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch
             'independent': True,
             'kind': 'parameter',
         },
-        {'alias': 'layer_thickness', 'displayName': 'Layer thickness', 'group': 'Layer', 'independent': False, 'kind': 'parameter'},
+        {
+            'alias': 'layer_thickness',
+            'displayName': 'Layer thickness',
+            'group': 'Layer',
+            'independent': False,
+            'kind': 'parameter',
+        },
     ]
 
     logic.set_variability_filter_criteria('all')
@@ -248,7 +300,7 @@ def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
     fixed for the fittables table."""
     project = make_project()
     logic = parameters_module.Parameters(project)
-    inactive_parameter = make_parameter(name='Density', unique_name='density', value=2.33, free=False)
+    inactive_parameter = make_parameter(display_name='Density', unique_name='density', value=2.33, free=False)
     mocked_parameters = [
         {
             'display_name': 'SiDensity density',
@@ -265,38 +317,22 @@ def test_set_current_parameter_fit_refuses_inactive_row(monkeypatch):
     assert inactive_parameter.free is False
 
 
-def test_add_constraint_supports_arithmetic_and_constant_dependencies():
-    independent = make_parameter(name='Scale', unique_name='scale', value=2.0)
-    dependent = make_parameter(name='Background', unique_name='background', value=0.5)
-    project = make_project()
-    project.parameters = [independent, dependent]
-    logic = parameters_module.Parameters(project)
-
-    logic.add_constraint(1, '=', 3.0, '*', 0)
-    assert dependent.dependency_expression == 'a*b'
-    assert dependent.dependency_map == {'a': independent, 'b': 3.0}
-
-    logic.add_constraint(1, '=', 7.0, '', -1)
-    assert dependent.dependency_expression == 'a'
-    assert dependent.dependency_map == {'a': 7.0}
-
-
 def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks(monkeypatch):
     _patch_tree_types(monkeypatch)
 
-    param1 = make_parameter(name='Same Name', unique_name='p1')
-    param2 = make_parameter(name='Same Name', unique_name='p2')
-    reserved = make_parameter(name='np', unique_name='reserved')
-    numeric = make_parameter(name='456', unique_name='numeric')
-    empty = make_parameter(name='!!!', unique_name='empty')
+    param1 = make_parameter(display_name='Same Name', unique_name='p1')
+    param2 = make_parameter(display_name='Same Name', unique_name='p2')
+    reserved = make_parameter(display_name='np', unique_name='reserved')
+    numeric = make_parameter(display_name='456', unique_name='numeric')
+    empty = make_parameter(display_name='!!!', unique_name='empty')
     dep_other = make_parameter(
-        name='dep',
+        display_name='dep',
         unique_name='dep_other',
         independent=False,
         dependency_expression='a+1',
         dependency_map={'a': 'external'},
     )
-    no_enabled = make_parameter(name='visible', unique_name='no_enabled', value=2.0)
+    no_enabled = make_parameter(display_name='visible', unique_name='no_enabled', value=2.0)
     del no_enabled.enabled  # exercise the missing-`enabled` fallback (-> True)
 
     model = make_model(name='M1', unique_name='m1', user_data={'original_name': 'M1'})
@@ -328,41 +364,173 @@ def test_from_parameters_to_list_of_dicts_handles_alias_edge_cases_and_fallbacks
     assert result[6]['enabled'] is True
 
 
+def _dependency_row(monkeypatch, expression, dependency_map, **sources):
+    """The 'dependency' text of a dependent parameter whose variables are the `sources`."""
+    _patch_tree_types(monkeypatch)
+    dependent = make_parameter(
+        display_name='background',
+        unique_name='dep',
+        independent=False,
+        dependency_expression=expression,
+        dependency_map=dependency_map,
+    )
+    model = make_model(name='M1', unique_name='m1', user_data={'original_name': 'M1'})
+    model.instrument = FakeNode('Instrument', 'instr', background=dependent, **sources)
+    result = parameters_module._from_parameters_to_list_of_dicts([*sources.values(), dependent], make_model_collection(model))
+    return result[-1]['dependency']
+
+
+def test_dependency_text_replaces_the_variable_not_every_letter(monkeypatch):
+    """Issue #365: 'max(a, 0)' read 'mInstrument scalex(Instrument scale, 0)'."""
+    scale = make_parameter(display_name='scale', unique_name='scale')
+
+    text = _dependency_row(monkeypatch, 'max(a, 0) + abs(a)', {'a': scale}, scale=scale)
+
+    assert text == 'max(Instrument scale, 0) + abs(Instrument scale)'
+
+
+def test_dependency_text_shows_variables_with_any_name(monkeypatch):
+    """Issue #365: keys other than 'a' (aliases, 'rho_m', 't0'...) fell back to '= value'."""
+    scale = make_parameter(display_name='scale', unique_name='scale')
+    offset = make_parameter(display_name='offset', unique_name='offset')
+
+    text = _dependency_row(monkeypatch, 't0 * rho_m + t0', {'t0': scale, 'rho_m': offset}, scale=scale, offset=offset)
+
+    assert text == 'Instrument scale * Instrument offset + Instrument scale'
+
+
+def test_dependency_text_names_another_models_parameter_as_the_table_does(monkeypatch):
+    """Issue #366: a leader in another model (a linked contrast) read as its bare name, 'thickness'."""
+    _patch_tree_types(monkeypatch)
+    leader = make_parameter(display_name='thickness', unique_name='t1')
+    follower = make_parameter(
+        display_name='thickness',
+        unique_name='t2',
+        independent=False,
+        dependency_expression='a + 2 * b',
+        dependency_map={'a': leader, 'b': make_parameter(display_name='offset', unique_name='no_row')},
+    )
+
+    def build_model(unique_name, original_name, thickness):
+        model = make_model(
+            name=f'{original_name} internal', unique_name=unique_name, user_data={'original_name': original_name}
+        )
+        layer = FakeLayerNode('Layer', f'{unique_name}_layer', thickness=thickness, roughness=None)
+        model.sample = [FakeNode('LayerA', f'{unique_name}_asm', layers=[layer])]
+        return model
+
+    models = make_model_collection(build_model('m1', 'M1', leader), build_model('m2', 'M2', follower))
+
+    rows = parameters_module._from_parameters_to_list_of_dicts([leader, follower], models)
+
+    assert [row['display_name'] for row in rows] == ['M1 LayerA thickness', 'M2 LayerA thickness']
+    # The leader as the table names it, model prefix included; a parameter with no row by its own name.
+    assert rows[1]['dependency'] == 'M1 LayerA thickness + 2 * offset'
+    assert rows[0]['dependency'] == ''
+
+
+def test_display_expression_replaces_each_variable_once():
+    # 'a' -> 'b', then 'b' -> 'a' again would be a sequential replacement; one pass swaps them.
+    assert helpers_module.display_expression('a - b + ab', {'a': 'b', 'b': 'a', 'ab': 'x y'}) == 'b - a + x y'
+    # An empty display name leaves its variable as it is.
+    assert helpers_module.display_expression('2*a', {'a': ''}) == '2*a'
+
+
+def _filter_row(name, display_name, group, unique_name, alias, fit, experiment=False, kind='parameter', independent=True):
+    """A parameter row as ``all_parameters`` returns it, with only the keys the filters read."""
+    return {
+        'name': name,
+        'display_name': display_name,
+        'group': group,
+        'unique_name': unique_name,
+        'fit': fit,
+        'enabled': True,
+        'independent': independent,
+        'kind': kind,
+        'alias': alias,
+        'object': object(),
+        'experiment': experiment,
+    }
+
+
+def _mixed_activity_rows():
+    return [
+        _filter_row('M1 Film thickness', 'M1 Film thickness', 'Film', 'film.t', 'm1_film_thickness', fit=True),
+        _filter_row('M1 Film roughness', 'M1 Film roughness', 'Film', 'film.r', 'm1_film_roughness', fit=False),
+        # Constrained: takes its value from another parameter
+        _filter_row('M1 Cap thickness', 'M1 Cap thickness', 'Cap', 'cap.t', 'm1_cap_thickness', fit=False, independent=False),
+        # Derived: computed from the layers
+        _filter_row(
+            'M1 total_thickness', 'M1 total_thickness', 'M1', 'total', 'm1_total', fit=False, kind='derived', independent=False
+        ),
+        # A decoupled density material's unused knob
+        _filter_row('Si density', 'Si density', 'Si', 'si.density', 'si_density', fit=False, kind='inactive'),
+        _filter_row('Scale', 'Scale', 'M1', 'scale', 'scale', fit=True, experiment=True),
+    ]
+
+
+def test_variability_filter_defaults_to_active_and_hides_greyed_rows(monkeypatch):
+    logic = parameters_module.Parameters(make_project())
+    monkeypatch.setattr(logic, 'all_parameters', _mixed_activity_rows)
+
+    assert logic.variability_filter_criteria == 'active'
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film thickness', 'M1 Film roughness', 'Scale']
+
+    assert logic.set_variability_filter_criteria('all') is True
+    assert len(logic.parameters) == 6
+
+    # Free and fixed are subsets of the active rows
+    logic.set_variability_filter_criteria('free')
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film thickness', 'Scale']
+    logic.set_variability_filter_criteria('fixed')
+    assert [entry['name'] for entry in logic.parameters] == ['M1 Film roughness']
+
+
+def test_variability_counts_ignore_name_filter_and_name_counts_follow_variability(monkeypatch):
+    logic = parameters_module.Parameters(make_project())
+    monkeypatch.setattr(logic, 'all_parameters', _mixed_activity_rows)
+    logic.set_name_filter_criteria('zzz')
+
+    assert logic.variability_counts() == {'active': 3, 'all': 6, 'free': 2, 'fixed': 1}
+
+    model_rows = [row for row in _mixed_activity_rows() if not row['experiment']]
+    assert logic.count_rows_matching_variability(model_rows) == 2
+    logic.set_variability_filter_criteria('all')
+    assert logic.count_rows_matching_variability(model_rows) == 5
+
+
 def test_parameters_special_filters_and_invalid_variability_normalization(monkeypatch):
     project = make_project()
     logic = parameters_module.Parameters(project)
     mocked_parameters = [
-        {'name': 'Cell length a', 'display_name': 'Cell length a', 'group': 'cell', 'unique_name': 'cell.a', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'cell_a', 'object': object()},
-        {'name': 'Atom site x', 'display_name': 'Atom site x', 'group': 'atom_site', 'unique_name': 'atom_site.x', 'fit': False, 'enabled': True, 'independent': True, 'alias': 'atom_site_x', 'object': object()},
-        {'name': 'Biso', 'display_name': 'adp b_iso', 'group': 'thermal', 'unique_name': 'b_iso', 'fit': False, 'enabled': True, 'independent': True, 'alias': 'b_iso', 'object': object()},
-        {'name': 'Instrument scale', 'display_name': 'Instrument scale', 'group': 'instrument', 'unique_name': 'scale', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'scale', 'object': object()},
-        {'name': 'Layer thickness', 'display_name': 'Layer thickness', 'group': 'layer', 'unique_name': 'layer.thickness', 'fit': True, 'enabled': True, 'independent': True, 'alias': 'thickness', 'object': object()},
+        _filter_row('Cell length a', 'Cell length a', 'cell', 'cell.a', 'cell_a', fit=True),
+        _filter_row('Atom site x', 'Atom site x', 'atom_site', 'atom_site.x', 'atom_site_x', fit=False),
+        _filter_row('Biso', 'adp b_iso', 'thermal', 'b_iso', 'b_iso', fit=False),
+        _filter_row('Instrument scale', 'Instrument scale', 'instrument', 'scale', 'scale', fit=True, experiment=True),
+        _filter_row('Layer thickness', 'Layer thickness', 'layer', 'layer.thickness', 'thickness', fit=True),
     ]
     monkeypatch.setattr(logic, 'all_parameters', lambda: mocked_parameters)
 
     assert logic.set_variability_filter_criteria('INVALID') is False
-    assert logic.variability_filter_criteria == 'all'
+    assert logic.variability_filter_criteria == 'active'
 
     logic.set_name_filter_criteria('model')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Cell length a', 'Atom site x', 'adp b_iso', 'Layer thickness']
+    assert [entry['display_name'] for entry in logic.parameters] == [
+        'Cell length a', 'Atom site x', 'adp b_iso', 'Layer thickness',
+    ]
 
     logic.set_name_filter_criteria('experiment')
     assert [entry['display_name'] for entry in logic.parameters] == ['Instrument scale']
 
-    logic.set_name_filter_criteria('cell')
-    assert [entry['display_name'] for entry in logic.parameters] == ['Cell length a']
-
+    # Any other word is a plain text match.
     logic.set_name_filter_criteria('atom_site')
     assert [entry['display_name'] for entry in logic.parameters] == ['Atom site x']
 
-    logic.set_name_filter_criteria('b_iso')
-    assert [entry['display_name'] for entry in logic.parameters] == ['adp b_iso']
 
-
-def test_parameter_current_selection_edge_cases_and_unsupported_constraint(monkeypatch, caplog):
+def test_parameter_current_selection_edge_cases(monkeypatch):
     project = make_project()
     logic = parameters_module.Parameters(project)
-    parameter = make_parameter(name='Scale', unique_name='scale', value=1.0, free=True)
+    parameter = make_parameter(display_name='Scale', unique_name='scale', value=1.0, free=True)
     monkeypatch.setattr(
         logic,
         'all_parameters',
@@ -389,11 +557,3 @@ def test_parameter_current_selection_edge_cases_and_unsupported_constraint(monke
 
     logic.set_current_index(0)
     assert logic.set_current_parameter_fit(True) is False
-
-    dependent = make_parameter(name='Background', unique_name='background', value=0.5)
-    project.parameters = [parameter, dependent]
-    with caplog.at_level(logging.WARNING, logger='EasyReflectometryApp.Backends.Py.logic.parameters'):
-        logic.add_constraint(1, '=', 2.0, '', 0)
-
-    assert 'Unsupported type' in caplog.text
-    assert dependent.independent is True

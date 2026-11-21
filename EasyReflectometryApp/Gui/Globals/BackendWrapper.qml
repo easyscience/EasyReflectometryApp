@@ -76,6 +76,8 @@ QtObject {
 
     function projectCreate() { activeBackend.project.create() }
     function projectReset() { activeBackend.project.reset() }
+    // Whether the samples, data or fit settings differ from a new project's
+    function projectHasCustomContent() { return activeBackend.project.hasCustomContent() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
     function sampleFileLoad(value, append) { activeBackend.project.sampleLoad(value, append) }
@@ -132,6 +134,24 @@ QtObject {
         return null
     }
 
+    // Automatic saves: the backend decides whether a checkpoint writes anything (autosave on,
+    // project created and changed, no fit running) and keeps the replaced file as a backup.
+    readonly property bool projectAutosaveEnabled: activeBackend.project.autosaveEnabled ?? false
+    function projectSetAutosaveEnabled(value) { activeBackend.project.setAutosaveEnabled(value) }
+    readonly property bool projectAutosaveFailing: activeBackend.project.autosaveFailing ?? false
+    readonly property bool projectLastSaveAutomatic: activeBackend.project.lastSaveAutomatic ?? false
+    readonly property string projectBackupPath: activeBackend.project.backupPath ?? ''
+    function projectAutosave(reason) { return activeBackend.project.autosave(reason) }
+
+    signal projectAutosaveError(string message)
+
+    property var _projectAutosaveErrorConnection: {
+        if (activeBackend && activeBackend.project && activeBackend.project.autosaveError) {
+            activeBackend.project.autosaveError.connect(projectAutosaveError)
+        }
+        return null
+    }
+
 
     ///////////////
     // Sample page
@@ -158,8 +178,6 @@ QtObject {
     function sampleAddNewMagneticMaterial() { activeBackend.sample.addNewMagneticMaterial() }
     function sampleSetMaterialMagneticMomentAtIndex(index, value) { activeBackend.sample.setMaterialMagneticMomentAtIndex(index, value) }
     function sampleDuplicateSelectedMaterial() { activeBackend.sample.duplicateSelectedMaterial() }
-    function sampleMoveSelectedMaterialUp() { activeBackend.sample.moveSelectedMaterialUp() }
-    function sampleMoveSelectedMaterialDown() { activeBackend.sample.moveSelectedMaterialDown() }
 
     // Model
     readonly property var sampleModels: activeBackend.sample.models
@@ -238,10 +256,10 @@ QtObject {
     function sampleMoveSelectedAssemblyDown() { activeBackend.sample.moveSelectedAssemblyDown() }
 
     // Assembly specific methods
-    readonly property int sampleCurrentAssemblyRepeatedLayerReptitions: activeBackend.sample.currentAssemblyRepeatedLayerReptitions
+    readonly property int sampleCurrentAssemblyRepeatedLayerRepetitions: activeBackend.sample.currentAssemblyRepeatedLayerRepetitions
     function sampleSetCurrentAssemblyConstrainAPM(value) { activeBackend.sample.setCurrentAssemblyConstrainAPM(value) }
     function sampleSetCurrentAssemblyConformalRoughness(value) { activeBackend.sample.setCurrentAssemblyConformalRoughness(value) }
-    function sampleSetCurrentAssemblyRepeatedLayerReptitions(value) { activeBackend.sample.setCurrentAssemblyRepeatedLayerReptitions(value) }
+    function sampleSetCurrentAssemblyRepeatedLayerRepetitions(value) { activeBackend.sample.setCurrentAssemblyRepeatedLayerRepetitions(value) }
 
     // Structure view (flattened whole-stack representation)
     readonly property var sampleStructure: activeBackend.sample.structure
@@ -312,16 +330,18 @@ QtObject {
     // Constraints
     readonly property var sampleEnabledParameterNames: activeBackend.sample.enabledParameterNames
     readonly property var sampleParameterNames: activeBackend.sample.parameterNames
-    readonly property var sampleDepParameterNames: activeBackend.sample.dependentParameterNames
+    readonly property var sampleConstrainableParameterNames: activeBackend.sample.constrainableParameterNames
     readonly property var sampleRelationOperators: activeBackend.sample.relationOperators
-    readonly property var sampleArithmicOperators: activeBackend.sample.arithmicOperators
+    readonly property var sampleArithmeticOperators: activeBackend.sample.arithmeticOperators
     readonly property var sampleConstraintsList: activeBackend.sample.constraintsList
     readonly property var sampleConstraintParametersMetadata: activeBackend.sample.constraintParametersMetadata
 
     function sampleValidateConstraintExpression(index, relation, expression) { return activeBackend.sample.validateConstraintExpression(index, relation, expression) }
     function sampleAddConstraint(index, relation, expression) { return activeBackend.sample.addConstraint(index, relation, expression) }
     function sampleRemoveConstraintByIndex(value) { activeBackend.sample.removeConstraintByIndex(value) }
-    function sampleConstrainModelsParameters(modelIndices, tieMaterials) { return activeBackend.sample.constrainModelsParameters(modelIndices, tieMaterials) }
+    function samplePlanModelLink(modelIndices, referenceIndex, tieMaterials) { return activeBackend.sample.planModelLink(modelIndices, referenceIndex, tieMaterials) }
+    function sampleLinkModels(modelIndices, referenceIndex, selectedKeys) { return activeBackend.sample.linkModels(modelIndices, referenceIndex, selectedKeys) }
+    function sampleRemoveLinkedParameter(uniqueName) { activeBackend.sample.removeLinkedParameter(uniqueName) }
 
     // Inequality constraints (BUMPS-only fit penalties) and physics-constraint recipes
     readonly property int sampleInequalityConstraintsCount: activeBackend.sample.inequalityConstraintsCount
@@ -437,9 +457,8 @@ QtObject {
     readonly property int analysisMinimizerCurrentIndex: activeBackend.analysis.minimizerCurrentIndex
     function analysisSetMinimizerCurrentIndex(value) { activeBackend.analysis.setMinimizerCurrentIndex(value) }
 
-    readonly property var analysisFitableParameters: activeBackend.analysis.enabledParameters
-    readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
     readonly property var analysisEnabledParameters: activeBackend.analysis.enabledParameters
+    readonly property int analysisCurrentParameterIndex: activeBackend.analysis.currentParameterIndex
 
     function analysisSetCurrentParameterIndex(value) { activeBackend.analysis.setCurrentParameterIndex(value) }
     function analysisSetExperimentName(value) { activeBackend.analysis.setExperimentName(value) }
@@ -470,13 +489,19 @@ QtObject {
     readonly property string analysisFitErrorMessage: activeBackend.analysis.fitErrorMessage
     readonly property int analysisFitNumRefinedParams: activeBackend.analysis.fitNumRefinedParams
     readonly property real analysisFitChi2: activeBackend.analysis.fitChi2
-    readonly property int analysisFitIteration: activeBackend.analysis.fitIteration
-    readonly property real analysisFitInterimChi2: activeBackend.analysis.fitInterimChi2
-    readonly property real analysisFitInterimReducedChi2: activeBackend.analysis.fitInterimReducedChi2
-    readonly property string analysisFitProgressMessage: activeBackend.analysis.fitProgressMessage
-    readonly property bool analysisFitHasInterimUpdate: activeBackend.analysis.fitHasInterimUpdate
-    readonly property bool analysisFitHasPreviewUpdate: activeBackend.analysis.fitHasPreviewUpdate
-    readonly property var analysisFitPreviewParameterValues: activeBackend.analysis.fitPreviewParameterValues
+    // Progress of the running fit or sampling: phase, fraction, count, unit, ...
+    // (Fitting.progress_snapshot); worded by Gui/Logic/FitProgressText.js.
+    readonly property var analysisFitProgress: activeBackend.analysis.fitProgress
+    // Shortest time (whole seconds) between two redraws of the curves during a fit; 0: no preview
+    readonly property int analysisFitPreviewInterval: activeBackend.analysis.fitPreviewInterval
+    function analysisSetFitPreviewInterval(value) { activeBackend.analysis.setFitPreviewInterval(value) }
+    function analysisResetFitPreviewInterval() { activeBackend.analysis.resetFitPreviewInterval() }
+    // A cancelled fit's best point waits to be kept or reverted; fitCancelledAt describes it
+    // (reducedChi2, count, unit), and the kept one while it is the project's last run ({} otherwise)
+    readonly property bool analysisFitCancelPending: activeBackend.analysis.fitCancelPending
+    readonly property var analysisFitCancelledAt: activeBackend.analysis.fitCancelledAt
+    function analysisKeepCancelledFit() { activeBackend.analysis.keepCancelledFit() }
+    function analysisRevertCancelledFit() { activeBackend.analysis.revertCancelledFit() }
     readonly property var analysisFitResults: activeBackend.analysis.fitResults
     function analysisFittingStartStop() { activeBackend.analysis.fittingStartStop() }
     function analysisSetShowFitResultsDialog(value) { activeBackend.analysis.setShowFitResultsDialog(value) }
@@ -548,6 +573,8 @@ QtObject {
     // Parameters
     readonly property int analysisFreeParametersCount: activeBackend.analysis.freeParametersCount
     readonly property int analysisFixedParametersCount: activeBackend.analysis.fixedParametersCount
+    readonly property int analysisActiveParametersCount: activeBackend.analysis.activeParametersCount
+    readonly property int analysisAllParametersCount: activeBackend.analysis.allParametersCount
     readonly property int analysisModelParametersCount: activeBackend.analysis.modelParametersCount
     readonly property int analysisExperimentParametersCount: activeBackend.analysis.experimentParametersCount
     readonly property string analysisNameFilterCriteria: activeBackend.analysis.nameFilterCriteria
@@ -604,6 +631,11 @@ QtObject {
     readonly property var plottingSampleMinY: activeBackend.plotting.sampleMinY
     readonly property var plottingSampleMaxY: activeBackend.plotting.sampleMaxY
 
+    // [minX, maxX, minY, maxY] of the curves of the given models (null: every model); re-read
+    // on the plotting object's sampleChartRangesChanged / sldChartRangesChanged
+    function plottingSampleRangeForModels(models) { return activeBackend.plotting.sampleRangeForModels(models) }
+    function plottingSldRangeForModels(models) { return activeBackend.plotting.sldRangeForModels(models) }
+
     readonly property var plottingExperimentMinX: activeBackend.plotting.experimentMinX
     readonly property var plottingExperimentMaxX: activeBackend.plotting.experimentMaxX
     readonly property var plottingExperimentMinY: activeBackend.plotting.experimentMinY
@@ -619,10 +651,9 @@ QtObject {
     readonly property var plottingResidualMinY: activeBackend.plotting.residualMinY
     readonly property var plottingResidualMaxY: activeBackend.plotting.residualMaxY
 
-    readonly property var calcSerieColor: activeBackend.plotting.calcSerieColor
-
     // Plot mode properties
     readonly property bool plottingPlotRQ4: activeBackend.plotting.plotRQ4
+    readonly property bool plottingYAxisLog: activeBackend.plotting.yAxisLog
     readonly property string plottingYAxisTitle: activeBackend.plotting.yMainAxisTitle
     readonly property bool plottingXAxisLog: activeBackend.plotting.xAxisLog
     readonly property string plottingXAxisType: activeBackend.plotting.xAxisType
@@ -640,6 +671,7 @@ QtObject {
 
     // Plot mode toggle functions
     function plottingTogglePlotRQ4() { activeBackend.plotting.togglePlotRQ4() }
+    function plottingToggleYAxisLog() { activeBackend.plotting.toggleYAxisLog() }
     function plottingToggleXAxisType() { activeBackend.plotting.toggleXAxisType() }
     function plottingReverseSldXData() { activeBackend.plotting.reverseSldXData() }
     function plottingFlipScaleShown() { activeBackend.plotting.flipScaleShown() }
@@ -1091,10 +1123,4 @@ QtObject {
             return []
         }
     }
-
-    // Bayesian sampling progress
-    readonly property int analysisSampleProgressStep: activeBackend.analysis.sampleProgressStep
-    readonly property string analysisSampleProgressMessage: activeBackend.analysis.sampleProgressMessage
-    readonly property bool analysisSampleProgressHasUpdate: activeBackend.analysis.sampleProgressHasUpdate
-    readonly property int analysisSampleProgressTotalSteps: activeBackend.analysis.sampleProgressTotalSteps
 }

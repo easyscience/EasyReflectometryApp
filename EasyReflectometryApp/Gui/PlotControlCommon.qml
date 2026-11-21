@@ -10,7 +10,12 @@ import EasyApplication.Gui.Elements as EaElements
 
 import Gui.Globals as Globals
 
+// The plot toggles shared by the Sample, Experiment and Analysis pages.
 Column {
+    // The scale and background lines are drawn against measured data, which
+    // the Sample page does not show.
+    property bool showReferenceLines: true
+
     spacing: EaStyle.Sizes.fontPixelSize * 0.5
 
     EaElements.CheckBox {
@@ -20,6 +25,17 @@ Column {
         ToolTip.text: qsTr("Checking this box will plot R(q) multiplied by q⁴")
         onToggled: {
             Globals.BackendWrapper.plottingTogglePlotRQ4()
+        }
+    }
+
+    // Mutually exclusive with R(q)×q⁴, which is a log-axis view: the backend unchecks the other.
+    EaElements.CheckBox {
+        topPadding: 0
+        checked: !Globals.BackendWrapper.plottingYAxisLog
+        text: qsTr("Linear R(q)-axis")
+        ToolTip.text: qsTr("Checking this box will make the R(q)-axis linear instead of logarithmic")
+        onToggled: {
+            Globals.BackendWrapper.plottingToggleYAxisLog()
         }
     }
 
@@ -34,6 +50,7 @@ Column {
     }
 
     EaElements.CheckBox {
+        visible: showReferenceLines
         topPadding: 0
         checked: Globals.BackendWrapper.plottingScaleShown
         text: qsTr("Show scale line")
@@ -44,6 +61,7 @@ Column {
     }
 
     EaElements.CheckBox {
+        visible: showReferenceLines
         topPadding: 0
         checked: Globals.BackendWrapper.plottingBkgShown
         text: qsTr("Show background line")

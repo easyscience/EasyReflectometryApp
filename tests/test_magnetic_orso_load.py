@@ -25,9 +25,9 @@ FE_RHO_M = 5.042
 
 @pytest.fixture(autouse=True)
 def clear_global_map():
-    global_object.map._clear()
+    global_object.registry.clear()
     yield
-    global_object.map._clear()
+    global_object.registry.clear()
 
 
 def _write_film(path, **film_material) -> str:
@@ -83,7 +83,7 @@ class TestLoad:
         assert material_row['magnetic'] is True
         assert float(material_row['magnetic_moment']) == pytest.approx(2.2)
         row = _film_row(backend)
-        assert (row['magnetic'], row['material_magnetic'], row['rho_m_coupled']) == ('True', 'True', 'True')
+        assert (row['magnetic'], row['material_magnetic'], row['rho_m_coupled']) == (True, True, True)
         assert float(row['rho_m']) == pytest.approx(FE_RHO_M, abs=1e-3)
         assert warnings_received == []
 

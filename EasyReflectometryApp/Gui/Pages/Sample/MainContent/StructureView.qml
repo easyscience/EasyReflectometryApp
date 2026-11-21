@@ -177,6 +177,7 @@ Rectangle {
                         }
                     }
 
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                     ToolTip.visible: boxMouse.containsMouse
                     ToolTip.text: {
                         let lines = [

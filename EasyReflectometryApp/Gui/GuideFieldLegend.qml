@@ -46,6 +46,7 @@ Row {
         color: EaStyle.Colors.themeForegroundMinor
     }
 
+    ToolTip.delay: Globals.Variables.toolTipDelay
     ToolTip.visible: hover.hovered
     ToolTip.text: root.field.in_plane
                   ? qsTr("Guide field direction. Arrows point the way the moment does in the sample plane; with the default field θM = 270° points along H (no spin flip).")
