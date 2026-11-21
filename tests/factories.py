@@ -58,9 +58,26 @@ class FakeLayer:
         self.solvent = solvent or FakeMaterial('D2O')
         self._thickness = FlaggedValueHolder(thickness)
         self._roughness = FlaggedValueHolder(roughness)
-        self.area_per_molecule = area_per_molecule
-        self.solvent_fraction = solvent_fraction
+        # As on LayerAreaPerMolecule: Parameters, assigned a plain value.
+        self._area_per_molecule = FlaggedValueHolder(area_per_molecule)
+        self._solvent_fraction = FlaggedValueHolder(solvent_fraction)
         self.molecular_formula = molecular_formula
+
+    @property
+    def area_per_molecule(self):
+        return self._area_per_molecule
+
+    @area_per_molecule.setter
+    def area_per_molecule(self, value):
+        self._area_per_molecule.value = value
+
+    @property
+    def solvent_fraction(self):
+        return self._solvent_fraction
+
+    @solvent_fraction.setter
+    def solvent_fraction(self, value):
+        self._solvent_fraction.value = value
 
     @property
     def thickness(self):
@@ -105,8 +122,8 @@ class FakeLayerCollection(list):
             thickness=source.thickness.value,
             roughness=source.roughness.value,
             solvent=getattr(source, 'solvent', None),
-            area_per_molecule=getattr(source, 'area_per_molecule', 0.1),
-            solvent_fraction=getattr(source, 'solvent_fraction', 0.2),
+            area_per_molecule=source.area_per_molecule.value,
+            solvent_fraction=source.solvent_fraction.value,
             molecular_formula=getattr(source, 'molecular_formula', 'formula'),
         )
         self.insert(index + 1, duplicate)

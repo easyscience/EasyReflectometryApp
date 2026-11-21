@@ -1,5 +1,9 @@
 # Demo datasets for the constraints and multiple-contrast functionality
 
+These datasets, together with the measured ones in `measured/` and the polarized set in
+`polarized/` (see the end of this file), are also the source of the example projects on the
+Project page, built by `python examples/make_example_projects.py`.
+
 Six simulated neutron reflectometry files (ORSO `.ort`, 4 % noise, 5 % dQ/Q
 resolution) for demonstrating the constraint features in the application:
 inequality constraints, the derived total film thickness, and the physics-constraint
@@ -276,3 +280,32 @@ exercises the formula substitution and a solvent shared by two layers.
   probes the forbidden region (the meaningless penalty χ² is not displayed).
 - **Bayesian**: the DREAM sampler honours the same constraints — the posterior is
   cut off at the constraint boundary (visible in the marginal of t_A + t_B).
+
+---
+
+## Measured data (`measured/`)
+
+Copied from the easyreflectometry library's tutorials, where they are fitted step by step.
+
+| file | sample | instrument | library tutorial |
+|---|---|---|---|
+| `polymer_film_platypus.ort` | polymer film on Si / SiO2, against D2O | Platypus (ANSTO), from the refnx docs | `fitting/simple_fitting` |
+| `dspc_d70_d2o_surf.ort` | tail-deuterated DSPC monolayer on D2O | SURF (ISIS) | `fitting/monolayer` |
+| `dspc_contrasts_surf.ort` | DSPC monolayer, three datasets: d13 / D2O, d70 / D2O, d83 / ACMW | SURF (ISIS) | `advancedfitting/multi_contrast` |
+
+## Polarized data (`polarized/`)
+
+`fe_on_si_{uu,ud,du,dd}.dat`: the four spin channels of a magnetic Fe film, simulated by
+`generate_datasets.py` (4 % noise, 5 % dQ/Q, as above) and written one file per channel, as a
+polarized measurement usually arrives. The suffix is the channel the import dialog detects
+(`uu` = R++, `ud` = R+-, `du` = R-+, `dd` = R--).
+
+| layer | value |
+|---|---|
+| superphase | vacuum |
+| Fe film | **200 Å**, SLD 8.02, roughness 5 Å, magnetic SLD **5.0**, moment angle **40°** |
+| subphase | Si (2.07), roughness 3 Å |
+
+Load them with **Experiment › Load polarized experiment (file per channel)** on a model with a magnetic Fe layer
+(Refl1D calculator). Starting from 180 Å / 3.0 / 60° and fitting the thickness and both magnetic
+parameters gives 200 Å / 5.0 / 41°.

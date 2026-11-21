@@ -80,6 +80,11 @@ QtObject {
     function projectHasCustomContent() { return activeBackend.project.hasCustomContent() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
+    // Example projects shipped with the app: [{ name, description, path }]
+    readonly property var projectExamples: activeBackend.project.examples ?? []
+    // Loaded from an example and not created as a project yet (nothing to save until it is)
+    readonly property bool projectIsExample: activeBackend.project.isExample ?? false
+    function projectLoadExample(path) { activeBackend.project.loadExample(path) }
     function sampleFileLoad(value, append) { activeBackend.project.sampleLoad(value, append) }
 
     // Sample load warning signal - forwarded from backend

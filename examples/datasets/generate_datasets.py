@@ -12,6 +12,7 @@ noise, so every constraint demo has a ground truth to compare against:
 - ``dppc_monolayer.ort``        surfactant recipes (equal APM, conformal / solvent roughness)
 - ``dppc_contrasts.ort``        three contrasts of one monolayer in one file (joint fit)
 - ``film_contrasts.ort``        three water contrasts of a film on silicon, slab model in each header
+- ``polarized/fe_on_si_*.dat``  four spin channels of a magnetic Fe film (one file per channel)
 
 Re-run from the repository root to regenerate::
 
@@ -29,6 +30,7 @@ from easyreflectometry.contrasts import derive_contrast
 from easyreflectometry.model import Model
 from easyreflectometry.model import PercentageFwhm
 from easyreflectometry.sample import Layer
+from easyreflectometry.sample import LayerMagnetism
 from easyreflectometry.sample import Material
 from easyreflectometry.sample import Multilayer
 from easyreflectometry.sample import RepeatingMultilayer
@@ -448,6 +450,58 @@ def main() -> None:
             )
         )
     save('film_contrasts.ort', datasets)
+
+    fe_on_si_polarized()
+
+
+def fe_on_si_polarized() -> None:
+    """Four spin channels of a magnetic Fe film, one plain-text file per channel.
+
+    Written as a polarized measurement typically arrives: one file per channel, the channel in
+    the conventional suffix (``_uu``, ``_ud``, ``_du``, ``_dd``) that the import dialog detects.
+    The fourth column is the Gaussian sigma of the 5 % dQ/Q resolution, as in the ORSO files.
+    """
+    film = Layer(
+        Material(8.02, 0.0, 'Fe'),
+        thickness=200.0,
+        roughness=5.0,
+        magnetism=LayerMagnetism(rho_m=5.0, theta_m=40.0, name='Fe moment'),
+        name='Fe film',
+    )
+    model = Model(
+        Sample(
+            Multilayer(Layer(Material(0.0, 0.0, 'Vacuum'), thickness=0.0, roughness=0.0, name='Vacuum'), name='Superphase'),
+            Multilayer(film, name='Fe film'),
+            Multilayer(Layer(Material(2.07, 0.0, 'Si'), thickness=0.0, roughness=3.0, name='Si'), name='Subphase'),
+        ),
+        scale=1.0,
+        background=BACKGROUND,
+        resolution_function=PercentageFwhm(RESOLUTION_PERCENT),
+    )
+    interface = CalculatorFactory()
+    interface.switch('refl1d')  # the calculator with magnetism
+    model.interface = interface
+    q = np.linspace(0.008, 0.22, 160)
+    channels = interface.polarized_reflectivity_profiles(q, model.unique_name)
+    sq = (RESOLUTION_PERCENT / 100.0) * q / 2.355
+    directory = OUTPUT_DIR / 'polarized'
+    directory.mkdir(exist_ok=True)
+    header = (
+        'Simulated polarized neutron reflectivity, channel {channel}.\n'
+        'TRUTH: Vacuum | Fe 200 A (SLD 8.02, roughness 5 A, magnetic SLD 5.0, moment angle 40 deg) | '
+        f'Si (SLD 2.07, roughness 3 A); scale 1, background {BACKGROUND:.0e}, dQ/Q {RESOLUTION_PERCENT:g} % FWHM.\n'
+        'Qz (1/angstrom)  R  sR  sQz (1/angstrom)'
+    )
+    for seed, (channel, suffix) in enumerate((('pp', 'uu'), ('pm', 'ud'), ('mp', 'du'), ('mm', 'dd')), start=20):
+        reflectivity = np.asarray(channels[channel])
+        rng = np.random.default_rng(seed)
+        sigma = NOISE_RELATIVE * reflectivity + 0.2 * BACKGROUND
+        measured = np.clip(reflectivity + rng.normal(0.0, sigma), 0.1 * BACKGROUND, None)
+        np.savetxt(
+            directory / f'fe_on_si_{suffix}.dat',
+            np.column_stack([q, measured, sigma, sq]),
+            header=header.format(channel=channel),
+        )
 
 
 if __name__ == '__main__':

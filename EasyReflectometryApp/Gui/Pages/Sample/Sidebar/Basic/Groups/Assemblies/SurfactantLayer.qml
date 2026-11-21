@@ -59,7 +59,8 @@ EaElements.GroupColumn {
 
             EaComponents.TableViewTextInput {
                 horizontalAlignment: Text.AlignHCenter
-                text: Globals.BackendWrapper.sampleLayers[index].formula
+                // Hidden, not destroyed, while a plain multilayer is current: its layers have no formula.
+                text: Globals.BackendWrapper.sampleLayers[index]?.formula ?? ''
                 onActiveFocusChanged: if (activeFocus && Globals.BackendWrapper.sampleCurrentLayerIndex !== index) Globals.BackendWrapper.sampleSetCurrentLayerIndex(index)
                 onEditingFinished: Globals.BackendWrapper.sampleSetLayerFormulaAtIndex(index, text)
             }
