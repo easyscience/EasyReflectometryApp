@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from easyreflectometry import Project
+from easyreflectometry.constraints import constrain
 from easyreflectometry.contrasts import ReplaceFormula
 from easyreflectometry.contrasts import ReplaceMaterial
 from easyreflectometry.fitting import Minimizers
@@ -288,6 +289,70 @@ def film_contrasts() -> Project:
     return project
 
 
+def linked_film_contrasts() -> Project:
+    project = new_project(
+        'Polymer film, linked contrasts',
+        'Simulated: a polymer film on silicon under D2O, H2O and silicon-matched water (CMSi), one '
+        'model per contrast. Link contrasts ties their structure; constraints give every contrast the '
+        "D2O contrast's scale and make the CMSi SLD follow the fitted D2O SLD (CMSi is 38% D2O).",
+    )
+    # The materials come from one palette, as when each model is built by picking them.
+    si = Material(sld=2.07, isld=0, name='Si')
+    sio2 = Material(sld=3.47, isld=0, name='SiO2')
+    polymer = Material(sld=1.5, isld=0, name='Polymer')
+    waters = [
+        Material(sld=6.36, isld=0, name='D2O'),
+        Material(sld=-0.56, isld=0, name='H2O'),
+        Material(sld=2.07, isld=0, name='CMSi'),
+    ]
+    # Each model takes the next colour, as models added in the app do.
+    models = ModelCollection([])
+    for water in waters:
+        sample = Sample(
+            Multilayer(slab(si, 0, 0, 'Si'), name='Superphase'),
+            # One assembly per layer: the app names a parameter by its model and assembly.
+            Multilayer(slab(sio2, 20, 3, 'SiO2'), name='Oxide'),
+            Multilayer(slab(polymer, 100, 3, 'Polymer'), name='Polymer'),
+            Multilayer(slab(water, 0, 3, 'Water'), name='Subphase'),
+        )
+        model = Model(
+            sample=sample,
+            scale=1,
+            background=1e-6,
+            resolution_function=PercentageFwhm(5),
+            color=models.next_color(),
+            name=f'Film in {water.name}',
+        )
+        models.add_model(model)
+    project.models = models
+    project.load_all_experiments_from_file(DATASETS / 'linked_film_contrasts.ort')
+    pair_experiments(project, {'in D2O': 0, 'in H2O': 1, 'in CMSi': 2})
+
+    fix_all(project)
+    reference = models[0]
+    oxide, film, subphase = (reference.sample[i].layers[0] for i in (1, 2, 3))
+    free(oxide.thickness, 5, 40)
+    free(film.thickness, 60, 200)
+    free(film.roughness, 1, 15)
+    free(subphase.roughness, 1, 10)
+    free(polymer.sld, 0, 3)
+    free(waters[0].sld, 5.8, 6.36)  # D2O takes up H2O from the air: its SLD only drops
+    free(reference.scale, 0.7, 1.3)
+    for model in models:
+        free(model.background, 1e-8, 1e-5)
+    # Link contrasts (the H2O and CMSi models follow the D2O one): the layer geometry is tied.
+    # Material rows are skipped: the substrate and polymer are one palette material already,
+    # and the waters differ.
+    for follower in (1, 2):
+        project.apply_link(project.plan_link(follower, 0, materials='skip'))
+    # One sample, one alignment: every contrast has the D2O contrast's scale.
+    for model in models[1:]:
+        constrain(model.scale, 'scale', scale=reference.scale)
+    # CMSi was mixed from this D2O and H2O, so its SLD follows the fitted D2O SLD.
+    constrain(waters[2].sld, '0.38 * d2o + 0.62 * h2o', d2o=waters[0].sld, h2o=waters[1].sld)
+    return project
+
+
 def two_layer_film_constraints() -> Project:
     project = new_project(
         'Two-layer film with a thickness budget',
@@ -369,6 +434,7 @@ EXAMPLES: list[tuple[str, Callable[[], Project], str]] = [
     ('NiTiMultilayer', ni_ti_multilayer, 'neutrons, repeating multilayer, simulated'),
     ('FilmContrasts', film_contrasts, 'neutrons, three contrasts fitted jointly, simulated'),
     ('DspcContrasts', dspc_contrasts, 'neutrons, three contrasts fitted jointly, SURF@ISIS'),
+    ('LinkedFilmContrasts', linked_film_contrasts, 'neutrons, linked contrasts, constraints across contrasts, simulated'),
     ('TwoLayerFilmConstraints', two_layer_film_constraints, 'neutrons, inequality constraints, simulated'),
     ('FePolarized', fe_on_si_polarized, 'polarized neutrons, magnetic film, simulated'),
 ]

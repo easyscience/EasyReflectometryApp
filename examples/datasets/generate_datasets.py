@@ -12,6 +12,7 @@ noise, so every constraint demo has a ground truth to compare against:
 - ``dppc_monolayer.ort``        surfactant recipes (equal APM, conformal / solvent roughness)
 - ``dppc_contrasts.ort``        three contrasts of one monolayer in one file (joint fit)
 - ``film_contrasts.ort``        three water contrasts of a film on silicon, slab model in each header
+- ``linked_film_contrasts.ort`` three water contrasts with one scale and partly exchanged D2O (links)
 - ``polarized/fe_on_si_*.dat``  four spin channels of a magnetic Fe film (one file per channel)
 
 Re-run from the repository root to regenerate::
@@ -451,7 +452,70 @@ def main() -> None:
         )
     save('film_contrasts.ort', datasets)
 
+    linked_film_contrasts(q)
     fe_on_si_polarized()
+
+
+#: Volume fraction of D2O in the silicon-matched water (the rest is H2O): 0.38 * 6.36 + 0.62 * -0.56 = 2.07.
+CMSI_D2O_FRACTION = 0.38
+
+
+def linked_film_contrasts(q: np.ndarray) -> None:
+    """Three water contrasts of a polymer film, for tying separately built models together.
+
+    What the contrasts share is what the demo's constraints express: one structure (Link
+    models), one scale (the sample and its alignment did not change between the
+    measurements) and one D2O. The D2O took up some H2O from the air, so its SLD is below the
+    nominal 6.36; the silicon-matched water was mixed from it, so its SLD follows.
+    """
+    d2o_sld = 6.20
+    h2o_sld = -0.56
+    cmsi_sld = CMSI_D2O_FRACTION * d2o_sld + (1 - CMSI_D2O_FRACTION) * h2o_sld
+    scale = 0.95
+    waters = (('D2O', d2o_sld, 2e-7), ('H2O', h2o_sld, 5e-6), ('CMSi', cmsi_sld, 1e-6))
+    truth = (
+        'TRUTH (all contrasts): Si | SiO2 12 A (SLD 3.47, roughness 3 A) | polymer 120 A (SLD 1.0, '
+        f'roughness 6 A) | water (roughness 4 A); scale {scale} in every contrast. '
+        f'D2O SLD {d2o_sld} (partly exchanged with H2O), H2O SLD {h2o_sld}, CMSi = {CMSI_D2O_FRACTION:.2f} D2O + '
+        f'{1 - CMSI_D2O_FRACTION:.2f} H2O by volume, SLD {cmsi_sld:.4f}. Backgrounds: '
+        + ', '.join(f'{name} {background:.0e}' for name, _, background in waters)
+        + '. Demo: one model per contrast, tied with Link models (structure), equal scales and '
+        'the CMSi SLD as an expression of the D2O and H2O SLDs.'
+    )
+    datasets = []
+    for number, (name, sld, background) in enumerate(waters, start=1):
+        seed = 29 + number
+        model = Model(
+            sample=Sample(
+                Multilayer(Layer(Material(2.07, 0.0, 'Si'), thickness=0.0, roughness=0.0, name='Si'), name='Superphase'),
+                Multilayer(
+                    [
+                        Layer(Material(3.47, 0.0, 'SiO2'), thickness=12.0, roughness=3.0, name='SiO2'),
+                        Layer(Material(1.0, 0.0, 'Polymer'), thickness=120.0, roughness=6.0, name='Polymer'),
+                    ],
+                    name='Oxide and polymer',
+                ),
+                Multilayer(Layer(Material(sld, 0.0, name), thickness=0.0, roughness=4.0, name='Water'), name='Subphase'),
+                populate_if_none=False,
+            ),
+            name=name,
+            scale=scale,
+            background=background,
+            resolution_function=PercentageFwhm(RESOLUTION_PERCENT),
+        )
+        r, sr = simulate(model, q, seed=seed)
+        datasets.append(
+            ort_dataset(
+                f'Polymer film on silicon in {name}',
+                f'Si / SiO2 / polymer / {name}',
+                truth,
+                q,
+                r,
+                sr,
+                data_set=f'{number}_{name}',
+            )
+        )
+    save('linked_film_contrasts.ort', datasets)
 
 
 def fe_on_si_polarized() -> None:

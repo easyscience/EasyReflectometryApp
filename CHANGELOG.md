@@ -1,10 +1,11 @@
 # Version 1.6.0 (21 Nov 2026)
 
-- Example projects: a new **Examples** group on the Project page lists seven
+- Example projects: a new **Examples** group on the Project page lists eight
   ready-to-fit projects, from a single polymer film to joint fits of several
-  contrasts, inequality constraints and polarized neutrons, with measured
-  (Platypus, SURF) and simulated data. Clicking one loads its sample, data and
-  fit settings. An example is not a saved project: Save stays unavailable until
+  contrasts (derived with Add contrast, or built separately and tied with Link
+  contrasts and constraints across contrasts), inequality constraints and
+  polarized neutrons, with measured (Platypus, SURF) and simulated data.
+  Clicking one loads its sample, data and fit settings. An example is not a saved project: Save stays unavailable until
   **Create a new project** (keeping the sample and data) gives it a location of
   your own, so the shipped files cannot be overwritten. Loading an example over
   unsaved work asks first. The examples are rebuilt with

@@ -26,6 +26,7 @@ EXPECTED = {
     'NiTiMultilayer/project.json': (1, 1, 'refnx'),
     'FilmContrasts/project.json': (3, 3, 'refnx'),
     'DspcContrasts/project.json': (3, 3, 'refnx'),
+    'LinkedFilmContrasts/project.json': (3, 3, 'refnx'),
     'TwoLayerFilmConstraints/project.json': (1, 1, 'refnx'),
     'FePolarized/project.json': (1, 1, 'refl1d'),
 }
@@ -132,6 +133,25 @@ def test_every_page_can_show_each_example(qcore_application, relative_path):
     assert failures == []
     materials = backend._project_lib._materials
     assert all(hasattr(material.sld, 'value') for material in materials), [m.name for m in materials]
+
+
+def test_the_linked_contrasts_example_lists_its_links_and_constraints(qcore_application):
+    """The Constraints list shows what a user would have made with Link models and Add constraint."""
+    backend = backend_module.PyBackend()
+    backend._project.loadExample(str(EXAMPLES_DIR / 'LinkedFilmContrasts' / 'project.json'))
+
+    rows = {(row['type'], row['dependentName'], row['expression']) for row in backend._sample.constraintsList}
+
+    assert rows == {
+        ('link', 'Film in H2O', 'linked to Film in D2O (5 tied parameter(s))'),
+        ('link', 'Film in CMSi', 'linked to Film in D2O (5 tied parameter(s))'),
+        ('dynamic', 'Film in H2O scale', 'Film in D2O scale'),
+        ('dynamic', 'Film in CMSi scale', 'Film in D2O scale'),
+        ('dynamic', 'CMSi sld', '0.38 * D2O sld + 0.62 * H2O sld'),
+    }
+    d2o, h2o, cmsi = (backend._project_lib._materials[i].sld for i in (3, 4, 5))
+    d2o.value = 6.2
+    assert cmsi.value == pytest.approx(0.38 * 6.2 + 0.62 * h2o.value)
 
 
 def test_creating_a_project_from_an_example_keeps_its_content(qcore_application, tmp_path):

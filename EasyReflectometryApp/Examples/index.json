@@ -25,6 +25,11 @@
         "description": "neutrons, three contrasts fitted jointly, SURF@ISIS"
     },
     {
+        "path": "LinkedFilmContrasts/project.json",
+        "name": "Polymer film, linked contrasts",
+        "description": "neutrons, linked contrasts, constraints across contrasts, simulated"
+    },
+    {
         "path": "TwoLayerFilmConstraints/project.json",
         "name": "Two-layer film with a thickness budget",
         "description": "neutrons, inequality constraints, simulated"
