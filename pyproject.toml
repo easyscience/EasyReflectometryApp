@@ -67,7 +67,7 @@ docs = [
 [release]
 app_name = 'EasyReflectometryApp'
 family_name = 'EasyReflectometryApp'
-release_date = '1 May 2026'
+release_date = '21 Nov 2026'
 tag_template = 'v{VERSION}'
 title_template = 'Version {VERSION} ({DATE})'
 description_file = 'RELEASE.md'
