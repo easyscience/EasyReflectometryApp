@@ -1,4 +1,4 @@
-# Version 1.6.0 (21 Nov 2026)
+# Version 1.6.1 (22 Nov 2026)
 
 - Example projects: a new **Examples** group on the Project page lists eight
   ready-to-fit projects, from a single polymer film to joint fits of several
@@ -10,6 +10,9 @@
   your own, so the shipped files cannot be overwritten. Loading an example over
   unsaved work asks first. The examples are rebuilt with
   `python examples/make_example_projects.py`.
+
+# Version 1.6.0 (21 Nov 2026)
+
 - Live preview of a running fit: the Analysis page's reflectivity, residual and
   SLD curves are redrawn with the best values found so far, at most once per
   second and only when the fit has improved. **Preview every (s)**, in the
