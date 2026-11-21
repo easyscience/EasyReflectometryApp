@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - "**"
+    # A release tag builds the release again, with the Windows installer signed
+    tags:
+      - "v*"
   pull_request:
     branches:
       - "**"
@@ -46,10 +49,17 @@ jobs:
       - name: Add extra info to pyproject.toml
         run: python utils.py --update
 
+      # A release tag (v1.6.0) is built as the master build it tags: the same artifact
+      # names (Config.py suffixes every other branch name) and the same release.
       - name: Declare env variables on push only
         if: github.event_name == 'push'
         shell: bash
-        run: echo "BRANCH_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "BRANCH_NAME=master" >> $GITHUB_ENV
+          else
+            echo "BRANCH_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+          fi
 
       - name: Declare env variables on pull_request only
         if: github.event_name == 'pull_request'
@@ -111,15 +121,16 @@ jobs:
 #          ${{ secrets.APPLE_CERT_DATA }} ${{ secrets.APPLE_CERT_PASSWORD }}
 #          ${{ secrets.APPLE_NOTARY_USER }} ${{ secrets.APPLE_NOTARY_PASSWORD }}
 
+      # Windows signing: pushes to master and release tags (push of a v* tag) only.
+      # Pull requests and other branches stay unsigned (fork PRs have no secrets).
       - name: Setup SM_CLIENT_CERT_FILE from base64 secret data
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
         run: |
           echo "${{ secrets.CODESIGN_WIN_CERT_P12_BASE64 }}" | base64 --decode > /d/Certificate_pkcs12.p12
         shell: bash
 
-
-      - name: Setup Software Trust Manager
-        if: runner.os == 'Windows'
+      - name: Setup Software Trust Manager and sign the installer (Windows)
+        if: runner.os == 'Windows' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
         uses: digicert/code-signing-software-trust-action@v1
         with:
               simple-signing-mode: true
@@ -160,13 +171,18 @@ jobs:
           name: ${{ env.BRANCH_NAME }}
           bodyFile: "RELEASE.md"
 
-      - name: Upload zipped offline app installer to GitHub releases (master branch)
+      # Master pushes and release tags. The release is created as a draft prerelease;
+      # an update leaves its state alone, so the tag build (published release) only
+      # replaces the installers with ones built from the tagged commit. Both are signed.
+      - name: Upload zipped offline app installer to GitHub releases (master branch and release tags)
         if: github.event_name == 'push' && env.BRANCH_NAME == 'master'
         uses: ncipollo/release-action@v1
         with:
           draft: true
           prerelease: true
           allowUpdates: true
+          omitDraftDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: "${{ env.DISTRIBUTION_PATH }}/*.zip"
@@ -204,10 +220,16 @@ jobs:
           python -m pip install toml
           python -m pip install requests
 
+      # As in build-installer: a release tag uses the master artifact names
       - name: Declare env variables on push only
         if: github.event_name == 'push'
         shell: bash
-        run: echo "BRANCH_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "BRANCH_NAME=master" >> $GITHUB_ENV
+          else
+            echo "BRANCH_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+          fi
 
       - name: Declare env variables on pull_request only
         if: github.event_name == 'pull_request'
