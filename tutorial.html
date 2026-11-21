@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Getting started &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
+    <title>Getting started &#8212; EasyReflectometry Dev Docs 1.6.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="_static/documentation_options.js?v=5eae0ad3"></script>
+    <script src="_static/documentation_options.js?v=fa68ba3e"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
-    <script>document.write(`<img src="_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
+    <img src="_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>
+    <script>document.write(`<img src="_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -322,8 +322,14 @@ document.write(`
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#home-page">Home page</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intialise-project">Intialise project</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#save-and-settings">Save and settings</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intialise-project">Intialise project</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-a-new-project">Creating a new project</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#save-and-settings">Save and settings</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#automatic-saving">Automatic saving</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-structure-view">Sample structure view</a></li>
 </ul>
             </nav>
@@ -339,7 +345,7 @@ document.write(`
   <section id="getting-started">
 <h1>Getting started<a class="headerlink" href="#getting-started" title="Link to this heading">#</a></h1>
 <p>This is the tutorial for EasyReflectometryApp and how to use it.<br />
-Version: 1.5.0</p>
+Version: 1.6.0</p>
 <section id="home-page">
 <h2>Home page<a class="headerlink" href="#home-page" title="Link to this heading">#</a></h2>
 <p>When opening up the EasyRecletometryApp you are presented with the <strong>Home</strong> page.</p>
@@ -369,6 +375,27 @@ Version: 1.5.0</p>
 </ul>
 <p>If no project is selected/created a default project is initialised.<br />
 This project is used going forward to explain the app.</p>
+<section id="creating-a-new-project">
+<h3>Creating a new project<a class="headerlink" href="#creating-a-new-project" title="Link to this heading">#</a></h3>
+<p><strong>Create a new project</strong> opens a dialog for the name, description and location of the
+project. <strong>OK</strong> creates it; <strong>Cancel</strong> closes the dialog and creates nothing.</p>
+<p>When the session already holds a sample, data or fit settings of your own - built before
+any project existed, or belonging to the project that is open - the app first asks what the
+new project should start with:</p>
+<ul class="simple">
+<li><p><strong>Keep sample and data</strong>: the new project starts with what is on screen.</p></li>
+<li><p><strong>Start from scratch</strong>: the new project starts with the default sample and no data.</p></li>
+<li><p><strong>Cancel</strong>: no new project.</p></li>
+</ul>
+<p>The dialog also says whether the current work has been saved. Starting from scratch
+discards work that was never saved to a project. Nothing is reset until the new project’s
+details are confirmed with <strong>OK</strong>, so cancelling there keeps everything as it was.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Projects saved by EasyReflectometry 1.5 or earlier cannot be opened by later versions.
+Re-create them, or open them with EasyReflectometry 1.5.</p>
+</div>
+</section>
 </section>
 <section id="save-and-settings">
 <h2>Save and settings<a class="headerlink" href="#save-and-settings" title="Link to this heading">#</a></h2>
@@ -379,6 +406,28 @@ This project is used going forward to explain the app.</p>
 <li><p><strong>B</strong>: Reset to start.</p></li>
 <li><p><strong>C</strong>: Setting, is further explained in settings.</p></li>
 </ul>
+<section id="automatic-saving">
+<h3>Automatic saving<a class="headerlink" href="#automatic-saving" title="Link to this heading">#</a></h3>
+<p>Once a project has been created, the app also saves it without being asked, whenever it has
+unsaved changes at one of these moments:</p>
+<ul class="simple">
+<li><p>when you leave a page;</p></li>
+<li><p>after a successful fit, and after a Bayesian sampling run;</p></li>
+<li><p>just before a fit starts, before the calculation engine is switched, and before the
+sample is replaced by one loaded from an ORSO file.</p></li>
+</ul>
+<p>Nothing is saved automatically while a fit is running.</p>
+<p>Each automatic save first copies the project file it replaces to <code class="docutils literal notranslate"><span class="pre">project.json.bak</span></code> in the
+project folder, so one unwanted automatic save can be undone by hand. Saving with the save
+button (<strong>A</strong>) does not write a backup.</p>
+<p>The <strong>Saved</strong> item of the status bar gives the time of the last save, followed by <code class="docutils literal notranslate"><span class="pre">(auto)</span></code>
+when that save was automatic; its tooltip then gives the path of the backup. If an
+automatic save fails, a dialog says so once and the status bar shows <strong>Autosave failed</strong>
+until a save succeeds. Your work is still in memory: use the save button to retry.</p>
+<p>To switch automatic saving off, untick <strong>Save automatically</strong> in the <strong>Saving</strong> group of
+the <code class="docutils literal notranslate"><span class="pre">Advanced</span> <span class="pre">controls</span></code> of the <code class="docutils literal notranslate"><span class="pre">Project</span></code> page. The choice is an application preference: it
+is remembered between sessions and applies to every project.</p>
+</section>
 </section>
 <section id="sample-structure-view">
 <h2>Sample structure view<a class="headerlink" href="#sample-structure-view" title="Link to this heading">#</a></h2>
@@ -439,8 +488,14 @@ layers stay visible and very thick ones do not crowd out the rest.</p>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#home-page">Home page</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intialise-project">Intialise project</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#save-and-settings">Save and settings</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#intialise-project">Intialise project</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-a-new-project">Creating a new project</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#save-and-settings">Save and settings</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#automatic-saving">Automatic saving</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-structure-view">Sample structure view</a></li>
 </ul>
   </nav></div>

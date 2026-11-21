@@ -1,6 +1,6 @@
 # Getting started
 This is the tutorial for EasyReflectometryApp and how to use it.  
-Version: 1.5.0
+Version: 1.6.0
 
 ## Home page
 When opening up the EasyRecletometryApp you are presented with the **Home** page.  
@@ -27,6 +27,27 @@ Pressing **A** will direct you to the **Project** page.
 If no project is selected/created a default project is initialised.  
 This project is used going forward to explain the app.
 
+### Creating a new project
+**Create a new project** opens a dialog for the name, description and location of the
+project. **OK** creates it; **Cancel** closes the dialog and creates nothing.
+
+When the session already holds a sample, data or fit settings of your own - built before
+any project existed, or belonging to the project that is open - the app first asks what the
+new project should start with:
+
+- **Keep sample and data**: the new project starts with what is on screen.
+- **Start from scratch**: the new project starts with the default sample and no data.
+- **Cancel**: no new project.
+
+The dialog also says whether the current work has been saved. Starting from scratch
+discards work that was never saved to a project. Nothing is reset until the new project's
+details are confirmed with **OK**, so cancelling there keeps everything as it was.
+
+```{note}
+Projects saved by EasyReflectometry 1.5 or earlier cannot be opened by later versions.
+Re-create them, or open them with EasyReflectometry 1.5.
+```
+
 ## Save and settings
 When a project is started two further buttons is visualised, and settings is the opposite corner of those.
 
@@ -35,6 +56,30 @@ When a project is started two further buttons is visualised, and settings is the
 - **A**: Save project.
 - **B**: Reset to start.
 - **C**: Setting, is further explained in settings.
+
+### Automatic saving
+Once a project has been created, the app also saves it without being asked, whenever it has
+unsaved changes at one of these moments:
+
+- when you leave a page;
+- after a successful fit, and after a Bayesian sampling run;
+- just before a fit starts, before the calculation engine is switched, and before the
+  sample is replaced by one loaded from an ORSO file.
+
+Nothing is saved automatically while a fit is running.
+
+Each automatic save first copies the project file it replaces to `project.json.bak` in the
+project folder, so one unwanted automatic save can be undone by hand. Saving with the save
+button (**A**) does not write a backup.
+
+The **Saved** item of the status bar gives the time of the last save, followed by `(auto)`
+when that save was automatic; its tooltip then gives the path of the backup. If an
+automatic save fails, a dialog says so once and the status bar shows **Autosave failed**
+until a save succeeds. Your work is still in memory: use the save button to retry.
+
+To switch automatic saving off, untick **Save automatically** in the **Saving** group of
+the `Advanced controls` of the `Project` page. The choice is an application preference: it
+is remembered between sessions and applies to every project.
 
 ## Sample structure view
 The **Model** page has a **Structure** tab next to **Reflectivity** showing a schematic of

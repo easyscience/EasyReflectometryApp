@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Installation &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
+    <title>Installation &#8212; EasyReflectometry Dev Docs 1.6.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="_static/documentation_options.js?v=5eae0ad3"></script>
+    <script src="_static/documentation_options.js?v=fa68ba3e"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
-    <script>document.write(`<img src="_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
+    <img src="_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>
+    <script>document.write(`<img src="_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -321,6 +321,7 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#upgrading-from-an-earlier-version">Upgrading from an earlier version</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation-from-source">Installation from source</a></li>
 </ul>
             </nav>
@@ -337,12 +338,22 @@ document.write(`
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h1>
 <p>To make the installation of EasyReflectometry as easy as possible, we prepare packaged releases for three major operating systems:</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.5.0/EasyReflectometryApp_v1.5.0_windows-2022.exe">Windows</a></p></li>
-<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.5.0/EasyReflectometryApp_v1.5.0_macos-14-AppleSilicon.zip">MacOS (Silicon)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.5.0/EasyReflectometryApp_v1.5.0_ubuntu-22.04">Linux (built on Ubuntu-22.04)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.5.0/EasyReflectometryApp_v1.5.0_ubuntu-24.04">Linux (built on Ubuntu-24.04)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.6.0/EasyReflectometryApp_v1.6.0_windows-2022.exe">Windows</a></p></li>
+<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.6.0/EasyReflectometryApp_v1.6.0_macos-14-AppleSilicon.zip">MacOS (Silicon)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.6.0/EasyReflectometryApp_v1.6.0_ubuntu-22.04">Linux (built on Ubuntu-22.04)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/EasyScience/EasyReflectometryApp/releases/download/v1.6.0/EasyReflectometryApp_v1.6.0_ubuntu-24.04">Linux (built on Ubuntu-24.04)</a></p></li>
 </ul>
+<section id="upgrading-from-an-earlier-version">
+<h2>Upgrading from an earlier version<a class="headerlink" href="#upgrading-from-an-earlier-version" title="Link to this heading">#</a></h2>
+<p>Installers newer than version 1.6.0 can install over an earlier version. When the chosen folder already holds one, the installer asks whether to remove it first:</p>
+<ul class="simple">
+<li><p><em>Yes</em> replaces the earlier version with the new one in the same folder.</p></li>
+<li><p><em>No</em> keeps the earlier version; the new one is installed into a separate folder named after its version, such as <code class="docutils literal notranslate"><span class="pre">EasyReflectometryApp-1.6.0</span></code>.</p></li>
+</ul>
+<p>Close EasyReflectometry before upgrading: an earlier version that is still running cannot be removed.</p>
+<p>Installers of version 1.6.0 and older stop with the message <em>“The directory you selected already exists and contains an installation”</em>. With those, remove the earlier version first: run <strong>MaintenanceTool</strong> from its installation folder, select <em>Remove all components</em> and follow the instructions. Alternatively, choose a different installation folder.</p>
 <p>If the relevant EasyReflectometry installation does not work on your system, then please try installation from source.</p>
+</section>
 <section id="installation-from-source">
 <h2>Installation from source<a class="headerlink" href="#installation-from-source" title="Link to this heading">#</a></h2>
 <ol class="arabic">
@@ -416,6 +427,7 @@ document.write(`
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#upgrading-from-an-earlier-version">Upgrading from an earlier version</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation-from-source">Installation from source</a></li>
 </ul>
   </nav></div>

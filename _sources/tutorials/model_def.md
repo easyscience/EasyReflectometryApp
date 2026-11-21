@@ -45,6 +45,10 @@ density**:
   note `unused (SLD is fitted directly)`, because they no longer affect the
   reflectivity - they cannot be fitted or edited until the box is checked again.
 
+The greyed rows are listed on the `Analysis` page only when its variability filter is set
+to **All parameters**; the default, **Active parameters**, hides them (see
+[simple fitting](./simple_fitting.md)).
+
 The molecular weight never appears in the `Analysis` table: it is a constant of the
 chemical formula (recomputed whenever the formula is edited), not a fittable parameter -
 fitting it alongside density would be degenerate, since only their ratio enters the SLD.
@@ -130,6 +134,11 @@ By clicking an assembly, the `Layer editor` is specified and changes can be made
 - **1**: Choose a material from materials in the `Material Editor`.
 - **2**+**3**: Setting the Thickness and Upper Roughness of the material in Angstrom, Å.
 
+A value typed here, or an SLD typed in the `Material editor`, is taken as typed even when
+it lies outside the parameter's fit limits: the limit it passes is moved out to the new
+value. The limits themselves are shown and edited on the `Analysis` page, see
+[simple fitting](./simple_fitting.md).
+
 ### Magnetism
 A layer can also be given a magnetisation, in the `Magnetism` group below the layer editor.
 This needs the `refl1d` calculation engine and is described in
@@ -164,8 +173,15 @@ same selector is available on the `Analysis` page. Only `refl1d` can model magne
 so selecting `refnx` while the sample has magnetic layers is refused - see
 [magnetic layers](./magnetism.md).
 
+The **Plot control** group switches the reflectivity chart between a logarithmic R(q)
+axis, a linear one (**Linear R(q)-axis**) and R(q)×q⁴, and sets the q-axis; it is described
+in [simple fitting](./simple_fitting.md).
+
 Below these sit three constraint groups, from the most specific to the most general:
 `Physics constraints`, `Single constraints` and `Link contrasts`.
+
+All constraints are saved with the project. The groups are disabled while a fit is
+running.
 
 ### Physics constraints
 The `Physics constraints` group applies physically motivated constraints to an assembly with
@@ -196,10 +212,12 @@ parameters.
 
 1. Pick the **dependent parameter** from the drop-down.
 2. Pick the relation: `=`, `≤` or `≥`.
-3. Type the **expression**, for example `np.sqrt(1 / sld_ni) + 4`. Use
-   **Insert parameter alias…** to paste the alias of another parameter rather than typing
-   it, and **Insert total film thickness** to use the read-only sum of all layer thicknesses
-   between superphase and subphase.
+3. Type the **expression**, for example `2 * model_d2o_roughness`. Parameters are referred
+   to by their alias: the display name in lower case, with underscores, such as
+   `model_d2o_thickness` for `Model D2O thickness`. Use **Insert parameter alias…** to
+   paste the alias of another parameter rather than typing it, and **Insert total film
+   thickness** to use the read-only sum of all layer thicknesses between superphase and
+   subphase.
 4. Check the **Preview** line, which shows how the constraint will read - and, for an
    inequality, that numeric literals are interpreted in the dependent parameter's unit.
 5. Press **Add constraint**.
@@ -207,6 +225,25 @@ parameters.
 `=` ties the parameter to the expression, so it is no longer free. `≤` and `≥` against other
 parameters become **inequality constraints**, which are enforced as penalties during
 fitting.
+
+What an `=` expression can contain:
+
+- `+`, `-`, `*`, `/` and `**` between parameters, e.g.
+  `model_film_thickness + model_sio2_thickness`. The expression must have the unit of the
+  dependent parameter: a thickness can be set to a sum of thicknesses but not to an SLD.
+- Plain numbers, which have no unit. They can scale a parameter
+  (`0.5 * model_film_thickness`) but cannot be added to one that has a unit:
+  `model_film_thickness / 2 + 4` is refused for a thickness, because 4 is not a length.
+  This differs from `≤` and `≥`, where numbers are read in the dependent parameter's unit.
+- The constants `pi` and `e`, and functions such as `sqrt` and `exp` applied to numbers,
+  e.g. `sqrt(2) * model_d2o_roughness`.
+
+```{note}
+Mathematical functions of a parameter, such as `sqrt(model_film_thickness)` or
+`exp(1 / model_film_thickness)`, are not supported yet. Write `sqrt`, `exp` and `pi`
+without a `np.` or `math.` prefix: with a prefix, an expression that refers to a parameter
+passes the preview but is not added.
+```
 
 ```{warning}
 Inequality constraints need a BUMPS minimizer (`Analysis` › `Minimization method`). With
@@ -218,8 +255,9 @@ parameter values violate an inequality, and again fits will not start until they
 Existing constraints are listed in the `Active Constraints` table, with columns `No.`,
 `Type`, `Parameter` and `Expression`. The `Type` column tells the kinds apart - `expr` for a
 plain equality, `≤ ≥` for an inequality, `physics` for a recipe from the group above,
-`bound` for an upper bound and `value` for a fixed value - and each row can be removed
-individually.
+`link` for a model link from the group below, `bound` for an upper bound and `value` for a
+fixed value - and each row can be removed individually. Hover the `Type` of a `physics` or
+`link` row to see which parameters it ties.
 
 ### Link contrasts
 The `Link contrasts` group ties whole models together rather than single parameters. It
@@ -230,14 +268,27 @@ it shares the structure from the start.
 
 <!-- TODO: screenshot of the Link contrasts group -> _images/sample_link_contrasts.png -->
 
-1. Tick two or more models in the table. The ticked model highest in the list is the
-   reference; the others follow it.
+1. Tick two or more models in the table. One of them is the **reference**, marked
+   `(reference)` in the table; the others follow it. By default it is the ticked model
+   highest in the list; pick another one in **Reference model**.
 2. Leave **Also tie material SLDs and densities** unticked when the models are contrasts,
-   i.e. differ in their materials. Ticked, it ties every material's SLD, density and
-   scattering lengths to the reference's too, including the water that makes the
-   contrast.
-3. Press **Link selected models**. The line below the button reports how many
+   i.e. differ in their materials. Ticked, it ticks every material's SLD, density and
+   scattering lengths in the preview too, including the water that makes the contrast.
+3. Check the preview table, **Parameters to tie (n of m ticked)**. It lists every
+   parameter of the following models that can be tied, ticked if it will be. Untick the
+   ones that should stay free in the following model; tick a single material row to tie
+   only that material. **Tick all** and **Untick all** set every row at once, and
+   **Show the parameters that cannot be tied** adds the rows linking leaves alone, with
+   the reason in the `Note` column (see the list below).
+4. Press **Link selected models**. The line below the button reports how many
    parameters were tied, and lists any it could not tie, with the reason.
+
+The preview follows the project: it is updated when you change the ticked models, the
+reference or the materials checkbox, and when constraints change elsewhere. After linking,
+the tied rows move to the parameters that cannot be tied, as "already follows the
+reference"; the ones you left unticked can still be ticked and linked later. Your ticks are
+kept while the preview is updated, except that the materials checkbox resets the material
+rows. Adding, removing or renaming a model clears the selection.
 
 Parameters are matched by their position in the model, so linking needs the models to
 have the same layout: the same assemblies with the same layers, and, layer by layer,
@@ -247,24 +298,34 @@ Models that do not match are reported, e.g.
 and nothing is tied. When several models are ticked, either all of them are linked or,
 if one cannot be, none.
 
-What linking ties, and what it leaves alone:
+What linking ties by default, and what it leaves alone:
 
-- each model keeps its own **scale** and **background**;
+- each model keeps its own **scale** and **background** (`per contrast`);
 - thicknesses, roughnesses and the other structural parameters of corresponding layers
-  are tied;
+  are tied, unless unticked in the preview;
+- the superphase thickness and roughness and the subphase thickness play no part in the
+  calculation and are not tied (`not used`);
 - a material both models use is already one set of parameters and needs no tie. A
   material is shared only when both models' layers use the same entry of the
   `Material editor`. A model made with the duplicate button has its own copies of the
   materials, under the same names: to share the film SLD with the reference, pick its
   layers' materials again in the `Layer editor`;
-- a material that differs between the models (the water) keeps its own SLD, unless
-  **Also tie material SLDs and densities** is ticked;
+- a material that differs between the models (the water) keeps its own SLD
+  (`material chemistry`), unless its row is ticked;
 - a parameter that already follows the reference's is left as it is; one that follows
   any other parameter is not re-tied, and is listed.
 
-Each tie is listed in the `Model Constraints` table below, and with the other constraints
-in the `Active Constraints` table. Removing a row frees that parameter and restores the
-value and bounds it had before the link. Links are saved with the project.
+Each link is one row of the `Model links` table, e.g.
+`Film in CMSi → Film in D2O (5 tied)`, and one row of type `link` in the
+`Active Constraints` table. Select a link to see its parameters in **Tied parameters of
+link n**:
+
+- the remove button next to a parameter unties only that one; the rest of the link stays;
+- the remove button on the link row (in either table) removes the whole link.
+
+A parameter that is untied gets back the value and bounds it had before the link. Links are
+saved with the project. Linking the same models again, e.g. for a parameter left unticked
+the first time, adds a second link row.
 
 ### Trying the constraints out
 Four simulated datasets with a known ground truth are provided for exercising these

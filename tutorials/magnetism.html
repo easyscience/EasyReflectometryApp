@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Magnetic layers &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
+    <title>Magnetic layers &#8212; EasyReflectometry Dev Docs 1.6.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
+    <script src="../_static/documentation_options.js?v=fa68ba3e"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -413,7 +413,9 @@ when the last such layer stops doing so the moment is taken out of the fit. If t
 material’s SLD is set directly (unticked <strong>SLD computed from formula and density</strong>), its
 density still sets <code class="docutils literal notranslate"><span class="pre">ρM</span></code> while a layer takes <code class="docutils literal notranslate"><span class="pre">ρM</span></code> from it; the data then constrain only
 density × moment, so ticking one of the two for fitting unticks the other. Without such a
-layer the density sets nothing and is greyed out too.</p>
+layer the density sets nothing and is greyed out too. Greyed rows are only listed when the
+table’s variability filter is set to <strong>All parameters</strong>; the default, <strong>Active
+parameters</strong>, hides them.</p>
 <p>A layer whose <code class="docutils literal notranslate"><span class="pre">ρM</span></code> is given a constraint in the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page no longer takes it from the
 material: <strong>ρM from material</strong> is unticked, and the constraint is kept when the layer’s
 material changes.</p>

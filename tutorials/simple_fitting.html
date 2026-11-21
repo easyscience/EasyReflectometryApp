@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Simple fitting with a slab model &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
+    <title>Simple fitting with a slab model &#8212; EasyReflectometry Dev Docs 1.6.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
+    <script src="../_static/documentation_options.js?v=fa68ba3e"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -321,8 +321,16 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-controls">Basic controls</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-controls">Basic controls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#filtering-the-parameter-table">Filtering the parameter table</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#starting-following-and-cancelling-a-fit">Starting, following and cancelling a fit</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plot-control">Plot control</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#residuals">Residuals</a></li>
 </ul>
             </nav>
@@ -357,6 +365,75 @@ The graph window has the same functionality as the previous tabs, so it will not
 <li><p><strong>E</strong>: Choose the variable for fitting.</p></li>
 <li><p><strong>F</strong>: Fit the chosen variable (<strong>E</strong>) between the min. (<strong>C</strong>) and max. (<strong>D</strong>).</p></li>
 </ul>
+<section id="filtering-the-parameter-table">
+<h3>Filtering the parameter table<a class="headerlink" href="#filtering-the-parameter-table" title="Link to this heading">#</a></h3>
+<p>Two drop-downs above the table choose which parameters it lists. Each entry shows the
+number of parameters it matches.</p>
+<ul class="simple">
+<li><p><strong>Filter by name</strong>: <code class="docutils literal notranslate"><span class="pre">All</span> <span class="pre">names</span></code>, <code class="docutils literal notranslate"><span class="pre">Model</span></code>, <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> or <code class="docutils literal notranslate"><span class="pre">Background</span></code>, or type part of a
+name in the field next to it. <code class="docutils literal notranslate"><span class="pre">Model</span></code> and <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> go by what owns the parameter: only
+a model’s scale and background are experiment parameters, whatever the others are called.</p></li>
+<li><p><strong>Filter by variability</strong>:</p></li>
+</ul>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Choice</p></th>
+<th class="head"><p>Lists</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Active parameters</strong> (the default)</p></td>
+<td><p>The parameters that can be edited and fitted.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>All parameters</strong></p></td>
+<td><p>The same, plus the greyed rows: constrained and derived parameters, and parameters that currently do not affect the reflectivity.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Free parameters</strong></p></td>
+<td><p>The active parameters ticked for fitting.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Fixed parameters</strong></p></td>
+<td><p>The active parameters not ticked for fitting.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A parameter that a constraint takes over disappears from the default view; switch to
+<strong>All parameters</strong> to see its value.</p>
+</section>
+<section id="limits">
+<h3>Limits<a class="headerlink" href="#limits" title="Link to this heading">#</a></h3>
+<p>The app gives a new parameter default limits: -1 to 10 for an SLD (in
+10<sup>-6</sup>Å<sup>-2</sup>), 0 to 10 for the scale, and 50 % to 200 % of the starting
+value for a thickness or a roughness. These are starting points, not rules:</p>
+<ul class="simple">
+<li><p>A min (<strong>C</strong>) or max (<strong>D</strong>) you type is kept as typed. If the current value lies outside
+the new limit, the value is moved onto it. A min at or above the max (or a max at or below
+the min) is not accepted.</p></li>
+<li><p>A value typed in the table (<strong>B</strong>) stays within the limits next to it. Widen the limit
+first to go further.</p></li>
+<li><p>A value typed on the <code class="docutils literal notranslate"><span class="pre">Model</span></code> page - a thickness, a roughness, an SLD, a <code class="docutils literal notranslate"><span class="pre">ρM</span></code> - has no
+limits beside it, so there the value wins: a limit it passes is moved out to the new
+value.</p></li>
+</ul>
+<p>A limit outside what is physically possible - a negative thickness or roughness, an SLD
+outside -1 to 10, a scale outside 0 to 10 - is shown in red, and hovering it gives the
+reason. The limit is still the one the fit uses; the colour only marks it as unusual.</p>
+<p>A limit is also red when it is <code class="docutils literal notranslate"><span class="pre">inf</span></code> for a fitted parameter while the selected minimiser
+needs finite limits for every fitted parameter.</p>
+</section>
+<section id="starting-following-and-cancelling-a-fit">
+<h3>Starting, following and cancelling a fit<a class="headerlink" href="#starting-following-and-cancelling-a-fit" title="Link to this heading">#</a></h3>
+<p>The <strong>Start fitting</strong> button sits below the sidebar on both the <code class="docutils literal notranslate"><span class="pre">Basic</span> <span class="pre">controls</span></code> and the
+<code class="docutils literal notranslate"><span class="pre">Extra</span> <span class="pre">controls</span></code> (advanced) tabs. While a fit runs it reads <strong>Cancel fitting</strong>, and a progress bar
+with a line of text appears under it: the number of evaluations so far (optimiser steps for
+a BUMPS minimiser), the reduced χ² and the time elapsed. A fit has no knowable end, so the
+bar only shows that it is running.</p>
+<p>The same is shown in short form on every page except <code class="docutils literal notranslate"><span class="pre">Home</span></code>: a thin bar along the top of
+the status bar, and a <strong>Fit</strong> item (e.g. <code class="docutils literal notranslate"><span class="pre">132</span> <span class="pre">evaluations</span> <span class="pre">·</span> <span class="pre">reduced</span> <span class="pre">χ²</span> <span class="pre">1.2345</span></code>) that takes
+the place of the <strong>Calculator</strong> and <strong>Minimizer</strong> items for the duration of the run.</p>
+<p><strong>Cancel fitting</strong> stops any minimiser within one evaluation or step. A cancelled LMFit or
+DFO fit puts the parameters back to the values they had before the fit.</p>
+</section>
 </section>
 <section id="advanced-controls">
 <h2>Advanced controls<a class="headerlink" href="#advanced-controls" title="Link to this heading">#</a></h2>
@@ -372,9 +449,29 @@ The graph window has the same functionality as the previous tabs, so it will not
 controls; both selectors change the same project setting. Note that only <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> can model
 magnetic layers, so a sample with magnetism cannot be calculated with <code class="docutils literal notranslate"><span class="pre">refnx</span></code> - see
 <a class="reference internal" href="magnetism.html"><span class="std std-doc">magnetic layers</span></a>.</p>
+<p>A new project fits with <code class="docutils literal notranslate"><span class="pre">Bumps_lm</span></code> (Levenberg-Marquardt) unless another minimiser is
+chosen. A loaded project keeps the minimiser it was saved with.</p>
 <p>The first entry of the minimiser list (<strong>B</strong>), <code class="docutils literal notranslate"><span class="pre">BUMPS-DREAM</span> <span class="pre">(Bayesian)</span></code>, does not minimise
 but samples the posterior distribution of the fitted parameters; it replaces <strong>C</strong> and <strong>D</strong>
 with its own sampling settings. See <a class="reference internal" href="bayesian.html"><span class="std std-doc">Bayesian analysis</span></a>.</p>
+<section id="plot-control">
+<h3>Plot control<a class="headerlink" href="#plot-control" title="Link to this heading">#</a></h3>
+<p>The <strong>Plot control</strong> group of the advanced controls sets how the reflectivity chart is
+drawn. The same group is in the advanced controls of the <code class="docutils literal notranslate"><span class="pre">Model</span></code> and <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> pages,
+and the choice applies to all three.</p>
+<ul class="simple">
+<li><p><strong>Plot R(q)×q⁴</strong>: plots the reflectivity multiplied by q⁴, which flattens the Fresnel
+decay and brings out the fringes.</p></li>
+<li><p><strong>Linear R(q)-axis</strong>: plots R(q) on a linear axis instead of a logarithmic one. This and
+<strong>Plot R(q)×q⁴</strong> exclude each other: ticking one unticks the other.</p></li>
+<li><p><strong>Logarithmic q-axis</strong>: makes the q-axis logarithmic.</p></li>
+<li><p><strong>Show scale line</strong> and <strong>Show background line</strong>: draw the model’s scale and background
+as reference lines. They are not offered on the <code class="docutils literal notranslate"><span class="pre">Model</span></code> page, which shows no measured
+data.</p></li>
+</ul>
+<p>The axis title says what is plotted: R(q) or R(q)×q⁴ on a linear axis, log₁₀(R(q)) or
+log₁₀(R(q)×q⁴) on a logarithmic one.</p>
+</section>
 </section>
 <section id="residuals">
 <h2>Residuals<a class="headerlink" href="#residuals" title="Link to this heading">#</a></h2>
@@ -437,8 +534,16 @@ residuals.</p>
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-controls">Basic controls</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-controls">Basic controls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#filtering-the-parameter-table">Filtering the parameter table</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#starting-following-and-cancelling-a-fit">Starting, following and cancelling a fit</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-controls">Advanced controls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plot-control">Plot control</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#residuals">Residuals</a></li>
 </ul>
   </nav></div>

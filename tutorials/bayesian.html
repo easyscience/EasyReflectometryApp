@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Bayesian analysis &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
+    <title>Bayesian analysis &#8212; EasyReflectometry Dev Docs 1.6.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
+    <script src="../_static/documentation_options.js?v=fa68ba3e"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -381,10 +381,20 @@ get a distribution: a median, a credible interval, and the correlations between 
 </div>
 <p>The parameters that are sampled, and the ranges they are sampled in, are the ones ticked
 for fitting in the <code class="docutils literal notranslate"><span class="pre">Basic</span> <span class="pre">controls</span></code>, exactly as for a classical fit.</p>
-<p>With the Bayesian minimiser selected, the fit button in <code class="docutils literal notranslate"><span class="pre">Basic</span> <span class="pre">controls</span></code> reads
-<strong>Start sampling</strong> instead of <strong>Start fitting</strong>. It becomes <strong>Cancel fitting</strong> while a run
-is in progress; cancelling keeps the interface locked until the worker has actually
-stopped, so a superseded run can never write into the parameters of the next one.</p>
+<p>With the Bayesian minimiser selected, the fit button below the sidebar (on both the
+<code class="docutils literal notranslate"><span class="pre">Basic</span> <span class="pre">controls</span></code> and the <code class="docutils literal notranslate"><span class="pre">Extra</span> <span class="pre">controls</span></code> tabs) reads <strong>Start sampling</strong> instead of
+<strong>Start fitting</strong>. It becomes <strong>Cancel fitting</strong> while a run is in progress; cancelling
+keeps the interface locked until the worker has actually stopped, so a superseded run can
+never write into the parameters of the next one. A cancelled run is reported as cancelled,
+not as a failed fit.</p>
+<p>While a run is in progress, a thin bar along the top of the status bar, and a bar with a
+line of text under the button, show how far it has got. For sampling the bar fills up: the
+text names the phase (<strong>Burn-in</strong>, then <strong>Sampling</strong>), the generation out of the number the
+run will take, and the time elapsed. A classical fit has no knowable end, so its bar only
+shows that it is running; the text gives the number of evaluations (optimizer steps for a
+BUMPS minimiser), the reduced χ² and the time elapsed. The status bar shows the short form,
+e.g. <code class="docutils literal notranslate"><span class="pre">Sampling</span> <span class="pre">42</span> <span class="pre">%</span></code>, on every page except <code class="docutils literal notranslate"><span class="pre">Home</span></code>; see
+<a class="reference internal" href="simple_fitting.html"><span class="std std-doc">simple fitting</span></a>.</p>
 </section>
 <section id="reading-the-results">
 <h2>Reading the results<a class="headerlink" href="#reading-the-results" title="Link to this heading">#</a></h2>

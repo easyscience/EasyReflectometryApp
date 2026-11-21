@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Material and model setup &#8212; EasyReflectometry Dev Docs 1.5.0 documentation</title>
+    <title>Material and model setup &#8212; EasyReflectometry Dev Docs 1.6.0 documentation</title>
   
   
   
@@ -37,7 +37,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
   <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../_static/documentation_options.js?v=5eae0ad3"></script>
+    <script src="../_static/documentation_options.js?v=fa68ba3e"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,8 +142,8 @@
       
     
     
-    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>
-    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.5.0 documentation - Home"/>`);</script>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>
+    <script>document.write(`<img src="../_static/logo.png" class="logo__image only-dark" alt="EasyReflectometry Dev Docs 1.6.0 documentation - Home"/>`);</script>
   
   
 </a></div>
@@ -396,6 +396,9 @@ tick their <code class="docutils literal notranslate"><span class="pre">Fit</spa
 note <code class="docutils literal notranslate"><span class="pre">unused</span> <span class="pre">(SLD</span> <span class="pre">is</span> <span class="pre">fitted</span> <span class="pre">directly)</span></code>, because they no longer affect the
 reflectivity - they cannot be fitted or edited until the box is checked again.</p></li>
 </ul>
+<p>The greyed rows are listed on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page only when its variability filter is set
+to <strong>All parameters</strong>; the default, <strong>Active parameters</strong>, hides them (see
+<a class="reference internal" href="simple_fitting.html"><span class="std std-doc">simple fitting</span></a>).</p>
 <p>The molecular weight never appears in the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> table: it is a constant of the
 chemical formula (recomputed whenever the formula is edited), not a fittable parameter -
 fitting it alongside density would be degenerate, since only their ratio enters the SLD.</p>
@@ -478,6 +481,10 @@ By clicking an assembly, the <code class="docutils literal notranslate"><span cl
 <li><p><strong>1</strong>: Choose a material from materials in the <code class="docutils literal notranslate"><span class="pre">Material</span> <span class="pre">Editor</span></code>.</p></li>
 <li><p><strong>2</strong>+<strong>3</strong>: Setting the Thickness and Upper Roughness of the material in Angstrom, Å.</p></li>
 </ul>
+<p>A value typed here, or an SLD typed in the <code class="docutils literal notranslate"><span class="pre">Material</span> <span class="pre">editor</span></code>, is taken as typed even when
+it lies outside the parameter’s fit limits: the limit it passes is moved out to the new
+value. The limits themselves are shown and edited on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page, see
+<a class="reference internal" href="simple_fitting.html"><span class="std std-doc">simple fitting</span></a>.</p>
 </section>
 <section id="magnetism">
 <h3>Magnetism<a class="headerlink" href="#magnetism" title="Link to this heading">#</a></h3>
@@ -512,8 +519,13 @@ the calculation engine, and to constrain the parameters of the model.</p>
 same selector is available on the <code class="docutils literal notranslate"><span class="pre">Analysis</span></code> page. Only <code class="docutils literal notranslate"><span class="pre">refl1d</span></code> can model magnetic layers,
 so selecting <code class="docutils literal notranslate"><span class="pre">refnx</span></code> while the sample has magnetic layers is refused - see
 <a class="reference internal" href="magnetism.html"><span class="std std-doc">magnetic layers</span></a>.</p>
+<p>The <strong>Plot control</strong> group switches the reflectivity chart between a logarithmic R(q)
+axis, a linear one (<strong>Linear R(q)-axis</strong>) and R(q)×q⁴, and sets the q-axis; it is described
+in <a class="reference internal" href="simple_fitting.html"><span class="std std-doc">simple fitting</span></a>.</p>
 <p>Below these sit three constraint groups, from the most specific to the most general:
 <code class="docutils literal notranslate"><span class="pre">Physics</span> <span class="pre">constraints</span></code>, <code class="docutils literal notranslate"><span class="pre">Single</span> <span class="pre">constraints</span></code> and <code class="docutils literal notranslate"><span class="pre">Link</span> <span class="pre">contrasts</span></code>.</p>
+<p>All constraints are saved with the project. The groups are disabled while a fit is
+running.</p>
 <section id="physics-constraints">
 <h3>Physics constraints<a class="headerlink" href="#physics-constraints" title="Link to this heading">#</a></h3>
 <p>The <code class="docutils literal notranslate"><span class="pre">Physics</span> <span class="pre">constraints</span></code> group applies physically motivated constraints to an assembly with
@@ -563,10 +575,12 @@ parameters.</p>
 <ol class="arabic simple">
 <li><p>Pick the <strong>dependent parameter</strong> from the drop-down.</p></li>
 <li><p>Pick the relation: <code class="docutils literal notranslate"><span class="pre">=</span></code>, <code class="docutils literal notranslate"><span class="pre">≤</span></code> or <code class="docutils literal notranslate"><span class="pre">≥</span></code>.</p></li>
-<li><p>Type the <strong>expression</strong>, for example <code class="docutils literal notranslate"><span class="pre">np.sqrt(1</span> <span class="pre">/</span> <span class="pre">sld_ni)</span> <span class="pre">+</span> <span class="pre">4</span></code>. Use
-<strong>Insert parameter alias…</strong> to paste the alias of another parameter rather than typing
-it, and <strong>Insert total film thickness</strong> to use the read-only sum of all layer thicknesses
-between superphase and subphase.</p></li>
+<li><p>Type the <strong>expression</strong>, for example <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">model_d2o_roughness</span></code>. Parameters are referred
+to by their alias: the display name in lower case, with underscores, such as
+<code class="docutils literal notranslate"><span class="pre">model_d2o_thickness</span></code> for <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">D2O</span> <span class="pre">thickness</span></code>. Use <strong>Insert parameter alias…</strong> to
+paste the alias of another parameter rather than typing it, and <strong>Insert total film
+thickness</strong> to use the read-only sum of all layer thicknesses between superphase and
+subphase.</p></li>
 <li><p>Check the <strong>Preview</strong> line, which shows how the constraint will read - and, for an
 inequality, that numeric literals are interpreted in the dependent parameter’s unit.</p></li>
 <li><p>Press <strong>Add constraint</strong>.</p></li>
@@ -574,6 +588,25 @@ inequality, that numeric literals are interpreted in the dependent parameter’s
 <p><code class="docutils literal notranslate"><span class="pre">=</span></code> ties the parameter to the expression, so it is no longer free. <code class="docutils literal notranslate"><span class="pre">≤</span></code> and <code class="docutils literal notranslate"><span class="pre">≥</span></code> against other
 parameters become <strong>inequality constraints</strong>, which are enforced as penalties during
 fitting.</p>
+<p>What an <code class="docutils literal notranslate"><span class="pre">=</span></code> expression can contain:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">+</span></code>, <code class="docutils literal notranslate"><span class="pre">-</span></code>, <code class="docutils literal notranslate"><span class="pre">*</span></code>, <code class="docutils literal notranslate"><span class="pre">/</span></code> and <code class="docutils literal notranslate"><span class="pre">**</span></code> between parameters, e.g.
+<code class="docutils literal notranslate"><span class="pre">model_film_thickness</span> <span class="pre">+</span> <span class="pre">model_sio2_thickness</span></code>. The expression must have the unit of the
+dependent parameter: a thickness can be set to a sum of thicknesses but not to an SLD.</p></li>
+<li><p>Plain numbers, which have no unit. They can scale a parameter
+(<code class="docutils literal notranslate"><span class="pre">0.5</span> <span class="pre">*</span> <span class="pre">model_film_thickness</span></code>) but cannot be added to one that has a unit:
+<code class="docutils literal notranslate"><span class="pre">model_film_thickness</span> <span class="pre">/</span> <span class="pre">2</span> <span class="pre">+</span> <span class="pre">4</span></code> is refused for a thickness, because 4 is not a length.
+This differs from <code class="docutils literal notranslate"><span class="pre">≤</span></code> and <code class="docutils literal notranslate"><span class="pre">≥</span></code>, where numbers are read in the dependent parameter’s unit.</p></li>
+<li><p>The constants <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">e</span></code>, and functions such as <code class="docutils literal notranslate"><span class="pre">sqrt</span></code> and <code class="docutils literal notranslate"><span class="pre">exp</span></code> applied to numbers,
+e.g. <code class="docutils literal notranslate"><span class="pre">sqrt(2)</span> <span class="pre">*</span> <span class="pre">model_d2o_roughness</span></code>.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Mathematical functions of a parameter, such as <code class="docutils literal notranslate"><span class="pre">sqrt(model_film_thickness)</span></code> or
+<code class="docutils literal notranslate"><span class="pre">exp(1</span> <span class="pre">/</span> <span class="pre">model_film_thickness)</span></code>, are not supported yet. Write <code class="docutils literal notranslate"><span class="pre">sqrt</span></code>, <code class="docutils literal notranslate"><span class="pre">exp</span></code> and <code class="docutils literal notranslate"><span class="pre">pi</span></code>
+without a <code class="docutils literal notranslate"><span class="pre">np.</span></code> or <code class="docutils literal notranslate"><span class="pre">math.</span></code> prefix: with a prefix, an expression that refers to a parameter
+passes the preview but is not added.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Inequality constraints need a BUMPS minimizer (<code class="docutils literal notranslate"><span class="pre">Analysis</span></code> › <code class="docutils literal notranslate"><span class="pre">Minimization</span> <span class="pre">method</span></code>). With
@@ -584,8 +617,9 @@ parameter values violate an inequality, and again fits will not start until they
 <p>Existing constraints are listed in the <code class="docutils literal notranslate"><span class="pre">Active</span> <span class="pre">Constraints</span></code> table, with columns <code class="docutils literal notranslate"><span class="pre">No.</span></code>,
 <code class="docutils literal notranslate"><span class="pre">Type</span></code>, <code class="docutils literal notranslate"><span class="pre">Parameter</span></code> and <code class="docutils literal notranslate"><span class="pre">Expression</span></code>. The <code class="docutils literal notranslate"><span class="pre">Type</span></code> column tells the kinds apart - <code class="docutils literal notranslate"><span class="pre">expr</span></code> for a
 plain equality, <code class="docutils literal notranslate"><span class="pre">≤</span> <span class="pre">≥</span></code> for an inequality, <code class="docutils literal notranslate"><span class="pre">physics</span></code> for a recipe from the group above,
-<code class="docutils literal notranslate"><span class="pre">bound</span></code> for an upper bound and <code class="docutils literal notranslate"><span class="pre">value</span></code> for a fixed value - and each row can be removed
-individually.</p>
+<code class="docutils literal notranslate"><span class="pre">link</span></code> for a model link from the group below, <code class="docutils literal notranslate"><span class="pre">bound</span></code> for an upper bound and <code class="docutils literal notranslate"><span class="pre">value</span></code> for a
+fixed value - and each row can be removed individually. Hover the <code class="docutils literal notranslate"><span class="pre">Type</span></code> of a <code class="docutils literal notranslate"><span class="pre">physics</span></code> or
+<code class="docutils literal notranslate"><span class="pre">link</span></code> row to see which parameters it ties.</p>
 </section>
 <section id="link-contrasts">
 <h3>Link contrasts<a class="headerlink" href="#link-contrasts" title="Link to this heading">#</a></h3>
@@ -596,15 +630,27 @@ contrast, <strong>Add contrast of the selected model…</strong> (see <em>Contra
 it shares the structure from the start.</p>
 <!-- TODO: screenshot of the Link contrasts group -> _images/sample_link_contrasts.png -->
 <ol class="arabic simple">
-<li><p>Tick two or more models in the table. The ticked model highest in the list is the
-reference; the others follow it.</p></li>
+<li><p>Tick two or more models in the table. One of them is the <strong>reference</strong>, marked
+<code class="docutils literal notranslate"><span class="pre">(reference)</span></code> in the table; the others follow it. By default it is the ticked model
+highest in the list; pick another one in <strong>Reference model</strong>.</p></li>
 <li><p>Leave <strong>Also tie material SLDs and densities</strong> unticked when the models are contrasts,
-i.e. differ in their materials. Ticked, it ties every material’s SLD, density and
-scattering lengths to the reference’s too, including the water that makes the
-contrast.</p></li>
+i.e. differ in their materials. Ticked, it ticks every material’s SLD, density and
+scattering lengths in the preview too, including the water that makes the contrast.</p></li>
+<li><p>Check the preview table, <strong>Parameters to tie (n of m ticked)</strong>. It lists every
+parameter of the following models that can be tied, ticked if it will be. Untick the
+ones that should stay free in the following model; tick a single material row to tie
+only that material. <strong>Tick all</strong> and <strong>Untick all</strong> set every row at once, and
+<strong>Show the parameters that cannot be tied</strong> adds the rows linking leaves alone, with
+the reason in the <code class="docutils literal notranslate"><span class="pre">Note</span></code> column (see the list below).</p></li>
 <li><p>Press <strong>Link selected models</strong>. The line below the button reports how many
 parameters were tied, and lists any it could not tie, with the reason.</p></li>
 </ol>
+<p>The preview follows the project: it is updated when you change the ticked models, the
+reference or the materials checkbox, and when constraints change elsewhere. After linking,
+the tied rows move to the parameters that cannot be tied, as “already follows the
+reference”; the ones you left unticked can still be ticked and linked later. Your ticks are
+kept while the preview is updated, except that the materials checkbox resets the material
+rows. Adding, removing or renaming a model clears the selection.</p>
 <p>Parameters are matched by their position in the model, so linking needs the models to
 have the same layout: the same assemblies with the same layers, and, layer by layer,
 materials of the same kind (a density material and a plain-SLD material do not match).
@@ -612,24 +658,34 @@ Models that do not match are reported, e.g.
 <code class="docutils literal notranslate"><span class="pre">'Film</span> <span class="pre">in</span> <span class="pre">CMSi'</span> <span class="pre">and</span> <span class="pre">'Film</span> <span class="pre">in</span> <span class="pre">D2O'</span> <span class="pre">differ</span> <span class="pre">in</span> <span class="pre">layout</span> <span class="pre">at</span> <span class="pre">sample/2/layers/0/material/density</span></code>,
 and nothing is tied. When several models are ticked, either all of them are linked or,
 if one cannot be, none.</p>
-<p>What linking ties, and what it leaves alone:</p>
+<p>What linking ties by default, and what it leaves alone:</p>
 <ul class="simple">
-<li><p>each model keeps its own <strong>scale</strong> and <strong>background</strong>;</p></li>
+<li><p>each model keeps its own <strong>scale</strong> and <strong>background</strong> (<code class="docutils literal notranslate"><span class="pre">per</span> <span class="pre">contrast</span></code>);</p></li>
 <li><p>thicknesses, roughnesses and the other structural parameters of corresponding layers
-are tied;</p></li>
+are tied, unless unticked in the preview;</p></li>
+<li><p>the superphase thickness and roughness and the subphase thickness play no part in the
+calculation and are not tied (<code class="docutils literal notranslate"><span class="pre">not</span> <span class="pre">used</span></code>);</p></li>
 <li><p>a material both models use is already one set of parameters and needs no tie. A
 material is shared only when both models’ layers use the same entry of the
 <code class="docutils literal notranslate"><span class="pre">Material</span> <span class="pre">editor</span></code>. A model made with the duplicate button has its own copies of the
 materials, under the same names: to share the film SLD with the reference, pick its
 layers’ materials again in the <code class="docutils literal notranslate"><span class="pre">Layer</span> <span class="pre">editor</span></code>;</p></li>
-<li><p>a material that differs between the models (the water) keeps its own SLD, unless
-<strong>Also tie material SLDs and densities</strong> is ticked;</p></li>
+<li><p>a material that differs between the models (the water) keeps its own SLD
+(<code class="docutils literal notranslate"><span class="pre">material</span> <span class="pre">chemistry</span></code>), unless its row is ticked;</p></li>
 <li><p>a parameter that already follows the reference’s is left as it is; one that follows
 any other parameter is not re-tied, and is listed.</p></li>
 </ul>
-<p>Each tie is listed in the <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">Constraints</span></code> table below, and with the other constraints
-in the <code class="docutils literal notranslate"><span class="pre">Active</span> <span class="pre">Constraints</span></code> table. Removing a row frees that parameter and restores the
-value and bounds it had before the link. Links are saved with the project.</p>
+<p>Each link is one row of the <code class="docutils literal notranslate"><span class="pre">Model</span> <span class="pre">links</span></code> table, e.g.
+<code class="docutils literal notranslate"><span class="pre">Film</span> <span class="pre">in</span> <span class="pre">CMSi</span> <span class="pre">→</span> <span class="pre">Film</span> <span class="pre">in</span> <span class="pre">D2O</span> <span class="pre">(5</span> <span class="pre">tied)</span></code>, and one row of type <code class="docutils literal notranslate"><span class="pre">link</span></code> in the
+<code class="docutils literal notranslate"><span class="pre">Active</span> <span class="pre">Constraints</span></code> table. Select a link to see its parameters in <strong>Tied parameters of
+link n</strong>:</p>
+<ul class="simple">
+<li><p>the remove button next to a parameter unties only that one; the rest of the link stays;</p></li>
+<li><p>the remove button on the link row (in either table) removes the whole link.</p></li>
+</ul>
+<p>A parameter that is untied gets back the value and bounds it had before the link. Links are
+saved with the project. Linking the same models again, e.g. for a parameter left unticked
+the first time, adds a second link row.</p>
 </section>
 <section id="trying-the-constraints-out">
 <h3>Trying the constraints out<a class="headerlink" href="#trying-the-constraints-out" title="Link to this heading">#</a></h3>
