@@ -10,6 +10,10 @@
   your own, so the shipped files cannot be overwritten. Loading an example over
   unsaved work asks first. The examples are rebuilt with
   `python examples/make_example_projects.py`.
+- The Surfactant Layer table shows the area per molecule and the solvation
+  again; both read `--` since the move to easyscience 3.
+- Adding a contrast of a model with a surfactant layer no longer breaks the
+  Material editor (it needs easyreflectometry with the materials-palette fix).
 
 # Version 1.6.0 (21 Nov 2026)
 
@@ -32,10 +36,6 @@
   goes back to the starting values without asking.
 - The status bar no longer shows the previous project's reduced χ² after a
   project is loaded or reset.
-- The Surfactant Layer table shows the area per molecule and the solvation
-  again; both read `--` since the move to easyscience 3.
-- Adding a contrast of a model with a surfactant layer no longer breaks the
-  Material editor (it needs easyreflectometry with the materials-palette fix).
 - SLD charts: the z range can be set by hand. A new **SLD z range** group in
   the `Advanced controls` tab of the Sample and Analysis pages has an **Auto**
   box, on by default, which fits the z axis to the calculated profiles as
