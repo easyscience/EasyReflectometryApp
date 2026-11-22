@@ -45,6 +45,22 @@ def test_from_layers_collection_to_list_of_dicts_mirrors_parameter_enablement(mo
     assert subphase[0]['roughness_enabled'] is True
 
 
+def test_surfactant_rows_of_a_real_layer_show_numbers():
+    """The fakes above mirror the library; this pins the library itself. Since Core 3.0
+    area_per_molecule and solvent_fraction are Parameters, and a row holding their repr
+    showed "--" in the Surfactant table."""
+    from easyreflectometry.sample import SurfactantLayer
+
+    surfactant = SurfactantLayer()
+    surfactant.head_layer.area_per_molecule = 52.5
+    surfactant.head_layer.solvent_fraction = 0.3
+
+    head = layers_module._from_layers_collection_to_list_of_dicts(surfactant.layers)[1]
+
+    assert float(head['apm']) == 52.5
+    assert float(head['solvation']) == 0.3
+
+
 def test_from_layers_collection_to_list_of_dicts_gives_plain_layers_no_apm_placeholders():
     layer = make_layer(name='Film', material=make_material('Si'))
 
@@ -167,10 +183,10 @@ def test_layers_index_based_setters_update_target_row_even_when_current_index_di
     assert logic._layers[1].molecular_formula == 'C10H21'
 
     assert logic.set_solvation_at_index(1, 0.5) is True
-    assert logic._layers[1].solvent_fraction == 0.5
+    assert logic._layers[1].solvent_fraction.value == 0.5
 
     assert logic.set_apm_at_index(1, 55.0) is True
-    assert logic._layers[1].area_per_molecule == 55.0
+    assert logic._layers[1].area_per_molecule.value == 55.0
 
     assert logic.set_solvent_at_index(1, 0) is True
     assert logic._layers[1].solvent.name == 'Air'

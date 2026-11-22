@@ -16,6 +16,36 @@ from .minimizers import apply_app_defaults
 
 logger = logging.getLogger(__name__)
 
+#: The example projects shipped with the app, built by `examples/make_example_projects.py`.
+EXAMPLES_DIR = Path(__file__).resolve().parents[3] / 'Examples'
+
+
+def available_examples(directory: Path = EXAMPLES_DIR) -> list[dict]:
+    """The example projects, in the order of the directory's `index.json`.
+
+    Each entry has the `name` and `description` the Project page lists, and the absolute `path`
+    of the project file. An entry whose file is missing is left out, and an unreadable index
+    lists nothing: either is a packaging fault, which must not stop the app from starting.
+    """
+    try:
+        index = json.loads((directory / 'index.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        logger.warning('Cannot read the index of the example projects in %s', directory, exc_info=True)
+        return []
+    examples = []
+    for entry in index:
+        try:
+            path = directory / entry['path']
+            example = {'name': str(entry['name']), 'description': str(entry.get('description', '')), 'path': path.as_posix()}
+        except (KeyError, TypeError):
+            logger.warning('Skipping a malformed entry of the example index: %r', entry)
+            continue
+        if not path.is_file():
+            logger.warning('Skipping the example %r: %s does not exist', example['name'], path)
+            continue
+        examples.append(example)
+    return examples
+
 
 class Project:
     def __init__(self, project_lib: ProjectLib):
@@ -260,6 +290,19 @@ class Project:
 
     def load(self, path: str) -> None:
         self._project_lib.load_from_json(path)
+        self._run_post_load_hooks()
+
+    def load_example(self, path: str) -> None:
+        """Load an example's content as the start of a project that is not created yet.
+
+        Loading binds a project to the file's directory, which for an example is inside the
+        app's installation. The example is detached from it, as if its content had been built
+        in this session: there is nothing to save until the user creates a project from it, so
+        neither a save nor an automatic save can write over the shipped example.
+        """
+        self._project_lib.load_from_json(path)
+        self._project_lib._created = False
+        self._project_lib.set_path_project_parent(Path.home())
         self._run_post_load_hooks()
 
     def load_experiment(self, path: str) -> bool:

@@ -1,3 +1,16 @@
+# Version 1.6.1 (22 Nov 2026)
+
+- Example projects: a new **Examples** group on the Project page lists eight
+  ready-to-fit projects, from a single polymer film to joint fits of several
+  contrasts (derived with Add contrast, or built separately and tied with Link
+  contrasts and constraints across contrasts), inequality constraints and
+  polarized neutrons, with measured (Platypus, SURF) and simulated data.
+  Clicking one loads its sample, data and fit settings. An example is not a saved project: Save stays unavailable until
+  **Create a new project** (keeping the sample and data) gives it a location of
+  your own, so the shipped files cannot be overwritten. Loading an example over
+  unsaved work asks first. The examples are rebuilt with
+  `python examples/make_example_projects.py`.
+
 # Version 1.6.0 (21 Nov 2026)
 
 - Live preview of a running fit: the Analysis page's reflectivity, residual and
@@ -19,6 +32,10 @@
   goes back to the starting values without asking.
 - The status bar no longer shows the previous project's reduced χ² after a
   project is loaded or reset.
+- The Surfactant Layer table shows the area per molecule and the solvation
+  again; both read `--` since the move to easyscience 3.
+- Adding a contrast of a model with a surfactant layer no longer breaks the
+  Material editor (it needs easyreflectometry with the materials-palette fix).
 - SLD charts: the z range can be set by hand. A new **SLD z range** group in
   the `Advanced controls` tab of the Sample and Analysis pages has an **Auto**
   box, on by default, which fits the z axis to the calculated profiles as

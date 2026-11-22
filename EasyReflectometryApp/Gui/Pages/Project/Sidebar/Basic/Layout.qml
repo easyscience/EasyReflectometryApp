@@ -17,4 +17,12 @@ EaComponents.SideBarColumn {
         Loader { source: 'Groups/GetStarted.qml' }
     }
 
+    EaElements.GroupBox {
+        title: qsTr('Examples')
+        icon: 'database'
+        collapsed: false
+
+        Loader { source: 'Groups/Examples.qml' }
+    }
+
 }

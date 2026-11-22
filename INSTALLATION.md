@@ -19,7 +19,7 @@ On macOS, see the note on unidentified developers in the [README](./README.md#in
 
 When the chosen folder already holds an earlier version, the installer asks whether to remove it first.
 Choose _Yes_ to replace the earlier version with the new one in the same folder.
-Choose _No_ to keep the earlier version; the new one is then installed into a separate folder named after its version, such as `EasyReflectometryApp-1.6.0`.
+Choose _No_ to keep the earlier version; the new one is then installed into a separate folder named after its version, such as `EasyReflectometryApp-1.6.1`.
 Close EasyReflectometry before upgrading; an earlier version that is still running cannot be removed.
 
 Installers of version 1.5.0 and older cannot install over an existing installation, and stop with the message _"The directory you selected already exists and contains an installation"_.

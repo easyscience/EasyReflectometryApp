@@ -1,0 +1,42 @@
+[
+    {
+        "path": "PolymerFilm/project.json",
+        "name": "Polymer film on silicon",
+        "description": "neutrons, solid/liquid, slab model, Platypus@ANSTO"
+    },
+    {
+        "path": "DspcMonolayer/project.json",
+        "name": "DSPC monolayer on water",
+        "description": "neutrons, air/liquid, surfactant layer, SURF@ISIS"
+    },
+    {
+        "path": "NiTiMultilayer/project.json",
+        "name": "Ni/Ti multilayer",
+        "description": "neutrons, repeating multilayer, simulated"
+    },
+    {
+        "path": "FilmContrasts/project.json",
+        "name": "Film in three water contrasts",
+        "description": "neutrons, three contrasts fitted jointly, simulated"
+    },
+    {
+        "path": "DspcContrasts/project.json",
+        "name": "DSPC monolayer, three contrasts",
+        "description": "neutrons, three contrasts fitted jointly, SURF@ISIS"
+    },
+    {
+        "path": "LinkedFilmContrasts/project.json",
+        "name": "Polymer film, linked contrasts",
+        "description": "neutrons, linked contrasts, constraints across contrasts, simulated"
+    },
+    {
+        "path": "TwoLayerFilmConstraints/project.json",
+        "name": "Two-layer film with a thickness budget",
+        "description": "neutrons, inequality constraints, simulated"
+    },
+    {
+        "path": "FePolarized/project.json",
+        "name": "Magnetic iron film, polarized",
+        "description": "polarized neutrons, magnetic film, simulated"
+    }
+]
