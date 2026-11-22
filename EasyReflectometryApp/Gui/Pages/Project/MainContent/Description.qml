@@ -56,14 +56,19 @@ Rectangle {
                 text: qsTr('Location:')
             }
             EaElements.Label {
-                text: Globals.BackendWrapper.projectLocation
+                // An example is not on disk anywhere of the user's until it is created.
+                text: Globals.BackendWrapper.projectIsExample ?
+                          qsTr('Example, not saved. Use "Create a new project" to keep your work.') :
+                          Globals.BackendWrapper.projectLocation
             }
 
             EaElements.Label {
+                visible: !Globals.BackendWrapper.projectIsExample
                 font.bold: true
                 text: qsTr('Created:')
             }
             EaElements.Label {
+                visible: !Globals.BackendWrapper.projectIsExample
                 text: Globals.BackendWrapper.projectCreationDate
             }
         }

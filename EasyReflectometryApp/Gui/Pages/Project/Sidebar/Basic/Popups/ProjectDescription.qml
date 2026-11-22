@@ -55,6 +55,8 @@ EaComponents.ProjectDescriptionDialog {
 
     // Nothing is created: drop what was typed, so the next opening shows the project as it is.
     onRejected: loadFromBackend()
+    // A load since the last opening (a project or an example) brings its own name and description.
+    onAboutToShow: loadFromBackend()
 
     Component.onCompleted: {
         Globals.References.pages.project.sidebar.basic.popups.projectDescriptionDialog = projectDescriptionDialog

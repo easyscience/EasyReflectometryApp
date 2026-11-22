@@ -14,6 +14,7 @@ from PySide6.QtCore import Slot
 
 from .helpers import IO
 from .logic.project import Project as ProjectLogic
+from .logic.project import available_examples
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,10 @@ class Project(QObject):
         self._autosave_failing = False
         # Predicates that veto an automatic save while true (e.g. a fit thread writing the models).
         self._autosave_blockers: list[Callable[[], bool]] = []
+        # Read once: the examples are part of the installation.
+        self._examples = available_examples()
+        # Whether the content was loaded from an example and no project has been made of it since.
+        self._is_example = False
 
     def add_pre_save_hook(self, hook: Callable[[], None]) -> None:
         """Run `hook` before the project is serialized (save, create and dirty checks)."""
@@ -122,6 +127,16 @@ class Project(QObject):
     def autosaveFailing(self) -> bool:
         """Whether the most recent automatic save failed and no save has succeeded since."""
         return self._autosave_failing
+
+    @Property('QVariant', constant=True)
+    def examples(self) -> list[dict]:
+        """The example projects for the Project page: `name`, `description` and file `path`."""
+        return self._examples
+
+    @Property(bool, notify=createdChanged)
+    def isExample(self) -> bool:
+        """Whether the session holds an example that has not been created as a project yet."""
+        return self._is_example
 
     @Property(str, notify=createdChanged)
     def backupPath(self) -> str:
@@ -310,6 +325,8 @@ class Project(QObject):
                 self._logic.create()
             except Exception as ex:
                 error = self._save_error_message(ex)
+            if self._logic.created:
+                self._is_example = False
             # Emitted either way, so that the UI reflects the real `created` state even when the
             # directories were made but the file was not written.
             self.createdChanged.emit()
@@ -330,9 +347,22 @@ class Project(QObject):
 
     @Slot(str)
     def load(self, path: str) -> None:
+        self._load(path, self._logic.load, is_example=False)
+
+    @Slot(str)
+    def loadExample(self, path: str) -> None:
+        """Load an example as the start of a new project; see `logic.Project.load_example`.
+
+        Nothing is created: the example is listed as not created, so Save is unavailable and
+        closing does not ask, until "Create a new project" (keeping the sample and data) gives
+        it a location of the user's own.
+        """
+        self._load(path, self._logic.load_example, is_example=True)
+
+    def _load(self, path: str, load: Callable[[str], None], is_example: bool) -> None:
         path = IO.generalizePath(path)
         try:
-            self._logic.load(path)
+            load(path)
         except FileNotFoundError:
             self.projectLoadError.emit(f'The project file "{path}" does not exist.')
             return
@@ -354,6 +384,7 @@ class Project(QObject):
         except OSError as ex:
             self.projectLoadError.emit(f'The project file "{path}" could not be read.\n\nDetails: {ex}')
             return
+        self._is_example = is_example
         self._clear_last_saved()
         # The fingerprint is taken before the fan-out: whatever the relays emit, now or on a
         # later event-loop turn, is compared against the state that was just loaded.
@@ -433,6 +464,7 @@ class Project(QObject):
     @Slot()
     def reset(self) -> None:
         self._logic.reset()
+        self._is_example = False
         self._clear_last_saved()
         self._record_clean_state()
         with self._suspended_dirty_tracking():

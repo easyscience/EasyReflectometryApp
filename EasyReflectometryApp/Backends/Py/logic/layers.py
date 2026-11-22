@@ -158,7 +158,7 @@ class Layers:
         return False
 
     def set_apm_at_current_index(self, new_value: float) -> bool:
-        if self._layers[self.index].area_per_molecule != new_value:
+        if self._layers[self.index].area_per_molecule.value != new_value:
             self._layers[self.index].area_per_molecule = new_value
             return True
         return False
@@ -166,13 +166,13 @@ class Layers:
     def set_apm_at_index(self, index: int, new_value: float) -> bool:
         if not self._has_valid_layer_index(index):
             return False
-        if self._layers[index].area_per_molecule != new_value:
+        if self._layers[index].area_per_molecule.value != new_value:
             self._layers[index].area_per_molecule = new_value
             return True
         return False
 
     def set_solvation_at_current_index(self, new_value: float) -> bool:
-        if self._layers[self.index].solvent_fraction != new_value:
+        if self._layers[self.index].solvent_fraction.value != new_value:
             self._layers[self.index].solvent_fraction = new_value
             return True
         return False
@@ -180,7 +180,7 @@ class Layers:
     def set_solvation_at_index(self, index: int, new_value: float) -> bool:
         if not self._has_valid_layer_index(index):
             return False
-        if self._layers[index].solvent_fraction != new_value:
+        if self._layers[index].solvent_fraction.value != new_value:
             self._layers[index].solvent_fraction = new_value
             return True
         return False
@@ -421,8 +421,8 @@ def _from_layers_collection_to_list_of_dicts(layers_collection: LayerCollection)
         )
         if isinstance(layer, LayerAreaPerMolecule):
             layers_list[-1]['formula'] = layer.molecular_formula
-            layers_list[-1]['apm'] = str(layer.area_per_molecule)
+            layers_list[-1]['apm'] = str(layer.area_per_molecule.value)
             layers_list[-1]['solvent'] = layer.solvent.name
-            layers_list[-1]['solvation'] = str(layer.solvent_fraction)
+            layers_list[-1]['solvation'] = str(layer.solvent_fraction.value)
 
     return layers_list

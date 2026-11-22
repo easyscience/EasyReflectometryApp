@@ -1,5 +1,9 @@
 # Demo datasets for the constraints and multiple-contrast functionality
 
+These datasets, together with the measured ones in `measured/` and the polarized set in
+`polarized/` (see the end of this file), are also the source of the example projects on the
+Project page, built by `python examples/make_example_projects.py`.
+
 Six simulated neutron reflectometry files (ORSO `.ort`, 4 % noise, 5 % dQ/Q
 resolution) for demonstrating the constraint features in the application:
 inequality constraints, the derived total film thickness, and the physics-constraint
@@ -262,6 +266,61 @@ exercises the formula substitution and a solvent shared by two layers.
 5. Save and reload the project. The contrasts still share their structure, and
    each experiment keeps its model pairing.
 
+## 7. `linked_film_contrasts.ort` — linked models and constraints across contrasts
+
+One file, **three datasets** of a polymer film on silicon under three waters,
+for the other ways of tying contrasts together. **Add contrast** (dataset 5)
+derives a contrast from a model; here each contrast is a model of its own, built
+from the same palette materials, and what the contrasts have in common is
+expressed afterwards:
+
+- **one structure**: *Sample › Advanced › Link contrasts* ties the layer geometry;
+- **one scale**: the sample and its alignment did not change between the
+  measurements, so the H2O and CMSi scales equal the D2O scale;
+- **one D2O**: the D2O took up some H2O from the air, so its SLD is below the
+  nominal 6.36. The silicon-matched water (CMSi) was mixed from it, 38 % D2O and
+  62 % H2O by volume, so its SLD is `0.38 * D2O sld + 0.62 * H2O sld` and follows
+  the fitted D2O SLD.
+
+| layer | material (SLD / 10⁻⁶ Å⁻²) | value |
+|---|---|---|
+| superphase (beam side) | Si (2.07) | ∞ |
+| oxide | SiO2 (3.47) | **12 Å**, roughness 3 Å |
+| film | Polymer (**1.0**) | **120 Å**, roughness **6 Å** |
+| subphase | water | ∞, roughness **4 Å** |
+
+| dataset (`data_set`) | water (SLD) | scale | background |
+|---|---|---|---|
+| `1_D2O` (reference) | D2O (**6.20**) | **0.95** | 2e-7 |
+| `2_H2O` | H2O (−0.56) | 0.95 | 5e-6 |
+| `3_CMSi` | CMSi = 0.38 D2O + 0.62 H2O (2.0088) | 0.95 | 1e-6 |
+
+The example project **Polymer film, linked contrasts** (Project page › Examples)
+is this set-up, ready to fit; its *Single constraints* list shows the two links
+and the three expressions. Fitting it (Bumps_lm, from polymer 100 Å / SLD 1.5,
+oxide 20 Å, D2O 6.36, scale 1, backgrounds 1e-6) returns polymer 119.9 Å, SLD
+1.00, roughness 5.9 Å, oxide 12.0 Å, D2O SLD 6.19 (so CMSi 2.006), scale 0.951
+and backgrounds 2.0e-7 / 5.0e-6 / 1.0e-6. To build it by hand:
+
+1. In the *Material editor*, make Si, SiO2, Polymer, D2O, H2O and CMSi
+   (duplicate an existing material for each, so that all are plain-SLD materials).
+2. Build the D2O model Si | SiO2 | Polymer | D2O, one assembly per layer (the
+   parameter lists name a parameter by its model and assembly, so the oxide and
+   the polymer stay distinguishable). Duplicate it twice, and in each
+   copy pick the palette materials again: Si, SiO2, Polymer, and H2O or CMSi for
+   the subphase. Name the models `Film in D2O / H2O / CMSi`.
+3. *Experiment* › **Load experiment(s) from file(s)** with this file and pair
+   each experiment with its model.
+4. *Sample › Advanced › Link contrasts*: tick all three models, keep `Film in D2O`
+   as **Reference model** and leave **Also tie material SLDs and densities**
+   unticked. The oxide and film thicknesses and roughnesses and the subphase
+   roughness are tied; the shared materials need no tie.
+5. *Single constraints* › **Add constraint**: `Film in H2O scale` = `Film in D2O
+   scale`, the same for CMSi, and `CMSi sld` = `0.38 * D2O sld + 0.62 * H2O sld`.
+6. *Analysis*: free the oxide thickness, the film thickness, roughness and SLD,
+   the subphase roughness, the D2O SLD (bounds 5.8–6.36), the D2O scale and the
+   three backgrounds, and fit.
+
 ---
 
 ## Other things to show with any of the datasets
@@ -276,3 +335,32 @@ exercises the formula substitution and a solvent shared by two layers.
   probes the forbidden region (the meaningless penalty χ² is not displayed).
 - **Bayesian**: the DREAM sampler honours the same constraints — the posterior is
   cut off at the constraint boundary (visible in the marginal of t_A + t_B).
+
+---
+
+## Measured data (`measured/`)
+
+Copied from the easyreflectometry library's tutorials, where they are fitted step by step.
+
+| file | sample | instrument | library tutorial |
+|---|---|---|---|
+| `polymer_film_platypus.ort` | polymer film on Si / SiO2, against D2O | Platypus (ANSTO), from the refnx docs | `fitting/simple_fitting` |
+| `dspc_d70_d2o_surf.ort` | tail-deuterated DSPC monolayer on D2O | SURF (ISIS) | `fitting/monolayer` |
+| `dspc_contrasts_surf.ort` | DSPC monolayer, three datasets: d13 / D2O, d70 / D2O, d83 / ACMW | SURF (ISIS) | `advancedfitting/multi_contrast` |
+
+## Polarized data (`polarized/`)
+
+`fe_on_si_{uu,ud,du,dd}.dat`: the four spin channels of a magnetic Fe film, simulated by
+`generate_datasets.py` (4 % noise, 5 % dQ/Q, as above) and written one file per channel, as a
+polarized measurement usually arrives. The suffix is the channel the import dialog detects
+(`uu` = R++, `ud` = R+-, `du` = R-+, `dd` = R--).
+
+| layer | value |
+|---|---|
+| superphase | vacuum |
+| Fe film | **200 Å**, SLD 8.02, roughness 5 Å, magnetic SLD **5.0**, moment angle **40°** |
+| subphase | Si (2.07), roughness 3 Å |
+
+Load them with **Experiment › Load polarized experiment (file per channel)** on a model with a magnetic Fe layer
+(Refl1D calculator). Starting from 180 Å / 3.0 / 60° and fitting the thickness and both magnetic
+parameters gives 200 Å / 5.0 / 41°.

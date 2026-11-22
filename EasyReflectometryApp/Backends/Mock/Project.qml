@@ -25,6 +25,7 @@ QtObject {
         console.debug(`Creating project ${name}`)
         creationDate = `${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`
         created = true
+        isExample = false
         lastSaved = new Date().toISOString()
         hasUnsavedChanges = false
         projectSaved(projectFilePath())
@@ -57,11 +58,12 @@ QtObject {
         return true
     }
 
-    function hasCustomContent() { return created }
+    function hasCustomContent() { return created || isExample }
 
     function reset() {
         console.debug(`Reset project ${name}`)
         created = false
+        isExample = false
         lastSaved = ''
         hasUnsavedChanges = false
     }
@@ -70,6 +72,25 @@ QtObject {
         console.debug(`Loading project from ${path}`)
         creationDate = `${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`
         created = true
+        isExample = false
+        lastSaved = ''
+        hasUnsavedChanges = false
+    }
+
+    // Like the Python backend: an example is loaded as content of a project not created yet.
+    readonly property var examples: [
+        { name: 'Polymer film on silicon', description: 'Mock example: a slab model and one dataset.', path: 'mock/PolymerFilm/project.json' },
+        { name: 'Film in three water contrasts', description: 'Mock example: three contrasts fitted jointly.', path: 'mock/FilmContrasts/project.json' }
+    ]
+    property bool isExample: false
+
+    function loadExample(path) {
+        console.debug(`Loading example from ${path}`)
+        const example = examples.find(item => item.path === path)
+        name = example ? example.name : name
+        description = example ? example.description : description
+        created = false
+        isExample = true
         lastSaved = ''
         hasUnsavedChanges = false
     }

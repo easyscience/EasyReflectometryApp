@@ -9,7 +9,7 @@ import Gui.Globals as Globals
 
 EaComponents.ContentPage {
 
-    defaultInfo: Globals.BackendWrapper.projectCreated ?
+    defaultInfo: Globals.BackendWrapper.projectCreated || Globals.BackendWrapper.projectIsExample ?
                      '' :
                      qsTr('No project defined\n')
 
