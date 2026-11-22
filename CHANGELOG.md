@@ -13,7 +13,7 @@
 - The Surfactant Layer table shows the area per molecule and the solvation
   again; both read `--` since the move to easyscience 3.
 - Adding a contrast of a model with a surfactant layer no longer breaks the
-  Material editor (it needs easyreflectometry with the materials-palette fix).
+  Material editor, and a project saved in that state opens with a working one.
 
 # Version 1.6.0 (21 Nov 2026)
 
