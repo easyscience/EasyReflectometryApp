@@ -1,3 +1,11 @@
+# Unreleased
+
+- A splash screen appears within about a second of launching the application
+  and stays animated, with a line naming the current loading step, until the
+  main window is drawn. Before, nothing was shown for the 10–40 s the
+  application takes to start. `--no-splash` (or the environment variable
+  `EASYREFLECTOMETRY_NO_SPLASH=1`) starts without it.
+
 # Version 1.6.1 (22 Nov 2026)
 
 - Example projects: a new **Examples** group on the Project page lists eight
