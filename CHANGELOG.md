@@ -5,6 +5,9 @@
   main window is drawn. Before, nothing was shown for the 10–40 s the
   application takes to start. `--no-splash` (or the environment variable
   `EASYREFLECTOMETRY_NO_SPLASH=1`) starts without it.
+- Linux installer: installing now adds an EasyReflectometryApp icon to the
+  desktop and an entry with the app's logo to the Applications menu.
+  Uninstalling removes both.
 
 # Version 1.6.1 (22 Nov 2026)
 
