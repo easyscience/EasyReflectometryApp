@@ -1,5 +1,12 @@
 # Unreleased
 
+- Faster startup. The pages behind the `Project`, `Sample`, `Experiment`,
+  `Analysis` and `Summary` tabs are built the first time each tab is opened
+  rather than all before the main window appears, and the web engine behind
+  the Bayesian plots is loaded only when those plots are first shown, which
+  most helps the first launch after a reboot.
+- The **Data Explorer** table on the `Analysis` page marks the selected
+  experiment(s) again, as the one on the `Experiment` page does.
 - A splash screen appears within about a second of launching the application
   and stays animated, with a line naming the current loading step and a
   progress bar showing how much of the startup is left, until the main window

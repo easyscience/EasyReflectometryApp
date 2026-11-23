@@ -59,15 +59,36 @@ def test_main_registers_the_backend_singleton_before_the_splash_engine_exists():
     assert main.index('qmlRegisterSingletonType(') < main.index('splash = Splash(')
 
 
-def test_splash_shows_status_and_closes_once():
+def test_qt_webengine_is_bundled_but_not_loaded_at_startup():
+    # The WebEngine library takes seconds to load on the first launch after a boot, and the
+    # Bayesian views that use it are created on demand. Application sets the context-sharing
+    # attribute that QtWebEngineQuick.initialize() would otherwise set (see the smoke test).
+    main = (ROOT / 'EasyReflectometryApp' / 'main.py').read_text(encoding='utf-8')
+    freeze = (ROOT / 'tools' / 'Scripts' / 'FreezeApp.py').read_text(encoding='utf-8')
+
+    assert 'QtWebEngine' not in main
+    assert re.search(r"'--hidden-import',\s*'PySide6\.QtWebEngineQuick'", freeze)
+
+
+def test_application_window_creates_pages_on_first_visit_and_keeps_them():
+    window = (ROOT / 'EasyReflectometryApp' / 'Gui' / 'ApplicationWindow.qml').read_text(encoding='utf-8')
+    content_area = window[window.index('contentArea: [') : window.index(']', window.index('contentArea: ['))]
+
+    assert re.search(r'component Page: Loader \{\s*active: SwipeView\.isCurrentItem\s*onLoaded: active = true', window)
+    assert content_area.count('Page { source:') == 6
+    assert 'Loader' not in content_area
+
+
+def test_application_and_splash_smoke():
     completed = _run_python(
         """
         import sys
+        from PySide6.QtCore import QCoreApplication, Qt
         from PySide6.QtQuick import QQuickWindow
-        from PySide6.QtWidgets import QApplication
-        from EasyReflectometryApp.Startup import Splash
+        from EasyReflectometryApp.Startup import Application, Splash
 
-        app = QApplication(sys.argv)
+        app = Application(sys.argv)
+        print('SHARED CONTEXTS', QCoreApplication.testAttribute(Qt.AA_ShareOpenGLContexts))
         assert Splash(enabled=False) and not app.topLevelWindows()
 
         splash = Splash()
@@ -100,6 +121,7 @@ def test_splash_shows_status_and_closes_once():
     )
     output = completed.stdout + completed.stderr
     assert completed.returncode == 0, output
+    assert 'SHARED CONTEXTS True' in output, output
     assert 'STATUS Loading VERSION True' in output, output
     assert 'NO STEP (0.0, 0.0, False)' in output, output  # a status without `until` leaves the bar alone
     assert 'STEP (0.0, 0.5, True)' in output, output

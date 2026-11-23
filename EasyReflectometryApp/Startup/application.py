@@ -4,6 +4,7 @@
 import os
 import sys
 
+from PySide6.QtCore import QCoreApplication
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QOffscreenSurface
 from PySide6.QtGui import QOpenGLContext
@@ -14,6 +15,11 @@ from PySide6.QtWidgets import QApplication
 
 class Application(QApplication):  # QGuiApplication crashes when using in combination with QtCharts
     def __init__(self, sysArgv):
+        # Lets Qt WebEngine (the Bayesian plots) share graphics contexts with Qt Quick; it has to
+        # be set before the application exists. QtWebEngineQuick.initialize() would do this too,
+        # but it needs the very large WebEngine library loaded at startup (seconds on the first
+        # launch after a boot), whereas the views are only created once there is a Bayesian result.
+        QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
         super(Application, self).__init__(sysArgv)
         self.setApplicationName('EasyReflectometry')
         self.setOrganizationName('EasyScience')

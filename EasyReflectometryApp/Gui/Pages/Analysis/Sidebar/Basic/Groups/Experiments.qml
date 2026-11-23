@@ -180,9 +180,12 @@ EaElements.GroupBox {
                                       ? qsTr("Polarized experiment: %1 spin channel(s)").arg(Globals.BackendWrapper.analysisExperimentsChannelCount[index] ?? 0)
                                       : ""
 
+                        // Selection overlay on the No. cell, as in the Experiment page's table
+                        // (anchoring to parent.parent, the row, is not allowed: it is not a parent
+                        // or sibling, so the overlay never showed and Qt warned instead)
                         Rectangle {
                             visible: isSelected
-                            anchors.fill: parent.parent
+                            anchors.fill: parent
                             color: EaStyle.Colors.themeForegroundHovered
                             opacity: 0.2
                             z: -1

@@ -161,6 +161,10 @@ def runPyInstaller():
                 CONFIG.build_dir,  # Where to put all the temporary work files, .log, .pyz and etc. (default: ./build)
                 '--collect-all',
                 'reportlab.graphics.barcode',
+                # Qt WebEngine (the Bayesian plots) is only used from QML, and main.py no longer
+                # imports it at startup; this makes PyInstaller's hook bundle it all the same
+                '--hidden-import',
+                'PySide6.QtWebEngineQuick',
                 # arviz packages load bundled data files (e.g. example_data/data_local.json) at import time
                 '--collect-data',
                 'arviz',
