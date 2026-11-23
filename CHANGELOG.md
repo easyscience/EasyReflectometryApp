@@ -1,3 +1,9 @@
+# Unreleased
+
+- Linux installer: installing now adds an EasyReflectometryApp icon to the
+  desktop and an entry with the app's logo to the Applications menu.
+  Uninstalling removes both.
+
 # Version 1.6.1 (22 Nov 2026)
 
 - Example projects: a new **Examples** group on the Project page lists eight
