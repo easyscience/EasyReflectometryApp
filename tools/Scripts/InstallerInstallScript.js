@@ -98,38 +98,50 @@ Component.prototype.createOperations = function () {
     */
   }
 
-  //if (systemInfo.productType === "ubuntu")
-  if (installer.value("os") === "x11") {
-    component.addOperation(
-      "CreateDesktopEntry",
-      "@ProductName@.desktop",
-      "Comment=A scientific software for modelling and analysis of the neutron re data.\n" +
+  if (systemInfo.kernelType === "linux") {
+    // App.png is copied to the installation root by MakeInstaller.py, so the
+    // path does not depend on PyInstaller's bundle layout (_internal/ etc.).
+    var desktopEntry =
       "Type=Application\n" +
-      "Exec=@TargetDir@/@ProductName@/@ProductName@\n" +
-      "Path=@TargetDir@/@ProductName@\n" +
       "Name=@ProductName@\n" +
-      "GenericName=@ProductName@\n" +
-      "Icon=@TargetDir@/@ProductName@/@ProductName@App/Gui/Resources/Logo/App.png\n" +
+      "GenericName=Reflectometry data analysis\n" +
+      "Comment=Making reflectometry data analysis and modelling easy.\n" +
+      "Exec=\"@TargetDir@/@ProductName@/@ProductName@\"\n" +
+      "Path=@TargetDir@/@ProductName@\n" +
+      "Icon=@TargetDir@/App.png\n" +
       "Terminal=false\n" +
-      "Categories=Science;"
-    )
+      "StartupWMClass=@ProductName@\n" +
+      "Categories=Science;Education;"
 
-    /*
-    component.addOperation(
-      "Execute",
-      "gio",
-      "set", "@TargetDir@/@ProductName@.desktop",
-      "'metadata::trusted'", "yes"
-    )
-    */
+    // Applications menu / Activities entry. A relative file name is written to
+    // $XDG_DATA_HOME/applications (~/.local/share/applications) and removed on
+    // uninstall.
+    component.addOperation("CreateDesktopEntry", "@ProductName@.desktop", desktopEntry)
 
-    /*
-    component.addOperation(
-      "Copy",
-      "@TargetDir@/@ProductName@.desktop",
-      "/usr/share/applications/@ProductName@.desktop"
-    )
-    */
+    // Desktop icon. The desktop folder is localised (e.g. ~/Schreibtisch), so
+    // ask xdg-user-dir for it and fall back to ~/Desktop.
+    var desktopDir = ""
+    try {
+      var result = installer.execute("xdg-user-dir", ["DESKTOP"])
+      if (result.length > 1 && result[1] == 0) desktopDir = result[0].trim()
+    } catch (e) { }
+    if (desktopDir === "") desktopDir = installer.environmentVariable("HOME") + "/Desktop"
+
+    if (installer.fileExists(desktopDir)) {
+      var desktopFile = desktopDir + "/@ProductName@.desktop"
+      component.addOperation("CreateDesktopEntry", desktopFile, desktopEntry)
+      // GNOME (Ubuntu's desktop icons extension) shows a .desktop file on the
+      // desktop as a launchable icon only when it is executable and marked
+      // trusted; otherwise the user gets an "Allow Launching" prompt or a text
+      // file. Run through sh and ignore failures so non-GNOME desktops
+      // without gio still install cleanly.
+      component.addOperation(
+        "Execute",
+        "/bin/sh", "-c",
+        "chmod +x \"" + desktopFile + "\"; " +
+        "gio set \"" + desktopFile + "\" metadata::trusted true 2>/dev/null; true"
+      )
+    }
   }
 
 }

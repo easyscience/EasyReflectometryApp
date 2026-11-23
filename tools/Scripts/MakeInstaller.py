@@ -295,6 +295,10 @@ def createInstallerSourceDir():
         Functions.moveDir(source=freezed_app_src, destination=app_data_subsubdir_path)
         Functions.copyFile(source=CONFIG.license_file, destination=app_data_subsubdir_path)
         Functions.copyFile(source=CONFIG['release']['changelog_file'], destination=app_data_subsubdir_path)
+        if CONFIG.os == 'ubuntu':
+            # Icon for the .desktop entries created by InstallerInstallScript.js (Icon=@TargetDir@/App.png)
+            icon_png_path = os.path.join(CONFIG.package_name, *CONFIG['ci']['app']['icon']['dir'], 'App.png')
+            Functions.copyFile(source=icon_png_path, destination=app_data_subsubdir_path)
         # package: docs
         ##docs_subdir_path = os.path.join(packagesDirPath(), CONFIG['ci']['app']['setup']['build']['docs_package_subdir'])
         ##docs_data_subsubdir_path = os.path.join(docs_subdir_path, CONFIG['ci']['app']['setup']['build']['data_subsubdir'])
