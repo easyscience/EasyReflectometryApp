@@ -72,13 +72,25 @@ def test_splash_shows_status_and_closes_once():
 
         splash = Splash()
         [view] = app.topLevelWindows()
-        splash.status('Loading')
         root = view.rootObject()
+
+        def step():  # the QML `var` property reaches Python as a QJSValue
+            value = root.property('step').toVariant()
+            return float(value['from']), float(value['to']), value['ms'] > 0
+
+        splash.status('Loading')
         print('STATUS', root.property('status'), 'VERSION', bool(root.property('version')))
+        print('NO STEP', step())
+
+        splash.status('Importing', until=0.5)
+        print('STEP', step())
+        splash.status('Going back', until=0.3)  # never moves back
+        print('STEP', step())
 
         window = QQuickWindow()
         window.show()
         splash.handOver(window)
+        print('STEP', step())
         splash.finish()
         splash.finish()
         print('VISIBLE', view.isVisible())
@@ -87,7 +99,19 @@ def test_splash_shows_status_and_closes_once():
     output = completed.stdout + completed.stderr
     assert completed.returncode == 0, output
     assert 'STATUS Loading VERSION True' in output, output
+    assert 'NO STEP (0.0, 0.0, False)' in output, output  # a status without `until` leaves the bar alone
+    assert 'STEP (0.0, 0.5, True)' in output, output
+    assert 'STEP (0.5, 0.5, False)' in output, output
+    assert 'STEP (0.5, 1.0, True)' in output, output
     assert 'VISIBLE False' in output, output
+
+
+def test_main_startup_steps_fill_the_splash_bar_in_order():
+    main = (ROOT / 'EasyReflectometryApp' / 'main.py').read_text(encoding='utf-8')
+    fractions = [float(value) for value in re.findall(r'splash\.status\(.*until=([0-9.]+)\)', main)]
+
+    assert len(fractions) == 5
+    assert fractions == sorted(fractions) and 0 < fractions[0] and fractions[-1] < 1
 
 
 class _GraphicsApiSpy:

@@ -85,16 +85,19 @@ if __name__ == '__main__':
 
     # The slow part of the startup, under the splash. Plain import statements, so that
     # PyInstaller still finds the scientific stack (see MD/SPLASH-DESIGN.md).
-    splash.status('Loading the numerical libraries…')
+    # `until`: the fraction of the startup done when the step ends, which sets how far the
+    # splash's progress bar moves during it. Measured shares of Splash.TYPICAL_SECONDS;
+    # the rest (to 1) is the main window's first frame, after handOver.
+    splash.status('Loading the numerical libraries…', until=0.02)
     import numpy  # noqa: F401
 
-    splash.status('Loading the fitting libraries…')
+    splash.status('Loading the fitting libraries…', until=0.27)
     import easyscience  # noqa: F401
 
-    splash.status('Loading the reflectometry models…')
+    splash.status('Loading the reflectometry models…', until=0.53)
     import easyreflectometry  # noqa: F401
 
-    splash.status('Loading the backend…')
+    splash.status('Loading the backend…', until=0.66)
     if INSTALLER:
         from EasyReflectometryApp.Backends.Py import PyBackend
     else:
@@ -119,7 +122,7 @@ if __name__ == '__main__':
         engine.addImportPath(str(EASYAPP_IMPORT_DIR))
         console.debug('Paths added where QML searches for components')
 
-    splash.status('Building the interface…')
+    splash.status('Building the interface…', until=0.96)
     engine.load(path_main_qml)
     console.debug('Main QML component loaded')
 

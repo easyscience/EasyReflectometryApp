@@ -14,6 +14,17 @@ Rectangle {
 
     property string status: ''
     property string version: ''
+    // Set by splash.py once per startup step: fill the bar from `from` to `to` (fractions
+    // of the startup) over `ms` milliseconds.
+    property var step: ({ from: 0, to: 0, ms: 0 })
+
+    onStepChanged: {
+        fillAnimator.stop()
+        fillAnimator.from = -track.width * (1 - root.step.from)
+        fillAnimator.to = -track.width * (1 - root.step.to)
+        fillAnimator.duration = Math.max(root.step.ms, 1)
+        fillAnimator.start()
+    }
 
     readonly property color accent: '#4ec1ef'
     readonly property color textColor: '#e9e9e9'
@@ -77,17 +88,33 @@ Rectangle {
         }
     }
 
-    Item {  // indeterminate progress: a segment sweeping along the bottom edge
+    Item {  // progress along the bottom edge: a full-width fill slid in from the left
+        id: track
+
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 1 }
-        height: 3
+        height: 8
         clip: true
 
         Rectangle {
-            width: parent.width * 0.3
+            anchors.fill: parent
+            color: root.accent
+            opacity: 0.2
+        }
+
+        Rectangle {
+            id: fill
+
+            x: -width  // empty until the first step
+            width: parent.width
             height: parent.height
             color: root.accent
+        }
 
-            XAnimator on x { from: -width; to: root.width; duration: 1400; loops: Animation.Infinite }
+        XAnimator {
+            id: fillAnimator
+
+            target: fill
+            easing.type: Easing.OutQuad  // slows towards the step's end, where a late step waits
         }
     }
 }

@@ -1,8 +1,9 @@
 # Unreleased
 
 - A splash screen appears within about a second of launching the application
-  and stays animated, with a line naming the current loading step, until the
-  main window is drawn. Before, nothing was shown for the 10–40 s the
+  and stays animated, with a line naming the current loading step and a
+  progress bar showing how much of the startup is left, until the main window
+  is drawn. Before, nothing was shown for the 10–40 s the
   application takes to start. `--no-splash` (or the environment variable
   `EASYREFLECTOMETRY_NO_SPLASH=1`) starts without it.
 - Linux installer: installing now adds an EasyReflectometryApp icon to the
