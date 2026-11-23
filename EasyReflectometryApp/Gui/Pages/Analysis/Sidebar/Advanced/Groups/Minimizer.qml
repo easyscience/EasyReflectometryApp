@@ -321,7 +321,9 @@ EaElements.GroupBox {
                     }
                     return 0
                 }
-                onCurrentIndexChanged: {
+                // onActivated fires on user choice only: writing back from onCurrentIndexChanged
+                // re-entered the currentIndex binding above (a binding loop) whenever it updated.
+                onActivated: {
                     const options = Globals.BackendWrapper.bayesianInitializerOptions
                     if (currentIndex >= 0 && currentIndex < options.length) {
                         Globals.BackendWrapper.setBayesianInitializer(options[currentIndex])

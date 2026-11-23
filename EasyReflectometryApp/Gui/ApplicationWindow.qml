@@ -175,14 +175,23 @@ EaComponents.ApplicationWindow {
     // APP PAGES (MAIN AREA + SIDEBAR)
     //////////////////////////////////
 
+    // A page is created the first time its tab is shown, and then kept (it holds the user's
+    // input, and the backend keeps references to its charts). Creating all of them up front
+    // was most of the time spent loading this file. Pages draw the current backend state
+    // when they are created, so a page opened late shows the same as one created early.
+    component Page: Loader {
+        active: SwipeView.isCurrentItem
+        onLoaded: active = true  // replaces the binding, so leaving the tab keeps the page
+    }
+
     // Pages for the tab buttons described above
     contentArea: [
-        Loader { source: 'Pages/Home/Layout.qml' },
-        Loader { source: 'Pages/Project/Layout.qml' },
-        Loader { source: 'Pages/Sample/Layout.qml' },
-        Loader { source: 'Pages/Experiment/Layout.qml' },
-        Loader { source: 'Pages/Analysis/Layout.qml' },
-        Loader { source: 'Pages/Summary/Layout.qml' }
+        Page { source: 'Pages/Home/Layout.qml' },
+        Page { source: 'Pages/Project/Layout.qml' },
+        Page { source: 'Pages/Sample/Layout.qml' },
+        Page { source: 'Pages/Experiment/Layout.qml' },
+        Page { source: 'Pages/Analysis/Layout.qml' },
+        Page { source: 'Pages/Summary/Layout.qml' }
     ]
 
     /////////////

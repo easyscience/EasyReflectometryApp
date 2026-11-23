@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # © 2026 Contributors to the EasyReflectometryApp project <https://github.com/easyscience/EasyReflectometryApp>
 import argparse
+import logging as _logging
 import os
 import sys
 from pathlib import Path
@@ -15,16 +16,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQml import qmlRegisterSingletonType
 
-try:
-    from PySide6.QtWebEngineQuick import QtWebEngineQuick as _QtWebEngineQuick
-
-    _QtWebEngineQuick.initialize()
-except ImportError:
-    _QtWebEngineQuick = None
-
 # Suppress matplotlib debug/verbose logging (especially font lookup spam)
-import logging as _logging
-
 _logging.getLogger('matplotlib').setLevel(_logging.WARNING)
 _logging.getLogger('matplotlib.font_manager').setLevel(_logging.WARNING)
 
