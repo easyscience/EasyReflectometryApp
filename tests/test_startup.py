@@ -74,8 +74,10 @@ def test_splash_shows_status_and_closes_once():
         [view] = app.topLevelWindows()
         root = view.rootObject()
 
-        def step():  # the QML `var` property reaches Python as a QJSValue
-            value = root.property('step').toVariant()
+        def step():  # the QML `var` property is a QJSValue or an already-converted dict, depending on the PySide6 version
+            value = root.property('step')
+            if hasattr(value, 'toVariant'):
+                value = value.toVariant()
             return float(value['from']), float(value['to']), value['ms'] > 0
 
         splash.status('Loading')
