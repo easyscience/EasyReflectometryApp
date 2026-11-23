@@ -170,96 +170,76 @@ class Summary:
 
         experiments = ordered_experiment_items(self._project_lib)
         if experiments:
-            for offset, (experiment_index, experiment) in enumerate(experiments):
-                experiment_name = experiment.name or f'Experiment {experiment_index + 1}'
-                channels = getattr(experiment, 'available_channels', None)
-                if channels is None:
-                    datasets = [(experiment_name, experiment, None)]
-                else:
-                    # Polarized experiment: one series per measured spin channel.
-                    datasets = [
-                        (f'{experiment_name} ({channel.value})', experiment[channel], channel) for channel in channels
-                    ]
-                for label_name, dataset, channel in datasets:
-                    x = np.asarray(dataset.x)
-                    y = np.asarray(dataset.y)
-                    if x.size == 0 or y.size == 0:
-                        continue
-
-                    ye = np.asarray(dataset.ye) if getattr(dataset, 'ye', None) is not None else None
-                    model = experiment.model
-                    model.interface = self._project_lib._calculator
-                    # Each channel needs its own spin cross-section; the
-                    # channel-agnostic call would repeat one curve under four
-                    # channel labels. None means "cannot be calculated" (e.g. a
-                    # spin-flip channel of a non-magnetic model) — then the
-                    # measured data is shown without a calculated overlay.
-                    y_calc = self._calculated_curve(
-                        model, x, channel, resolution_function=getattr(dataset, 'resolution_function', None)
-                    )
-                    scale_factor = 10**offset
-
-                    color = CHANNEL_COLORS[channel.value] if channel is not None else (
-                        getattr(model, 'color', None) or '#1f77b4'
-                    )
-                    # Without a calculated curve the measured series carries the
-                    # legend entry, so the channel is still identifiable.
-                    measured_label = label_name if y_calc is None else None
-                    if ye is not None and ye.size == y.size:
-                        # ye holds variances (sigma**2); errorbar() needs one
-                        # standard deviation, same convention as the fitter
-                        # weights and the analysis-chart residuals.
-                        sigma = np.sqrt(np.clip(ye, 0.0, None))
-                        ax_reflectivity.errorbar(
-                            x,
-                            y * scale_factor,
-                            sigma * scale_factor,
-                            marker='',
-                            ls='',
-                            color=color,
-                            alpha=0.45,
-                        )
-                        if measured_label is not None:
-                            ax_reflectivity.plot(
-                                x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45, label=measured_label
-                            )
-                    else:
-                        ax_reflectivity.plot(
-                            x, y * scale_factor, ls='', marker='.', color=color, alpha=0.45, label=measured_label
-                        )
-
-                    if y_calc is not None:
-                        ax_reflectivity.plot(
-                            x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name
-                        )
+            self._plot_experiments(ax_reflectivity, experiments)
         else:
-            for model_index, model in enumerate(self._project_lib.models):
-                sample_data = self._project_lib.sample_data_for_model_at_index(model_index)
-                if sample_data.x.size == 0 or sample_data.y.size == 0:
-                    continue
-
-                color = getattr(model, 'color', None) or '#1f77b4'
-                ax_reflectivity.plot(
-                    sample_data.x,
-                    sample_data.y * (10**model_index),
-                    ls='-',
-                    color=color,
-                    zorder=10,
-                    label=model.name,
-                )
-
-        for model_index, model in enumerate(self._project_lib.models):
-            sld_data = self._project_lib.sld_data_for_model_at_index(model_index)
-            if sld_data.x.size == 0 or sld_data.y.size == 0:
-                continue
-
-            color = getattr(model, 'color', None) or '#1f77b4'
-            ax_sld.plot(sld_data.x, sld_data.y + (10 * model_index), color=color, ls='-', label=model.name)
+            self._plot_sample_curves(ax_reflectivity)
+        self._plot_sld_profiles(ax_sld)
 
         if ax_reflectivity.has_data():
             ax_reflectivity.legend(loc='best')
 
         return fig
+
+    def _plot_experiments(self, ax, experiments) -> None:
+        """Measured data with its calculated curve, each experiment a decade above the last."""
+        for offset, (experiment_index, experiment) in enumerate(experiments):
+            for label_name, dataset, channel in self._experiment_datasets(experiment_index, experiment):
+                self._plot_dataset(ax, experiment.model, label_name, dataset, channel, 10**offset)
+
+    @staticmethod
+    def _experiment_datasets(experiment_index: int, experiment) -> list:
+        """``(label, dataset, channel)`` of each series an experiment plots; channel None when unpolarized."""
+        experiment_name = experiment.name or f'Experiment {experiment_index + 1}'
+        channels = getattr(experiment, 'available_channels', None)
+        if channels is None:
+            return [(experiment_name, experiment, None)]
+        # Polarized experiment: one series per measured spin channel.
+        return [(f'{experiment_name} ({channel.value})', experiment[channel], channel) for channel in channels]
+
+    def _plot_dataset(self, ax, model, label_name: str, dataset, channel, scale_factor: float) -> None:
+        x = np.asarray(dataset.x)
+        y = np.asarray(dataset.y)
+        if x.size == 0 or y.size == 0:
+            return
+
+        model.interface = self._project_lib._calculator
+        # Each channel needs its own spin cross-section; the
+        # channel-agnostic call would repeat one curve under four
+        # channel labels. None means "cannot be calculated" (e.g. a
+        # spin-flip channel of a non-magnetic model) — then the
+        # measured data is shown without a calculated overlay.
+        y_calc = self._calculated_curve(model, x, channel, resolution_function=getattr(dataset, 'resolution_function', None))
+        color = CHANNEL_COLORS[channel.value] if channel is not None else _model_color(model)
+        # Without a calculated curve the measured series carries the
+        # legend entry, so the channel is still identifiable.
+        measured_label = label_name if y_calc is None else None
+        _plot_measured(ax, x, y * scale_factor, _sigma(dataset, y.size), scale_factor, color, measured_label)
+
+        if y_calc is not None:
+            ax.plot(x, y_calc * scale_factor, ls='-', color=color, zorder=10, label=label_name)
+
+    def _plot_sample_curves(self, ax) -> None:
+        """Without experiments, each model's calculated reflectivity, a decade above the last."""
+        for model_index, model, sample_data in self._nonempty_model_data(self._project_lib.sample_data_for_model_at_index):
+            ax.plot(
+                sample_data.x,
+                sample_data.y * (10**model_index),
+                ls='-',
+                color=_model_color(model),
+                zorder=10,
+                label=model.name,
+            )
+
+    def _plot_sld_profiles(self, ax) -> None:
+        for model_index, model, sld_data in self._nonempty_model_data(self._project_lib.sld_data_for_model_at_index):
+            ax.plot(sld_data.x, sld_data.y + (10 * model_index), color=_model_color(model), ls='-', label=model.name)
+
+    def _nonempty_model_data(self, data_at_index):
+        """Yield ``(index, model, data)`` for each model whose ``data_at_index(index)`` has points."""
+        for model_index, model in enumerate(self._project_lib.models):
+            data = data_at_index(model_index)
+            if data.x.size and data.y.size:
+                yield model_index, model, data
 
     def _inject_models_section(self, html: str) -> str:
         """Add the table of models when there are several (contrasts); the library's
@@ -297,3 +277,33 @@ class Summary:
             f'{table_rows}'
             '</table>'
         )
+
+
+_DEFAULT_COLOR = '#1f77b4'
+
+
+def _model_color(model) -> str:
+    return getattr(model, 'color', None) or _DEFAULT_COLOR
+
+
+def _sigma(dataset, size: int):
+    """One standard deviation per point, or None when the dataset has no usable errors.
+
+    ye holds variances (sigma**2); errorbar() needs one standard deviation, same
+    convention as the fitter weights and the analysis-chart residuals.
+    """
+    if getattr(dataset, 'ye', None) is None:
+        return None
+    ye = np.asarray(dataset.ye)
+    if ye.size != size:
+        return None
+    return np.sqrt(np.clip(ye, 0.0, None))
+
+
+def _plot_measured(ax, x, y_scaled, sigma, scale_factor: float, color: str, label: str | None) -> None:
+    """The measured points: error bars when there are errors, markers when there are none or a label to carry."""
+    if sigma is not None:
+        ax.errorbar(x, y_scaled, sigma * scale_factor, marker='', ls='', color=color, alpha=0.45)
+        if label is None:
+            return
+    ax.plot(x, y_scaled, ls='', marker='.', color=color, alpha=0.45, label=label)

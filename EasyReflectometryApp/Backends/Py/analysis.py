@@ -2,6 +2,7 @@ import logging
 import math
 import time
 from pathlib import Path
+from typing import Any
 from typing import List
 from typing import Optional
 
@@ -37,6 +38,46 @@ DEFAULT_PREVIEW_INTERVAL_S = FitterWorker.DEFAULT_PREVIEW_INTERVAL_S
 def _lacks_finite_bounds(param: dict) -> bool:
     """The library's rule for minimizers that need bounds (differential evolution)."""
     return not (math.isfinite(param['min']) and math.isfinite(param['max']))
+
+
+_FLATTENED_DRAWS_STATUS = 'Unavailable: the sampler returned flattened draws without chain identities.'
+_SINGLE_CHAIN_STATUS = 'Unavailable: only one chain was sampled (increase Population).'
+
+
+def _acceptance_rate(state) -> float | None:
+    """The sampler's acceptance rate as a fraction, None when the state does not tell."""
+    acceptance_rate = getattr(state, 'acceptance_rate', None)
+    if acceptance_rate is None:
+        return None
+    try:
+        if callable(acceptance_rate):
+            # BUMPS MCMCDraw.acceptance_rate() returns (generation ids, rate in percent)
+            # for the kept portion of the run.
+            _generations, rates = acceptance_rate()
+            acceptance_rate = float(np.mean(rates)) / 100.0
+        return float(acceptance_rate)
+    except (TypeError, ValueError):
+        return None
+
+
+def _chain_draws(draws, state) -> tuple[Any, str | None]:
+    """The draws per chain that arviz R-hat needs, (n_chains, n_draws, n_params).
+
+    Returns ``(draws_3d, None)``, or ``(None, why there are none)``.
+    """
+    if getattr(draws, 'ndim', 0) == 3 and draws.shape[0] >= 2:
+        return draws, None
+    if state is None or not hasattr(state, 'chains'):
+        return None, _FLATTENED_DRAWS_STATUS
+    try:
+        # BUMPS MCMCDraw.chains() returns (n_generations, n_chains, n_params).
+        _draw_counts, chains_3d, _logp_3d = state.chains()
+        if chains_3d.shape[1] < 2:
+            return None, _SINGLE_CHAIN_STATUS
+        # Transpose to arviz convention: (n_chains, n_draws, n_params)
+        return np.moveaxis(chains_3d, 0, 1), None
+    except Exception:
+        return None, _FLATTENED_DRAWS_STATUS
 
 
 class Analysis(QObject):
@@ -808,85 +849,55 @@ class Analysis(QObject):
             self._bayesian_logic.diagnostics = {}
             return
 
+        draws = posterior['draws']
         diagnostics = {
-            'nDraws': int(posterior['draws'].shape[0]),
-            'nParams': int(posterior['draws'].shape[1]),
+            'nDraws': int(draws.shape[0]),
+            'nParams': int(draws.shape[1]),
             'burnIn': self._bayesian_logic.burn,
             'thin': self._bayesian_logic.thin,
             'population': self._bayesian_logic.population,
             'samples': self._bayesian_logic.samples,
         }
 
-        # Extract acceptance rate from BUMPS state if available.
         # The sampler result dict exposes the BUMPS MCMCDraw under
         # 'internal_bumps_object' (easyscience core); fall back to the legacy
         # 'state' key for robustness against future core renames.
         state = posterior.get('internal_bumps_object') or posterior.get('state')
-        acceptance_rate = getattr(state, 'acceptance_rate', None)
+        acceptance_rate = _acceptance_rate(state)
         if acceptance_rate is not None:
-            try:
-                if callable(acceptance_rate):
-                    # BUMPS MCMCDraw.acceptance_rate() returns (generation ids, rate in percent)
-                    # for the kept portion of the run.
-                    _generations, rates = acceptance_rate()
-                    acceptance_rate = float(np.mean(rates)) / 100.0
-                diagnostics['acceptanceRate'] = float(acceptance_rate)
-            except (TypeError, ValueError):
-                pass
+            diagnostics['acceptanceRate'] = acceptance_rate
 
-        draws = posterior['draws']
-
-        # Try to obtain 3D draws (chains × draws × params) needed by arviz R-hat.
-        # The BUMPS MCMCDraw.chains() returns (n_generations, n_chains, n_params).
-        draws_3d = None
-        if getattr(draws, 'ndim', 0) == 3 and draws.shape[0] >= 2:
-            draws_3d = draws
-        elif state is not None and hasattr(state, 'chains'):
-            try:
-                _draw_counts, chains_3d, _logp_3d = state.chains()
-                # chains_3d: (n_generations, n_chains, n_params)
-                if chains_3d.shape[1] >= 2:  # at least 2 chains
-                    # Transpose to arviz convention: (n_chains, n_draws, n_params)
-                    draws_3d = np.moveaxis(chains_3d, 0, 1)
-                else:
-                    diagnostics['rhatStatus'] = 'Unavailable: only one chain was sampled (increase Population).'
-            except Exception:
-                draws_3d = None
-
-        if draws_3d is not None:
-            try:
-                import arviz as _arviz
-
-                # Build arviz InferenceData from 3D draws (n_chains, n_draws, n_params)
-                posterior_dict = {}
-                for i, name in enumerate(posterior['param_names']):
-                    posterior_dict[name] = draws_3d[:, :, i]
-                idata = _arviz.from_dict({'posterior': posterior_dict})
-                rhat = _arviz.rhat(idata)
-                if rhat is not None:
-                    # arviz.rhat returns an xarray Dataset; extract scalar values
-                    mapping = self._bayesian_display_names()
-                    mapped_rhat = {}
-                    for name in posterior['param_names']:
-                        val = float(rhat[name].values)
-                        display = mapping.get(name, name)
-                        mapped_rhat[display] = val
-                    finite_rhat = {name: value for name, value in mapped_rhat.items() if np.isfinite(value)}
-                    if finite_rhat:
-                        diagnostics['rhat'] = finite_rhat
-                    else:
-                        diagnostics['rhatStatus'] = 'Unavailable: all R-hat values are NaN/Inf.'
-                else:
-                    diagnostics['rhatStatus'] = 'Unavailable: arviz.rhat returned None.'
-            except ImportError:
-                diagnostics['rhatStatus'] = 'Unavailable: arviz is not installed.'
-            except Exception as exc:
-                diagnostics['rhatStatus'] = f'Unavailable: R-hat computation failed ({exc}).'
+        draws_3d, rhat_status = _chain_draws(draws, state)
+        if draws_3d is None:
+            diagnostics['rhatStatus'] = rhat_status
         else:
-            if 'rhatStatus' not in diagnostics:
-                diagnostics['rhatStatus'] = 'Unavailable: the sampler returned flattened draws without chain identities.'
+            diagnostics.update(self._rhat_diagnostics(draws_3d, posterior['param_names']))
 
         self._bayesian_logic.diagnostics = diagnostics
+
+    def _rhat_diagnostics(self, draws_3d, param_names) -> dict:
+        """``{'rhat': {display name: value}}`` of the finite R-hat values, else ``{'rhatStatus': why not}``.
+
+        :param draws_3d: arviz layout, (n_chains, n_draws, n_params).
+        """
+        try:
+            import arviz as _arviz
+
+            posterior_dict = {name: draws_3d[:, :, i] for i, name in enumerate(param_names)}
+            rhat = _arviz.rhat(_arviz.from_dict({'posterior': posterior_dict}))
+            if rhat is None:
+                return {'rhatStatus': 'Unavailable: arviz.rhat returned None.'}
+            # arviz.rhat returns an xarray Dataset; extract scalar values
+            mapping = self._bayesian_display_names()
+            mapped_rhat = {mapping.get(name, name): float(rhat[name].values) for name in param_names}
+            finite_rhat = {name: value for name, value in mapped_rhat.items() if np.isfinite(value)}
+            if not finite_rhat:
+                return {'rhatStatus': 'Unavailable: all R-hat values are NaN/Inf.'}
+            return {'rhat': finite_rhat}
+        except ImportError:
+            return {'rhatStatus': 'Unavailable: arviz is not installed.'}
+        except Exception as exc:
+            return {'rhatStatus': f'Unavailable: R-hat computation failed ({exc}).'}
 
     def _plot_file_path(self, stem: str, ext: str = 'png'):
         """Return a stable temporary file path for a rendered Bayesian plot."""
