@@ -1,5 +1,12 @@
 # Unreleased
 
+- With several experiments selected (or a polarized experiment's spin
+  channels shown), the reflectivity plots on the `Experiment` and `Analysis`
+  pages redraw their data when **Plot R(q)×q⁴** or **Linear R(q)-axis** is
+  toggled. Before, the axes changed but the data kept its previous values and
+  disappeared from view until the q-axis type was changed, and **Reset view**
+  could not bring it back. On the `Experiment` page, **Reset view** also fits
+  the y-axis to staggered curves.
 - The project name, description and location on the `Project` page wrap onto
   several lines instead of being cut off at the edge of the page, so long
   names and descriptions (such as those of the examples) can be read in full,

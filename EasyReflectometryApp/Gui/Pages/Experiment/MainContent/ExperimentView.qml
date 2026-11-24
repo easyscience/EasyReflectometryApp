@@ -93,6 +93,16 @@ Rectangle {
             }
         }
 
+        // Redraw the series this view creates and fills itself (multi-experiment and polarized
+        // modes) from the backend's current data and plot transform.
+        function refillOwnSeries() {
+            if (isMultiExperimentMode) {
+                updateMultiExperimentSeries()
+            } else if (isPolarizedMode) {
+                updateChannelSeries()
+            }
+        }
+
         function recreateSeriesForCurrentMode() {
             if (isMultiExperimentMode) {
                 // Multi-experiment mode: recreate all multi-experiment series
@@ -360,12 +370,17 @@ Rectangle {
             }
         }
 
-        // Watch for plot mode changes (R(q)×q⁴ toggle)
+        // Watch for plot mode changes (R(q)×q⁴, linear/log R axis)
         Connections {
             target: Globals.BackendWrapper
             function onPlotModeChanged() {
                 console.debug("ExperimentView: Plot mode changed, refreshing chart")
+                // Refills the single-experiment series, which the backend holds.
                 Globals.BackendWrapper.plottingRefreshExperiment()
+                // The per-experiment and per-channel series are this view's own: the backend
+                // only clears its series in those modes, so they are refilled here, or they
+                // keep the previous transform's values under the new axis range (#393).
+                chartView.refillOwnSeries()
                 // Delay resetAxes to allow axis range properties to update first
                 experimentResetAxesTimer.start()
             }
@@ -507,6 +522,8 @@ Rectangle {
                 chartView.axisY.min = chartView.axisY.minAfterReset
                 chartView.axisY.max = chartView.axisY.maxAfterReset
             }
+            // Staggered curves are shifted beyond the data's own range; fit the axis to them.
+            adjustAxisForStaggering()
         }
 
         property double yRange: Globals.BackendWrapper.plottingExperimentMaxY - Globals.BackendWrapper.plottingExperimentMinY

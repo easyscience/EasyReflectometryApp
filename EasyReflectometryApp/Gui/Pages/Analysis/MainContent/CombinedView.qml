@@ -152,12 +152,20 @@ Rectangle {
                     }
                 }
 
-                // Watch for plot mode changes (R(q)×q⁴ toggle)
+                // Watch for plot mode changes (R(q)×q⁴, linear/log R axis)
                 Connections {
                     target: Globals.BackendWrapper
                     function onPlotModeChanged() {
                         console.debug("CombinedView Analysis: Plot mode changed, refreshing chart")
+                        // Refills the single-experiment series, which the backend holds.
                         Globals.BackendWrapper.plottingRefreshAnalysis()
+                        // The per-experiment and per-channel series are this view's own: the
+                        // backend only clears its series in those modes, so they are refilled
+                        // here, or they keep the previous transform's values under the new
+                        // axis range (#393).
+                        if (analysisChartView.useDynamicSeries) {
+                            analysisChartView.updateMultiExperimentSeries()
+                        }
                         // Delay resetAxes to allow axis range properties to update first
                         combinedAnalysisResetAxesTimer.start()
                     }
