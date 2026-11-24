@@ -78,6 +78,8 @@ QtObject {
     function projectReset() { activeBackend.project.reset() }
     // Whether the samples, data or fit settings differ from a new project's
     function projectHasCustomContent() { return activeBackend.project.hasCustomContent() }
+    // Whether replacing the session loses work: unsaved changes, an edited example, or own content
+    function projectHasUnsavedWork() { return activeBackend.project.hasUnsavedWork() }
     function projectSave() { activeBackend.project.save() }
     function projectLoad(value) { activeBackend.project.load(value) }
     // Example projects shipped with the app: [{ name, description, path }]

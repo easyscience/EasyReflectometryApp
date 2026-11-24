@@ -59,6 +59,8 @@ QtObject {
     }
 
     function hasCustomContent() { return created || isExample }
+    // The mock's setters mark an example changed too, so the flag stands in for the content.
+    function hasUnsavedWork() { return created || isExample ? hasUnsavedChanges : hasCustomContent() }
 
     function reset() {
         console.debug(`Reset project ${name}`)

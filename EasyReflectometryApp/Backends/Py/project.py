@@ -197,6 +197,27 @@ class Project(QObject):
         """Whether creating a new project should first ask to keep or drop the current work."""
         return self._logic.has_custom_content()
 
+    @Slot(result=bool)
+    def hasUnsavedWork(self) -> bool:
+        """Whether replacing the whole session (e.g. by loading an example) loses work.
+
+        - A created project: whether it has unsaved changes.
+        - An example: whether its content has changed since it was loaded. An untouched
+          example can be loaded again as it is, so nothing is lost by replacing it.
+        - Anything else not created: whether it differs from a new project
+          (`hasCustomContent`).
+
+        Unlike `hasCustomContent`, an untouched example does not count: "Create a new project"
+        must still offer to keep it, but loading another example over it loses nothing.
+        """
+        if self._logic.created:
+            return self._has_unsaved_changes
+        if self._is_example:
+            # `_load` records the example as its clean state; markDirty is ignored while nothing
+            # is created, so the flag is not kept up to date and the content decides.
+            return not self._content_unchanged_since_clean()
+        return self._logic.has_custom_content()
+
     @Slot()
     def markDirty(self) -> None:
         """Record that the project differs from the file on disk.

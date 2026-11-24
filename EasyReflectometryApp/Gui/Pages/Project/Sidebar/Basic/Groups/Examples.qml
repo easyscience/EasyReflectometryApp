@@ -53,13 +53,11 @@ EaComponents.TableView {
     }
 
     // Loading replaces the whole session, like opening a project: ask first when that would
-    // lose work that is not on disk.
+    // lose work that is not on disk. An untouched example is not such work: it can be loaded
+    // again as it is.
     function requestExample(example) {
         console.debug(`Clicking example '${example.name}' ::: ${this}`)
-        const unsaved = Globals.BackendWrapper.projectCreated ?
-                            Globals.BackendWrapper.projectHasUnsavedChanges :
-                            Globals.BackendWrapper.projectHasCustomContent()
-        if (unsaved) {
+        if (Globals.BackendWrapper.projectHasUnsavedWork()) {
             replaceDialog.example = example
             replaceDialog.open()
         } else {
@@ -86,17 +84,33 @@ EaComponents.TableView {
         modal: true
         closePolicy: Popup.CloseOnEscape
 
-        EaElements.Label {
-            width: EaStyle.Sizes.fontPixelSize * 32
-            wrapMode: Text.WordWrap
-            text: {
-                const name = replaceDialog.example.name ?? ''
-                if (Globals.BackendWrapper.projectCreated) {
-                    return qsTr('The project "%1" has unsaved changes. Loading the example "%2" discards them.')
-                               .arg(Globals.BackendWrapper.projectName).arg(name)
+        // The dialog takes its width from its content's implicit width. A Label's is its text on
+        // one line however `width` is set (and it is read-only), so the label sits in a Column,
+        // whose implicit width is the label's actual width.
+        Column {
+            EaElements.Label {
+                id: replaceMessage
+                // As wide as the text, wrapping beyond a readable line length.
+                width: Math.min(EaStyle.Sizes.fontPixelSize * 28, replaceMessageMetrics.advanceWidth + 1)
+                wrapMode: Text.WordWrap
+                TextMetrics {
+                    id: replaceMessageMetrics
+                    font: replaceMessage.font
+                    text: replaceMessage.text
                 }
-                return qsTr('This session holds work that has not been saved to a project. Loading the example "%1" discards it.')
-                           .arg(name)
+                text: {
+                    const name = replaceDialog.example.name ?? ''
+                    if (Globals.BackendWrapper.projectCreated) {
+                        return qsTr('The project "%1" has unsaved changes. Loading the example "%2" discards them.')
+                                   .arg(Globals.BackendWrapper.projectName).arg(name)
+                    }
+                    if (Globals.BackendWrapper.projectIsExample) {
+                        return qsTr('The current example has been changed, and the changes have not been saved to a project. Loading the example "%1" discards them.')
+                                   .arg(name)
+                    }
+                    return qsTr('This session holds work that has not been saved to a project. Loading the example "%1" discards it.')
+                               .arg(name)
+                }
             }
         }
 

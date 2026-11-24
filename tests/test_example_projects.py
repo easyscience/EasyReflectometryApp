@@ -172,6 +172,55 @@ def test_creating_a_project_from_an_example_keeps_its_content(qcore_application,
     assert len(saved['models']['data']) == 3
 
 
+@pytest.mark.parametrize('relative_path', list(EXPECTED))
+def test_an_untouched_example_is_not_unsaved_work(qcore_application, relative_path):
+    """Loading another example over an untouched one does not ask (issue #397).
+
+    The deferred relays of the load (e.g. the coalesced constraintsChanged) land one event-loop
+    turn later; they must not make the example look changed.
+    """
+    backend = backend_module.PyBackend()
+    project = backend._project
+    project.loadExample(str(EXAMPLES_DIR / relative_path))
+    qcore_application.processEvents()
+
+    assert project.hasUnsavedWork() is False
+    # "Create a new project" still offers to keep the example's sample and data.
+    assert project.hasCustomContent() is True
+
+
+def test_an_edited_example_is_unsaved_work_until_another_one_replaces_it(qcore_application):
+    backend = backend_module.PyBackend()
+    project = backend._project
+    project.loadExample(str(EXAMPLES_DIR / 'DspcContrasts' / 'project.json'))
+    qcore_application.processEvents()
+
+    backend._analysis.setMinimizerCurrentIndex(backend._analysis.minimizerCurrentIndex + 1)
+    assert project.hasUnsavedWork() is True
+
+    project.loadExample(str(EXAMPLES_DIR / 'FilmContrasts' / 'project.json'))
+    qcore_application.processEvents()
+    assert project.hasUnsavedWork() is False
+
+
+def test_unsaved_work_outside_examples(qcore_application, tmp_path):
+    """Outside an example, unsaved work is what it was before: own content, or unsaved changes."""
+    backend = backend_module.PyBackend()
+    project = backend._project
+    assert project.hasUnsavedWork() is False
+
+    backend._analysis.setMinimizerCurrentIndex(backend._analysis.minimizerCurrentIndex + 1)
+    assert project.hasUnsavedWork() is True
+
+    project.setName('Saved')
+    project.setLocation(str(tmp_path / 'Saved'))
+    project.create()
+    assert project.hasUnsavedWork() is False
+
+    project.setDescription('Edited')
+    assert project.hasUnsavedWork() is True
+
+
 def test_loading_a_project_or_resetting_ends_the_example(qcore_application, tmp_path):
     backend = backend_module.PyBackend()
     project = backend._project
@@ -207,7 +256,11 @@ def test_qml_lists_the_examples_and_loads_them_as_examples():
     assert "Loader { source: 'Groups/Examples.qml' }" in sidebar_qml
     assert 'model: Globals.BackendWrapper.projectExamples' in examples_qml
     assert 'Globals.BackendWrapper.projectLoadExample(example.path)' in examples_qml
-    # Unsaved work is not discarded without asking.
+    # Unsaved work is not discarded without asking, and an untouched example is not such work.
     assert 'replaceDialog.open()' in examples_qml
+    assert 'Globals.BackendWrapper.projectHasUnsavedWork()' in examples_qml
+    assert 'projectHasCustomContent' not in examples_qml
+    assert 'activeBackend.project.hasUnsavedWork()' in wrapper_qml
+    assert 'function hasUnsavedWork()' in mock_qml
     # A loaded example shows its description instead of "No project defined".
     assert 'projectIsExample' in page_qml
