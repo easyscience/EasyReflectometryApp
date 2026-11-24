@@ -1,5 +1,9 @@
 # Unreleased
 
+- The project name, description and location on the `Project` page wrap onto
+  several lines instead of being cut off at the edge of the page, so long
+  names and descriptions (such as those of the examples) can be read in full,
+  also at the minimum window size.
 - Faster startup. The pages behind the `Project`, `Sample`, `Experiment`,
   `Analysis` and `Summary` tabs are built the first time each tab is opened
   rather than all before the main window appears, and the web engine behind
