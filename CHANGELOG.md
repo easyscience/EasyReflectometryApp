@@ -1,5 +1,13 @@
 # Unreleased
 
+- The parameter table on the `Analysis` page names each layer of a multilayer
+  (or a surfactant's head and tail) after the layer, e.g. `SiO2 thickness` and
+  `Film thickness`, instead of naming both after the assembly. A layer shared
+  by several models is no longer prefixed with all their names (the ⇄ marker
+  and its tooltip say which models share it), so in *Film in three water
+  contrasts* its rows are no longer shortened to an indistinguishable
+  `Film in … thickness`. Typing a model's name in the filter still finds the
+  layers it shares. Layer rows that would still read alike are numbered.
 - With several experiments selected (or a polarized experiment's spin
   channels shown), the reflectivity plots on the `Experiment` and `Analysis`
   pages redraw their data when **Plot R(q)×q⁴** or **Linear R(q)-axis** is

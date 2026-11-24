@@ -154,6 +154,28 @@ def test_the_linked_contrasts_example_lists_its_links_and_constraints(qcore_appl
     assert cmsi.value == pytest.approx(0.38 * 6.2 + 0.62 * h2o.value)
 
 
+def test_the_film_contrasts_table_names_each_layer(qcore_application):
+    """Issue #394: the shared oxide and film layers were both 'Film in D2O+Film in H2O+Film in
+    CMSi Oxide and film thickness', which the table elided to 'Film in … thickness'."""
+    backend = backend_module.PyBackend()
+    backend._project.loadExample(str(EXAMPLES_DIR / 'FilmContrasts' / 'project.json'))
+    logic = backend._analysis._parameters_logic
+
+    names = [row['display_name'] for row in logic.all_parameters() if row['display_name'].endswith(' thickness')]
+
+    assert names == [
+        'Superphase thickness',
+        'Film thickness',
+        'SiO2 thickness',
+        'Film in D2O Subphase thickness',
+        'Film in H2O Subphase thickness',
+        'Film in CMSi Subphase thickness',
+    ]
+    # A shared layer no longer carries the models' names, but filtering by one still finds it.
+    logic.set_name_filter_criteria('Film in H2O')
+    assert 'SiO2 thickness' in [row['display_name'] for row in logic.parameters]
+
+
 def test_creating_a_project_from_an_example_keeps_its_content(qcore_application, tmp_path):
     backend = backend_module.PyBackend()
     project = backend._project

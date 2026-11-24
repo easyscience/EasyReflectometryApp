@@ -117,8 +117,10 @@ class Parameters:
             return True
 
         normalized = criteria.lower()
+        # A shared layer's name leaves out the models holding it; they still find it.
         searchable_text = ' '.join(
-            str(parameter.get(key, '')) for key in ('name', 'display_name', 'group', 'unique_name')
+            [str(parameter.get(key, '')) for key in ('name', 'display_name', 'group', 'unique_name')]
+            + [str(model_name) for model_name in parameter.get('sharedBy', [])]
         ).lower()
 
         if normalized == 'model':
@@ -286,8 +288,10 @@ def _matches_variability(parameter: dict[str, Any], criteria: str) -> bool:
 def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> list[dict[str, Any]]:
     """Convert parameters to list of dictionaries with simplified logic.
 
-    Layer parameters (thickness, roughness) are prefixed with model identifier (e.g., M1, M2).
-    Material parameters and model parameters (scale, background) are not prefixed to avoid duplication.
+    Layer parameters (thickness, roughness, magnetism) are named after their layer and, when
+    one model alone holds them, prefixed with that model's name (e.g. ``M1 Film thickness``);
+    a layer shared by several models is marked shared instead. Material parameters and model
+    parameters (scale, background) are not prefixed to avoid duplication.
     """
     # The models each parameter belongs to (several when contrasts share an object), and
     # how many parameters of other models follow it (equality ties between contrasts).
@@ -300,13 +304,22 @@ def _from_parameters_to_list_of_dicts(parameters: List[Parameter], models) -> li
         followed_by=_count_followers(parameters, owners),
         # Materials some layer takes its rho_m from: only their moment acts.
         coupled_materials=coupled_material_ids(models),
-        aliases=_AliasRegistry(),
+        layer_labels=_layer_labels(models),
     )
 
-    parameter_list = [
-        _build_row(parameter, path, model_idx, context)
-        for model_idx, parameter, path in _rows_in_table_order(parameters, model_paths)
-    ]
+    parameter_list = []
+    layer_rows = []
+    for model_idx, parameter, path in _rows_in_table_order(parameters, model_paths):
+        row = _build_row(parameter, path, model_idx, context)
+        parameter_list.append(row)
+        if _is_per_layer_parameter(parameter, path):
+            layer_rows.append(row)
+    # Layer rows still named alike (e.g. two assemblies given one name) are told apart
+    # by number; the aliases follow the final names.
+    _number_repeated_names(layer_rows)
+    aliases = _AliasRegistry()
+    for row in parameter_list:
+        row['alias'] = aliases.make(row['display_name'] or row['object'].display_name)
 
     # A constrained row names the parameters it depends on as the table does, model
     # prefix included, whichever model they belong to (a linked contrast follows
@@ -345,7 +358,50 @@ class _RowContext(NamedTuple):
     owners: dict[str, list[int]]
     followed_by: dict[str, int]
     coupled_materials: set[int]
-    aliases: _AliasRegistry
+    #: ``{id(layer): what its parameters are called}``, see ``_layer_labels``.
+    layer_labels: dict[int, str]
+
+
+def _layer_labels(models) -> dict[int, str]:
+    """``{id(layer): label}``: what each layer's parameters are named after in the table.
+
+    A layer alone in its assembly goes by the assembly's name, so that renaming an assembly
+    in the Model Editor renames its rows. A layer of a multilayer (or a surfactant's head and
+    tail) goes by its own name: they share the assembly's (#394). Layers of one model that
+    would still be named alike go by their position, as the Model Editor numbers them.
+    A layer shared by several models is labelled under the first.
+    """
+    labels: dict[int, str] = {}
+    for model in models:
+        entries = []
+        for assembly in getattr(model, 'sample', None) or []:
+            layers = list(getattr(assembly, 'layers', None) or [])
+            for position, layer in enumerate(layers, start=1):
+                if id(layer) in labels:
+                    continue
+                label = assembly.name if len(layers) == 1 else layer.name
+                entries.append((layer, assembly, len(layers), position, label))
+        taken: dict[str, int] = {}
+        for *_, label in entries:
+            taken[label] = taken.get(label, 0) + 1
+        for layer, assembly, layer_count, position, label in entries:
+            if taken[label] > 1 and layer_count > 1:
+                label = f'{assembly.name} layer {position}'
+            labels[id(layer)] = label
+    return labels
+
+
+def _number_repeated_names(rows: list[dict[str, Any]]) -> None:
+    """Number the ``rows`` that share a display name: ``X thickness (1)``, ``X thickness (2)``."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row['display_name']] = counts.get(row['display_name'], 0) + 1
+    seen: dict[str, int] = {}
+    for row in rows:
+        name = row['display_name']
+        if counts[name] > 1:
+            seen[name] = seen.get(name, 0) + 1
+            row['display_name'] = row['name'] = f'{name} ({seen[name]})'
 
 
 def _parameter_owners(model_paths: list[dict]) -> dict[str, list[int]]:
@@ -396,12 +452,12 @@ def _build_row(parameter: Parameter, path: list, model_idx: int, context: _RowCo
     is_layer_param = _is_per_layer_parameter(parameter, path)
     independent = is_independent(parameter)
 
-    display_name, group_name = _parameter_display_data(parameter, path)
-    # Add model prefix only to layer parameters (thickness, roughness); a layer shared
-    # by several models carries all their names.
-    if is_layer_param:
-        owner_names = [get_original_name(models[index]) for index in shared_by]
-        display_name = f'{"+".join(owner_names)} {display_name}'
+    display_name, group_name = _parameter_display_data(parameter, path, context.layer_labels)
+    # Add model prefix only to layer parameters (thickness, roughness): each model has its
+    # own. A layer shared by several models has no one model to name; the table marks it
+    # shared and its tooltip names them (#394: all their names drowned the layer's).
+    if is_layer_param and not is_shared:
+        display_name = f'{get_original_name(model)} {display_name}'
 
     is_derived = _is_derived_parameter(parameter, model)
     physical_min, physical_max = physical_range(parameter, path, model)
@@ -419,7 +475,7 @@ def _build_row(parameter: Parameter, path: list, model_idx: int, context: _RowCo
         'name': display_name,
         'display_name': display_name,
         'group': group_name,
-        'alias': context.aliases.make(display_name or parameter.display_name),
+        'alias': '',  # given once every row's name is final
         'unique_name': parameter.unique_name,
         'value': float(parameter.value),
         # None means the minimizer produced no error bars (e.g. lmfit's
@@ -471,18 +527,31 @@ def _row_note(parameter: Parameter, is_derived: bool, inactive_note: str | None)
     return ''
 
 
-def _parameter_display_data(param: Parameter, path: list) -> Tuple[str, str]:
+def _parameter_display_data(param: Parameter, path: list, layer_labels: dict[int, str] | None = None) -> Tuple[str, str]:
     """Extract display name and group from the object path.
 
-    For layer parameters (thickness, roughness), uses the assembly name
-    from the path instead of the layer name, so that renaming an assembly
-    in the Model Editor is reflected in the Analysis parameters table.
+    Layer parameters are grouped under their assembly and named after their layer as
+    ``layer_labels`` has it (the assembly's name, for a layer alone in it); others are
+    named and grouped after the object that holds them.
     """
     if path is None or len(path) < 2:
         return param.display_name, ''  # Fallback to the parameter's own name, without group
     param_name = _DISPLAY_NAMES.get(path[-1].display_name, path[-1].display_name)
     parent_name = _group_owner(param, path).name
-    return f'{parent_name} {param_name}', parent_name
+    subject = parent_name
+    layer = _owning_layer(param, path)
+    if layer is not None and layer_labels:
+        subject = layer_labels.get(id(layer), parent_name)
+    return f'{subject} {param_name}', parent_name
+
+
+def _owning_layer(param: Parameter, path: list):
+    """The layer a per-layer parameter belongs to, else None."""
+    if _is_layer_parameter(param, path):
+        return path[-2]
+    if _is_magnetism_parameter(path) and len(path) >= 3:
+        return path[-3]
+    return None
 
 
 def _group_owner(param: Parameter, path: list):

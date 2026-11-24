@@ -125,16 +125,17 @@ def test_from_parameters_to_list_of_dicts_prefixes_layers_and_deduplicates_share
 
     result = parameters_module._from_parameters_to_list_of_dicts([thickness, scale, dependent], models)
 
-    # The thickness is one object in both models: one row, named for both, and marked shared
+    # The thickness is one object in both models: one row, marked shared and named after
+    # its layer alone (#394: the owners' names once drowned the layer's)
     assert [entry['display_name'] for entry in result] == [
-        'M1+M2 LayerA thickness',
+        'LayerA thickness',
         'Instrument scale',
         'Instrument background',
     ]
     assert result[1]['dependency'] == ''
     assert result[2]['dependency'] == '2*Instrument scale'
     assert result[2]['enabled'] is False
-    assert result[0]['alias'] == 'm1_m2_layera_thickness'
+    assert result[0]['alias'] == 'layera_thickness'
     assert result[0]['sharedBy'] == ['M1', 'M2'] and result[0]['sharedByIndices'] == [0, 1]
     assert result[2]['sharedBy'] == [] and result[1]['followedBy'] == 0
 
@@ -199,6 +200,58 @@ def test_from_parameters_to_list_of_dicts_classifies_by_owner_not_by_name(monkey
     assert rows['rho_m']['display_name'] == 'M1 Film rho_m'
     assert rows['impostor']['display_name'] == 'Background Material thickness'
     assert rows['scale_named']['display_name'] == 'Background Material scale'
+
+
+def test_layer_rows_are_named_after_their_layer_and_told_apart(monkeypatch):
+    """Issue #394: both layers of a multilayer were named after the assembly, alike."""
+    _patch_tree_types(monkeypatch)
+
+    def layer(key, name=None, **magnetism):
+        thickness = make_parameter(display_name='thickness', unique_name=f'{key}.thickness')
+        node = FakeLayerNode(name or key, f'{key}.layer', thickness=thickness, roughness=None)
+        if magnetism:
+            node.magnetism = FakeMagnetismNode('EasyLayerMagnetism', f'{key}.magnetism', **magnetism)
+        return node
+
+    rho_m = make_parameter(display_name='rho_m', unique_name='film.rho_m')
+    superphase = layer('Si')
+    oxide, film = layer('SiO2'), layer('Film', rho_m=rho_m)
+    twin_a, twin_b = layer('twin1', 'Si Layer'), layer('twin2', 'Si Layer')
+    dup_a, dup_b = layer('A'), layer('B')
+    model = make_model(name='M1 internal', unique_name='m1', user_data={'original_name': 'M1'})
+    model.sample = [
+        FakeNode('Superphase', 'asm1', layers=[superphase]),
+        FakeNode('Oxide and film', 'asm2', layers=[oxide, film]),
+        FakeNode('Twins', 'asm3', layers=[twin_a, twin_b]),
+        FakeNode('Spare', 'asm4', layers=[dup_a]),
+        FakeNode('Spare', 'asm5', layers=[dup_b]),
+    ]
+    layers = [superphase, oxide, film, twin_a, twin_b, dup_a, dup_b]
+    parameters = [node.thickness for node in layers] + [rho_m]
+
+    rows = parameters_module._from_parameters_to_list_of_dicts(parameters, make_model_collection(model))
+    by_name = {row['unique_name']: row for row in rows}
+
+    # Alone in its assembly, a layer goes by the assembly's name (renamed with it in the
+    # Model Editor); in a multilayer, by its own. The assembly still groups them.
+    assert by_name['Si.thickness']['display_name'] == 'M1 Superphase thickness'
+    assert by_name['SiO2.thickness']['display_name'] == 'M1 SiO2 thickness'
+    assert by_name['Film.thickness']['display_name'] == 'M1 Film thickness'
+    assert by_name['film.rho_m']['display_name'] == 'M1 Film rho_m'
+    assert {by_name[name]['group'] for name in ('SiO2.thickness', 'Film.thickness', 'film.rho_m')} == {'Oxide and film'}
+    # Layers named alike go by position, as the Model Editor numbers them
+    assert by_name['twin1.thickness']['display_name'] == 'M1 Twins layer 1 thickness'
+    assert by_name['twin2.thickness']['display_name'] == 'M1 Twins layer 2 thickness'
+    # Assemblies named alike: numbered, and so are their aliases
+    assert [by_name['A.thickness']['display_name'], by_name['B.thickness']['display_name']] == [
+        'M1 Spare thickness (1)',
+        'M1 Spare thickness (2)',
+    ]
+    assert [by_name['A.thickness']['alias'], by_name['B.thickness']['alias']] == [
+        'm1_spare_thickness_1',
+        'm1_spare_thickness_2',
+    ]
+    assert len({row['display_name'] for row in rows}) == len(rows)
 
 
 def test_parameters_filtering_metadata_and_current_parameter_updates(monkeypatch):

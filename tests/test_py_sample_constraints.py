@@ -85,7 +85,7 @@ class TestInequalityConstraints:
     def test_validation_reports_type_and_feasibility(self, project_and_backend):
         project, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
-        alias_b = _alias(backend, 'Film B thickness')
+        alias_b = _alias(backend, 'B2 thickness')
         result = backend.validateConstraintExpression(idx, '<', f'{alias_b} * 2')
         assert result['valid'] and result['type'] == 'inequality' and result['warning'] == ''
 
@@ -97,7 +97,7 @@ class TestInequalityConstraints:
         # inequality expression (literals read in the dependent's unit).
         _, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
-        alias_b = _alias(backend, 'Film B thickness')
+        alias_b = _alias(backend, 'B2 thickness')
         result = backend.validateConstraintExpression(idx, '<', f'90 - {alias_b}')
         assert result['valid'] and result['type'] == 'inequality'
         assert backend.addConstraint(idx, '<', f'90 - {alias_b}')['success']
@@ -122,7 +122,7 @@ class TestInequalityConstraints:
     def test_remove_by_negative_index_is_ignored(self, project_and_backend):
         _, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
-        alias_b = _alias(backend, 'Film B thickness')
+        alias_b = _alias(backend, 'B2 thickness')
         assert backend.addConstraint(idx, '<', f'{alias_b} * 2')['success']
         assert len(backend.constraintsList) == 1
 
@@ -140,7 +140,7 @@ class TestInequalityConstraints:
     def test_add_list_remove_and_persist(self, project_and_backend):
         project, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
-        alias_b = _alias(backend, 'Film B thickness')
+        alias_b = _alias(backend, 'B2 thickness')
         alias_total = _alias(backend, 'total_thickness', kind='derived')
 
         assert backend.addConstraint(idx, '<', f'{alias_b} * 2')['success']
@@ -149,7 +149,7 @@ class TestInequalityConstraints:
         rows = [row for row in backend.constraintsList if row['type'] == 'inequality']
         assert [row['relation'] for row in rows] == ['≤', '≤']
         assert rows[0]['dependentName'].endswith('Film A thickness')
-        assert 'Film B thickness * 2' in rows[0]['expression']
+        assert 'B2 thickness * 2' in rows[0]['expression']
         assert all(row['satisfied'] for row in rows)
         # The parameter itself is untouched: it stays independent (no dependency is created).
         t_a = project.models[0].sample[1].layers[0].thickness
@@ -161,7 +161,7 @@ class TestInequalityConstraints:
         reloaded_backend = Sample(reloaded_project)
         reloaded_project.from_dict(project_dict)
         rows = [row for row in reloaded_backend.constraintsList if row['type'] == 'inequality']
-        assert len(rows) == 2 and 'Film B thickness * 2' in rows[0]['expression']
+        assert len(rows) == 2 and 'B2 thickness * 2' in rows[0]['expression']
 
         reloaded_backend.removeConstraintByIndex(reloaded_backend.constraintsList.index(rows[0]))
         assert reloaded_backend.inequalityConstraintsCount == 1
@@ -169,7 +169,7 @@ class TestInequalityConstraints:
     def test_enable_toggle_and_violation_listing(self, project_and_backend):
         project, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
-        alias_b = _alias(backend, 'Film B thickness')
+        alias_b = _alias(backend, 'B2 thickness')
         backend.addConstraint(idx, '>', f'{alias_b} * 2')  # 40 >= 60 is violated
         assert backend.violatedInequalityConstraints
         backend.setInequalityConstraintEnabled(0, False)
@@ -179,7 +179,7 @@ class TestInequalityConstraints:
     def test_enable_toggle_out_of_range_is_a_no_op(self, project_and_backend):
         _, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
-        alias_b = _alias(backend, 'Film B thickness')
+        alias_b = _alias(backend, 'B2 thickness')
         backend.addConstraint(idx, '<', f'{alias_b} * 2')
         backend.setInequalityConstraintEnabled(5, False)
         backend.setInequalityConstraintEnabled(-1, False)
@@ -190,7 +190,7 @@ class TestFitScreening:
     def _with_inequality(self, project_and_backend, relation='<'):
         project, backend = project_and_backend
         idx = _dependent_index(backend, 'Film A thickness')
-        alias_b = _alias(backend, 'Film B thickness')
+        alias_b = _alias(backend, 'B2 thickness')
         assert backend.addConstraint(idx, relation, f'{alias_b} * 2')['success']
         return project, Minimizers(project), Fitting(project)
 
@@ -400,10 +400,10 @@ class TestEqualityConstraintPersistence:
 
     def _add_all(self, backend):
         film_a_thickness = _dependent_index(backend, 'Film A thickness')
-        assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
+        assert backend.addConstraint(film_a_thickness, '=', 'model_b2_thickness * 2')['success']
         assert backend.addConstraint(_dependent_index(backend, 'Film A roughness'), '=', '5')['success']
-        assert backend.addConstraint(_dependent_index(backend, 'Film B thickness'), '>', '10')['success']
-        assert backend.addConstraint(_dependent_index(backend, 'Film B roughness'), '<', '8')['success']
+        assert backend.addConstraint(_dependent_index(backend, 'B2 thickness'), '>', '10')['success']
+        assert backend.addConstraint(_dependent_index(backend, 'B2 roughness'), '<', '8')['success']
 
     def test_every_kind_of_row_survives_reload(self, project_and_backend):
         project, backend = project_and_backend
@@ -471,10 +471,10 @@ class TestEqualityConstraintPersistence:
         assert film_a.roughness.independent is True
         assert film_a.roughness.value == pytest.approx(3.0)
 
-        reloaded_backend.removeConstraintByIndex(_row_index(reloaded_backend, 'Film B thickness'))
+        reloaded_backend.removeConstraintByIndex(_row_index(reloaded_backend, 'B2 thickness'))
         assert film_b.thickness.min == pytest.approx(0.0)
 
-        assert _equality_rows(reloaded_backend) == [('upper_bound', 'Model Film B roughness', '<', '8')]
+        assert _equality_rows(reloaded_backend) == [('upper_bound', 'Model B2 roughness', '<', '8')]
 
     def test_removed_constraint_is_not_resurrected(self, project_and_backend):
         project, backend = project_and_backend
@@ -492,12 +492,12 @@ class TestEqualityConstraintPersistence:
         # dependencies named after the parameters rather than the saved aliases.
         project, backend = project_and_backend
         film_a_thickness = _dependent_index(backend, 'Film A thickness')
-        assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
+        assert backend.addConstraint(film_a_thickness, '=', 'model_b2_thickness * 2')['success']
         backend._constraint_states.clear()
 
         _, reloaded_backend, _ = _save_and_reload(project, backend)
 
-        assert _equality_rows(reloaded_backend) == [('dynamic', 'Model Film A thickness', '=', 'Model Film B thickness * 2')]
+        assert _equality_rows(reloaded_backend) == [('dynamic', 'Model Film A thickness', '=', 'Model B2 thickness * 2')]
 
     def test_linked_models_survive_reload(self, project_and_backend):
         project, backend = project_and_backend
@@ -569,9 +569,9 @@ class TestEqualityConstraintPersistence:
         project, backend = project_and_backend
         film_a_thickness = project.models[0].sample[1].layers[0].thickness
         film_a_thickness.value = dependent_value
-        source_index = _dependent_index(backend, 'Film B thickness')
+        source_index = _dependent_index(backend, 'B2 thickness')
         assert backend.addConstraint(source_index, source_relation, source_bound)['success']
-        assert backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', 'model_film_b_thickness')['success']
+        assert backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', 'model_b2_thickness')['success']
 
         reloaded, reloaded_backend, _ = _save_and_reload(project, backend)
         reloaded_backend.removeConstraintByIndex(_row_index(reloaded_backend, 'Film A thickness'))
@@ -587,7 +587,7 @@ class TestEqualityConstraintPersistence:
         project, backend = project_and_backend
         thickness = project.models[0].sample[1].layers[0].thickness
 
-        result = backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', 'model_film_b_thickness * 0')
+        result = backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', 'model_b2_thickness * 0')
 
         assert not result['success']
         assert 'single value' in result['message']
@@ -619,7 +619,7 @@ class TestEqualityConstraintPersistence:
             raise RuntimeError('failed after changing the parameter')
 
         monkeypatch.setattr(sample_module, 'constrain', constrain_then_fail)
-        result = backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', 'model_film_b_thickness * 2')
+        result = backend.addConstraint(_dependent_index(backend, 'Film A thickness'), '=', 'model_b2_thickness * 2')
 
         assert not result['success']
         assert thickness.independent is True
@@ -628,7 +628,7 @@ class TestEqualityConstraintPersistence:
 
     def test_stale_bound_row_is_not_saved(self, project_and_backend):
         project, backend = project_and_backend
-        assert backend.addConstraint(_dependent_index(backend, 'Film B thickness'), '>', '10')['success']
+        assert backend.addConstraint(_dependent_index(backend, 'B2 thickness'), '>', '10')['success']
         project.models[0].sample[2].layers[1].thickness.min = 2.0  # edited in the parameter table
 
         _, reloaded_backend, project_dict = _save_and_reload(project, backend)
@@ -638,7 +638,7 @@ class TestEqualityConstraintPersistence:
 
     def test_reload_drops_the_rows_of_the_previous_project(self, project_and_backend):
         project, backend = project_and_backend
-        assert backend.addConstraint(_dependent_index(backend, 'Film B thickness'), '>', '10')['success']
+        assert backend.addConstraint(_dependent_index(backend, 'B2 thickness'), '>', '10')['success']
 
         project.reset()
         project.default_model()
@@ -732,7 +732,7 @@ class TestStructuralEditsDetachCutOffConstraints:
         thickness = project.models[0].sample[1].layers[0].thickness
         thickness.free = False
         film_a_thickness = _dependent_index(backend, 'Film A thickness')
-        assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
+        assert backend.addConstraint(film_a_thickness, '=', 'model_b2_thickness * 2')['success']
         assert thickness.value == pytest.approx(60.0)
 
         backend.removeAssembly(2)  # Film B
@@ -809,12 +809,12 @@ class TestStructuralEditsDetachCutOffConstraints:
         project, backend = project_and_backend
         thickness = project.models[0].sample[1].layers[0].thickness
         film_a_thickness = _dependent_index(backend, 'Film A thickness')
-        assert backend.addConstraint(film_a_thickness, '=', 'model_film_b_thickness * 2')['success']
+        assert backend.addConstraint(film_a_thickness, '=', 'model_b2_thickness * 2')['success']
 
         backend.removeAssembly(3)  # Surf: neither end of the constraint
 
         assert thickness.independent is False
-        assert _equality_rows(backend) == [('dynamic', 'Model Film A thickness', '=', 'Model Film B thickness * 2')]
+        assert _equality_rows(backend) == [('dynamic', 'Model Film A thickness', '=', 'Model B2 thickness * 2')]
         assert len(self._save(project, backend)['parameter_constraints']) == 1
 
 
