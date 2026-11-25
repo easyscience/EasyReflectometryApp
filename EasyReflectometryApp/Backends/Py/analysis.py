@@ -9,8 +9,10 @@ from typing import Optional
 import numpy as np
 from easyreflectometry import Project as ProjectLib
 from PySide6.QtCore import Property
+from PySide6.QtCore import QCoreApplication
 from PySide6.QtCore import QObject
 from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
@@ -33,6 +35,12 @@ logger = logging.getLogger(__name__)
 NO_MODEL_COLOR = '#A5A5A5'
 
 DEFAULT_PREVIEW_INTERVAL_S = FitterWorker.DEFAULT_PREVIEW_INTERVAL_S
+
+#: Longest wait for a running fit or sampling to stop when the application quits; the
+#: wait ends as soon as it has. A stop lands after the current lmfit/DFO evaluation or
+#: BUMPS step, but DREAM checks it only once per generation, which evaluates the whole
+#: population: 3-4 s for the three-contrast film example, longer for larger models.
+QUIT_WAIT_S = 30.0
 
 
 def _lacks_finite_bounds(param: dict) -> bool:
@@ -147,11 +155,15 @@ class Analysis(QObject):
         self.stopFit.connect(self._onStopFit)
         # Start, stop, finish and failure change the progress as well.
         self.fittingChanged.connect(self.fitProgressChanged)
-        # A minimizer switch changes the inequality-constraint notices too.
+        # A minimizer switch changes the inequality-constraint notices.
         self.minimizerChanged.connect(self.inequalityContextChanged)
-        # The selected experiments, shared with Plotting1d (PyBackend passes the same instance).
+        # The selected experiments, shared with Plotting1d.
         self._selection = selection if selection is not None else ExperimentSelection()
         self._selection.set_indices([0], len(self._experiments_logic.available()))
+        # A running worker must stop before the app destroys it, or Qt aborts.
+        app = QCoreApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._stop_workers_for_quit)
 
     ########################
     ## Fitting
@@ -656,6 +668,35 @@ class Analysis(QObject):
         if self._fitter_thread is not None:
             self._fitter_thread.stop()
         self.fittingChanged.emit()
+
+    @Slot()
+    def _stop_workers_for_quit(self) -> None:
+        """Stop every running fit or sampling and wait for its thread before Qt tears down.
+
+        Called on ``aboutToQuit``: the event loop has stopped.
+        Besides the current, a cancelled worker can still be finishing its last
+        evaluation. Each worker is detached so its preview, finished and failed signals
+        are stale and return immediately.
+        """
+        workers = [worker for worker in self.findChildren(QThread) if worker.isRunning()]
+        if not workers:
+            return
+        self._fitter_thread = None
+        self._fitting_logic.stop_fit()
+        for worker in workers:
+            for signal in (worker.finished, worker.failed):
+                try:
+                    signal.disconnect(worker.deleteLater)
+                except (RuntimeError, TypeError):
+                    pass
+            worker.stop()
+        deadline = time.monotonic() + QUIT_WAIT_S
+        for worker in workers:
+            while not worker.wait(50):  # ms
+                QCoreApplication.processEvents()
+                if time.monotonic() > deadline:
+                    logger.warning('A fit was still running %.0f s after quitting', QUIT_WAIT_S)
+                    return
 
     # ------------------------------------------------------------------
     # Bayesian sampling dispatch and result handling

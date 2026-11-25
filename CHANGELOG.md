@@ -1,5 +1,11 @@
 # Unreleased
 
+- Quitting the application while a fit or a Bayesian sampling run is in
+  progress no longer crashes it (`QThread: Destroyed while thread is still
+  running`). The run is stopped and the application waits for it to end, up
+  to 30 s, before exiting; nothing from the stopped run is recorded. Bayesian
+  sampling stops only after its current generation, which can take several
+  seconds for a multi-contrast model.
 - The parameter table on the `Analysis` page names each layer of a multilayer
   (or a surfactant's head and tail) after the layer, e.g. `SiO2 thickness` and
   `Film thickness`, instead of naming both after the assembly. A layer shared
