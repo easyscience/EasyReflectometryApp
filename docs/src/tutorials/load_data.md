@@ -1,50 +1,49 @@
 # Loading experimental data
 ## Load data
-Experimental data must be **.dat**, **.txt**, or **.ort** to be loaded into the EasyReflectometryApp.  
-Data is loaded in the `Experimental` page, by pressing the `Import experimental data`.
+EasyReflectometryApp loads experimental data from .dat, .txt and .ort files.
+To load a file, go to the `Experimental` page and press `Import experimental data`.
 
 ![Loading data](./_images/exp_load.png)
 
-- **A**: Open your file manager to load data in the mentioned format.
+- **A**: Opens a file dialog for choosing a data file.
 
-The loaded data is drawn in the main window. Move the cursor near a measured point to read
-its coordinates: the tooltip snaps to the nearest visible point, so the cursor does not
-have to be exactly on the marker. The **Plot control** group of the advanced controls
-chooses between a logarithmic and a linear R(q) axis, see
-[simple fitting](./simple_fitting.md).
+The loaded data is drawn in the main window. To read the coordinates of a measured point,
+move the cursor near it. The tooltip snaps to the nearest visible point, so you do not have
+to hit the marker exactly. The Plot control group in the advanced controls switches the
+R(q) axis between logarithmic and linear, see [simple fitting](./simple_fitting.md).
 
-## Instrumental parameters  
-When data is loaded, it is possible to change instrumental parameters that affect the data.
+## Instrumental parameters
+Once data is loaded, you can change the instrumental parameters that apply to it.
 
 ![Setting experimental parameters](./_images/exp_data.png)
 
-- **A**: Scale the data by the given value.
-- **B**: Set the level where data merges into the experimental background.
-- **C**: Instrumental resolution that percentage varies as a function of Q.
+- **A**: Scale factor applied to the data.
+- **B**: Level at which the data meets the experimental background.
+- **C**: Instrumental resolution, as a percentage of Q.
 
 ## Resolution of the data
-A file with a fourth column (`sQz`, the q-resolution of each point) keeps that resolution:
-the fit, the calculated curve and residuals on the `Analysis` page, the Bayesian sampling
-and band, and the report all smear each dataset with the resolution it was measured with.
-This holds for every dataset, also when several datasets share one model (other angles,
-other contrasts) and for each channel of a polarised experiment.
+If a file has a fourth column (`sQz`, the q-resolution of each point), the app keeps that
+resolution. The fit, the calculated curve and residuals on the `Analysis` page, the Bayesian
+sampling and its band, and the report all smear each dataset with its measured resolution.
+This applies to every dataset, including several datasets sharing one model (other angles
+or contrasts) and each channel of a polarised experiment.
 
-The resolution field above (**C**) belongs to the model. It is taken from the first dataset
-loaded onto the model (it shows `Spline` for a measured resolution), and it is used for
-simulations on the `Sample` page and for datasets without a resolution column, which are
+The resolution field (**C**) belongs to the model. Its value comes from the first dataset
+loaded onto the model, and it shows `Spline` when that dataset has a measured resolution.
+The `Sample` page uses it for simulations, and datasets without a resolution column are
 smeared with the model's percentage.
 
 ## Several files of one contrast
 A contrast is often measured as several curves, one per incident angle or wavelength band.
 Load the first file, keep its experiment selected, and press
-`Add file(s) to the selected experiment` to merge the others into it. The points are
-sorted by q and every point keeps its own resolution, so overlapping q ranges measured
-with different widths are fitted correctly. A file without a resolution column added to
-measured ones is given the model's percentage resolution (5 % when the model holds a
-measured one), and the app says so. The button is disabled for a polarised experiment,
-whose channels are separate datasets.
+`Add file(s) to the selected experiment` to merge the other files into it. The points are
+sorted by q and each keeps its own resolution, so overlapping q ranges measured with
+different widths fit correctly. If you add a file without a resolution column to measured
+data, its points get the model's percentage resolution (5 % when the model holds a measured
+resolution), and the app tells you. The button is disabled for polarised experiments,
+because their channels are separate datasets.
 
 ## Polarised data
-A measurement that recorded several spin channels is loaded with the second button,
-`Load polarized experiment (file per channel)`, which takes one file per channel and asks
-how to assign them. See [polarised data](./polarized_data.md).
+To load a measurement with several spin channels, use the second button,
+`Load polarized experiment (file per channel)`. It takes one file per channel and asks how
+to assign them. See [polarised data](./polarized_data.md).

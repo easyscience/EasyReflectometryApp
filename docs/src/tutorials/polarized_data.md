@@ -1,8 +1,8 @@
 # Polarised data
 
 A polarised measurement records up to four spin channels of the same sample. The app loads
-them as a single experiment, draws them separately, and fits them together against one
-model.
+them as one experiment, draws each channel separately, and fits all of them together
+against one model.
 
 | Channel | Meaning |
 |---|---|
@@ -13,86 +13,85 @@ model.
 
 ## Loading one file per channel
 
-The **Experimental data** group on the `Experiment` page has a second button,
-**Load polarized experiment (file per channel)**, below the ordinary
-**Load experiment(s) from file(s)**. Select one file per spin channel - the file picker
-allows multiple selection - and the **Assign spin channels** dialog opens.
+In the **Experimental data** group on the `Experiment` page, below the ordinary
+**Load experiment(s) from file(s)** button, there is a second button:
+**Load polarized experiment (file per channel)**. Select one file per spin channel (the
+file picker accepts several files at once), and the **Assign spin channels** dialog opens.
 
 <!-- TODO: screenshot of the Assign spin channels dialog -> _images/exp_polarized_assign.png -->
 
-Each file gets a channel drop-down, pre-assigned from the ORSO `polarization` header or,
-failing that, from the file name. Adjust anything that came out wrong. Any number of
-channels may be assigned, a single one included, and a file that should be ignored is set
+Each file gets a channel drop-down. The app fills it in from the ORSO `polarization`
+header, or from the file name if there is no header. Correct any wrong assignments. You
+can assign any number of channels, including just one, and set a file you want to ignore
 to **not used**.
 
-The dialog refuses to continue and explains why if a channel is assigned to more than one
-file, if a file is missing, or if nothing at all is assigned.
+The dialog will not continue if a channel is assigned to more than one file, if a file is
+missing, or if nothing is assigned, and it tells you which of these is the problem.
 
 ```{note}
-Each channel keeps the resolution of its own file: the fit, the per-channel curves on the
-`Analysis` page and the report all smear a channel with the resolution it was measured
-with. The model's resolution field on the `Experiment` page follows the first assigned
-channel; it is used for simulations and for a file without a resolution column.
+Each channel keeps the resolution of its own file. The fit, the per-channel curves on the
+`Analysis` page and the report all smear a channel with its measured resolution. The
+model's resolution field on the `Experiment` page follows the first assigned channel, and
+is used for simulations and for files without a resolution column.
 ```
 
-If the project's calculation engine cannot model magnetism, the dialog also notes that the
-channels will be loaded and displayed but not modelled until the sample has magnetic layers
-and the engine is switched - see [magnetic layers](./magnetism.md).
+If the project's calculation engine cannot model magnetism, the dialog also tells you that
+the channels will be loaded and displayed, but not modelled until the sample has magnetic
+layers and you switch the engine. See [magnetic layers](./magnetism.md).
 
 ## Seeing the channels
 
-- The experiment chart draws one measured series, with its error bounds, per **visible**
-  channel, in a fixed palette (↑↑ `pp`, ↑↓ `pm`, ↓↑ `mp`, ↓↓ `mm`), with a per-channel
-  legend.
+- The experiment chart draws one measured series with error bounds for each visible
+  channel, in a fixed palette (↑↑ `pp`, ↑↓ `pm`, ↓↑ `mp`, ↓↓ `mm`), with a legend entry per
+  channel.
 - The **Polarization channels** group in the advanced controls of the `Experiment` page
-  toggles which channels are drawn. At least one measured channel always stays visible.
-- Experiment lists mark a polarised experiment with a `⇅N` badge, `N` being the number of
-  measured spin channels.
-- With several experiments selected, each polarised experiment contributes one series per
-  visible channel, using the experiment colour as the hue base.
+  sets which channels are drawn. At least one measured channel always stays visible.
+- Experiment lists mark a polarised experiment with a `⇅N` badge, where `N` is the number
+  of measured spin channels.
+- When several experiments are selected, each polarised experiment adds one series per
+  visible channel, with colours based on the experiment's colour.
 
 ## Spin asymmetry
 
-The spin asymmetry
+The spin asymmetry is
 
 ```
 SA(q) = (R↑↑ − R↓↓) / (R↑↑ + R↓↓)
 ```
 
-is available as a **Spin asymmetry** tab next to **Reflectivity** on the `Experiment` page
-(measured data only) and as a third tab of the lower panel on the `Analysis` page (measured
-data plus the model). Neither tab is shown unless the experiment measured **both**
-non-spin-flip channels; without one, the `Experiment` page has no tab strip at all.
+It is shown in a **Spin asymmetry** tab next to **Reflectivity** on the `Experiment` page
+(measured data only), and in a third tab of the lower panel on the `Analysis` page
+(measured data and the model). Both tabs appear only if the experiment measured both
+non-spin-flip channels. If one is missing, the `Experiment` page shows no tab strip.
 
 <!-- TODO: screenshot of the spin asymmetry tab -> _images/exp_spin_asymmetry.png -->
 
-Error bars are propagated from the channel uncertainties. Two kinds of point are dropped,
-with a note of how many:
+Error bars are propagated from the channel uncertainties. Two kinds of points are left
+out, and a note says how many:
 
-- points where `R↑↑ + R↓↓` is not significantly above zero - the background-dominated tail,
-  which would otherwise wreck the axis;
-- points where the two channels do not share the same `q`.
+- points where `R↑↑ + R↓↓` is not significantly above zero, i.e. the background-dominated
+  tail, which would otherwise ruin the axis scaling;
+- points where the two channels do not have the same `q`.
 
-The axis shows the full `[−1, 1]` window and expands only if background-subtracted data go
-outside it.
+The axis shows the full `[−1, 1]` range and widens only if background-subtracted data
+fall outside it.
 
 ## Fitting a polarised experiment
 
-Fitting a polarised experiment fits **all** its measured spin channels at once against the
-shared model. Thickness, roughness, nuclear SLD, scale and background are common to every
-channel; `ρM` and `θM` are constrained by all of them. Polarised and ordinary experiments
-can be fitted together in the same refinement.
+When you fit a polarised experiment, all of its measured spin channels are fitted at once
+against the shared model. Thickness, roughness, nuclear SLD, scale and background are
+common to every channel, and all channels together constrain `ρM` and `θM`. You can fit
+polarised and ordinary experiments together in the same refinement.
 
-The analysis and residual charts draw one measured/calculated pair per visible channel,
-each with that channel's cross-section. A channel the model cannot calculate - a spin-flip
-channel on a non-magnetic sample - shows its measured points only and contributes no
-residuals.
+The analysis and residual charts draw one measured and calculated pair for each visible
+channel, each with that channel's cross-section. If the model cannot calculate a channel,
+for example a spin-flip channel on a non-magnetic sample, the chart shows only its measured
+points and the channel adds no residuals.
 
-In the `Summary` report a polarised experiment contributes one row per measured spin
-channel, named after the channel, and the report figures plot each channel in its channel
-colour.
+In the `Summary` report a polarised experiment has one row per measured spin channel,
+named after the channel, and the report figures plot each channel in its own colour.
 
 ## Limitations
 
-- Bayesian sampling of polarised experiments is not supported yet; see
+- Bayesian sampling does not support polarised experiments yet; see
   [Bayesian analysis](./bayesian.md).

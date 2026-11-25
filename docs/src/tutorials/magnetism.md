@@ -1,20 +1,19 @@
 # Magnetic layers
 
-A layer can be given a magnetisation, so that the two neutron spin states see different
-scattering length densities. This page covers the **Model** page controls; loading and
-fitting measured spin channels is described in
-[polarised data](./polarized_data.md).
+You can give a layer a magnetisation, so that the two neutron spin states see different
+scattering length densities. This page covers the controls on the **Model** page. Loading
+and fitting measured spin channels is described in [polarised data](./polarized_data.md).
 
 ```{note}
-Magnetic layers can only be calculated by `refl1d`. `refnx` has no magnetism, so the app
-asks to switch the project's calculation engine the first time a layer is made magnetic.
+Only `refl1d` can calculate magnetic layers. `refnx` has no magnetism, so the first time you
+make a layer magnetic the app asks to switch the project's calculation engine.
 ```
 
 ## The Magnetism group
 
 The **Magnetism** group is in the basic controls of the **Model** page, below the layer
-editor. It is titled after the assembly currently selected in the `Layer editor`, for
-example `Magnetism: Multi-layer`, and shows one row per layer of that assembly.
+editor. Its title names the assembly selected in the `Layer editor`, for example
+`Magnetism: Multi-layer`, and it has one row per layer of that assembly.
 
 <!-- TODO: screenshot of the Magnetism group -> _images/sample_magnetism.png -->
 
@@ -26,47 +25,49 @@ example `Magnetism: Multi-layer`, and shows one row per layer of that assembly.
 | **θM/°** | In-plane angle of the magnetic moment. |
 | **Magn.** | Makes the layer magnetic. Unticking it removes the magnetisation. |
 
-`ρM` and `θM` are only editable once **Magn.** is ticked.
+You can edit `ρM` and `θM` only after ticking **Magn.**
 
 ```{note}
 With the default in-plane guide field (270°), `θM = 270°` aligns the moment with the
-field, which produces no spin-flip scattering. This is the value to start from for a
-simple saturated film.
+field, which produces no spin-flip scattering. Start from this value for a simple
+saturated film.
 ```
 
 ### ρM from a magnetic material
 
-`ρM` can also come from the layer's material instead of being typed. **Add magnetic
+Instead of typing `ρM`, you can take it from the layer's material. **Add magnetic
 material** in the **Materials** group creates a material with a formula, a mass density
-and a **Moment** in Bohr magnetons per formula unit (bulk iron to start with: Fe,
-7.874 g/cm³, 2.2 µB). The material editor shows the resulting `ρM` and the number density
-`N`: `ρM = N × moment × 2.6991·10⁻⁵ Å`.
+and a **Moment** in Bohr magnetons per formula unit. The starting values are those of bulk
+iron: Fe, 7.874 g/cm³, 2.2 µB. The material editor shows the resulting `ρM` and the number
+density `N`: `ρM = N × moment × 2.6991·10⁻⁵ Å`.
 
-Give a layer that material, make it magnetic, select its row and tick **ρM from material**
-below the table. The layer's `ρM` then follows the material's moment and density and is no
-longer editable in the table; `θM` stays the layer's own, so two layers of one material can
-point different ways. Unticking keeps the current value.
+Assign that material to a layer, make the layer magnetic, select its row and tick
+**ρM from material** below the table. The layer's `ρM` then follows the material's moment
+and density, and you can no longer edit it in the table. `θM` stays with the layer, so two
+layers of the same material can point in different directions. Unticking the box keeps the
+current value.
 
-The moment is the effective in-plane net moment per formula unit, which is the moment per
-atom only for a formula unit of one atom, such as Fe (`Fe2` is one element but two atoms).
-In the `Analysis` table it is greyed out until some layer takes `ρM` from the material, and
-when the last such layer stops doing so the moment is taken out of the fit. If the
-material's SLD is set directly (unticked **SLD computed from formula and density**), its
-density still sets `ρM` while a layer takes `ρM` from it; the data then constrain only
-density × moment, so ticking one of the two for fitting unticks the other. Without such a
-layer the density sets nothing and is greyed out too. Greyed rows are only listed when the
-table's variability filter is set to **All parameters**; the default, **Active
+The moment is the effective in-plane net moment per formula unit. It equals the moment per
+atom only when the formula unit is a single atom, as for Fe (`Fe2` is one element but two
+atoms). In the `Analysis` table the moment is greyed out until a layer takes `ρM` from the
+material, and when the last such layer stops doing so, the moment is removed from the fit.
+
+If the material's SLD is set directly (**SLD computed from formula and density** unticked),
+its density still sets `ρM` for any layer that takes `ρM` from it. The data then constrain
+only density × moment, so ticking one of the two for fitting unticks the other. Without
+such a layer the density sets nothing and is greyed out as well. Greyed rows are listed only
+when the table's variability filter is set to **All parameters**. The default, **Active
 parameters**, hides them.
 
-A layer whose `ρM` is given a constraint in the `Analysis` page no longer takes it from the
-material: **ρM from material** is unticked, and the constraint is kept when the layer's
+If you constrain a layer's `ρM` on the `Analysis` page, the layer stops taking it from the
+material: **ρM from material** is unticked, and the constraint stays when the layer's
 material changes.
 
 ### The guide field
 
-Below the table, **Guide field angle** and **Applied field (T)** set the field of the
-current model (refl1d's `Aguide` and `H`). They are shown while the current model has a
-magnetic layer and the engine is `refl1d`:
+**Guide field angle** and **Applied field (T)**, below the table, set the field of the
+current model (refl1d's `Aguide` and `H`). They are visible while the current model has a
+magnetic layer and the engine is `refl1d`.
 
 | Guide field angle | Field direction |
 |---|---|
@@ -76,119 +77,117 @@ magnetic layer and the engine is `refl1d`:
 | anything else | tilted out of the sample plane |
 
 The applied field adds a Zeeman term along the field, so its effect depends on the field
-and its direction relative to the moments. Both appear in the `Analysis` parameter table,
-named after the model, and can be fitted; they are shown only while the model is magnetic
-and the engine is `refl1d`, and are taken out of the fit otherwise. The ORSO model language
-has no field, so model export warns when it is not the default.
+strength and on its direction relative to the moments. Both values appear in the
+`Analysis` parameter table, named after the model, and can be fitted. They are shown only
+while the model is magnetic and the engine is `refl1d`; otherwise they are removed from the
+fit. The ORSO model language has no field, so model export warns you when the field is not
+the default.
 
 ### Magnetic samples from ORSO files
 
-**Load sample** reads an ORSO model's `magnetic_moment`: a material with a formula, a
-density and a moment becomes a magnetic material, and its layer is magnetic with
-**ρM from material** ticked and `θM = 270°`, since the file has no direction. Whatever the
+**Load sample** reads the `magnetic_moment` of an ORSO model. A material with a formula, a
+density and a moment becomes a magnetic material, and its layer becomes magnetic with
+**ρM from material** ticked and `θM = 270°`, because the file has no direction. Anything the
 import could not carry over (a moment without a density, an unknown unit, an ignored
 `relative_density`, magnetic layers in a repeated stack) is listed in a warning after the
-sample loads. A magnetic sample cannot be loaded while the engine cannot model magnetism:
-the load is refused with a message naming the engine to switch to, and the project is left
-as it was.
+sample loads. If the current engine cannot model magnetism, the app refuses to load a
+magnetic sample, names the engine to switch to, and leaves the project as it was.
 
 ### The moment angle slider
 
-Selecting a magnetic row shows a slider below the table, spanning the whole `0-360°`
-range of `θM`, with the guide field reference **H →** and the resulting arrow beside it -
-the same arrow the [Structure tab](#moment-arrows-on-the-structure-tab) draws. Its
-tooltip gives the angle both ways: `φ` from **H**, and the `θM` the table edits.
+When you select a magnetic row, a slider appears below the table. It spans the full
+`0-360°` range of `θM`, with the guide field reference **H →** and the resulting arrow next
+to it. This is the same arrow the [Structure tab](#moment-arrows-on-the-structure-tab)
+draws. The tooltip gives the angle both ways: `φ` measured from **H**, and the `θM` that the
+table edits.
 
-Dragging the slider sets `θM`, snapped to 5°; the text field remains the precise input.
-The slider is read-only - and says so in its tooltip - while a fit is running, or when
-`θM` follows a constraint, because then the parameter is not the user's to set.
+Dragging the slider sets `θM` in 5° steps. For an exact value, type it in the text field.
+The slider is read-only while a fit is running or when `θM` follows a constraint, and its
+tooltip says so.
 
-The slider edits `θM` itself, exactly as the table column does. The arrow beside it shows
-`φ`, the direction the moment physically points, so with a **negative `ρM`** the arrow
-points opposite the angle on the slider - the moment is reversed while the parameter
-stays where it was put.
+The slider edits `θM` directly, just like the table column. The arrow next to it shows `φ`,
+the direction the moment actually points. With a negative `ρM` the arrow therefore points
+opposite to the angle on the slider: the moment is reversed, but the parameter keeps its
+value.
 
 ### Switching the calculation engine
 
-Ticking **Magn.** while the project uses an engine that cannot model magnetism opens the
-**Switch calculation engine?** dialog. Accepting it makes the layer magnetic *and* switches
-the project to `refl1d` in one step - the page does not change under you.
+If the project uses an engine that cannot model magnetism, ticking **Magn.** opens the
+**Switch calculation engine?** dialog. Accepting it makes the layer magnetic and switches
+the project to `refl1d` in one step, without leaving the page.
 
-Switching recalculates the reflectivity and makes any existing fit result stale; the sample
-and the loaded data are untouched. The engine can be switched back once no layer is
-magnetic any more.
+Switching recalculates the reflectivity and marks any existing fit result as stale. The
+sample and the loaded data are not changed. You can switch the engine back once no layer is
+magnetic.
 
-The engine itself lives in the **Calculation engine** group of the advanced controls on the
-**Model** page (and in `Analysis` › `Advanced`, see
-[simple fitting](./simple_fitting.md)). Selecting an engine that cannot model magnetism
-while the sample still has magnetic layers is refused, with a message on both pages.
+The engine selector is in the **Calculation engine** group of the advanced controls on the
+**Model** page, and in `Analysis` › `Advanced` (see [simple fitting](./simple_fitting.md)).
+While the sample has magnetic layers, the app refuses an engine that cannot model magnetism
+and shows a message on both pages.
 
 ## Fitting ρM and θM
 
 `ρM` and `θM` appear in the `Analysis` parameter table like any other layer parameter,
-named after their assembly and model - for example `Model Fe rho_m`. They come with default
-limits, a fit checkbox and can be used in constraints. The parameter name filter accepts
-`magnetic` as a keyword to show only the magnetic parameters: `ρM`, `θM`, the material
+named after their assembly and model, for example `Model Fe rho_m`. They have default
+limits and a fit checkbox, and you can use them in constraints. Type `magnetic` in the
+parameter name filter to show only the magnetic parameters: `ρM`, `θM`, the material
 moments and the field.
 
 ## Magnetic depth profiles
 
 Once at least one layer is magnetic, the **Magnetic profile** group appears in the basic
-controls, below **Magnetism**. The same switches are repeated in `Analysis` ›
-`Advanced` › `Plot control`, and the two share one selection.
+controls, below **Magnetism**. The same switches are also in `Analysis` › `Advanced` ›
+`Plot control`, and both places share one selection.
 
 <!-- TODO: screenshot of the Magnetic profile group -> _images/sample_magnetic_profile.png -->
 
-- **Show ρ ± ρM∥** - adds the nuclear SLD plus and minus the magnetic SLD along the
-  field for each magnetic model to the SLD chart, dashed in the model's colour. These are
-  the potentials of the two spin states only when every moment is parallel to the field
-  and there is no applied field; a moment across the field mixes the spin states instead.
-  For non-magnetic layers, and for moments across the field, the two curves collapse onto
-  the nuclear SLD.
-- **Show ρM** - the magnetic SLD profile on its own.
-- **Show θM** - the in-plane moment angle, on its own right-hand axis. `θM` is only defined
-  where there is a moment, so the curve is drawn in pieces rather than joined across the
-  gaps.
-- **Show R↑↑ and R↓↓** - splits each magnetic model's reflectivity into its two
+- **Show ρ ± ρM∥**: adds the nuclear SLD plus and minus the magnetic SLD along the field to
+  the SLD chart for each magnetic model, dashed in the model's colour. These curves are the
+  potentials of the two spin states only when every moment is parallel to the field and no
+  field is applied. A moment across the field mixes the spin states instead. For
+  non-magnetic layers and for moments across the field, both curves fall onto the nuclear
+  SLD.
+- **Show ρM**: the magnetic SLD profile alone.
+- **Show θM**: the in-plane moment angle, on its own right-hand axis. `θM` is defined only
+  where there is a moment, so the curve is drawn in pieces and not joined across the gaps.
+- **Show R↑↑ and R↓↓**: splits each magnetic model's reflectivity into its two
   non-spin-flip cross-sections on the **Model** page reflectivity chart, dashed in the
   model's colour with their own legend rows. Off by default.
 
-The y-range of the SLD chart covers every visible curve and grows when a curve is switched
+The y-range of the SLD chart covers every visible curve and grows when you switch a curve
 on, so `ρ + ρM` is never clipped. If no model is magnetic, the chart, its legend and the
-sidebar are unchanged.
+sidebar look as before.
 
 ```{note}
-The `refl1d` calculator cannot repeat slabs that carry magnetism, so a magnetic model with
-a repeating multilayer has no magnetic depth profile at all - and therefore none of these
-curves. The **Magnetic profile** group reports the reason.
+The `refl1d` calculator cannot repeat slabs that carry magnetism. A magnetic model with a
+repeating multilayer therefore has no magnetic depth profile, and none of these curves are
+drawn. The **Magnetic profile** group shows the reason.
 ```
 
 ```{note}
-For a magnetic sample the plain model curve is **not** an unpolarised average - the
-calculator returns the ↑↑ cross-section - so `R↑↑` is drawn on top of it. The sidebar says
-so as well.
+For a magnetic sample the plain model curve is not an unpolarised average. The calculator
+returns the ↑↑ cross-section, so `R↑↑` is drawn on top of it. The sidebar notes this too.
 ```
 
-The `Analysis` reflectivity chart is unaffected by this switch: it already draws one
-calculated curve per measured spin channel when the experiment is polarised.
+This switch does not affect the `Analysis` reflectivity chart, which already draws one
+calculated curve per measured spin channel for a polarised experiment.
 
 ## Which way the moments point
 
-`θM` is a number, and a stack of numbers does not show at a glance whether a model is
-collinear, canted or twisted. The app therefore draws the moment as an arrow, in a single
-convention shared by every view:
+A column of `θM` values does not show at a glance whether a model is collinear, canted or
+twisted, so the app also draws each moment as an arrow. All views use the same convention:
 
-- the arrows are a **top view along the surface normal** - a compass laid over the sample;
-- screen **right is the default guide field H** (in the sample plane at 270°), and the angle
-  drawn is `φ`, measured from it counterclockwise: `φ = θM − 270°`. The arrows stay in this
-  frame when the field is changed; the **H** reference follows the field instead, pointing
-  left for a reversed in-plane field and replaced by its angle when the field is tilted out
-  of the sample plane;
-- a **negative `ρM`** is the same moment reversed, so the arrow points the opposite way
-  and the tooltip carries the signed parameter;
-- a magnetic layer whose `ρM` is below 1 % of the largest one in the model gets a **hollow
-  dot** - "magnetic, but no moment": the direction of a zero-length vector means nothing.
-  A layer with no magnetism at all gets nothing.
+- The arrows are a top view along the surface normal, like a compass laid over the sample.
+- Screen right is the default guide field H (in the sample plane at 270°). The angle drawn
+  is `φ`, measured counterclockwise from it: `φ = θM − 270°`. The arrows keep this frame
+  when you change the field. The **H** reference moves instead: it points left for a
+  reversed in-plane field, and is replaced by its angle when the field is tilted out of the
+  sample plane.
+- A negative `ρM` is the same moment reversed, so the arrow points the opposite way and the
+  tooltip shows the signed parameter.
+- A magnetic layer whose `ρM` is below 1 % of the largest in the model gets a hollow dot,
+  meaning magnetic but with no moment, since a zero-length vector has no direction. A layer
+  with no magnetism gets no mark.
 
 | `θM` | Arrow | Physics |
 |---|---|---|
@@ -197,26 +196,26 @@ convention shared by every view:
 | 0° / 180° | ↑ / ↓ | fully transverse, maximal spin flip |
 | 40° | ↖ (`φ` = 130°) | canted |
 
-Every arrow view shows the **H** reference on screen. Tooltips lead with `φ`, then the
-`θM` and signed `ρM` the sidebar edits, then the part of the moment along the field and the
-size of the part across it - what the non-spin-flip and the spin-flip channels mostly see.
+Every arrow view shows the **H** reference. Tooltips give `φ` first, then the `θM` and
+signed `ρM` that the sidebar edits, then the component of the moment along the field and
+the size of the component across it. These are roughly what the non-spin-flip and
+spin-flip channels see.
 
-Arrows are constant length everywhere: they encode direction only. The magnitude is the
-`ρM` curve's job, and the exact value is in the tooltip.
+All arrows have the same length and show direction only. The `ρM` curve shows the
+magnitude, and the tooltip gives the exact value.
 
 (moment-arrows-on-the-structure-tab)=
 ### On the Structure tab
 
-Each magnetic layer's box gets an arrow between its name and its thickness annotation.
-This needs no switch: attaching magnetism *is* the request to see it. Boxes too short for
-a readable glyph drop the arrow and keep it in the tooltip, and the box layout of a
-non-magnetic sample is unchanged.
+Each magnetic layer's box gets an arrow between its name and its thickness label. There is
+no switch for this: the arrow appears as soon as a layer is magnetic. Boxes too short for a
+readable arrow leave it out and show the direction in the tooltip. A non-magnetic sample's
+box layout is unchanged.
 
-The Structure tab draws the **current model**; switch models in the header to inspect
-another one. A repeating multilayer that the tab collapses to its repeat unit shows one
-arrow per drawn box - the direction of the repeat unit, which every repeat shares.
+The Structure tab draws the current model; switch models in the header to look at another
+one. When the tab collapses a repeating multilayer to its repeat unit, it shows one arrow
+per drawn box, giving the direction of the repeat unit that every repeat shares.
 
-Gradient layers get no arrow. A gradient has no single moment of its own, and one
-"representative" arrow would be actively misleading when its slices oppose; the `ρM(z)`
-and `θM(z)` curves remain the truth for graded structures.
-
+Gradient layers get no arrow. A gradient has no single moment, and one representative
+arrow would mislead when its slices point in opposite directions. For graded structures,
+use the `ρM(z)` and `θM(z)` curves.
