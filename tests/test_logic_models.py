@@ -21,6 +21,24 @@ def test_from_models_collection_to_list_of_dicts_uses_original_name():
     ]
 
 
+def test_a_model_loaded_from_a_file_can_be_renamed():
+    # A sample loaded from an ORSO file shows the file's name (user_data['original_name']).
+    # Renaming once changed only model.name, so the shown name never changed and the model
+    # table, which commits every keystroke, put the file's name straight back.
+    models = make_model_collection(
+        make_model(name='Model', user_data={'original_name': 'Si / SiO2 / film / D2O'}),
+        make_model(name='Other', user_data={'original_name': 'Other file name'}),
+    )
+    logic = models_module.Models(make_project(models=models))
+
+    assert logic.set_name_at_index(0, 'Film in D2O') is True
+    assert logic.set_name_at_current_index('Film in D2') is True
+    assert logic.models_names == ['Film in D2', 'Other file name']
+    assert logic.set_name_at_index(1, 'Model') is True  # same as the internal name, not the shown one
+    assert logic.models_names == ['Film in D2', 'Model']
+    assert logic.set_name_at_index(1, 'Model') is False
+
+
 def test_model_properties_and_resolution_handling(monkeypatch):
     monkeypatch.setattr(models_module, 'PercentageFwhm', FakeResolutionFunction)
     models = make_model_collection(

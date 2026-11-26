@@ -62,8 +62,12 @@ EaElements.GroupBox {
                     color: EaStyle.Colors.themeForegroundMinor
                     text: (index + 1) + (sharedWith.length ? ' ⇄' : '')
                     ToolTip.text: sharedWith.length
-                                  ? qsTr("Shared with %1: editing its layers changes them too").arg(sharedWith.join(', '))
+                                  ? qsTr("Shared with %1.").arg(sharedWith.join(', '))
                                   : ''
+                    // TableViewLabel shows its own tooltip only for a truncated text, which
+                    // "1 ⇄" never is: show this one while hovered (never both at once).
+                    ToolTip.visible: hovered && !truncated && sharedWith.length > 0
+                    ToolTip.delay: Globals.Variables.toolTipDelay
                 }
 
                 EaComponents.TableViewTextInput {

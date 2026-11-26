@@ -13,6 +13,7 @@ tutorial.md
 tutorials/model_def.md
 tutorials/load_data.md
 tutorials/simple_fitting.md
+tutorials/multi_contrast.md
 tutorials/magnetism.md
 tutorials/polarized_data.md
 tutorials/bayesian.md

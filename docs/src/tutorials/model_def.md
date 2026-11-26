@@ -84,12 +84,14 @@ condition: the film in D2O and in H2O, or a monolayer with deuterated and with
 hydrogenated tails. Each contrast is a model of its own, with its own scale,
 background and resolution, while the structure is common to all of them. Fitted
 together, the contrasts determine what no single one of them can.
+[Fitting several contrasts together](./multi_contrast.md) walks through the whole
+workflow on two examples; this section describes the controls.
 
 To create one, select the reference model in the `Models selector` and press
 **Add contrast of the selected model…**. The dialog asks for the new model's name and
 lists what the contrast can change:
 
-<!-- TODO: screenshot of the Add contrast dialog -> _images/sample_add_contrast.png -->
+![Add contrast dialog](./_images/sample_add_contrast.png)
 
 - every material the model uses, with a drop-down to **replace** it by another material
   from the `Material editor` (`keep` leaves it as it is). Add the replacement material,
@@ -189,7 +191,7 @@ one click. The list is per assembly of the current model, and only shows the rec
 make sense for that assembly type; a recipe that cannot be applied right now is marked
 `n/a` with the reason, and one that is always in force is marked `always on`.
 
-<!-- TODO: screenshot of the Physics constraints group -> _images/sample_physics_constraints.png -->
+![Physics constraints group](./_images/sample_physics_constraints.png)
 
 | Recipe | Effect |
 |---|---|
@@ -208,7 +210,7 @@ Each active recipe appears as a single row in the `Active Constraints` table of 
 The `Single constraints` group creates numeric or symbolic relationships between individual
 parameters.
 
-<!-- TODO: screenshot of the Single constraints group -> _images/sample_constraints.png -->
+![Single constraints group](./_images/sample_constraints.png)
 
 1. Pick the **dependent parameter** from the drop-down.
 2. Pick the relation: `=`, `≤` or `≥`.
@@ -266,7 +268,7 @@ separate files, or kept from a project saved before **Add contrast** existed. Fo
 contrast, **Add contrast of the selected model…** (see *Contrasts* above) is simpler:
 it shares the structure from the start.
 
-<!-- TODO: screenshot of the Link contrasts group -> _images/sample_link_contrasts.png -->
+![Link contrasts group](./_images/sample_link_contrasts.png)
 
 1. Tick two or more models in the table. One of them is the **reference**, marked
    `(reference)` in the table; the others follow it. By default it is the ticked model

@@ -1,5 +1,27 @@
 # Unreleased
 
+- The **Add contrast** dialog is half as wide: the name field lines up with
+  the replacement choices, and the explanation above wraps to the same width.
+- Hovering the **⇄** marker of a shared assembly in the `Model editor` shows
+  which other models share it. The tooltip existed but never appeared.
+- A model whose sample was loaded from an ORSO file (**Load sample from file**)
+  can be renamed in the `Models selector`. Before, it kept showing the
+  sample name from the file: every key typed in its name was undone at once.
+- **Add contrast** works with a material made with **Add material**. Before,
+  choosing such a material as the replacement (e.g. H2O for D2O) left the new
+  contrast with a copy of the material it should have replaced, without any
+  message: the "H2O" contrast was calculated as D2O, and only a poor fit gave
+  it away. Contrasts made with a material loaded from a file, or with a
+  duplicated one, were not affected. The fix is in easyreflectometry.
+- New tutorial, *Fitting several contrasts together*, which walks through the
+  multiple-contrast workflow on the *Film in three water contrasts* and
+  *DSPC monolayer, three contrasts* examples (#396): building one model and
+  its contrasts with **Add contrast**, what is shared (⇄) and what each
+  contrast keeps, pairing experiments with models, the joint fit, detaching a
+  shared parameter, when to use **Link contrasts** instead and why shared
+  parameters are not in its table, and constraints between contrasts. The
+  `Material and model setup` page now has its screenshots of the
+  **Add contrast** dialog and the constraint groups.
 - The reflectivity plots on the `Sample`, `Experiment` and `Analysis` pages
   show their legend from the start (#400), so with several contrasts on one
   plot each curve can be identified without opening the plot options. The SLD

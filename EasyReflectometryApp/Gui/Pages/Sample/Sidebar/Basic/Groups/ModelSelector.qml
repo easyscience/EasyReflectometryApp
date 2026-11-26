@@ -181,11 +181,16 @@ EaElements.GroupBox {
             contrastError.text = result.success ? '' : result.message
         }
 
+        // Two columns, label and input: the name row, every candidate row and the text above
+        // share them, so the dialog is as wide as one row.
+        readonly property real columnWidth: EaStyle.Sizes.fontPixelSize * 12
+        readonly property real columnSpacing: EaStyle.Sizes.fontPixelSize * 0.5
+
         Column {
             spacing: EaStyle.Sizes.fontPixelSize * 0.5
 
             EaElements.Label {
-                width: EaStyle.Sizes.sideBarContentWidth * 1.3
+                width: 2 * addContrastDialog.columnWidth + addContrastDialog.columnSpacing
                 wrapMode: Text.WordWrap
                 text: qsTr("The new model shares the structure of '%1': editing a shared layer edits both. "
                            + "Choose what this contrast changes; scale, background and resolution are its own.")
@@ -193,9 +198,17 @@ EaElements.GroupBox {
             }
 
             Row {
-                spacing: EaStyle.Sizes.fontPixelSize * 0.5
-                EaElements.Label { text: qsTr("Name"); anchors.verticalCenter: parent.verticalCenter }
-                EaElements.TextField { id: contrastName; width: EaStyle.Sizes.sideBarContentWidth }
+                spacing: addContrastDialog.columnSpacing
+                EaElements.Label {
+                    width: addContrastDialog.columnWidth
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Name")
+                }
+                EaElements.TextField {
+                    id: contrastName
+                    width: addContrastDialog.columnWidth
+                    horizontalAlignment: TextInput.AlignLeft
+                }
             }
 
             Repeater {
@@ -203,7 +216,7 @@ EaElements.GroupBox {
                 model: addContrastDialog.candidates
 
                 Row {
-                    spacing: EaStyle.Sizes.fontPixelSize * 0.5
+                    spacing: addContrastDialog.columnSpacing
 
                     // The choice for this row, or null to keep it as in the reference
                     function choice() {
@@ -214,7 +227,7 @@ EaElements.GroupBox {
                     }
 
                     EaElements.Label {
-                        width: EaStyle.Sizes.fontPixelSize * 12
+                        width: addContrastDialog.columnWidth
                         elide: Text.ElideRight
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.label
@@ -222,13 +235,14 @@ EaElements.GroupBox {
                     EaElements.ComboBox {
                         id: replacement
                         visible: modelData.kind === 'material'
-                        width: EaStyle.Sizes.fontPixelSize * 12
+                        width: addContrastDialog.columnWidth
                         model: [qsTr("keep")].concat(Globals.BackendWrapper.sampleMaterialNames)
                     }
                     EaElements.TextField {
                         id: formula
                         visible: modelData.kind === 'formula'
-                        width: EaStyle.Sizes.fontPixelSize * 12
+                        width: addContrastDialog.columnWidth
+                        horizontalAlignment: TextInput.AlignLeft
                         text: modelData.formula ?? ''
                         ToolTip.text: qsTr("Chemical formula, e.g. with D for deuterium")
                     }

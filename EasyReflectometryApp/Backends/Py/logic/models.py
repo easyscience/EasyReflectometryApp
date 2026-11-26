@@ -73,18 +73,12 @@ class Models:
         return [element['label'] for element in self.models]
 
     def set_name_at_current_index(self, new_value: str) -> bool:
-        if self._models[self.index].name != new_value:
-            self._models[self.index].name = new_value
-            return True
-        return False
+        return _rename(self._models[self.index], new_value)
 
     def set_name_at_index(self, index: int, new_value: str) -> bool:
         if not (0 <= index < len(self._models)):
             return False
-        if self._models[index].name != new_value:
-            self._models[index].name = new_value
-            return True
-        return False
+        return _rename(self._models[index], new_value)
 
     def set_scaling_at_current_index(self, new_value: float) -> bool:
         return _set_model_parameter(self._models[self.index].scale, new_value)
@@ -219,6 +213,22 @@ class Models:
     def move_selected_down(self) -> None:
         if self.index < len(self._models) - 1:
             self._project_lib.move_model(self.index, self.index + 1)
+
+
+def _rename(model, new_value: str) -> bool:
+    """Give `model` the name the user typed. Returns whether its shown name changed.
+
+    A model loaded from an ORSO file carries the file's sample name in
+    ``user_data['original_name']``, which is shown instead of ``model.name``. The name
+    the user types replaces it; otherwise the rename would not show, and the model
+    table, which commits every keystroke, would put the file's name back at once.
+    """
+    if get_original_name(model) == new_value and model.name == new_value:
+        return False
+    model.name = new_value
+    if isinstance(getattr(model, 'user_data', None), dict):
+        model.user_data.pop('original_name', None)
+    return True
 
 
 def _from_models_collection_to_list_of_dicts(models_collection: ModelCollection) -> list[dict[str, str]]:

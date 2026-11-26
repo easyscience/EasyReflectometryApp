@@ -155,7 +155,8 @@ first one, the D2O stack.
    (D2O, H2O, CMSi) in the experiments table.
 4. *Analysis*: set each model's background to its value in the table above and
    keep it fixed. Free the oxide thickness, the film thickness, SLD and
-   roughness, and the three scales. Start from a wrong guess, e.g. oxide 25 Å,
+   roughness, and the three scales. Untick the `sld` and `isld` of `H2O` and
+   `CMSi`: a material added with **Add material** starts with them free. Start from a wrong guess, e.g. oxide 25 Å,
    film 70 Å, SLD 1.0, roughness 3 Å. Fit all three: oxide 15.2 Å, film 80.0 Å,
    SLD 2.00, roughness 5.0 Å. The scales come back per contrast (H2O 0.95), the
    pooled reduced χ² is about 0.9 and each dataset's χ²/point is about 0.9 too.
@@ -176,11 +177,11 @@ CMSi contrast is built as a copy of the D2O model and linked to it, instead of
 being added with **Add contrast**.
 
 <!-- DRAFT, not yet followable in the app (2026-10-11): steps 2-4 of this variant
-     hit three defects: Add contrast ignores a replacement that is a density
-     material; re-picking a layer's material does not reach the calculator until
-     the project is reloaded; and linking needs the waters to be the same kind of
-     material. The verified numbers below were obtained through the app backend
-     with the calculation refreshed. -->
+     hit two defects: re-picking a layer's material does not reach the calculator
+     until the project is reloaded; and linking needs the waters to be the same kind
+     of material. (A third, Add contrast ignoring a replacement that is a density
+     material, was fixed in the library on 2026-11-26.) The verified numbers below
+     were obtained through the app backend with the calculation refreshed. -->
 
 1. As in step 1, but create the CMSi material by **duplicating D2O** in the
    *Material editor* and setting the copy's name to `CMSi` and its SLD to 2.07.
