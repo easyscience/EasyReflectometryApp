@@ -29,6 +29,8 @@ QtObject {
     property bool reverseSldZAxis: false
     property bool logarithmicQAxis: false
     property int experimentMarkerStyle: 0  // 0: dots, 1: circles, 2: line
+    // Factor on the measured-data marker size (line width for the line style)
+    property double experimentMarkerSize: 1.0
 
     // SLD chart z range, shared by the Sample and Analysis SLD charts.
     // Auto: fit the calculated profiles. Otherwise [sldZMin, sldZMax]; NaN until

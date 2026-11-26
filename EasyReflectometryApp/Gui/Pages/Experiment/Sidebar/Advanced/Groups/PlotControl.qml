@@ -47,6 +47,27 @@ EaElements.GroupBox {
             textRole: "text"
             valueRole: "value"
         }
+
+        EaElements.Label {
+            text: qsTr("Marker size")
+        }
+
+        // Factor on the default marker size (line width for the line style),
+        // held as a percentage because the spin box is integer-valued.
+        EaElements.SpinBox {
+            from: 50
+            to: 400
+            stepSize: 25
+            editable: false
+            value: Math.round(Globals.Variables.experimentMarkerSize * 100)
+            textFromValue: (value, locale) => '×' + Number(value / 100).toLocaleString(locale, 'f', 2)
+            ToolTip.text: qsTr("Scale the measured-data markers (or line width) relative to the default")
+            ToolTip.delay: Globals.Variables.toolTipDelay
+            ToolTip.visible: hovered
+            // Not onValueModified: the EasyApp +/- buttons call increase()/decrease(),
+            // which do not emit it.
+            onValueChanged: Globals.Variables.experimentMarkerSize = value / 100
+        }
     }
 }
 

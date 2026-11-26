@@ -39,7 +39,14 @@ Rectangle {
         bkgSerie.width: 1
 
         // Keep scatter series color in sync with selected experiment
-        onCurrentExperimentColorChanged: MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
+        onCurrentExperimentColorChanged: {
+            MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
+            if (logModeSeries) {
+                MeasuredScatter.setColor(logModeSeries.measuredSerie, currentExperimentColor)
+                logModeSeries.errorUpperSerie.color = currentExperimentColor
+                logModeSeries.errorLowerSerie.color = currentExperimentColor
+            }
+        }
 
         anchors.topMargin: EaStyle.Sizes.toolButtonHeight - EaStyle.Sizes.fontPixelSize - 1
 
@@ -85,10 +92,13 @@ Rectangle {
             }
         }
 
-        // Recreate series when marker style changes
+        // Recreate series when marker style or size changes
         Connections {
             target: Globals.Variables
             function onExperimentMarkerStyleChanged() {
+                chartView.recreateSeriesForCurrentMode()
+            }
+            function onExperimentMarkerSizeChanged() {
                 chartView.recreateSeriesForCurrentMode()
             }
         }
@@ -122,7 +132,8 @@ Rectangle {
                 measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                               "measured_scatter",
                                                               chartView.axisX, chartView.axisY,
-                                                              currentExperimentColor, Globals.Variables.experimentMarkerStyle)
+                                                              currentExperimentColor, Globals.Variables.experimentMarkerStyle,
+                                                          Globals.Variables.experimentMarkerSize)
                 if (measuredScatterSerie) {
                     measuredScatterSerie.visible = true
                     Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
@@ -221,6 +232,7 @@ Rectangle {
             }
 
             // Hide the default single-experiment series.
+            removeLogModeSeries()
             measured.visible = false
             if (measuredScatterSerie) measuredScatterSerie.visible = false
             errorUpper.visible = false
@@ -242,7 +254,8 @@ Rectangle {
             var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                        `${name} - Data`,
                                                        xAxis, chartView.axisY,
-                                                       channelRow.color, Globals.Variables.experimentMarkerStyle)
+                                                       channelRow.color, Globals.Variables.experimentMarkerStyle,
+                                                          Globals.Variables.experimentMarkerSize)
 
             var errorBounds = MeasuredScatter.createErrorBounds(chartView, ChartView, name,
                                                                 xAxis, chartView.axisY, channelRow.color)
@@ -396,6 +409,41 @@ Rectangle {
             repeat: false
             onTriggered: chartView.resetAxes()
         }
+
+        // The axes are bound to the data range only until the first reset (Home, a plot mode
+        // or log q change) assigns them, and the log q axis is never bound at all. So when the
+        // data range moves, e.g. another project or experiment is loaded, the axes are fitted
+        // to it here; otherwise they keep showing the previous data's range (and the user's
+        // zoom survives refreshes that leave the data where it was).
+        property string fittedDataExtent: ""
+
+        function dataExtent() {
+            var xAxis = currentXAxis()
+            return [useLogQAxis, xAxis.minAfterReset, xAxis.maxAfterReset,
+                    chartView.axisY.minAfterReset, chartView.axisY.maxAfterReset].join()
+        }
+
+        function fitAxesIfDataMoved() {
+            if (dataExtent() !== fittedDataExtent) {
+                resetAxes()
+            }
+        }
+
+        Connections {
+            target: Globals.BackendWrapper.activeBackend?.plotting ?? null
+            enabled: target !== null
+            ignoreUnknownSignals: true  // the mock backend has no range signals
+            function onExperimentChartRangesChanged() {
+                experimentFitAxesTimer.start()
+            }
+        }
+
+        Timer {
+            id: experimentFitAxesTimer
+            interval: 75
+            repeat: false
+            onTriggered: chartView.fitAxesIfDataMoved()
+        }
         
         property double xRange: Globals.BackendWrapper.plottingExperimentMaxX - Globals.BackendWrapper.plottingExperimentMinX
         axisX.title: "q (Å⁻¹)"
@@ -407,6 +455,9 @@ Rectangle {
         // Logarithmic axis control
         property bool useLogQAxis: Globals.Variables.logarithmicQAxis
         axisX.visible: !useLogQAxis
+
+        // Border on all four sides of the plot area
+        Gui.PlotFrame { chart: chartView }
 
         Gui.LogQAxis {
             id: axisXLog
@@ -437,13 +488,8 @@ Rectangle {
         }
 
         function recreateForLogMode() {
-            // Clean up previous log mode series
-            if (logModeSeries) {
-                chartView.removeSeries(logModeSeries.measuredSerie)
-                chartView.removeSeries(logModeSeries.errorUpperSerie)
-                chartView.removeSeries(logModeSeries.errorLowerSerie)
-                logModeSeries = null
-            }
+            // Rebuilt, not reused: a marker style change comes through here too.
+            removeLogModeSeries()
 
             if (isMultiExperimentMode) {
                 // Multi-experiment mode: recreate all multi-experiment series with the correct axis
@@ -451,59 +497,83 @@ Rectangle {
             } else if (isPolarizedMode) {
                 // Polarized experiment: recreate per-channel series on the correct axis
                 updateChannelSeries()
-            } else if (useLogQAxis) {
-                // Single experiment, log mode: create dynamic series on log axis
-                measured.visible = false
-                if (measuredScatterSerie) measuredScatterSerie.visible = false
-                errorUpper.visible = false
-                errorLower.visible = false
-
-                var newMeasured = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
-                                                         "measured_log", axisXLog, chartView.axisY,
-                                                         chartView.currentExperimentColor, Globals.Variables.experimentMarkerStyle)
-
-                var newErrorUpper = chartView.createSeries(ChartView.SeriesTypeLine, "errorUpper_log", axisXLog, chartView.axisY)
-                newErrorUpper.color = errorUpper.color
-                newErrorUpper.width = errorUpper.width
-                newErrorUpper.useOpenGL = chartView.useOpenGL
-
-                var newErrorLower = chartView.createSeries(ChartView.SeriesTypeLine, "errorLower_log", axisXLog, chartView.axisY)
-                newErrorLower.color = errorLower.color
-                newErrorLower.width = errorLower.width
-                newErrorLower.useOpenGL = chartView.useOpenGL
-
-                logModeSeries = {
-                    measuredSerie: newMeasured,
-                    errorUpperSerie: newErrorUpper,
-                    errorLowerSerie: newErrorLower
-                }
-
-                // Register new series with backend and refresh
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', newMeasured)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', newErrorUpper)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', newErrorLower)
-                Globals.BackendWrapper.plottingRefreshExperiment()
             } else {
-                // Single experiment, linear mode: restore scatter series
-                measured.visible = false
-                if (!measuredScatterSerie) {
-                    console.warn("ExperimentView.recreateForLogMode: measuredScatterSerie is null - linear mode will render no measured points")
-                } else {
-                    measuredScatterSerie.visible = true
-                }
-                errorUpper.visible = true
-                errorLower.visible = true
-
-                // Re-register scatter series for measured, static series for errors
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', errorUpper)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', errorLower)
-                Globals.BackendWrapper.plottingRefreshExperiment()
+                showSingleExperimentSeries()
             }
 
             // Update reference lines on correct axis
             chartView.updateReferenceLines()
             Qt.callLater(resetAxes)
+        }
+
+        function registerSingleExperimentSeries(measuredSerie, upperSerie, lowerSerie) {
+            Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredSerie)
+            Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', upperSerie)
+            Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', lowerSerie)
+        }
+
+        // The log-q series exist only while they are shown. Removing them points the backend
+        // back at the linear series, so it never fills a deleted one.
+        function removeLogModeSeries() {
+            if (!logModeSeries) {
+                return
+            }
+            chartView.removeSeries(logModeSeries.measuredSerie)
+            chartView.removeSeries(logModeSeries.errorUpperSerie)
+            chartView.removeSeries(logModeSeries.errorLowerSerie)
+            logModeSeries = null
+            registerSingleExperimentSeries(measuredScatterSerie, errorUpper, errorLower)
+        }
+
+        function createLogModeSeries() {
+            var newErrorUpper = chartView.createSeries(ChartView.SeriesTypeLine, "errorUpper_log", axisXLog, chartView.axisY)
+            newErrorUpper.color = errorUpper.color
+            newErrorUpper.width = errorUpper.width
+            newErrorUpper.useOpenGL = chartView.useOpenGL
+
+            var newErrorLower = chartView.createSeries(ChartView.SeriesTypeLine, "errorLower_log", axisXLog, chartView.axisY)
+            newErrorLower.color = errorLower.color
+            newErrorLower.width = errorLower.width
+            newErrorLower.useOpenGL = chartView.useOpenGL
+
+            return {
+                measuredSerie: MeasuredScatter.create(chartView, ChartView, ScatterSeries,
+                                                      "measured_log", axisXLog, chartView.axisY,
+                                                      chartView.currentExperimentColor, Globals.Variables.experimentMarkerStyle,
+                                                      Globals.Variables.experimentMarkerSize),
+                errorUpperSerie: newErrorUpper,
+                errorLowerSerie: newErrorLower
+            }
+        }
+
+        // One experiment, filled by the backend: on a log q axis into the log-mode series,
+        // otherwise into the linear ones. Exactly one of the two sets is on screen, so the
+        // points of a previous project or experiment cannot stay next to the current ones.
+        function showSingleExperimentSeries() {
+            measured.visible = false
+            if (useLogQAxis) {
+                if (measuredScatterSerie) measuredScatterSerie.visible = false
+                errorUpper.visible = false
+                errorLower.visible = false
+                if (!logModeSeries) {
+                    logModeSeries = createLogModeSeries()
+                }
+                registerSingleExperimentSeries(logModeSeries.measuredSerie,
+                                               logModeSeries.errorUpperSerie,
+                                               logModeSeries.errorLowerSerie)
+            } else {
+                removeLogModeSeries()
+                if (!measuredScatterSerie) {
+                    console.warn("ExperimentView.showSingleExperimentSeries: measuredScatterSerie is null - no measured points will render")
+                } else {
+                    measuredScatterSerie.visible = true
+                    MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
+                }
+                errorUpper.visible = true
+                errorLower.visible = true
+                registerSingleExperimentSeries(measuredScatterSerie, errorUpper, errorLower)
+            }
+            Globals.BackendWrapper.plottingRefreshExperiment()
         }
 
         function resetAxes() {
@@ -524,6 +594,7 @@ Rectangle {
             }
             // Staggered curves are shifted beyond the data's own range; fit the axis to them.
             adjustAxisForStaggering()
+            fittedDataExtent = dataExtent()
         }
 
         property double yRange: Globals.BackendWrapper.plottingExperimentMaxY - Globals.BackendWrapper.plottingExperimentMinY
@@ -638,22 +709,7 @@ Rectangle {
                     return
                 }
                 clearChannelSeries()
-                // Show default series for single experiment
-                measured.visible = false
-                if (!measuredScatterSerie) {
-                    console.warn("ExperimentView.updateMultiExperimentSeries: measuredScatterSerie is null - single mode will render no measured points")
-                } else {
-                    measuredScatterSerie.visible = true
-                    MeasuredScatter.setColor(measuredScatterSerie, currentExperimentColor)
-                }
-                errorUpper.visible = true
-                errorLower.visible = true
-
-                // Re-register scatter series and refresh data
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', errorUpper)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', errorLower)
-                Globals.BackendWrapper.plottingRefreshExperiment()
+                showSingleExperimentSeries()
                 return
             }
 
@@ -663,27 +719,14 @@ Rectangle {
             // If no data available yet, keep default series visible as fallback
             if (experimentDataList.length === 0) {
                 console.log("No experiment data available - keeping default series visible")
-                measured.visible = false
-                if (!measuredScatterSerie) {
-                    console.warn("ExperimentView.updateMultiExperimentSeries: measuredScatterSerie is null - no-data fallback will render no measured points")
-                } else {
-                    measuredScatterSerie.visible = true
-                }
-                errorUpper.visible = true
-                errorLower.visible = true
-
-                // Re-register and refresh so this branch matches the
-                // single-experiment branch above.
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'measuredSerie', measuredScatterSerie)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorUpperSerie', errorUpper)
-                Globals.BackendWrapper.plottingSetQtChartsSerieRef('experimentPage', 'errorLowerSerie', errorLower)
-                Globals.BackendWrapper.plottingRefreshExperiment()
+                showSingleExperimentSeries()
                 return
             }
 
             // Hide default and per-channel series in multi-experiment mode
             // (only after we have data)
             clearChannelSeries()
+            removeLogModeSeries()
             measured.visible = false
             if (measuredScatterSerie) measuredScatterSerie.visible = false
             errorUpper.visible = false
@@ -725,7 +768,8 @@ Rectangle {
             var measuredSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                        `${expName} - Data`,
                                                        xAxis, chartView.axisY,
-                                                       color, Globals.Variables.experimentMarkerStyle)
+                                                       color, Globals.Variables.experimentMarkerStyle,
+                                                          Globals.Variables.experimentMarkerSize)
 
             var errorBounds = MeasuredScatter.createErrorBounds(chartView, ChartView, expName,
                                                                 xAxis, chartView.axisY, color)
@@ -1005,7 +1049,8 @@ Rectangle {
             measuredScatterSerie = MeasuredScatter.create(chartView, ChartView, ScatterSeries,
                                                           "measured_scatter",
                                                           chartView.axisX, chartView.axisY,
-                                                          currentExperimentColor, Globals.Variables.experimentMarkerStyle)
+                                                          currentExperimentColor, Globals.Variables.experimentMarkerStyle,
+                                                          Globals.Variables.experimentMarkerSize)
             if (!measuredScatterSerie) {
                 console.warn("ExperimentView: failed to create measuredScatterSerie - measured data will not render")
             }

@@ -12,8 +12,10 @@
 // MARKER_SHAPE expects one of `ScatterSeries.MarkerShape*` enum values; it is
 // resolved lazily inside `applyStyle` so this file does not depend on QtCharts
 // being importable at load time.
+// Sizes at a marker scale of 1; the user's marker size setting multiplies them.
 var MARKER_SIZE_DOTS   = 2
 var MARKER_SIZE_CIRCLES = 5
+var LINE_WIDTH    = 2
 var BORDER_WIDTH  = 0
 var OPACITY       = 0.95
 var MARKER_SHAPE  = "Circle"   // "Circle" or "Rectangle" (ScatterSeries.MarkerShape*)
@@ -34,18 +36,24 @@ function _resolveMarkerShape(scatterSeriesType, shape) {
     return (value !== undefined) ? value : 0
 }
 
+// A usable marker scale: a positive number, otherwise 1.
+function _scale(markerScale) {
+    return (typeof markerScale === "number" && markerScale > 0) ? markerScale : 1
+}
+
 // Apply the canonical measured-scatter style to an existing ScatterSeries.
 //   serie              -- the ScatterSeries to style (must not be null)
 //   color              -- foreground/border color
 //   markerStyle        -- 0: dots, 1: circles, 2: line
 //   scatterSeriesType  -- the ScatterSeries QML type, used to resolve the
 //                         marker-shape enum (pass `ScatterSeries` from QML)
-function applyStyle(serie, color, markerStyle, scatterSeriesType) {
+//   markerScale        -- factor on the marker size (default 1)
+function applyStyle(serie, color, markerStyle, scatterSeriesType, markerScale) {
     if (!serie) {
         console.warn("MeasuredScatter.applyStyle: serie is null - style not applied")
         return
     }
-    var markerSize = (markerStyle === 0) ? MARKER_SIZE_DOTS : MARKER_SIZE_CIRCLES
+    var markerSize = ((markerStyle === 0) ? MARKER_SIZE_DOTS : MARKER_SIZE_CIRCLES) * _scale(markerScale)
     serie.color       = color
     serie.borderColor = color
     serie.markerSize  = markerSize
@@ -61,8 +69,10 @@ function applyStyle(serie, color, markerStyle, scatterSeriesType) {
 //   name, axisX, axisY -- forwarded to createSeries
 //   color              -- color applied via applyStyle
 //   markerStyle        -- 0: dots, 1: circles, 2: line
+//   markerScale        -- factor on the marker size, or on the line width for
+//                         the line style (default 1)
 // Returns the new series, or null if creation failed.
-function create(chartView, chartViewType, scatterSeriesType, name, axisX, axisY, color, markerStyle) {
+function create(chartView, chartViewType, scatterSeriesType, name, axisX, axisY, color, markerStyle, markerScale) {
     if (!chartView) {
         console.warn("MeasuredScatter.create: chartView is null")
         return null
@@ -83,10 +93,10 @@ function create(chartView, chartViewType, scatterSeriesType, name, axisX, axisY,
         return null
     }
     if (markerStyle !== 2) {  // apply scatter style only if not line
-        applyStyle(serie, color, markerStyle, scatterSeriesType)
+        applyStyle(serie, color, markerStyle, scatterSeriesType, markerScale)
     } else {  // line style
         serie.color = color
-        serie.width = 2  // line width
+        serie.width = LINE_WIDTH * _scale(markerScale)
     }
     serie.useOpenGL = chartView.useOpenGL
     return serie

@@ -10,6 +10,7 @@ ExperimentModelComboBox ExperimentModelComboBox.qml
 FitProgressBar FitProgressBar.qml
 MagneticProfileControl MagneticProfileControl.qml
 PlotControlCommon PlotControlCommon.qml
+PlotFrame PlotFrame.qml
 SpinAsymmetryChart SpinAsymmetryChart.qml
 SideBarWithFooter SideBarWithFooter.qml
 SldChart SldChart.qml

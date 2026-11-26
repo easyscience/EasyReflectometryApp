@@ -161,6 +161,7 @@ Rectangle {
             property double maxAfterReset: root.manualZRange ? Globals.Variables.sldZMax
                                                              : root.shownRange[1] + chartView.xRange * 0.01
             reverse: root.reverseZAxis
+            lineVisible: false  // PlotFrame draws the border
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -179,6 +180,7 @@ Rectangle {
             titleText: "SLD (10⁻⁶Å⁻²)"
             property double minAfterReset: root.shownRange[2] - chartView.yRange * 0.01
             property double maxAfterReset: root.shownRange[3] + chartView.yRange * 0.01
+            lineVisible: false  // PlotFrame draws the border
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -198,12 +200,16 @@ Rectangle {
             visible: root.visibleMagneticCurves.indexOf('theta_m') !== -1 && root.anyModelMagnetic
             min: Globals.BackendWrapper.plottingSldThetaMinY - 5
             max: Globals.BackendWrapper.plottingSldThetaMaxY + 5
+            lineVisible: false  // PlotFrame draws the border
             color: EaStyle.Colors.chartAxis
             // The SLD axis already draws the grid; a second one would clutter.
             gridVisible: false
             labelsColor: EaStyle.Colors.chartLabels
             titleBrush: EaStyle.Colors.chartLabels
         }
+
+        // Border on all four sides of the plot area
+        PlotFrame { chart: chartView }
 
         function resetAxes() {
             axisX.min = axisX.minAfterReset

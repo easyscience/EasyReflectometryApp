@@ -1,5 +1,21 @@
 # Unreleased
 
+- The `Experiment` plot shows only the current project's data after a project
+  is reset or another project or example is loaded. With **Logarithmic
+  q-axis** on, the previous project's points used to stay on the plot next to
+  the new ones. After **Reset view** (or toggling a plot option) had been used
+  once, the axes also kept the previous data's range, so new data could be out
+  of view until **Reset view** was clicked again. The axes now follow the data
+  whenever its range changes, and a zoom is kept when nothing about the data
+  changed.
+- Plots are closer to publication-ready (#401). Every chart (reflectivity,
+  residuals, SLD and spin asymmetry) is framed on all four sides instead of
+  only along the left and bottom axes. With **Logarithmic q-axis** on, minor
+  grid lines mark 2×…9× of each decade (and fill the gaps between ticks when
+  zoomed in), so values between 0.01 and 0.1 can be read off. A new
+  **Marker size** setting next to **Marker style** in the `Experiment` page's
+  **Plot control** scales the measured-data markers (or line width) from ×0.5
+  to ×4, on the `Experiment` and `Analysis` plots alike.
 - Quitting the application while a fit or a Bayesian sampling run is in
   progress no longer crashes it (`QThread: Destroyed while thread is still
   running`). The run is stopped and the application waits for it to end, up

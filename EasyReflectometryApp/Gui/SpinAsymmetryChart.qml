@@ -58,6 +58,7 @@ Rectangle {
             titleText: "q (1/Å)"
             property double minAfterReset: Globals.BackendWrapper.plottingSpinAsymmetryMinX - chartView.xRange * 0.02
             property double maxAfterReset: Globals.BackendWrapper.plottingSpinAsymmetryMaxX + chartView.xRange * 0.02
+            lineVisible: false  // PlotFrame draws the border
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -77,6 +78,7 @@ Rectangle {
             titleText: "Spin asymmetry"
             property double minAfterReset: Globals.BackendWrapper.plottingSpinAsymmetryMinY - chartView.yRange * 0.05
             property double maxAfterReset: Globals.BackendWrapper.plottingSpinAsymmetryMaxY + chartView.yRange * 0.05
+            lineVisible: false  // PlotFrame draws the border
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -87,6 +89,9 @@ Rectangle {
                 max = maxAfterReset
             }
         }
+
+        // Border on all four sides of the plot area
+        PlotFrame { chart: chartView }
 
         function resetAxes() {
             axisX.min = axisX.minAfterReset

@@ -54,6 +54,7 @@ Rectangle {
             titleText: "q (Å⁻¹)"
             property double minAfterReset: Globals.BackendWrapper.plottingResidualMinX - chartView.xRange * 0.01
             property double maxAfterReset: Globals.BackendWrapper.plottingResidualMaxX + chartView.xRange * 0.01
+            lineVisible: false  // PlotFrame draws the border
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -64,6 +65,9 @@ Rectangle {
                 max = maxAfterReset
             }
         }
+
+        // Border on all four sides of the plot area
+        Gui.PlotFrame { chart: chartView }
 
         Gui.LogQAxis {
             id: axisXLog
@@ -105,6 +109,7 @@ Rectangle {
                 const maxAbs = Math.max(Math.abs(Globals.BackendWrapper.plottingResidualMinY), Math.abs(Globals.BackendWrapper.plottingResidualMaxY))
                 return maxAbs + maxAbs * 0.05
             }
+            lineVisible: false  // PlotFrame draws the border
             color: EaStyle.Colors.chartAxis
             gridLineColor: EaStyle.Colors.chartGridLine
             minorGridLineColor: EaStyle.Colors.chartMinorGridLine

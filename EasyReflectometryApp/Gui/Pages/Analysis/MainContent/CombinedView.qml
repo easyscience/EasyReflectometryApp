@@ -188,10 +188,13 @@ Rectangle {
                     }
                 }
 
-                // Recreate series when marker style changes
+                // Recreate series when marker style or size changes
                 Connections {
                     target: Globals.Variables
                     function onExperimentMarkerStyleChanged() {
+                        analysisChartView.recreateSeriesForCurrentMode()
+                    }
+                    function onExperimentMarkerSizeChanged() {
                         analysisChartView.recreateSeriesForCurrentMode()
                     }
                 }
@@ -411,7 +414,8 @@ Rectangle {
                     var measuredSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
                                                                `${expName} - Measured`,
                                                                xAxis, analysisChartView.axisY,
-                                                               color, Globals.Variables.experimentMarkerStyle)
+                                                               color, Globals.Variables.experimentMarkerStyle,
+                                                                  Globals.Variables.experimentMarkerSize)
                     var errorBounds = MeasuredScatter.createErrorBounds(analysisChartView, ChartView, `${expName} - Measured`,
                                                                         xAxis, analysisChartView.axisY, color)
 
@@ -479,6 +483,9 @@ Rectangle {
                 property bool useLogQAxis: Globals.Variables.logarithmicQAxis
                 axisX.visible: !useLogQAxis
 
+                // Border on all four sides of the plot area
+                Gui.PlotFrame { chart: analysisChartView }
+
                 Gui.LogQAxis {
                     id: analysisAxisXLog
                     visible: analysisChartView.useLogQAxis
@@ -535,7 +542,8 @@ Rectangle {
 
                         var newMeasured = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
                                                                  "measured_log", analysisAxisXLog, analysisChartView.axisY,
-                                                                 measured.color, Globals.Variables.experimentMarkerStyle)
+                                                                 measured.color, Globals.Variables.experimentMarkerStyle,
+                                                                  Globals.Variables.experimentMarkerSize)
 
                         var newCalculated = analysisChartView.createSeries(ChartView.SeriesTypeLine, "calculated_log", analysisAxisXLog, analysisChartView.axisY)
                         newCalculated.color = calculated.color
@@ -820,7 +828,8 @@ Rectangle {
                     measuredScatterSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
                                                                   "measured_scatter",
                                                                   analysisChartView.axisX, analysisChartView.axisY,
-                                                                  measured.color, Globals.Variables.experimentMarkerStyle)
+                                                                  measured.color, Globals.Variables.experimentMarkerStyle,
+                                                                  Globals.Variables.experimentMarkerSize)
                     if (!measuredScatterSerie) {
                         console.warn("CombinedView: failed to create measuredScatterSerie - measured data will not render")
                     }
@@ -864,7 +873,8 @@ Rectangle {
                         measuredScatterSerie = MeasuredScatter.create(analysisChartView, ChartView, ScatterSeries,
                                                                       "measured_scatter",
                                                                       analysisChartView.axisX, analysisChartView.axisY,
-                                                                      measured.color, Globals.Variables.experimentMarkerStyle)
+                                                                      measured.color, Globals.Variables.experimentMarkerStyle,
+                                                                  Globals.Variables.experimentMarkerSize)
                         if (measuredScatterSerie) {
                             measuredScatterSerie.visible = true
                             Globals.BackendWrapper.plottingSetQtChartsSerieRef('analysisPage', 'measuredSerie', measuredScatterSerie)

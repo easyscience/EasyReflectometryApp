@@ -99,6 +99,7 @@ Rectangle {
                     // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: container.shownRange[0] - sampleChartView.xRange * 0.01
                     property double maxAfterReset: container.shownRange[1] + sampleChartView.xRange * 0.01
+                    lineVisible: false  // PlotFrame draws the border
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
@@ -109,6 +110,9 @@ Rectangle {
                         max = maxAfterReset
                     }
                 }
+
+                // Border on all four sides of the plot area
+                Gui.PlotFrame { chart: sampleChartView }
 
                 Gui.LogQAxis {
                     id: sampleAxisXLog
@@ -136,6 +140,7 @@ Rectangle {
                     // min/max set imperatively to avoid binding reset during zoom
                     property double minAfterReset: container.shownRange[2] - sampleChartView.yRange * 0.01
                     property double maxAfterReset: container.shownRange[3] + sampleChartView.yRange * 0.01
+                    lineVisible: false  // PlotFrame draws the border
                     color: EaStyle.Colors.chartAxis
                     gridLineColor: EaStyle.Colors.chartGridLine
                     minorGridLineColor: EaStyle.Colors.chartMinorGridLine
