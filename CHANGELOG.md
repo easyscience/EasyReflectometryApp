@@ -1,5 +1,10 @@
 # Unreleased
 
+- The reflectivity plots on the `Sample`, `Experiment` and `Analysis` pages
+  show their legend from the start (#400), so with several contrasts on one
+  plot each curve can be identified without opening the plot options. The SLD
+  and spin asymmetry charts, which share the same toggle, show theirs too. The
+  legend button in each chart's toolbar still hides it.
 - The `Experiment` plot shows only the current project's data after a project
   is reset or another project or example is loaded. With **Logarithmic
   q-axis** on, the previous project's points used to stay on the plot next to

@@ -13,9 +13,12 @@ QtObject {
     // (QStyleHints::toolTipWakeUpDelay). Chart data readouts stay instant.
     readonly property int toolTipDelay: 700
 
-    property bool showLegendOnSamplePage: false
-    property bool showLegendOnExperimentPage: false
-    property bool showLegendOnAnalysisPage: false
+    // Legends start shown on the reflectivity plots (and the SLD/spin asymmetry charts that share
+    // their toggle): with several contrasts on one plot the curves cannot be told apart without
+    // one (#400). The chart toolbar still switches them off.
+    property bool showLegendOnSamplePage: true
+    property bool showLegendOnExperimentPage: true
+    property bool showLegendOnAnalysisPage: true
     property bool showLegendOnAnalysisResidualsTab: false
     property bool useStaggeredPlotting: false
     property double staggeringFactor: 0.5
