@@ -192,6 +192,11 @@ class Analysis(QObject):
     def fitSuccess(self) -> bool:
         return self._fitting_logic.fit_success
 
+    @Property(bool, notify=fittingChanged)
+    def fitCancelled(self) -> bool:
+        """The last run ended because the user cancelled it (until the next one starts)."""
+        return self._fitting_logic.fit_cancelled
+
     @Property(str, notify=fittingChanged)
     def fitErrorMessage(self) -> str:
         return self._fitting_logic.fit_error_message
@@ -912,6 +917,8 @@ class Analysis(QObject):
         if draws_3d is None:
             diagnostics['rhatStatus'] = rhat_status
         else:
+            # The population is a factor per parameter: BUMPS runs population x parameters chains.
+            diagnostics['chains'] = int(draws_3d.shape[0])
             diagnostics.update(self._rhat_diagnostics(draws_3d, posterior['param_names']))
 
         self._bayesian_logic.diagnostics = diagnostics

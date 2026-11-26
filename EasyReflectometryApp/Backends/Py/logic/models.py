@@ -10,6 +10,7 @@ from easyreflectometry.model import ModelCollection
 from easyreflectometry.model.resolution_functions import PercentageFwhm
 from easyreflectometry.project import ModelRemoval
 
+from .experiments import ordered_experiment_items
 from .helpers import get_original_name
 from .helpers import is_independent
 from .helpers import set_value_widening_bounds
@@ -50,19 +51,42 @@ class Models:
         return get_original_name(self._models[self.index])
 
     @property
+    def current_experiment_model_index(self) -> int | None:
+        """The model of the selected experiment, or None without one (or when it has no model).
+
+        Scale, background and resolution belong to the model, so the Experiment page shows
+        those of the model the selected experiment is fitted with: with several contrasts,
+        each experiment has its own.
+        """
+        items = ordered_experiment_items(self._project_lib)
+        position = self._project_lib.current_experiment_index
+        if not items or position is None or not 0 <= position < len(items):
+            return None
+        return self._project_lib.model_index_for_experiment(items[position][0])
+
+    def scaling_at(self, index: int) -> float:
+        return self._models[index].scale.value
+
+    def background_at(self, index: int) -> float:
+        return self._models[index].background.value
+
+    def resolution_at(self, index: int) -> str:
+        """The percentage resolution, or '-' for a measured (pointwise) one."""
+        if isinstance(self._models[index].resolution_function, PercentageFwhm):
+            return str(self._models[index].resolution_function.constant)
+        return '-'
+
+    @property
     def scaling_at_current_index(self) -> float:
-        return self._models[self.index].scale.value
+        return self.scaling_at(self.index)
 
     @property
     def background_at_current_index(self) -> float:
-        return self._models[self.index].background.value
+        return self.background_at(self.index)
 
     @property
     def resolution_at_current_index(self) -> str:
-        if isinstance(self._models[self.index].resolution_function, PercentageFwhm):
-            return str(self._models[self.index].resolution_function.constant)
-        else:
-            return '-'
+        return self.resolution_at(self.index)
 
     @property
     def models(self) -> list[dict[str, str]]:
@@ -80,18 +104,27 @@ class Models:
             return False
         return _rename(self._models[index], new_value)
 
+    def set_scaling_at(self, index: int, new_value: float) -> bool:
+        return _set_model_parameter(self._models[index].scale, new_value)
+
+    def set_background_at(self, index: int, new_value: float) -> bool:
+        return _set_model_parameter(self._models[index].background, new_value)
+
+    def set_resolution_at(self, index: int, new_value: str) -> bool:
+        resolution = self._models[index].resolution_function
+        if isinstance(resolution, PercentageFwhm) and resolution.constant != float(new_value):
+            resolution.constant = float(new_value)
+            return True
+        return False
+
     def set_scaling_at_current_index(self, new_value: float) -> bool:
-        return _set_model_parameter(self._models[self.index].scale, new_value)
+        return self.set_scaling_at(self.index, new_value)
 
     def set_background_at_current_index(self, new_value: float) -> bool:
-        return _set_model_parameter(self._models[self.index].background, new_value)
+        return self.set_background_at(self.index, new_value)
 
     def set_resolution_at_current_index(self, new_value: str) -> bool:
-        if isinstance(self._models[self.index].resolution_function, PercentageFwhm):
-            if self._models[self.index].resolution_function.constant != float(new_value):
-                self._models[self.index].resolution_function.constant = float(new_value)
-                return True
-        return False
+        return self.set_resolution_at(self.index, new_value)
 
     def contrast_candidates(self, index: int) -> list[dict]:
         """What a contrast of the model at `index` can change: rows of ``label``, ``kind``

@@ -7,6 +7,7 @@ from typing import List
 from typing import Optional
 from typing import cast
 
+import numpy as np
 from easyreflectometry import Project as ProjectLib
 from easyscience.fitting import FitResults
 
@@ -232,6 +233,8 @@ class Fitting:
         self._prepared = None
         self._starting_values = {}
 
+    SAMPLING_CANCELLED_MESSAGE = 'Sampling cancelled by user'
+
     def on_fit_cancelled(self, error_message: str, best: dict | None) -> None:
         """End a run the user cancelled.
 
@@ -248,7 +251,7 @@ class Fitting:
         if self._run_kind != 'fit' or not best:
             if self._run_kind == 'fit':
                 self._restore_starting_values()
-            self.on_fit_failed(error_message)
+            self.on_fit_failed(self.SAMPLING_CANCELLED_MESSAGE if self._run_kind == 'sample' else error_message)
             return
         pending = {
             'reducedChi2': float(best['reduced_chi2']),
@@ -378,6 +381,24 @@ class Fitting:
     _POLARIZED_SAMPLE_MESSAGE = (
         'Bayesian sampling of polarized experiments is not supported yet.'
     )
+
+    _NO_UNCERTAINTIES_SAMPLE_MESSAGE = (
+        '{names}: every point has zero uncertainty, so the sampler has no likelihood to work with. '
+        'Load the data with an uncertainty column, or set "Zero-variance points" to mighell in '
+        'Extra controls > Minimization method. Mighell is a chi-square correction, not a true '
+        'likelihood: the credible intervals it gives are not measurement uncertainties.'
+    )
+
+    def _experiments_without_uncertainties(self, experiments: list) -> list[str]:
+        """The quoted names of the experiments that sampling with the project's objective refuses."""
+        if getattr(self._project_lib.fit_settings, 'objective', None) == 'mighell':
+            return []
+        names = []
+        for experiment in experiments:
+            variances = np.asarray(experiment.ye, dtype=float)
+            if variances.size and np.all(variances <= 0.0):
+                names.append(f"'{experiment.name}'")
+        return names
 
     def _has_polarized_experiments(self, experiments: Optional[list] = None) -> bool:
         """Whether any of `experiments` (by default every loaded one) carries per-channel data."""
@@ -603,6 +624,11 @@ class Fitting:
                 return None
             if self._has_polarized_experiments(experiments):
                 self._fail_before_start(self._POLARIZED_SAMPLE_MESSAGE)
+                return None
+            # The library refuses these too, but names its Python argument; this names the control.
+            no_errors = self._experiments_without_uncertainties(experiments)
+            if no_errors:
+                self._fail_before_start(self._NO_UNCERTAINTIES_SAMPLE_MESSAGE.format(names=', '.join(no_errors)))
                 return None
 
             constraints_error = self.inequality_constraints_error(minimizers_logic)

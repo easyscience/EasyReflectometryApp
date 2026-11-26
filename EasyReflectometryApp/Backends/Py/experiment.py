@@ -66,21 +66,28 @@ class Experiment(QObject):
         self._model_logic = ModelsLogic(project_lib)
         self._project_logic = ProjectLogic(project_lib)
 
+    def _instrument_model_index(self) -> int:
+        """The model whose scale, background and resolution the Instrumental parameters show:
+        that of the selected experiment, so each contrast shows its own; without one, the
+        current model."""
+        index = self._model_logic.current_experiment_model_index
+        return self._model_logic.index if index is None else index
+
     @Property(float, notify=experimentChanged)
     def scaling(self) -> float:
-        return self._model_logic.scaling_at_current_index
+        return self._model_logic.scaling_at(self._instrument_model_index())
 
     @Property(float, notify=experimentChanged)
     def background(self) -> float:
-        return self._model_logic.background_at_current_index
+        return self._model_logic.background_at(self._instrument_model_index())
 
     @Property(str, notify=experimentChanged)
     def resolution(self) -> str:
-        return self._model_logic.resolution_at_current_index
+        return self._model_logic.resolution_at(self._instrument_model_index())
 
     @Property(bool, notify=experimentChanged)
     def experimentalData(self) -> bool:
-        return self._project_logic.experimental_data_at_current_index
+        return self._model_logic.current_experiment_model_index is not None
 
     # Setters
     @Slot(int)
@@ -89,19 +96,19 @@ class Experiment(QObject):
 
     @Slot(float)
     def setScaling(self, new_value: float) -> None:
-        if self._model_logic.set_scaling_at_current_index(new_value):
+        if self._model_logic.set_scaling_at(self._instrument_model_index(), new_value):
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
 
     @Slot(float)
     def setBackground(self, new_value: float) -> None:
-        if self._model_logic.set_background_at_current_index(new_value):
+        if self._model_logic.set_background_at(self._instrument_model_index(), new_value):
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
 
     @Slot(str)
     def setResolution(self, new_value: str) -> None:
-        if self._model_logic.set_resolution_at_current_index(new_value):
+        if self._model_logic.set_resolution_at(self._instrument_model_index(), new_value):
             self.experimentChanged.emit()
             self.externalExperimentChanged.emit()
 

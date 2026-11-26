@@ -579,7 +579,15 @@ class Sample(QObject):
 
     @Slot(int)
     def setCurrentAssemblyRepeatedLayerRepetitions(self, new_value: int) -> None:
-        if self._assemblies_logic.set_repeated_layer_repetitions(new_value):
+        try:
+            changed = self._assemblies_logic.set_repeated_layer_repetitions(new_value)
+        except NotImplementedError as exception:
+            # Reported in the Magnetism group; the field goes back to the stored count.
+            logger.warning('Cannot change the repetitions: %s', exception)
+            self.magnetismFailed.emit(str(exception))
+            self.assembliesTableChanged.emit()
+            return
+        if changed:
             self.assembliesTableChanged.emit()
             self.externalRefreshPlot.emit()
 

@@ -649,9 +649,14 @@ Rectangle {
             const yAxis = curve === 'theta_m' ? axisThetaM : axisY
             const segments = Globals.BackendWrapper.plottingGetMagneticSldSegmentsForModel(modelIndex, curve)
             for (let s = 0; s < segments.length; s++) {
+                // createSeries puts its y axis on the left, where θM would stack beside
+                // the SLD axis: create the θM pieces on the SLD axis and move them to the
+                // right-hand θM axis (an axis once added on the left stays there).
                 const line = chartView.createSeries(ChartView.SeriesTypeLine,
                                                     model.label + ' ' + curve + ' ' + s,
-                                                    axisX, yAxis)
+                                                    axisX, axisY)
+                if (yAxis === axisThetaM)
+                    line.axisYRight = axisThetaM
                 // Same hue as the model, different dash and shade: colour stays
                 // "which model", the pattern and shade say "which curve".
                 line.color = magneticCurveColor(curve, model.color)

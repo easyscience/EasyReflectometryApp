@@ -23,6 +23,12 @@ _DEFAULT_RHO_M = MAGNETISM_DEFAULTS['rho_m']['value']
 _DEFAULT_THETA_M = MAGNETISM_DEFAULTS['theta_m']['value']
 
 
+def repeats_of_assembly(assembly) -> int:
+    """How many times an assembly is repeated: its repetitions, or 1 for any other kind."""
+    repetitions = getattr(assembly, 'repetitions', None)
+    return 1 if repetitions is None else int(round(repetitions.value))
+
+
 class Layers:
     def __init__(self, project_lib: ProjectLib):
         self._project_lib = project_lib
@@ -258,6 +264,13 @@ class Layers:
             raise NotImplementedError(
                 f'The {self._project_lib.calculator} calculation engine cannot model magnetic layers; '
                 f'magnetism needs {engines}.'
+            )
+        # refl1d cannot repeat magnetic slabs: the model could then not be calculated at all.
+        if new_value and repeats_of_assembly(self._sample[self._project_lib.current_assembly_index]) > 1:
+            raise NotImplementedError(
+                'Magnetic layers cannot be repeated: refl1d cannot calculate magnetism inside a '
+                'repeating multilayer. Set its repetitions to 1, or build the repeats as layers of '
+                'a Multi-layer.'
             )
         layer.magnetism = LayerMagnetism() if new_value else None
         if new_value:

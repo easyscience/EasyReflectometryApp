@@ -30,7 +30,7 @@ Rectangle {
             EaElements.Label {
                 Layout.fillWidth: true
                 text: qsTr("Pairwise Parameter Correlations & Marginal Distributions")
-                font: EaStyle.Fonts.headingFont
+                font.bold: true
             }
 
             BayesianSavePlotButton {

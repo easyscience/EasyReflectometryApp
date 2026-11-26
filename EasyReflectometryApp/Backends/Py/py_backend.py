@@ -430,6 +430,9 @@ class PyBackend(QObject):
         self._summary.summaryChanged.emit()
 
     def _relay_experiment_page_experiment_changed(self):
+        # The Instrumental parameters show the selected experiment's model: another
+        # selection, or another model for it, changes what they show.
+        self._experiment.experimentChanged.emit()
         self._analysis.experimentsChanged.emit()
         self._analysis._clearCacheAndEmitParametersChanged()
         self._status.statusChanged.emit()

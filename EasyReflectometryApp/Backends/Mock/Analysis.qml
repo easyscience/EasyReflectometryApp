@@ -31,6 +31,7 @@ QtObject {
     property bool showFitResultsDialog: false
     readonly property bool fitSuccess: true
     readonly property string fitErrorMessage: ''
+    readonly property bool fitCancelled: false
     readonly property int fitNumRefinedParams: 3
     readonly property real fitChi2: 1.2345
     readonly property var fitProgress: ({ phase: '', kind: '', fraction: -1, count: 0, total: 0, unit: '', reducedChi2: 0.0, startedAtMs: 0 })

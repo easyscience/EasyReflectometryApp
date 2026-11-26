@@ -30,7 +30,7 @@ Rectangle {
             EaElements.Label {
                 Layout.fillWidth: true
                 text: qsTr("MCMC Chain Traces")
-                font: EaStyle.Fonts.headingFont
+                font.bold: true
             }
 
             BayesianSavePlotButton {

@@ -17,9 +17,13 @@ EaElements.Dialog {
     id: dialog
 
     visible: Globals.BackendWrapper.analysisShowFitResultsDialog
+    // A cancelled run is not a failure: it says so, and its message is not shown as an error.
+    readonly property bool cancelled: !Globals.BackendWrapper.analysisFitSuccess && Globals.BackendWrapper.analysisFitCancelled
+
     title: Globals.BackendWrapper.bayesianResultAvailable
            ? qsTr("Bayesian Sampling Results")
-           : (Globals.BackendWrapper.analysisFitSuccess ? qsTr("Refinement Results") : qsTr("Refinement Failed"))
+           : (Globals.BackendWrapper.analysisFitSuccess ? qsTr("Refinement Results")
+                                                        : (cancelled ? qsTr("Cancelled") : qsTr("Refinement Failed")))
     standardButtons: Dialog.Ok
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -139,10 +143,10 @@ EaElements.Dialog {
 
         EaElements.Label {
             visible: !Globals.BackendWrapper.bayesianResultAvailable && !Globals.BackendWrapper.analysisFitSuccess && Globals.BackendWrapper.analysisFitErrorMessage !== ""
-            text: "Error: " + Globals.BackendWrapper.analysisFitErrorMessage
+            text: (dialog.cancelled ? "" : "Error: ") + Globals.BackendWrapper.analysisFitErrorMessage
             wrapMode: Text.WordWrap
             width: Math.min(implicitWidth, EaStyle.Sizes.sideBarContentWidth * 1.5)
-            color: EaStyle.Colors.red
+            color: dialog.cancelled ? EaStyle.Colors.themeForeground : EaStyle.Colors.red
         }
     }
 

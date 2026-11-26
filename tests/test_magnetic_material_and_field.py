@@ -238,3 +238,27 @@ class TestFieldWithoutAModel:
             'phi': 0.0,
         }
         assert logic.set_field('applied_field', '1.0') is False
+
+
+class TestRepeatedMagnetism:
+    """refl1d cannot repeat magnetic slabs, and the model then has no curve at all: refuse both ways in."""
+
+    def test_a_layer_of_a_repeated_stack_cannot_be_made_magnetic_and_back(self, project):
+        from EasyReflectometryApp.Backends.Py.logic.assemblies import Assemblies
+
+        assemblies = Assemblies(project)
+        assert assemblies.set_type_at_current_index('Repeating Multi-layer') is True
+        layers = Layers(project)
+
+        # Repeated once it is plain slabs, which refl1d calculates with magnetism.
+        assert layers.set_magnetic_at_index(0, True) is True
+        with pytest.raises(NotImplementedError, match='Magnetic layers cannot be repeated'):
+            assemblies.set_repeated_layer_repetitions(3)
+        assert assemblies.repetitions_at_current_index == 1
+
+        assert layers.set_magnetic_at_index(0, False) is True
+        assert assemblies.set_repeated_layer_repetitions(3) is True
+        with pytest.raises(NotImplementedError, match='Set its repetitions to 1'):
+            layers.set_magnetic_at_index(0, True)
+        assert project.models[0].sample[1].layers[0].magnetism is None
+        project.model_data_for_model_at_index(0)  # still calculable

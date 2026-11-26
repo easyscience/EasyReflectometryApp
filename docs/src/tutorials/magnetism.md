@@ -1,7 +1,7 @@
 # Magnetic layers
 
 You can give a layer a magnetisation, so that the two neutron spin states see different
-scattering length densities. This page covers the controls on the **Model** page. Loading
+scattering length densities. This page covers the controls on the `Sample` page. Loading
 and fitting measured spin channels is described in [polarised data](./polarized_data.md).
 
 ```{note}
@@ -11,11 +11,12 @@ make a layer magnetic the app asks to switch the project's calculation engine.
 
 ## The Magnetism group
 
-The **Magnetism** group is in the basic controls of the **Model** page, below the layer
-editor. Its title names the assembly selected in the `Layer editor`, for example
-`Magnetism: Multi-layer`, and it has one row per layer of that assembly.
+The **Magnetism** group is in the basic controls of the `Sample` page, below the
+`Model editor`. Its title names the assembly selected in the `Model editor`, for example
+`Magnetism: Fe film`, and it has one row per layer of that assembly. Here it shows the
+example *Magnetic iron film, polarized*, with the film's row selected:
 
-<!-- TODO: screenshot of the Magnetism group -> _images/sample_magnetism.png -->
+![The Magnetism group](./_images/sample_magnetism.png)
 
 | Column | Meaning |
 |---|---|
@@ -36,13 +37,14 @@ saturated film.
 ### ρM from a magnetic material
 
 Instead of typing `ρM`, you can take it from the layer's material. **Add magnetic
-material** in the **Materials** group creates a material with a formula, a mass density
+material** in the `Material editor` creates a material with a formula, a mass density
 and a **Moment** in Bohr magnetons per formula unit. The starting values are those of bulk
 iron: Fe, 7.874 g/cm³, 2.2 µB. The material editor shows the resulting `ρM` and the number
 density `N`: `ρM = N × moment × 2.6991·10⁻⁵ Å`.
 
 Assign that material to a layer, make the layer magnetic, select its row and tick
-**ρM from material** below the table. The layer's `ρM` then follows the material's moment
+**ρM from material** below the table. The box is shown only for a layer whose material is a
+magnetic material. The layer's `ρM` then follows the material's moment
 and density, and you can no longer edit it in the table. `θM` stays with the layer, so two
 layers of the same material can point in different directions. Unticking the box keeps the
 current value.
@@ -85,7 +87,7 @@ the default.
 
 ### Magnetic samples from ORSO files
 
-**Load sample** reads the `magnetic_moment` of an ORSO model. A material with a formula, a
+**Load sample from file** reads the `magnetic_moment` of an ORSO model. A material with a formula, a
 density and a moment becomes a magnetic material, and its layer becomes magnetic with
 **ρM from material** ticked and `θM = 270°`, because the file has no direction. Anything the
 import could not carry over (a moment without a density, an unknown unit, an ignored
@@ -121,14 +123,15 @@ sample and the loaded data are not changed. You can switch the engine back once 
 magnetic.
 
 The engine selector is in the **Calculation engine** group of the advanced controls on the
-**Model** page, and in `Analysis` › `Advanced` (see [simple fitting](./simple_fitting.md)).
+`Sample` page, and in `Analysis` › `Extra controls` (see [simple fitting](./simple_fitting.md)).
 While the sample has magnetic layers, the app refuses an engine that cannot model magnetism
 and shows a message on both pages.
 
 ## Fitting ρM and θM
 
 `ρM` and `θM` appear in the `Analysis` parameter table like any other layer parameter,
-named after their assembly and model, for example `Model Fe rho_m`. They have default
+named after their model and assembly, for example `Fe on Si Fe film rho_m` in the
+iron example. They have default
 limits and a fit checkbox, and you can use them in constraints. Type `magnetic` in the
 parameter name filter to show only the magnetic parameters: `ρM`, `θM`, the material
 moments and the field.
@@ -136,12 +139,13 @@ moments and the field.
 ## Magnetic depth profiles
 
 Once at least one layer is magnetic, the **Magnetic profile** group appears in the basic
-controls, below **Magnetism**. The same switches are also in `Analysis` › `Advanced` ›
-`Plot control`, and both places share one selection.
+controls, below **Magnetism**. The same switches are also in `Analysis` › `Extra controls` ›
+`Plot control`, and both places share one selection. With every switch on, the iron example
+looks like this:
 
-<!-- TODO: screenshot of the Magnetic profile group -> _images/sample_magnetic_profile.png -->
+![The Magnetic profile group with every curve shown](./_images/sample_magnetic_profile.png)
 
-- **Show ρ ± ρM∥**: adds the nuclear SLD plus and minus the magnetic SLD along the field to
+- **Show ρ ± ρM∥** (on by default): adds the nuclear SLD plus and minus the magnetic SLD along the field to
   the SLD chart for each magnetic model, dashed in the model's colour. These curves are the
   potentials of the two spin states only when every moment is parallel to the field and no
   field is applied. A moment across the field mixes the spin states instead. For
@@ -151,7 +155,7 @@ controls, below **Magnetism**. The same switches are also in `Analysis` › `Adv
 - **Show θM**: the in-plane moment angle, on its own right-hand axis. `θM` is defined only
   where there is a moment, so the curve is drawn in pieces and not joined across the gaps.
 - **Show R↑↑ and R↓↓**: splits each magnetic model's reflectivity into its two
-  non-spin-flip cross-sections on the **Model** page reflectivity chart, dashed in the
+  non-spin-flip cross-sections on the `Sample` page reflectivity chart, dashed in the
   model's colour with their own legend rows. Off by default.
 
 The y-range of the SLD chart covers every visible curve and grows when you switch a curve
@@ -159,9 +163,11 @@ on, so `ρ + ρM` is never clipped. If no model is magnetic, the chart, its lege
 sidebar look as before.
 
 ```{note}
-The `refl1d` calculator cannot repeat slabs that carry magnetism. A magnetic model with a
-repeating multilayer therefore has no magnetic depth profile, and none of these curves are
-drawn. The **Magnetic profile** group shows the reason.
+The `refl1d` calculator cannot repeat slabs that carry magnetism. The app therefore refuses
+to make a layer of a repeating multilayer magnetic while its repetitions are above 1, and to
+raise the repetitions of one that holds a magnetic layer; the **Magnetism** group says why.
+Build such a structure as layers of a `Multi-layer` instead. A repeating multilayer with
+1 repetition is plain slabs and can be magnetic.
 ```
 
 ```{note}
@@ -211,6 +217,8 @@ Each magnetic layer's box gets an arrow between its name and its thickness label
 no switch for this: the arrow appears as soon as a layer is magnetic. Boxes too short for a
 readable arrow leave it out and show the direction in the tooltip. A non-magnetic sample's
 box layout is unchanged.
+
+![The Structure tab of the iron example: θM = 60°, so φ = 150°](./_images/sample_magnetic_structure.png)
 
 The Structure tab draws the current model; switch models in the header to look at another
 one. When the tab collapses a repeating multilayer to its repeat unit, it shows one arrow
