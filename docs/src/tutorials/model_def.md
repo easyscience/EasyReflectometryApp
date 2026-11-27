@@ -330,5 +330,5 @@ saved with the project. Linking the same models again, e.g. for a parameter left
 the first time, adds a second link row.
 
 ### Trying the constraints out
-Four simulated datasets with a known ground truth are provided for exercising these
-features - see [demo datasets](./datasets.md).
+Simulated datasets with a known ground truth are provided for trying these features out;
+see [demo datasets](./datasets.md).

@@ -33,8 +33,8 @@ replaced by the sampler's settings:
 | **Thinning** | Record every n-th generation, to reduce autocorrelation. |
 | **Initializer** | Where the chains start: `eps` and `cov` close to the current values, `lhs` and `random` spread over the parameter ranges. |
 
-The parameters sampled are the ones ticked **Fit** in the parameter table of the
-`Basic controls`, and each stays between its **Min** and **Max**. **Zero-variance points**
+The parameters sampled are the ones selected for fitting in the parameter table of the
+`Basic controls`. Each remains between its **Min** and **Max**. **Zero-variance points**
 applies to sampling as it does to a fit; see *Limitations* at the end of this page.
 
 ### How long a run takes

@@ -8,6 +8,35 @@
   was refused. ORSO imports already warned about this case.
 - The θM curve of the SLD chart is drawn against its own axis on the right, as
   intended. The axis used to stack on the left, next to the SLD axis.
+- The *Polarised data* tutorial has screenshots of the channel assignment
+  dialog, the channel chart, the `Polarization channels` group, the spin
+  asymmetry and a fit of the iron example. It lists the file name parts the
+  channel detection recognises, says that the spin asymmetry chart plots
+  `|SA|`, that the `Analysis` page draws the channels in shades of the
+  experiment's colour, and that the model's resolution follows the `pp`
+  channel when there is one.
+- The *Simple fitting* tutorial walks through a fit of the *Polymer film on
+  silicon* example, with new screenshots of both sidebar tabs, the
+  `Refinement Results` dialog and the residuals. It describes the `Data
+  Explorer`, the parameter table and its slider, the cancel dialog, every
+  minimiser setting (`Zero-variance points`, `Preview every (s)` and the
+  per-minimiser options) and the `SLD z range` group, and refers to the
+  `Sample` page by its current name.
+- The *Settings* tutorial has screenshots of the `Preferences` dialog and says
+  what each setting does. It notes that the update check, the language and the
+  logging level have no effect in this version and that the zoom is not kept.
+- The *Summary* tutorial has screenshots of the report, its `Experiments` and
+  `Refinement` sections and the exported figure. It says what each row of the
+  report means (the "Measured intensity range" is the reflectivity range, not
+  the `q` range), what the HTML and PDF exports contain, and how the exported
+  figure shifts several experiments and models.
+- The *Demo datasets* tutorial covers all seven simulated files, including
+  `linked_film_contrasts.ort`, the measured and polarised data and the example
+  project built from each. It has screenshots of a sample loaded from a file,
+  the warning for a file without a sample model, and the three experiments of
+  `film_contrasts.ort`. It no longer says that `ni_ti_multilayer.ort` loads as
+  flat layers (it loads as a repeating multilayer), and it corrects what the
+  `swapped_layers.ort` demo shows.
 - The *Magnetic layers* tutorial has screenshots of the `Magnetism` group, the
   `Magnetic profile` group and the moment arrows on the `Structure` tab, and
   names the page, groups and buttons as the app does.
