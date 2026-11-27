@@ -405,6 +405,14 @@ class Sample(QObject):
         return {'success': True, 'message': ''}
 
     @Slot(str, int, result='QVariant')
+    def detachParameterByAlias(self, alias: str, model_index: int) -> dict:
+        """`detachParameter` for a parameter named by its table alias (a tutorial's Show me)."""
+        row = next((row for row in self._parameters_logic.all_parameters() if row['alias'] == alias), None)
+        if row is None:
+            return {'success': False, 'message': self.tr('The parameter no longer exists.')}
+        return self.detachParameter(row['unique_name'], model_index)
+
+    @Slot(str, int, result='QVariant')
     def detachParameter(self, unique_name: str, model_index: int) -> dict:
         """Give the model at `model_index` its own copy of a parameter it shares with other
         models: the shared assembly is copied for it, every other parameter of the copy

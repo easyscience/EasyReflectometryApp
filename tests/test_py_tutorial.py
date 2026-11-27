@@ -2,6 +2,7 @@
 parts, and one run against the real backend and the shipped example."""
 
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -24,8 +25,7 @@ def clear_global_map():
 
 
 class StubProject(QObject):
-    externalProjectLoaded = Signal()
-    externalProjectReset = Signal()
+    sessionReplaced = Signal()
     externalCreatedChanged = Signal()
     externalNameChanged = Signal()
     isExample = True
@@ -39,6 +39,9 @@ class StubSample(QObject):
     externalSampleChanged = Signal()
     modelsNames = ['Film']
     currentAssemblyName = 'Superphase'
+    assembliesNames = ['Superphase', 'Film', 'Subphase']
+    materials = [{'label': 'Si', 'sld': '2.07'}, {'label': 'Film', 'sld': '2.0'}]
+    layers = [{'label': 'Film', 'material': 'Film', 'thickness': '250.0', 'roughness': '3.0'}]
 
 
 class StubPlotting(QObject):
@@ -61,6 +64,7 @@ class StubAnalysis(QObject):
         self.fitChi2 = 0.0
         self.showFitResultsDialog = False
         self.experimentsAvailable = ['data']
+        self.experimentsModelIndices = [0]
         self.freeParametersCount = 1
         self.thickness = 250.0
         self._parameters_logic = SimpleNamespace(
@@ -110,10 +114,11 @@ def _wait(predicate, seconds=5.0):
 def test_the_shipped_tutorials_are_offered(qcore_application):
     part = Tutorial(StubProject(), StubSample(), StubAnalysis(), SimpleNamespace(minimizer=''), StubPlotting())
 
-    assert [tutorial['id'] for tutorial in part.available] == ['simple-fitting', 'magnetism']
+    assert part.available, 'no tutorials shipped'
     for tutorial in part.available:
         assert set(tutorial) == {'id', 'title', 'summary', 'minutes', 'examplePath'}
-    assert part.available[1]['examplePath'].endswith('FePolarized/project.json')
+        # '' for a tutorial that starts from an empty project
+        assert tutorial['examplePath'] == '' or Path(tutorial['examplePath']).is_file(), tutorial['id']
     assert part.state == 'idle' and part.step == {}
 
 
@@ -146,11 +151,10 @@ def test_a_parameter_change_is_checked_at_once(qcore_application):
     assert part.step['state'] == 'done'
 
 
-@pytest.mark.parametrize('signal', ['externalProjectLoaded', 'externalProjectReset'])
-def test_replacing_the_session_stops_the_tutorial(qcore_application, signal):
+def test_replacing_the_session_stops_the_tutorial(qcore_application):
     part, project, _ = _tutorial(qcore_application, _step('read'))
 
-    getattr(project, signal).emit()
+    project.sessionReplaced.emit()
 
     assert part.state == 'stopped' and part.stopReason == SESSION_REPLACED
 
@@ -246,3 +250,42 @@ def test_the_sample_view_is_a_ui_fact(qcore_application):
     part.reportUi('sample_view', 'structure')
 
     assert part.step['state'] == 'done'
+
+
+def test_material_and_layer_facts(qcore_application):
+    part, _, _ = _tutorial(
+        qcore_application,
+        _step('material', done="abs(sample.material_slds.get('dPS', 0) - 6.4) < 0.05"),
+        _step(
+            'layer',
+            done="len(sample.layers) >= 2 and sample.layers[-1].material == 'dPS' and sample.layers[-1].thickness == 50",
+        ),
+    )
+    sample = part._sample
+    # A material that is not there yet reads as absent, not as an error.
+    assert part.step['state'] == 'waiting'
+
+    sample.materials = [*StubSample.materials, {'label': 'dPS', 'sld': '6.4'}]
+    sample.externalSampleChanged.emit()
+    assert part.step['state'] == 'done'
+
+    part.next()
+    sample.layers = [*StubSample.layers, {'label': 'dPS Layer', 'material': 'dPS', 'thickness': '50.0', 'roughness': '3.3'}]
+    sample.externalSampleChanged.emit()
+    assert part.step['state'] == 'done'
+
+
+def test_a_sample_import_does_not_stop_a_tutorial(qcore_application, clear_global_map):
+    # Loading a sample from a file replaces the models, not the session: a tutorial may ask for it.
+    from EasyReflectometryApp.Backends.Py.logic.tutorial import DATA_DIR
+    from EasyReflectometryApp.Backends.Py.py_backend import PyBackend
+
+    backend = PyBackend()
+    part = backend.tutorial
+    part.start(part.available[0]['id'])
+
+    backend.project.sampleLoad((DATA_DIR / 'film_contrasts.ort').as_posix(), False)
+    assert part.state == 'active'
+
+    backend.project.reset()
+    assert part.state == 'stopped'

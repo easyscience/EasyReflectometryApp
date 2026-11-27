@@ -129,7 +129,7 @@ are listed once per model.
 
 The fit should return an oxide of 15.2 Å, a film of 80.0 Å with SLD 2.00 and roughness
 5.0 Å, and scales of about 0.99, 0.95 and 0.98. The reduced χ² of the joint fit is
-about 0.89, and each dataset's χ² per point is between 0.8 and 0.9.
+about 0.89, and each dataset's χ² per point is between 0.83 and 0.92.
 
 The **Fit** checkboxes in the `Data Explorer` choose which contrasts the next fit uses.
 Untick two of them to fit one contrast alone and compare the uncertainties in the `Error`
@@ -159,6 +159,238 @@ Detaching works for layer parameters (thickness, roughness, and the like). A mat
 belongs to the material in the `Material editor`, so it cannot be detached. To give one
 contrast a different SLD, give that contrast a different material, for example with the
 replacement in **Add contrast**.
+
+### The same in the app, step by step
+
+```{tutorial} Fitting several contrasts
+:id: multi-contrast
+:data: film_contrasts.ort
+:minutes: 15
+:summary: Build a film model from a data file, make two more water contrasts and fit all three together.
+```
+
+```{tutorial-step} Three waters, one film
+:id: intro
+:page: project
+:more: multi_contrast.md#the-film-in-three-waters
+
+This tutorial starts from an empty project. You will build the model of a film on silicon in
+D₂O from a data file, make two more contrasts of it in H₂O and in silicon-matched water
+(CMSi), load the three measurements and fit them together with one structure.
+```
+
+```{tutorial-step} Open the Sample page
+:id: open-sample
+:target: appbar.sampleTab
+:done: ui.page == 'sample'
+:do: goto sample
+:advance: auto
+:more: multi_contrast.md#build-one-model
+
+Open the **Sample** page with its tab in the application bar.
+```
+
+```{tutorial-step} Load the model from the data file
+:id: load-sample
+:page: sample
+:sidebar-tab: basic
+:target: sample.loadSample
+:done: models.count == 1 and sample.material_slds.get('SiO2', 0) > 3
+:do: call project.sampleLoad "{data}/film_contrasts.ort" false
+:more: multi_contrast.md#build-one-model
+
+In **Load a sample**, untick **Append to existing models**, press **Load sample from file**
+and pick `film_contrasts.ort`; the file dialog opens in the folder of the tutorial's data.
+The model is Si | SiO2 | Film | D2O, built from the file header. With **Append** left
+ticked, the empty project's model stays next to it: restart the tutorial then.
+```
+
+```{tutorial-step} Name the model
+:id: rename-model
+:page: sample
+:sidebar-tab: basic
+:target: sample.models
+:done: models.names.count('Film in D2O') == 1
+:do: call sample.setModelNameAtIndex 0 "Film in D2O"
+:more: multi_contrast.md#build-one-model
+
+In the **Models selector**, rename the model to `Film in D2O`. It will be the reference
+for the other contrasts.
+```
+
+```{tutorial-step} Name the assembly
+:id: rename-assembly
+:page: sample
+:sidebar-tab: basic
+:target: sample.assemblies
+:done: sample.assemblies.count('Oxide and film') == 1
+:do: call sample.setAssemblyNameAtIndex 1 "Oxide and film"
+:more: multi_contrast.md#build-one-model
+
+In the **Model editor**, rename the assembly `Loaded layer`, which holds the oxide and the
+film, to `Oxide and film`.
+```
+
+```{tutorial-step} Make the other two waters
+:id: waters
+:page: sample
+:sidebar-tab: basic
+:target: sample.addMaterial
+:done: abs(sample.material_slds.get('H2O', 9) + 0.56) < 0.001 and abs(sample.material_slds.get('CMSi', 0) - 2.07) < 0.001
+:do: click sample.addMaterial; click sample.addMaterial; call sample.setMaterialNameAtIndex 4 H2O; call sample.setMaterialSldAtIndex 4 -0.56; call sample.setMaterialNameAtIndex 5 CMSi; call sample.setMaterialSldAtIndex 5 2.07
+:more: multi_contrast.md#build-one-model
+
+In the **Material editor**, press **Add material** twice. Name the new rows `H2O` with SLD
+`-0.56` and `CMSi` with SLD `2.07`.
+```
+
+```{tutorial-step} Add the H2O contrast
+:id: contrast-h2o
+:page: sample
+:sidebar-tab: basic
+:target: sample.addContrast
+:done: models.names.count('Film in H2O') == 1
+:do: call sample.contrastCandidates 0; call sample.addContrast 0 "Film in H2O" '[{"candidate":3,"material":4}]'
+:more: multi_contrast.md#make-the-other-contrasts-with-add-contrast
+
+With `Film in D2O` selected in the **Models selector**, press
+**Add contrast of the selected model…**. Name the new model `Film in H2O`, replace `D2O`
+with `H2O`, leave the other materials at `keep`, and press **OK**.
+```
+
+```{tutorial-step} Add the CMSi contrast
+:id: contrast-cmsi
+:page: sample
+:sidebar-tab: basic
+:target: sample.addContrast
+:done: models.names.count('Film in CMSi') == 1
+:do: call sample.contrastCandidates 0; call sample.addContrast 0 "Film in CMSi" '[{"candidate":3,"material":5}]'
+:more: multi_contrast.md#make-the-other-contrasts-with-add-contrast
+
+The new model is now the selected one, so select `Film in D2O` again first. Then add a
+contrast named `Film in CMSi` that replaces `D2O` with `CMSi`.
+```
+
+```{tutorial-step} What the contrasts share
+:id: shared
+:page: sample
+:sidebar-tab: basic
+:target: sample.assemblies
+:more: multi_contrast.md#make-the-other-contrasts-with-add-contrast
+
+In the **Model editor**, the superphase and `Oxide and film` are marked **⇄**: the three
+models share them, so they have one film thickness between them. Each model has its own
+subphase, with its own water, and its own scale and background.
+```
+
+```{tutorial-step} Load the three measurements
+:id: load-data
+:page: experiment
+:sidebar-tab: basic
+:target: experiment.loadData
+:done: experiments.count >= 3
+:do: call experiment.load "{data}/film_contrasts.ort"
+:more: multi_contrast.md#load-the-data-and-pair-it-with-the-models
+
+On the **Experiment** page, press **Load experiment(s) from file(s)** and pick
+`film_contrasts.ort` again. The file holds three datasets, so you get three experiments.
+```
+
+```{tutorial-step} Pair each measurement with its contrast
+:id: pair
+:page: experiment
+:sidebar-tab: basic
+:target: experiment.dataExplorer
+:done: experiments.models == ['Film in D2O', 'Film in H2O', 'Film in CMSi']
+:do: call analysis.setModelOnExperiment 0 0; call analysis.setModelOnExperiment 1 1; call analysis.setModelOnExperiment 2 2
+:more: multi_contrast.md#load-the-data-and-pair-it-with-the-models
+
+All three experiments start with the same model. In the **Model** column of the
+**Data Explorer**, give the D2O data `Film in D2O`, the H2O data `Film in H2O` and the CMSi
+data `Film in CMSi`. A wrong pairing gives a bad fit without an error message.
+```
+
+```{tutorial-step} Choose the parameters to fit
+:id: fit-flags
+:page: analysis
+:sidebar-tab: basic
+:target: analysis.parameterTable
+:done: params.free == 7 and params.is_free('sio2_thickness') and params.is_free('film_thickness') and params.is_free('film_sld') and params.is_free('film_roughness') and params.is_free('film_in_d2o_scale') and params.is_free('film_in_h2o_scale') and params.is_free('film_in_cmsi_scale')
+:do: call analysis.setParameterFit sio2_thickness true; call analysis.setParameterFit film_thickness true; call analysis.setParameterFit film_sld true; call analysis.setParameterFit film_roughness true; call analysis.setParameterFit film_in_d2o_scale true; call analysis.setParameterFit film_in_h2o_scale true; call analysis.setParameterFit film_in_cmsi_scale true; call analysis.setParameterFit h2o_sld false; call analysis.setParameterFit h2o_isld false; call analysis.setParameterFit cmsi_sld false; call analysis.setParameterFit cmsi_isld false; call analysis.setParameterFit film_in_d2o_subphase_roughness false
+:more: multi_contrast.md#fit-the-three-contrasts-together
+
+On the **Analysis** page, tick **Fit** for exactly these: `SiO2 thickness`,
+`Film thickness`, `Film sld`, `Film roughness` and the three scales, and untick the rest.
+The shared parameters are one row each, marked **⇄**. The new waters arrive with their
+`sld` and `isld` ticked: untick them, as the water SLDs are known.
+```
+
+```{tutorial-step} Set the backgrounds
+:id: backgrounds
+:page: analysis
+:sidebar-tab: basic
+:target: analysis.parameterTable
+:done: abs(params.value('film_in_d2o_background') - 2e-7) < 1e-9 and abs(params.value('film_in_h2o_background') - 5e-6) < 1e-8 and abs(params.value('film_in_cmsi_background') - 1e-6) < 1e-8
+:do: call analysis.setParameterValue film_in_d2o_background 2e-7; call analysis.setParameterValue film_in_h2o_background 5e-6; call analysis.setParameterValue film_in_cmsi_background 1e-6
+:more: multi_contrast.md#fit-the-three-contrasts-together
+
+Set the backgrounds to `2e-7` (`Film in D2O`), `5e-6` (`Film in H2O`) and `1e-6`
+(`Film in CMSi`), and keep them fixed. The data are simulated, so these are known.
+```
+
+```{tutorial-step} Start from the wrong structure
+:id: start-values
+:page: analysis
+:sidebar-tab: basic
+:target: analysis.parameterTable
+:done: abs(params.value('sio2_thickness') - 25) < 0.5 and abs(params.value('film_thickness') - 70) < 0.5 and abs(params.value('film_sld') - 1) < 0.01 and abs(params.value('film_roughness') - 3) < 0.1
+:do: call analysis.setParameterValue sio2_thickness 25; call analysis.setParameterValue film_thickness 70; call analysis.setParameterValue film_sld 1; call analysis.setParameterValue film_roughness 3
+:more: multi_contrast.md#fit-the-three-contrasts-together
+
+The model still has the values the file was simulated with. Move them away, so the fit has
+something to find: oxide thickness `25`, film thickness `70`, film SLD `1` and film
+roughness `3`.
+```
+
+```{tutorial-step} Fit the three contrasts together
+:id: fit
+:page: analysis
+:target: analysis.startFitting
+:done: step.fits_finished >= 1 and fit.reduced_chi2 < 1.5
+:do: click analysis.startFitting
+:hint: The fit did not find the structure. Check the pairing in the Data Explorer and the parameters ticked for fitting.
+:more: multi_contrast.md#fit-the-three-contrasts-together
+
+Leave **Fit** ticked for all three experiments in the **Data Explorer** and press
+**Start fitting**. The joint fit finds the oxide at about 15.2 Å and the film at 80.0 Å,
+with SLD 2.00 and roughness 5.0 Å, at a reduced χ² of about 0.89.
+```
+
+```{tutorial-step} Read the results
+:id: results
+:page: analysis
+:done: not fit.results_dialog_open
+:do: call analysis.setShowFitResultsDialog false
+:more: multi_contrast.md#fit-the-three-contrasts-together
+
+The **Refinement Results** dialog lists each dataset with its χ² per point and its share
+of the total, all three close to 1. Press **OK**.
+```
+
+```{tutorial-step} Let one parameter differ in one contrast
+:id: detach
+:page: analysis
+:sidebar-tab: basic
+:target: analysis.parameterTable
+:done: params.has('film_in_cmsi_film_roughness')
+:do: call sample.detachParameterByAlias film_roughness 2
+:more: multi_contrast.md#let-one-parameter-differ-in-one-contrast
+
+Select the `Film roughness` row. Below the table, pick `Film in CMSi` after
+**Detach in** and press **Detach**. `Film in CMSi` now has its own copy of
+`Oxide and film`, and its film roughness is a row of its own, `Film in CMSi Film roughness`.
+Every other parameter of the copy still follows the shared one.
+```
 
 ## Linking models that were made separately
 

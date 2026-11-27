@@ -10,15 +10,25 @@ from types import SimpleNamespace
 from PySide6.QtCore import Property
 from PySide6.QtCore import QObject
 from PySide6.QtCore import QTimer
+from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import Slot
 
+from .logic.tutorial import DATA_DIR
 from .logic.tutorial import ParameterFacts
 from .logic.tutorial import TutorialRun
 from .logic.tutorial import available_tutorials
 
 SESSION_REPLACED = 'Another project was loaded or the app was reset, so the tutorial stopped.'
 AUTO_ADVANCE_MS = 1000
+
+
+def _number(text: str) -> float:
+    """The backend's table values are strings; one that is not a number reads as NaN."""
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return float('nan')
 
 
 class Tutorial(QObject):
@@ -44,8 +54,8 @@ class Tutorial(QObject):
         self._auto_advance.setInterval(AUTO_ADVANCE_MS)
         self._auto_advance.timeout.connect(self._advance_automatically)
 
-        project.externalProjectLoaded.connect(self._on_session_replaced)
-        project.externalProjectReset.connect(self._on_session_replaced)
+        # Not externalProjectLoaded: a sample import emits it too, and a tutorial may do one.
+        project.sessionReplaced.connect(self._on_session_replaced)
         analysis.fittingChanged.connect(self._on_fitting_changed)
         analysis.prefitCheckFailed.connect(lambda _title, _message: self._on_fit_ended('refused'))
         for signal in (
@@ -70,6 +80,16 @@ class Tutorial(QObject):
             {key: tutorial[key] for key in ('id', 'title', 'summary', 'minutes', 'examplePath')}
             for tutorial in self._tutorials.values()
         ]
+
+    @Property(str, constant=True)
+    def dataFolder(self) -> str:
+        """Where the data files of the tutorials are; `{data}` in a Show me action."""
+        return DATA_DIR.as_posix()
+
+    @Property(str, constant=True)
+    def dataFolderUrl(self) -> str:
+        """The same as a URL, for the file dialogs to open in while a tutorial runs."""
+        return QUrl.fromLocalFile(str(DATA_DIR)).toString()
 
     @Property(str, notify=changed)
     def state(self) -> str:
@@ -162,10 +182,30 @@ class Tutorial(QObject):
             'ui': SimpleNamespace(**self._ui),
             'project': SimpleNamespace(is_example=project.isExample, created=project.created, name=project.name),
             'models': SimpleNamespace(count=len(sample.modelsNames), names=list(sample.modelsNames)),
-            'sample': SimpleNamespace(assembly=sample.currentAssemblyName),
+            'sample': SimpleNamespace(
+                assembly=sample.currentAssemblyName,
+                assemblies=list(sample.assembliesNames),  # of the selected model
+                material_slds={material['label']: _number(material['sld']) for material in sample.materials},
+                # The layers of the selected assembly, in the order of the Layer editor
+                layers=[
+                    SimpleNamespace(
+                        name=layer['label'],
+                        material=layer['material'],
+                        thickness=_number(layer['thickness']),
+                        roughness=_number(layer['roughness']),
+                    )
+                    for layer in sample.layers
+                ],
+            ),
             'plot': SimpleNamespace(sld_curves=list(self._plotting.visibleSldCurves)),
             'experiments': SimpleNamespace(
-                count=len(analysis.experimentsAvailable), names=list(analysis.experimentsAvailable)
+                count=len(analysis.experimentsAvailable),
+                names=list(analysis.experimentsAvailable),
+                # The model each experiment is paired with ('' for none)
+                models=[
+                    sample.modelsNames[index] if 0 <= index < len(sample.modelsNames) else ''
+                    for index in analysis.experimentsModelIndices
+                ],
             ),
             'params': ParameterFacts(analysis.freeParametersCount, analysis._parameters_logic.all_parameters),
             'fit': SimpleNamespace(

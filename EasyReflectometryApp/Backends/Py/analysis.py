@@ -1529,6 +1529,12 @@ class Analysis(QObject):
             self._clearCacheAndEmitParametersChanged()
             self.externalParametersChanged.emit()
 
+    @Slot(str, bool)
+    def setParameterFit(self, alias: str, new_value: bool) -> None:
+        """Tick or untick Fit by alias, as the table's checkbox would (a tutorial's Show me)."""
+        if self._parameters_logic.set_parameter_fit(alias, new_value):
+            self._clearCacheAndEmitParametersChanged()
+
     @Slot(float)
     def setCurrentParameterMin(self, new_value: float) -> None:
         if self._parameters_logic.set_current_parameter_min(new_value):

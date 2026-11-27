@@ -528,6 +528,7 @@ EaElements.GroupBox {
         // A parameter several models share (one object): give one of them its own copy.
         Row {
             id: detachRow
+            objectName: 'analysis.detach'  // a tutorial target
             readonly property var current: currentParameter
             readonly property var sharedBy: current?.sharedBy ?? []
             visible: current?.detachable ?? false

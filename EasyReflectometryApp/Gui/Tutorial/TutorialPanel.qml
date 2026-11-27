@@ -338,7 +338,15 @@ Rectangle {
 
     function showMe() {
         showMeError = ''
-        _actions = (step.actions ?? []).slice()
+        // First to where the step is (a no-op when already there), then its own actions.
+        const where = []
+        if (step.page) {
+            where.push({ verb: 'goto', args: [step.page] })
+        }
+        if (step.sidebarTab) {
+            where.push({ verb: 'sidebar-tab', args: [step.sidebarTab] })
+        }
+        _actions = where.concat(step.actions ?? [])
         _waits = 0
         showingMe = true
         actionTimer.start()
@@ -403,7 +411,10 @@ Rectangle {
             return setValue(frame.find(args[0]), args[1])
         case 'call': {
             const [part, slot] = args[0].split('.')
-            Globals.BackendWrapper.activeBackend[part][slot](...args.slice(1))
+            // `{data}`: the folder of the files the tutorials load
+            const values = args.slice(1).map(value => typeof value === 'string'
+                                             ? value.replace('{data}', panel.backend.tutorialDataFolder) : value)
+            Globals.BackendWrapper.activeBackend[part][slot](...values)
             return 'done'
         }
         }

@@ -24,9 +24,11 @@ import shlex
 PAGES = ('home', 'project', 'sample', 'experiment', 'analysis', 'summary')
 SIDEBAR_TABS = ('basic', 'advanced')
 # The symbols a condition may use (logic/tutorial.py provides them).
-FACT_NAMESPACES = frozenset({'ui', 'project', 'models', 'sample', 'experiments', 'params', 'fit', 'plot', 'step', 'abs'})
+FACT_NAMESPACES = frozenset(
+    {'ui', 'project', 'models', 'sample', 'experiments', 'params', 'fit', 'plot', 'step', 'abs', 'len'}
+)
 
-TUTORIAL_OPTIONS = {'id', 'example', 'minutes', 'summary'}
+TUTORIAL_OPTIONS = {'id', 'example', 'data', 'minutes', 'summary'}
 STEP_OPTIONS = {'id', 'page', 'sidebar-tab', 'target', 'done', 'do', 'advance', 'requires', 'hint', 'more'}
 
 # Action verb -> number of arguments (None: one or more)
@@ -134,7 +136,9 @@ def parse_page(text: str, doc_name: str, source: str = '<text>') -> dict | None:
         raise TutorialFormatError(f'{source}: one {{tutorial}} block must come first, followed by {{tutorial-step}} blocks')
     if not steps:
         raise TutorialFormatError(f'{source}: the tutorial has no steps')
-    _check_keys(head, TUTORIAL_OPTIONS, {'id', 'example', 'minutes', 'summary'}, source)
+    # Without `example` the tutorial starts from a new, empty project. `data` lists files of
+    # examples/datasets that the tutorial loads; they are shipped in Tutorials/data.
+    _check_keys(head, TUTORIAL_OPTIONS, {'id', 'minutes', 'summary'}, source)
     try:
         minutes = int(head['options']['minutes'])
     except ValueError:
@@ -142,7 +146,8 @@ def parse_page(text: str, doc_name: str, source: str = '<text>') -> dict | None:
     tutorial = {
         'id': head['options']['id'],
         'title': head['title'],
-        'example': head['options']['example'],
+        'example': head['options'].get('example', ''),
+        'data': [name.strip() for name in head['options'].get('data', '').split(',') if name.strip()],
         'minutes': minutes,
         'summary': head['options']['summary'],
         'steps': [_parse_step(block, doc_name, source) for block in steps],

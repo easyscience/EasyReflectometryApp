@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 #: Written by tools/make_tutorials.py from the documentation.
 TUTORIALS_DIR = Path(__file__).resolve().parents[3] / 'Tutorials'
 EXAMPLES_DIR = Path(__file__).resolve().parents[3] / 'Examples'
+#: Data files the tutorials load, copied there from examples/datasets by the generator.
+DATA_DIR = TUTORIALS_DIR / 'data'
 FORMAT = 1
 
 # How a fit ended, as the `step.*` counters count it.
@@ -49,7 +51,8 @@ def available_tutorials(directory: Path = TUTORIALS_DIR, examples_dir: Path = EX
         if definition.get('format') != FORMAT:
             logger.warning('Tutorial %s has format %s, not %s', tutorial_id, definition.get('format'), FORMAT)
             continue
-        definition['examplePath'] = (examples_dir / definition['example']).as_posix()
+        # '' for a tutorial that starts from a new, empty project
+        definition['examplePath'] = (examples_dir / definition['example']).as_posix() if definition['example'] else ''
         tutorials.append(definition)
     return tutorials
 
@@ -67,6 +70,14 @@ class ParameterFacts:
 
     def is_free(self, alias: str) -> bool:
         return bool(self._row(alias)['fit'])
+
+    def has(self, alias: str) -> bool:
+        """Whether a parameter with this alias exists, e.g. one that a detach creates."""
+        try:
+            self._row(alias)
+        except KeyError:
+            return False
+        return True
 
     def _row(self, alias: str) -> dict:
         if self._by_alias is None:
@@ -185,8 +196,8 @@ class TutorialRun:
     def _check(self, expression: str) -> bool | None:
         """The condition's truth, or None when it cannot be evaluated (logged)."""
         counters = {f'fits_{outcome}': count for outcome, count in self._counters.items()}
-        symbols = {**self._read_facts(), 'step': SimpleNamespace(**counters), 'abs': abs}
-        # Given a symbol table, asteval uses it alone: no builtins beyond `abs`.
+        symbols = {**self._read_facts(), 'step': SimpleNamespace(**counters), 'abs': abs, 'len': len}
+        # Given a symbol table, asteval uses it alone: no builtins beyond `abs` and `len`.
         interpreter = Interpreter(symtable=symbols, writer=io.StringIO(), err_writer=io.StringIO())
         result = interpreter(expression)
         if interpreter.error:

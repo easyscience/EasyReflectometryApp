@@ -207,7 +207,7 @@ The curve follows at once: the fringes move apart again.
 :sidebar-tab: advanced
 :target: analysis.minimizer
 :done: fit.minimizer == 'LMFit_leastsq' and step.fits_finished >= 1 and fit.reduced_chi2 < 5
-:do: sidebar-tab advanced; set analysis.minimizer LMFit_leastsq; click analysis.startFitting
+:do: set analysis.minimizer LMFit_leastsq; click analysis.startFitting
 :hint: Pick `LMFit_leastsq` as the **Minimizer** and press **Start fitting**.
 :more: simple_fitting.md#minimization-method
 

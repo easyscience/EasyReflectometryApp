@@ -4,6 +4,7 @@
   "id": "magnetism",
   "title": "Magnetic layers",
   "example": "FePolarized/project.json",
+  "data": [],
   "minutes": 5,
   "summary": "Turn the moment of an iron film, show its magnetic profile and reverse the guide field.",
   "steps": [
@@ -47,7 +48,7 @@
       "title": "Select the iron film",
       "body": "In the **Model editor**, click the *Fe film* row. The **Magnetism** group below always\nshows the layers of the assembly selected here.",
       "page": "sample",
-      "sidebarTab": "",
+      "sidebarTab": "basic",
       "target": "sample.assemblies",
       "done": "sample.assembly == 'Fe film'",
       "actions": [
@@ -69,7 +70,7 @@
       "title": "The Magnetism group",
       "body": "The **Magnetism** group has a row for the *Fe* layer. **Magn.** is ticked, so its `ρM`\nand `θM` can be edited. In a project calculated with `refnx`, ticking **Magn.** offers to\nswitch to `refl1d` first.",
       "page": "sample",
-      "sidebarTab": "",
+      "sidebarTab": "basic",
       "target": "sample.magnetismTable",
       "done": "",
       "actions": [],
@@ -83,7 +84,7 @@
       "title": "Show the magnetic profile",
       "body": "In the **Magnetic profile** group, tick **Show ρM**. The SLD chart now also draws the\nmagnetic SLD of the film. The dashed curves, shown by default, are the nuclear SLD plus\nand minus the part of `ρM` along the field.",
       "page": "sample",
-      "sidebarTab": "",
+      "sidebarTab": "basic",
       "target": "sample.showRhoM",
       "done": "plot.sld_curves.count('rho_m') == 1",
       "actions": [
@@ -106,7 +107,7 @@
       "title": "Turn the moment against the field",
       "body": "Select the *Fe film* row and drag the slider below the table to 90°, or type `90` as its\n`θM`. (The example limits `θM` to 0-90° for its fit; the slider stops there.) With the\nguide field at its default 270°, the moment now points straight against the field. That is\ncollinear again, with no spin-flip scattering, so the dashed curves spread out to the full\n`ρM`.",
       "page": "sample",
-      "sidebarTab": "",
+      "sidebarTab": "basic",
       "target": "sample.momentAngle",
       "done": "abs(params.value('fe_on_si_fe_film_theta_m') - 90) < 1",
       "actions": [
@@ -150,7 +151,7 @@
       "title": "Reverse the guide field",
       "body": "Type `90` as the **Guide field angle**, below the Magnetism table, and press Enter. The\nfield still lies in the sample plane, but reversed: the **H** reference now points left,\nso the moment lies along the field again. The arrows keep their frame; only **H** moves.",
       "page": "sample",
-      "sidebarTab": "",
+      "sidebarTab": "basic",
       "target": "sample.guideFieldAngle",
       "done": "abs(params.value('fe_on_si_guide_field_angle') - 90) < 1",
       "actions": [
@@ -172,7 +173,7 @@
       "title": "Fitting the moments",
       "body": "On the **Analysis** page, `ρM`, `θM` and the field are in the parameter table like any\nother parameter, for example *Fe on Si Fe film theta_m*, and can be fitted. Type `magnetic`\nin the name filter to list only those. Fitting them to measured spin channels is the\nsubject of the polarised data tutorial.",
       "page": "analysis",
-      "sidebarTab": "",
+      "sidebarTab": "basic",
       "target": "analysis.parameterTable",
       "done": "",
       "actions": [],

@@ -121,8 +121,17 @@ HARNESS = textwrap.dedent(
 
             project.hasUnsavedChanges = false
             replaceDialog.request({ name: 'Missing', path: 'mock/Missing/project.json' }, onLoaded)
-            return { direct: direct, asked: asked, afterCancel: afterCancel, afterLoad: afterLoad, afterFailure: calls,
-                     names: [examples[0].name, examples[1].name] }
+            const afterFailure = calls
+
+            // No path: a new, empty project (a tutorial that builds its own), asked about first.
+            project.hasUnsavedChanges = true
+            replaceDialog.request({ name: 'A tutorial', path: '' }, onLoaded)
+            const emptyTitle = replaceDialog.title
+            replaceDialog.load(replaceDialog.example, replaceDialog.onLoaded)
+            replaceDialog.close()
+            const empty = { calls: calls, isExample: project.isExample, title: emptyTitle }
+            return { direct: direct, asked: asked, afterCancel: afterCancel, afterLoad: afterLoad, afterFailure: afterFailure,
+                     empty: empty, names: [examples[0].name, examples[1].name] }
         }
     }
     """ % (gui / 'Pages' / 'Project' / 'Sidebar' / 'Basic' / 'Groups' / 'Examples.qml').as_uri()
@@ -224,3 +233,5 @@ def test_examples_list_loads_and_the_replace_dialog_fits_its_message_and_loads(t
     assert loading['afterLoad'] == {'calls': 2, 'name': second}
     # A load that fails does not start what was waiting for it.
     assert loading['afterFailure'] == 2
+    # Without a path, the session is reset instead, and then the caller is told.
+    assert loading['empty'] == {'calls': 3, 'isExample': False, 'title': 'Start from an empty project'}

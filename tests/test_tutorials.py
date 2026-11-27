@@ -111,7 +111,7 @@ def test_a_page_without_a_tutorial_has_none():
         ((':page: project\n', ':page: nowhere\n'), 'unknown page'),
         ((':do: goto analysis\n', ''), 'needs "do"'),
         ((":done: ui.page == 'analysis'\n", ':done: fit.reduced_chi2 < 5\n'), 'advance'),
-        ((":done: ui.page == 'analysis'\n", ':done: len(ui) > 0\n'), 'unknown names'),
+        ((":done: ui.page == 'analysis'\n", ':done: sorted(ui) > 0\n'), 'unknown names'),
         ((":done: ui.page == 'analysis'\n", ':done: ui.page ==\n'), 'not a Python expression'),
         ((':do: goto analysis\n', ':do: fly analysis\n'), 'unknown action'),
         ((':do: goto analysis\n', ':do: goto\n'), 'number of arguments'),
@@ -154,9 +154,17 @@ def test_the_generated_files_are_in_sync_with_the_documentation():
     )
 
 
-def test_every_tutorial_example_is_shipped():
+def test_every_tutorial_example_and_data_file_is_shipped():
     for tutorial in _shipped():
-        assert (ROOT / 'EasyReflectometryApp' / 'Examples' / tutorial['example']).is_file(), tutorial['id']
+        # Without an example, a tutorial starts from a new, empty project.
+        if tutorial['example']:
+            assert (ROOT / 'EasyReflectometryApp' / 'Examples' / tutorial['example']).is_file(), tutorial['id']
+        for name in tutorial['data']:
+            shipped = TUTORIALS / 'data' / name
+            assert shipped.is_file(), f'{tutorial["id"]}: {name}; run python tools/make_tutorials.py'
+            assert shipped.read_bytes() == (ROOT / 'examples' / 'datasets' / name).read_bytes(), name
+    shipped_names = {path.name for path in (TUTORIALS / 'data').iterdir()} if (TUTORIALS / 'data').is_dir() else set()
+    assert shipped_names == {name for tutorial in _shipped() for name in tutorial['data']}
 
 
 def _object_names() -> list[str]:
@@ -164,6 +172,20 @@ def _object_names() -> list[str]:
     for path in GUI.rglob('*.qml'):
         names += re.findall(r"objectName: '([^']+)'", path.read_text(encoding='utf-8'))
     return names
+
+
+def test_a_step_whose_control_is_in_a_sidebar_tab_names_that_tab():
+    # Otherwise a sidebar left on its other tab hides the control, and the panel cannot say
+    # where it is (a run after the simple fitting tutorial, which ends on Extra controls).
+    tab_of = {}
+    for path in GUI.rglob('*.qml'):
+        match = re.search(r'[\\/]Sidebar[\\/](Basic|Advanced)[\\/]', str(path))
+        if match:
+            for name in re.findall(r"objectName: '([^']+)'", path.read_text(encoding='utf-8')):
+                tab_of[name] = match.group(1).lower()
+    for step in _steps():
+        if step['target'] in tab_of:
+            assert step['sidebarTab'] == tab_of[step['target']], f'{step["id"]}: add :sidebar-tab: {tab_of[step["target"]]}'
 
 
 def test_every_control_a_tutorial_needs_is_named_exactly_once():
@@ -193,7 +215,13 @@ def test_every_call_names_a_slot_of_a_backend_part():
     from EasyReflectometryApp.Backends.Py.project import Project
     from EasyReflectometryApp.Backends.Py.sample import Sample
 
-    classes = {'analysis': Analysis, 'experiment': Experiment, 'project': Project, 'sample': Sample, 'plotting': Plotting1d}
+    classes = {
+        'analysis': Analysis,
+        'experiment': Experiment,
+        'project': Project,
+        'sample': Sample,
+        'plotting': Plotting1d,
+    }
     for step in _steps():
         for action in step['actions']:
             if action['verb'] != 'call':
@@ -208,6 +236,10 @@ def test_every_parameter_alias_exists_in_the_tutorial_example(qcore_application,
     from EasyReflectometryApp.Backends.Py.py_backend import PyBackend
 
     for tutorial in _shipped():
+        if not tutorial['example']:
+            # It builds its own model, whose aliases exist only once it has: the run of
+            # test_tutorials_run.py checks those, step by step.
+            continue
         text = json.dumps(tutorial['steps'])
         aliases = set(re.findall(r"params\.(?:value|is_free)\('([^']+)'\)", text))
         for step in tutorial['steps']:

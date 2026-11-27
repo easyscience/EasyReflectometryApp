@@ -9,6 +9,15 @@
   documentation, which shows them too, and a test runs every tutorial to the
   end in the application window. A tutorial finished without skipping is
   marked with a tick on the `Home` page.
+- An interactive tutorial, *Fitting several contrasts*, starts from an empty
+  project: it builds a film model from `film_contrasts.ort` (shipped with the
+  app), makes two water contrasts with **Add contrast**, loads and pairs the
+  three datasets, fits them together and detaches one parameter. The
+  tutorial's page now gives the χ² per point of the three datasets as 0.83
+  to 0.92 (it said 0.8 to 0.9).
+- An interactive tutorial, *Building a model*, adds a polystyrene layer to the
+  polymer film example: a new material in the `Material editor`, a new layer in
+  the `Layer editor`, and the result on the `Structure` tab.
 - A second interactive tutorial, *Magnetic layers*, works on the iron film
   example: it shows the `ρM` profile, turns the moment with the slider, shows
   it as an arrow on the `Structure` tab and reverses the guide field.

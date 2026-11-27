@@ -609,6 +609,9 @@ QtObject {
     readonly property int tutorialStepCount: activeBackend.tutorial.stepCount
     // { id, title, body, page, sidebarTab, target, actions, advance, more, hasCondition, state, message, canNext, isLast }
     readonly property var tutorialStep: activeBackend.tutorial.step
+    // Where the data files of the tutorials are; the file dialogs open there while a tutorial runs
+    readonly property string tutorialDataFolder: activeBackend.tutorial.dataFolder
+    readonly property string tutorialDataFolderUrl: activeBackend.tutorial.dataFolderUrl
     function tutorialStart(id) { activeBackend.tutorial.start(id) }
     function tutorialStop() { activeBackend.tutorial.stop() }
     function tutorialNext() { activeBackend.tutorial.next() }

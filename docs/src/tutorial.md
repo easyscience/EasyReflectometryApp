@@ -17,7 +17,8 @@ opens a panel on the left of the pages. For each step the panel gives the instru
 the control to use, and ticks the step off once it is done. **Show me** performs the step,
 **Skip step** moves on without it, and **Stop** closes the panel and leaves the project as it
 is. A tutorial finished without skipping a step is marked with a tick in the list. The
-[simple fitting](./tutorials/simple_fitting.md) and [magnetic layers](./tutorials/magnetism.md)
+[model setup](./tutorials/model_def.md), [simple fitting](./tutorials/simple_fitting.md),
+[several contrasts](./tutorials/multi_contrast.md) and [magnetic layers](./tutorials/magnetism.md)
 tutorials show their steps on their pages as well.
 
 ## Initialise project

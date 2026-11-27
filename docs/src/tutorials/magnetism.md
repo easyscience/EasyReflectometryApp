@@ -42,6 +42,7 @@ Open the **Sample** page with its tab in the application bar.
 ```{tutorial-step} Select the iron film
 :id: select-film
 :page: sample
+:sidebar-tab: basic
 :target: sample.assemblies
 :done: sample.assembly == 'Fe film'
 :do: call sample.setCurrentAssemblyIndex 1
@@ -54,6 +55,7 @@ shows the layers of the assembly selected here.
 ```{tutorial-step} The Magnetism group
 :id: magnetism-group
 :page: sample
+:sidebar-tab: basic
 :target: sample.magnetismTable
 :more: magnetism.md#the-magnetism-group
 
@@ -65,6 +67,7 @@ switch to `refl1d` first.
 ```{tutorial-step} Show the magnetic profile
 :id: rho-m-curve
 :page: sample
+:sidebar-tab: basic
 :target: sample.showRhoM
 :done: plot.sld_curves.count('rho_m') == 1
 :do: call plotting.setSldCurveVisible rho_m true
@@ -78,6 +81,7 @@ and minus the part of `ρM` along the field.
 ```{tutorial-step} Turn the moment against the field
 :id: align
 :page: sample
+:sidebar-tab: basic
 :target: sample.momentAngle
 :done: abs(params.value('fe_on_si_fe_film_theta_m') - 90) < 1
 :do: call sample.setLayerThetaMAtIndex 0 90
@@ -106,6 +110,7 @@ the top right of the view shows. That is `φ = θM − 270° = −180°`.
 ```{tutorial-step} Reverse the guide field
 :id: guide-field
 :page: sample
+:sidebar-tab: basic
 :target: sample.guideFieldAngle
 :done: abs(params.value('fe_on_si_guide_field_angle') - 90) < 1
 :do: call sample.setGuideFieldAngle 90
@@ -119,6 +124,7 @@ so the moment lies along the field again. The arrows keep their frame; only **H*
 ```{tutorial-step} Fitting the moments
 :id: fitting
 :page: analysis
+:sidebar-tab: basic
 :target: analysis.parameterTable
 :more: polarized_data.md
 

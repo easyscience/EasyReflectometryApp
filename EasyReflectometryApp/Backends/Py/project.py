@@ -31,6 +31,9 @@ class Project(QObject):
     externalNameChanged = Signal()
     externalProjectLoaded = Signal()
     externalProjectReset = Signal()
+    # The whole session was replaced: a project or an example loaded, or a reset. Unlike
+    # externalProjectLoaded, not emitted by a sample import, which replaces only models.
+    sessionReplaced = Signal()
     # Emitted after a successful load with what could not be restored as saved.
     projectLoadWarning = Signal(str)
     sampleLoadWarning = Signal(str)
@@ -417,6 +420,7 @@ class Project(QObject):
             self.locationChanged.emit()
             self.externalProjectLoaded.emit()
         self._clear_dirty()
+        self.sessionReplaced.emit()
         if self._logic.load_report:
             self.projectLoadWarning.emit('\n\n'.join(self._logic.load_report))
 
@@ -497,6 +501,7 @@ class Project(QObject):
             self.externalNameChanged.emit()
             self.externalProjectReset.emit()
         self._clear_dirty()
+        self.sessionReplaced.emit()
 
     @Slot(str, bool)
     def sampleLoad(self, url: str, append: bool = True) -> None:

@@ -10,7 +10,8 @@ import Gui.Globals as Globals
 // Replacing the session with an example project: the one path for it, shared by the Examples
 // list on the Project page and the start of a tutorial on the Home page (which can run before
 // the Project page exists). ApplicationWindow.qml publishes `request` as
-// Globals.References.applicationWindow.replaceSessionWithExample.
+// Globals.References.applicationWindow.replaceSessionWithExample. An example without a `path`
+// is a new, empty project (a tutorial that builds its own).
 EaElements.Dialog {
     id: replaceDialog
 
@@ -42,6 +43,13 @@ EaElements.Dialog {
         if (!tabs.projectButton.checked) {
             tabs.projectButton.toggle()
         }
+        if (!example.path) {
+            Globals.BackendWrapper.projectReset()
+            if (onLoaded) {
+                onLoaded()
+            }
+            return
+        }
         let failed = false
         const onError = () => failed = true
         Globals.BackendWrapper.projectLoadError.connect(onError)
@@ -52,7 +60,7 @@ EaElements.Dialog {
         }
     }
 
-    title: qsTr('Load an example')
+    title: replaceDialog.example.path ? qsTr('Load an example') : qsTr('Start from an empty project')
     modal: true
     closePolicy: Popup.CloseOnEscape
 
@@ -72,16 +80,18 @@ EaElements.Dialog {
             }
             text: {
                 const name = replaceDialog.example.name ?? ''
+                const action = replaceDialog.example.path ? qsTr('Loading the example "%1"').arg(name)
+                                                          : qsTr('Starting "%1" from an empty project').arg(name)
                 if (Globals.BackendWrapper.projectCreated) {
-                    return qsTr('The project "%1" has unsaved changes. Loading the example "%2" discards them.')
-                               .arg(Globals.BackendWrapper.projectName).arg(name)
+                    return qsTr('The project "%1" has unsaved changes. %2 discards them.')
+                               .arg(Globals.BackendWrapper.projectName).arg(action)
                 }
                 if (Globals.BackendWrapper.projectIsExample) {
-                    return qsTr('The current example has been changed, and the changes have not been saved to a project. Loading the example "%1" discards them.')
-                               .arg(name)
+                    return qsTr('The current example has been changed, and the changes have not been saved to a project. %1 discards them.')
+                               .arg(action)
                 }
-                return qsTr('This session holds work that has not been saved to a project. Loading the example "%1" discards it.')
-                           .arg(name)
+                return qsTr('This session holds work that has not been saved to a project. %1 discards it.')
+                           .arg(action)
             }
         }
     }
@@ -93,7 +103,7 @@ EaElements.Dialog {
         }
 
         EaElements.Button {
-            text: qsTr('Load example')
+            text: replaceDialog.example.path ? qsTr('Load example') : qsTr('Start')
             onClicked: {
                 replaceDialog.close()
                 replaceDialog.load(replaceDialog.example, replaceDialog.onLoaded)

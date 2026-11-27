@@ -20,6 +20,8 @@ QtObject {
           'hasCondition': true }
     ]
 
+    readonly property string dataFolder: '/path/to/tutorial/data'
+    readonly property string dataFolderUrl: 'file:///path/to/tutorial/data'
     property string state: 'idle'
     property string stopReason: ''
     property string tutorialId: ''

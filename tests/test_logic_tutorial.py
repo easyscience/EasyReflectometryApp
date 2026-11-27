@@ -123,7 +123,7 @@ def test_parameters_are_read_by_alias_and_an_unknown_alias_makes_the_step_invali
     assert run.step_state == 'invalid' and run.message == INVALID and not run.can_next
 
 
-@pytest.mark.parametrize('expression', ['len([1]) == 1', 'open("x")', 'undefined_name', 'params.value('])
+@pytest.mark.parametrize('expression', ['sorted([1]) == [1]', 'open("x")', 'undefined_name', 'params.value('])
 def test_a_broken_condition_is_invalid_not_false(expression):
     run, _ = _run(_step('broken', done=expression))
 
@@ -172,5 +172,6 @@ def test_available_tutorials_skips_what_it_cannot_read(tmp_path):
 
 
 def test_the_shipped_tutorials_are_found():
-    assert [tutorial['id'] for tutorial in available_tutorials()] == ['simple-fitting', 'magnetism']
+    index = json.loads((tutorial_logic.TUTORIALS_DIR / 'index.json').read_text(encoding='utf-8'))
+    assert [tutorial['id'] for tutorial in available_tutorials()] == index and index
     assert tutorial_logic.FORMAT == 1

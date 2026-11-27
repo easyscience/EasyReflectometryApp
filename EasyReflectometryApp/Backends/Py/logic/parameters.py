@@ -245,7 +245,13 @@ class Parameters:
         return True
 
     def set_current_parameter_fit(self, new_value: bool) -> bool:
-        entry = self._get_current_parameter_entry()
+        return self._set_fit(self._get_current_parameter_entry(), new_value)
+
+    def set_parameter_fit(self, alias: str, new_value: bool) -> bool:
+        """Tick or untick Fit for the row with this alias, whatever the table filters show."""
+        return self._set_fit(next((row for row in self.all_parameters() if row['alias'] == alias), None), new_value)
+
+    def _set_fit(self, entry: dict[str, Any] | None, new_value: bool) -> bool:
         if entry is None:
             return False
         if entry.get('kind') == 'inactive':

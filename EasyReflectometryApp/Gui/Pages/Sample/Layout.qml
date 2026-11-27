@@ -39,8 +39,9 @@ EaComponents.ContentPage {
 
     sideBar: EaComponents.SideBar {
         tabs: [
-            EaElements.TabButton { text: qsTr('Basic controls') },
-            EaElements.TabButton { text: qsTr('Advanced controls') }
+            // Named for the tutorials: `<page>.<sidebar-tab>Tab`
+            EaElements.TabButton { objectName: 'sample.basicTab'; text: qsTr('Basic controls') },
+            EaElements.TabButton { objectName: 'sample.advancedTab'; text: qsTr('Advanced controls') }
         ]
 
         items: [

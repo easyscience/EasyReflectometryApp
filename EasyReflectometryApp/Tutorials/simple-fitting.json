@@ -4,6 +4,7 @@
   "id": "simple-fitting",
   "title": "Simple fitting",
   "example": "PolymerFilm/project.json",
+  "data": [],
   "minutes": 5,
   "summary": "Fit a slab model to a polymer film measured on Platypus.",
   "steps": [
@@ -166,12 +167,6 @@
       "target": "analysis.minimizer",
       "done": "fit.minimizer == 'LMFit_leastsq' and step.fits_finished >= 1 and fit.reduced_chi2 < 5",
       "actions": [
-        {
-          "verb": "sidebar-tab",
-          "args": [
-            "advanced"
-          ]
-        },
         {
           "verb": "set",
           "args": [
