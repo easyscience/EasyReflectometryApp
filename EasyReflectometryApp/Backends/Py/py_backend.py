@@ -14,6 +14,7 @@ from .project import Project
 from .sample import Sample
 from .status import Status
 from .summary import Summary
+from .tutorial import Tutorial
 
 # Signals whose emission changes what `Project.save()` would write to disk. Every one of them
 # marks the project dirty (see `_connect_dirty_tracking`). The inventory is explicit rather than
@@ -90,6 +91,10 @@ class PyBackend(QObject):
         # Plotting backend part
         self._plotting_1d = Plotting1d(self._project_lib, parent=self, selection=self._experiment_selection)
 
+        # Not a project part: running a tutorial changes nothing the project saves, so it is in
+        # neither DIRTYING_SIGNALS nor NON_DIRTYING_EXTERNAL_SIGNALS and has no external* signals.
+        self._tutorial = Tutorial(self._project, self._sample, self._analysis, self._status, self._plotting_1d, parent=self)
+
         self._logger = LoggerLevelHandler(self)
 
         # Wire cross-cutting references before connecting signals
@@ -125,6 +130,10 @@ class PyBackend(QObject):
         return self._summary
 
     # Other elements
+    @Property('QVariant', constant=True)
+    def tutorial(self) -> Tutorial:
+        return self._tutorial
+
     @Property('QVariant', constant=True)
     def status(self) -> Status:
         return self._status

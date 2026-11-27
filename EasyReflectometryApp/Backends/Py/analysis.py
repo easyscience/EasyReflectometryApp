@@ -1522,6 +1522,13 @@ class Analysis(QObject):
             self._clearCacheAndEmitParametersChanged()
             self.externalParametersChanged.emit()
 
+    @Slot(str, float)
+    def setParameterValue(self, alias: str, new_value: float) -> None:
+        """Set a parameter by its alias, as an edit in the table would (a tutorial's Show me)."""
+        if self._parameters_logic.set_parameter_value(alias, new_value):
+            self._clearCacheAndEmitParametersChanged()
+            self.externalParametersChanged.emit()
+
     @Slot(float)
     def setCurrentParameterMin(self, new_value: float) -> None:
         if self._parameters_logic.set_current_parameter_min(new_value):

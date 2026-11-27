@@ -596,6 +596,27 @@ QtObject {
     function analysisSetVariabilityFilterCriteria(value) { activeBackend.analysis.setVariabilityFilterCriteria(value) }
 
     ///////////////
+    // Interactive tutorials (Gui/Tutorial, MD/INTERACTIVE_TUTORIALS_DESIGN.md)
+    ///////////////
+    // [{ id, title, summary, minutes, examplePath }] in display order
+    readonly property var tutorialAvailable: activeBackend.tutorial.available
+    readonly property string tutorialState: activeBackend.tutorial.state  // idle | active | finished | stopped
+    readonly property string tutorialStopReason: activeBackend.tutorial.stopReason
+    readonly property string tutorialId: activeBackend.tutorial.tutorialId
+    readonly property string tutorialTitle: activeBackend.tutorial.title
+    readonly property string tutorialExamplePath: activeBackend.tutorial.examplePath
+    readonly property int tutorialStepIndex: activeBackend.tutorial.stepIndex
+    readonly property int tutorialStepCount: activeBackend.tutorial.stepCount
+    // { id, title, body, page, sidebarTab, target, actions, advance, more, hasCondition, state, message, canNext, isLast }
+    readonly property var tutorialStep: activeBackend.tutorial.step
+    function tutorialStart(id) { activeBackend.tutorial.start(id) }
+    function tutorialStop() { activeBackend.tutorial.stop() }
+    function tutorialNext() { activeBackend.tutorial.next() }
+    function tutorialPrevious() { activeBackend.tutorial.previous() }
+    function tutorialSkip() { activeBackend.tutorial.skip() }
+    function tutorialReportUi(key, value) { activeBackend.tutorial.reportUi(key, value) }
+
+    ///////////////
     // Summary page
     ///////////////
     readonly property bool summaryCreated: activeBackend.summary.created

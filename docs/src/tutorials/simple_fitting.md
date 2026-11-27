@@ -99,14 +99,139 @@ A limit is also red when it is `inf` for a fitted parameter while the selected m
 needs finite limits for every fitted parameter.
 
 ## Fitting the polymer film
-In the example, eight parameters are ticked for fitting: the thickness and roughness of the
-oxide and of the film, the film's SLD, the roughness towards the D<sub>2</sub>O, the scale
-and the background. The SLDs of Si, SiO<sub>2</sub> and D<sub>2</sub>O are known and stay
-fixed. At the starting values, the calculated fringes are spaced too far apart: the film is
-thicker than the 250 Å the model starts from.
 
-Press **Start fitting**. With the default minimiser, `Bumps_lm`, the fit takes about a
-second. The **Refinement Results** dialog then reports the outcome:
+```{tutorial} Simple fitting
+:id: simple-fitting
+:example: PolymerFilm/project.json
+:minutes: 5
+:summary: Fit a slab model to a polymer film measured on Platypus.
+```
+
+```{tutorial-step} The sample
+:id: sample
+:page: project
+:more: simple_fitting.md#simple-fitting-with-a-slab-model
+
+The example *Polymer film on silicon* is loaded: a polymer film on a silicon block with its
+native oxide, measured against heavy water (D₂O) on Platypus. The model has the film on the
+oxide, with silicon as the super-phase and D₂O as the sub-phase.
+```
+
+```{tutorial-step} Open the Analysis page
+:id: open-analysis
+:target: appbar.analysisTab
+:done: ui.page == 'analysis'
+:do: goto analysis
+:advance: auto
+:more: simple_fitting.md#the-analysis-page
+
+Open the **Analysis** page with its tab in the application bar.
+```
+
+```{tutorial-step} Compare the data and the model
+:id: compare
+:page: analysis
+:target: analysis.reflectivityChart
+:more: simple_fitting.md#the-analysis-page
+
+The **Reflectivity** chart shows the measured data and the model's reflectivity. At the
+starting values the calculated fringes are spaced too far apart: the film is thicker than
+the 250 Å the model starts from.
+```
+
+```{tutorial-step} The parameters to fit
+:id: parameters
+:page: analysis
+:sidebar-tab: basic
+:target: analysis.parameterTable
+:more: simple_fitting.md#the-parameter-table
+
+Eight parameters are ticked **Fit**: the thickness and roughness of the oxide and of the
+film, the film's SLD, the roughness towards the D₂O, the scale and the background. The SLDs
+of Si, SiO₂ and D₂O are known and stay fixed.
+```
+
+```{tutorial-step} Start the fit
+:id: start-fit
+:page: analysis
+:target: analysis.startFitting
+:done: step.fits_finished >= 1 and fit.reduced_chi2 < 5
+:do: click analysis.startFitting
+:hint: The fit did not end with a good result. Press **Start fitting** again, or restart the tutorial to begin from the example's values.
+:more: simple_fitting.md#starting-following-and-cancelling-a-fit
+
+Press **Start fitting**, below the sidebar. With the default minimiser, `Bumps_lm`, the fit
+takes about a second.
+```
+
+```{tutorial-step} Read the results
+:id: results
+:page: analysis
+:done: not fit.results_dialog_open
+:do: call analysis.setShowFitResultsDialog false
+:more: simple_fitting.md#the-fit-results
+
+The **Refinement Results** dialog reports the outcome: a reduced χ² of about 2.4, where 1
+would mean the model describes the data within their uncertainties. Press **OK**. The table
+now shows the fitted values with their uncertainties.
+```
+
+```{tutorial-step} Look at the residuals
+:id: residuals
+:page: analysis
+:target: analysis.residualsTab
+:done: ui.plot_tab == 'residuals'
+:do: click analysis.residualsTab
+:more: simple_fitting.md#residuals
+
+Open the **Residuals** tab below the chart. After the fit, the residuals scatter around zero,
+a little more widely at low q.
+```
+
+```{tutorial-step} Change a parameter
+:id: thickness
+:page: analysis
+:sidebar-tab: basic
+:target: analysis.parameterTable
+:done: abs(params.value('polymer_film_film_thickness') - 200) < 5
+:do: call analysis.setParameterValue polymer_film_film_thickness 200
+:more: simple_fitting.md#the-parameter-table
+
+Type `200` as the **Value** of *Polymer film Film thickness* in the table and press Enter.
+The curve follows at once: the fringes move apart again.
+```
+
+```{tutorial-step} Fit with another minimiser
+:id: minimizer
+:page: analysis
+:sidebar-tab: advanced
+:target: analysis.minimizer
+:done: fit.minimizer == 'LMFit_leastsq' and step.fits_finished >= 1 and fit.reduced_chi2 < 5
+:do: sidebar-tab advanced; set analysis.minimizer LMFit_leastsq; click analysis.startFitting
+:hint: Pick `LMFit_leastsq` as the **Minimizer** and press **Start fitting**.
+:more: simple_fitting.md#minimization-method
+
+Open **Extra controls**, pick `LMFit_leastsq` as the **Minimizer**, and press
+**Start fitting**. It finds the film thickness again, about 258 Å. Not every minimiser does:
+200 Å is the lower limit of the thickness, and `Bumps_lm` or `Bumps_simplex` stay stuck
+there.
+```
+
+```{tutorial-step} Continue to the Summary
+:id: summary
+:page: analysis
+:target: analysis.continue
+:done: ui.page == 'summary'
+:do: click analysis.continue
+:advance: auto
+:more: summary.md
+
+Press **Continue** at the bottom of the sidebar. The `Summary` page reports the model, the
+data and the fit, and exports them.
+```
+
+### The fit results
+The **Refinement Results** dialog reports the outcome of a fit:
 
 ![The Refinement Results dialog of the polymer film fit](./_images/anal_fit_results.png)
 

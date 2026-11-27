@@ -1,5 +1,17 @@
 # Unreleased
 
+- Interactive tutorials: the `Home` page lists tutorials that can be followed
+  step by step in the app. A panel on the left of the pages gives each step,
+  frames the control to use, and ticks the step off when the app reaches the
+  expected state; **Show me** performs a step, **Skip step** and
+  **Restart tutorial** get out of one that cannot be completed. The first
+  tutorial is *Simple fitting*. Its steps are written in the online
+  documentation, which shows them too, and a test runs every tutorial to the
+  end in the application window. A tutorial finished without skipping is
+  marked with a tick on the `Home` page.
+- A second interactive tutorial, *Magnetic layers*, works on the iron film
+  example: it shows the `ρM` profile, turns the moment with the slider, shows
+  it as an arrow on the `Structure` tab and reverses the guide field.
 - A layer of a repeating multilayer repeated more than once can no longer be
   made magnetic, and such a stack holding a magnetic layer can no longer be
   repeated: refl1d cannot calculate it, and the whole model then had no

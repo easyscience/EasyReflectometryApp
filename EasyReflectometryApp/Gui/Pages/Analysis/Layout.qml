@@ -53,8 +53,9 @@ EaComponents.ContentPage {
 
     sideBar: Gui.SideBarWithFooter {
         tabs: [
-            EaElements.TabButton { text: qsTr("Basic controls") },
-            EaElements.TabButton { text: qsTr("Extra controls") }
+            // Named for the tutorials: `<page>.<sidebar-tab>Tab`
+            EaElements.TabButton { objectName: 'analysis.basicTab'; text: qsTr("Basic controls") },
+            EaElements.TabButton { objectName: 'analysis.advancedTab'; text: qsTr("Extra controls") }
         ]
 
         items: [
@@ -76,6 +77,7 @@ EaComponents.ContentPage {
                 spacing: 0.5 * EaStyle.Sizes.fontPixelSize
 
                 EaElements.SideBarButton {
+                    objectName: 'analysis.startFitting'  // a tutorial target; not the Fitting group's copy
                     enabled: Globals.BackendWrapper.analysisExperimentsAvailable.length
                     wide: true
                     fontIcon: Globals.BackendWrapper.analysisFittingRunning ? 'stop-circle' : 'play-circle'
@@ -113,6 +115,7 @@ EaComponents.ContentPage {
             }
         }
 
+        continueButton.objectName: 'analysis.continue'  // a tutorial target
         continueButton.onClicked: {
             console.debug(`Clicking '${continueButton.text}' button: ${this}`)
             Globals.References.applicationWindow.appBarCentralTabs.summaryButton.enabled = true

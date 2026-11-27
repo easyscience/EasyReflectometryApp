@@ -206,6 +206,7 @@ EaElements.GroupBox {
         // Table
         EaComponents.TableView {
             id: tableView
+            objectName: 'analysis.parameterTable'  // a tutorial target
             defaultInfoText: qsTr("No parameters found")
 
             maxRowCountShow: 8 +

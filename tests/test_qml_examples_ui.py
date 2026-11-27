@@ -1,9 +1,11 @@
-"""Runtime check of the Examples group on the Project page (Examples.qml) in a real QML engine.
+"""Runtime check of the Examples group on the Project page (Examples.qml) and of the dialog that
+replaces the session with an example (LoadExampleDialog.qml), in a real QML engine.
 
 The source-level checks in test_example_projects.py cannot see a QML error that stops the file
 from loading (once, an assignment to the read-only `implicitWidth` of a Label left the examples
-list empty). This loads the real file with the Mock backend and measures the "Load an example"
-dialog, which takes its width from its content's implicit width.
+list empty). This loads the real files with the Mock backend, measures the "Load an example"
+dialog, which takes its width from its content's implicit width, and runs the loading itself as
+the Examples list and the tutorials use it.
 
 A QGuiApplication cannot coexist with the QCoreApplication the other tests share, so the
 harness runs in a subprocess (as in test_qml_close_behaviour.py).
@@ -37,6 +39,7 @@ HARNESS = textwrap.dedent(
     QML = """
     import QtQuick
     import EasyApplication.Gui.Style as EaStyle
+    import Gui as Gui
     import Gui.Globals as Globals
 
     Window {
@@ -51,11 +54,16 @@ HARNESS = textwrap.dedent(
             source: "%s"
         }
 
-        function replaceDialog() {
-            for (const child of loader.item.data) {
-                if (child.title === 'Load an example') return child
+        Gui.LoadExampleDialog { id: replaceDialog }
+
+        // Stand-ins for the application bar's page buttons, which a load enables.
+        readonly property var tabs: Globals.References.applicationWindow.appBarCentralTabs
+        Component.onCompleted: {
+            for (const name of ['projectButton', 'sampleButton', 'experimentButton', 'analysisButton', 'summaryButton']) {
+                tabs[name] = Qt.createQmlObject(
+                    'import QtQuick; QtObject { property bool enabled: false; property bool checked: false; '
+                    + 'function toggle() { checked = !checked } }', this)
             }
-            return null
         }
 
         // 0: an edited example, 1: a created project with unsaved changes, 2: own work, no project
@@ -63,13 +71,12 @@ HARNESS = textwrap.dedent(
             const project = Globals.BackendWrapper.activeBackend.project
             project.created = state === 1
             project.isExample = state === 0
-            const dialog = replaceDialog()
-            dialog.example = loader.item.model[1]
-            dialog.open()
+            replaceDialog.example = loader.item.model[1]
+            replaceDialog.open()
         }
 
         function measure() {
-            const dialog = replaceDialog()
+            const dialog = replaceDialog
             const message = dialog.contentItem.children[0].children[0]
             return { dialogWidth: dialog.width, messageWidth: message.width, lineCount: message.lineCount,
                      padding: dialog.leftPadding + dialog.rightPadding }
@@ -80,6 +87,43 @@ HARNESS = textwrap.dedent(
             rows: loader.status === Loader.Ready ? loader.item.model.length : -1,
             fontPixelSize: EaStyle.Sizes.fontPixelSize,
         })
+
+        // Loading as the Examples list and the tutorials do: at once without unsaved work,
+        // after asking with it, and never calling back on Cancel or on a failed load.
+        function loading() {
+            const project = Globals.BackendWrapper.activeBackend.project
+            const examples = loader.item.model
+            let calls = 0
+            const onLoaded = () => calls += 1
+            replaceDialog.close()
+            // `visible` lags behind open()/close() by the transitions: count the openings.
+            let asks = 0
+            replaceDialog.aboutToShow.connect(() => asks += 1)
+            project.created = false
+            project.isExample = false
+            project.hasUnsavedChanges = false
+
+            replaceDialog.request(examples[0], onLoaded)
+            const direct = { calls: calls, asked: asks > 0, name: project.name,
+                             tabsEnabled: tabs.analysisButton.enabled && tabs.summaryButton.enabled,
+                             projectOpen: tabs.projectButton.checked }
+
+            project.hasUnsavedChanges = true
+            replaceDialog.request(examples[1], onLoaded)
+            const asked = asks === 1
+            replaceDialog.close()  // Cancel
+            const afterCancel = { calls: calls, name: project.name }
+
+            replaceDialog.request(examples[1], onLoaded)
+            replaceDialog.load(replaceDialog.example, replaceDialog.onLoaded)  // what "Load example" does
+            replaceDialog.close()
+            const afterLoad = { calls: calls, name: project.name }
+
+            project.hasUnsavedChanges = false
+            replaceDialog.request({ name: 'Missing', path: 'mock/Missing/project.json' }, onLoaded)
+            return { direct: direct, asked: asked, afterCancel: afterCancel, afterLoad: afterLoad, afterFailure: calls,
+                     names: [examples[0].name, examples[1].name] }
+        }
     }
     """ % (gui / 'Pages' / 'Project' / 'Sidebar' / 'Basic' / 'Groups' / 'Examples.qml').as_uri()
 
@@ -114,6 +158,7 @@ HARNESS = textwrap.dedent(
 
     def step(state):
         if state == 3:
+            result['loading'] = call('loading')
             finish()
             return
         call('setState', state)
@@ -131,7 +176,7 @@ HARNESS = textwrap.dedent(
 )
 
 
-def test_examples_list_loads_and_the_replace_dialog_fits_its_message(tmp_path):
+def test_examples_list_loads_and_the_replace_dialog_fits_its_message_and_loads(tmp_path):
     pytest.importorskip('PySide6.QtQml')
     pytest.importorskip('EasyApplication')
     script = tmp_path / 'examples_harness.py'
@@ -155,7 +200,7 @@ def test_examples_list_loads_and_the_replace_dialog_fits_its_message(tmp_path):
     result = json.loads(completed.stdout.split('RESULT ', 1)[1].splitlines()[0])
 
     # Qt reports QML errors in the file (bad assignments, unknown properties) on stderr.
-    assert [line for line in completed.stderr.splitlines() if 'Examples.qml' in line] == []
+    assert [line for line in completed.stderr.splitlines() if 'Examples.qml' in line or 'LoadExampleDialog.qml' in line] == []
     assert result['loaderStatus'] == 1, output
     # The Mock backend lists two examples.
     assert result['rows'] == 2
@@ -167,3 +212,15 @@ def test_examples_list_loads_and_the_replace_dialog_fits_its_message(tmp_path):
         assert 0 < state['messageWidth'] <= cap, state
         assert state['dialogWidth'] == pytest.approx(state['messageWidth'] + state['padding'], abs=1), state
         assert state['lineCount'] >= 2, state
+
+    loading = result['loading']
+    first, second = loading['names']
+    # Nothing unsaved: loaded at once, the page tabs enabled and the Project page opened (where
+    # a load error is shown), then the caller (a tutorial) is told.
+    assert loading['direct'] == {'calls': 1, 'asked': False, 'name': first, 'tabsEnabled': True, 'projectOpen': True}
+    # Unsaved work: asked first, and Cancel loads nothing.
+    assert loading['asked'] is True
+    assert loading['afterCancel'] == {'calls': 1, 'name': first}
+    assert loading['afterLoad'] == {'calls': 2, 'name': second}
+    # A load that fails does not start what was waiting for it.
+    assert loading['afterFailure'] == 2

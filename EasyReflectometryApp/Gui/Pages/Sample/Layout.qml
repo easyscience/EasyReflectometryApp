@@ -11,9 +11,18 @@ import Gui.Globals as Globals
 
 EaComponents.ContentPage {
     mainView: EaComponents.MainContent {
+        // Named for the tutorials, which also read the open one as `ui.sample_view`
         tabs: [
-            EaElements.TabButton { text: qsTr('Reflectivity') },
-            EaElements.TabButton { text: qsTr('Structure') }
+            EaElements.TabButton {
+                objectName: 'sample.reflectivityTab'
+                text: qsTr('Reflectivity')
+                onCheckedChanged: if (checked) Globals.BackendWrapper.tutorialReportUi('sample_view', 'reflectivity')
+            },
+            EaElements.TabButton {
+                objectName: 'sample.structureTab'
+                text: qsTr('Structure')
+                onCheckedChanged: if (checked) Globals.BackendWrapper.tutorialReportUi('sample_view', 'structure')
+            }
        ]
 
         items: [

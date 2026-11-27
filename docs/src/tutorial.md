@@ -11,6 +11,15 @@ EasyReflectometryApp opens on the **Home** page.
 - **B**: Pop-up window with source information.
 - **C**: Link to developer documentation.
 
+Below them, **Tutorials** lists the tutorials that can be followed step by step in the app.
+Clicking one loads its example project (asking first if that would discard unsaved work) and
+opens a panel on the left of the pages. For each step the panel gives the instructions, frames
+the control to use, and ticks the step off once it is done. **Show me** performs the step,
+**Skip step** moves on without it, and **Stop** closes the panel and leaves the project as it
+is. A tutorial finished without skipping a step is marked with a tick in the list. The
+[simple fitting](./tutorials/simple_fitting.md) and [magnetic layers](./tutorials/magnetism.md)
+tutorials show their steps on their pages as well.
+
 ## Initialise project
 
 Pressing **A** takes you to the **Project** page.

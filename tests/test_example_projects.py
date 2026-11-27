@@ -277,11 +277,15 @@ def test_qml_lists_the_examples_and_loads_them_as_examples():
     assert "title: qsTr('Examples')" in sidebar_qml
     assert "Loader { source: 'Groups/Examples.qml' }" in sidebar_qml
     assert 'model: Globals.BackendWrapper.projectExamples' in examples_qml
-    assert 'Globals.BackendWrapper.projectLoadExample(example.path)' in examples_qml
+    # One path replaces the session with an example, shared with the tutorials (which start on
+    # the Home page, before the Project page exists): Gui/LoadExampleDialog.qml.
+    assert 'Globals.References.applicationWindow.replaceSessionWithExample(example)' in examples_qml
+    dialog_qml = (GUI / 'LoadExampleDialog.qml').read_text(encoding='utf-8')
+    assert 'Globals.BackendWrapper.projectLoadExample(example.path)' in dialog_qml
     # Unsaved work is not discarded without asking, and an untouched example is not such work.
-    assert 'replaceDialog.open()' in examples_qml
-    assert 'Globals.BackendWrapper.projectHasUnsavedWork()' in examples_qml
-    assert 'projectHasCustomContent' not in examples_qml
+    assert 'replaceDialog.open()' in dialog_qml
+    assert 'Globals.BackendWrapper.projectHasUnsavedWork()' in dialog_qml
+    assert 'projectHasCustomContent' not in dialog_qml
     assert 'activeBackend.project.hasUnsavedWork()' in wrapper_qml
     assert 'function hasUnsavedWork()' in mock_qml
     # A loaded example shows its description instead of "No project defined".

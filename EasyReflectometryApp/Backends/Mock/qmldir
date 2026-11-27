@@ -7,4 +7,5 @@ singleton Project Project.qml
 singleton Summary Summary.qml
 singleton Sample Sample.qml
 singleton Status Status.qml
+singleton Tutorial Tutorial.qml
 singleton Plotting Plotting.qml

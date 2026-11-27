@@ -17,6 +17,9 @@ import Gui.Globals as Globals
 Column {
     spacing: EaStyle.Sizes.fontPixelSize * 0.5
 
+    // So that one of the two places using this control can name it for the tutorials.
+    property alias rhoMCheckBox: rhoMCheckBox
+
     EaElements.CheckBox {
         topPadding: 0
         checked: Globals.BackendWrapper.plottingVisibleSldCurves.indexOf('spin_up') !== -1
@@ -26,6 +29,7 @@ Column {
     }
 
     EaElements.CheckBox {
+        id: rhoMCheckBox
         topPadding: 0
         checked: Globals.BackendWrapper.plottingVisibleSldCurves.indexOf('rho_m') !== -1
         text: qsTr("Show ρM")

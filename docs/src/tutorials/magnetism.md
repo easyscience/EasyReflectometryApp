@@ -9,6 +9,125 @@ Only `refl1d` can calculate magnetic layers. `refnx` has no magnetism, so the fi
 make a layer magnetic the app asks to switch the project's calculation engine.
 ```
 
+## Trying it on the iron example
+
+```{tutorial} Magnetic layers
+:id: magnetism
+:example: FePolarized/project.json
+:minutes: 5
+:summary: Turn the moment of an iron film, show its magnetic profile and reverse the guide field.
+```
+
+```{tutorial-step} The iron film
+:id: example
+:page: project
+:more: magnetism.md#magnetic-layers
+
+The example *Magnetic iron film, polarized* is loaded: an iron film on silicon, with a
+magnetic SLD `ρM` of 3 and its moment at `θM` = 60°, canted against the guide field. It is
+calculated with `refl1d`, the engine that can model magnetism.
+```
+
+```{tutorial-step} Open the Sample page
+:id: open-sample
+:target: appbar.sampleTab
+:done: ui.page == 'sample'
+:do: goto sample
+:advance: auto
+:more: magnetism.md#the-magnetism-group
+
+Open the **Sample** page with its tab in the application bar.
+```
+
+```{tutorial-step} Select the iron film
+:id: select-film
+:page: sample
+:target: sample.assemblies
+:done: sample.assembly == 'Fe film'
+:do: call sample.setCurrentAssemblyIndex 1
+:more: magnetism.md#the-magnetism-group
+
+In the **Model editor**, click the *Fe film* row. The **Magnetism** group below always
+shows the layers of the assembly selected here.
+```
+
+```{tutorial-step} The Magnetism group
+:id: magnetism-group
+:page: sample
+:target: sample.magnetismTable
+:more: magnetism.md#the-magnetism-group
+
+The **Magnetism** group has a row for the *Fe* layer. **Magn.** is ticked, so its `ρM`
+and `θM` can be edited. In a project calculated with `refnx`, ticking **Magn.** offers to
+switch to `refl1d` first.
+```
+
+```{tutorial-step} Show the magnetic profile
+:id: rho-m-curve
+:page: sample
+:target: sample.showRhoM
+:done: plot.sld_curves.count('rho_m') == 1
+:do: call plotting.setSldCurveVisible rho_m true
+:more: magnetism.md#magnetic-depth-profiles
+
+In the **Magnetic profile** group, tick **Show ρM**. The SLD chart now also draws the
+magnetic SLD of the film. The dashed curves, shown by default, are the nuclear SLD plus
+and minus the part of `ρM` along the field.
+```
+
+```{tutorial-step} Turn the moment against the field
+:id: align
+:page: sample
+:target: sample.momentAngle
+:done: abs(params.value('fe_on_si_fe_film_theta_m') - 90) < 1
+:do: call sample.setLayerThetaMAtIndex 0 90
+:more: magnetism.md#the-moment-angle-slider
+
+Select the *Fe film* row and drag the slider below the table to 90°, or type `90` as its
+`θM`. (The example limits `θM` to 0-90° for its fit; the slider stops there.) With the
+guide field at its default 270°, the moment now points straight against the field. That is
+collinear again, with no spin-flip scattering, so the dashed curves spread out to the full
+`ρM`.
+```
+
+```{tutorial-step} See the moment as an arrow
+:id: structure
+:page: sample
+:target: sample.structureTab
+:done: ui.sample_view == 'structure'
+:do: click sample.structureTab
+:more: magnetism.md#which-way-the-moments-point
+
+Open the **Structure** tab. The iron film's box carries an arrow, seen from above the
+sample: it points left, against the guide field, whose direction the **H →** reference at
+the top right of the view shows. That is `φ = θM − 270° = −180°`.
+```
+
+```{tutorial-step} Reverse the guide field
+:id: guide-field
+:page: sample
+:target: sample.guideFieldAngle
+:done: abs(params.value('fe_on_si_guide_field_angle') - 90) < 1
+:do: call sample.setGuideFieldAngle 90
+:more: magnetism.md#the-guide-field
+
+Type `90` as the **Guide field angle**, below the Magnetism table, and press Enter. The
+field still lies in the sample plane, but reversed: the **H** reference now points left,
+so the moment lies along the field again. The arrows keep their frame; only **H** moves.
+```
+
+```{tutorial-step} Fitting the moments
+:id: fitting
+:page: analysis
+:target: analysis.parameterTable
+:more: polarized_data.md
+
+On the **Analysis** page, `ρM`, `θM` and the field are in the parameter table like any
+other parameter, for example *Fe on Si Fe film theta_m*, and can be fitted. Type `magnetic`
+in the name filter to list only those. Fitting them to measured spin channels is the
+subject of the polarised data tutorial.
+```
+
 ## The Magnetism group
 
 The **Magnetism** group is in the basic controls of the `Sample` page, below the

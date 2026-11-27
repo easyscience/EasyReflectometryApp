@@ -69,6 +69,7 @@ EaElements.GroupBox {
 
         EaElements.GroupRow{
             EaElements.ComboBox {
+                objectName: 'analysis.minimizer'  // a tutorial target
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2
                 topInset: minimizerLabel.height
                 topPadding: topInset + padding
@@ -77,8 +78,10 @@ EaElements.GroupBox {
                 // project shows its own minimizer.
                 currentIndex: Globals.BackendWrapper.analysisMinimizerCurrentIndex
                 // onActivated fires on user choice only, so a programmatic
-                // update (e.g. after a load) is not written back.
-                onActivated: Globals.BackendWrapper.analysisSetMinimizerCurrentIndex(currentIndex)
+                // update (e.g. after a load) is not written back. It writes the activated
+                // index, not currentIndex: a tutorial's Show me emits activated(index) alone,
+                // which leaves the currentIndex binding in place.
+                onActivated: (index) => Globals.BackendWrapper.analysisSetMinimizerCurrentIndex(index)
                 EaElements.Label {
                     id: minimizerLabel
                     text: qsTr("Minimizer")

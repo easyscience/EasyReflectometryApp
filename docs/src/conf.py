@@ -28,6 +28,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 main_root = Path(__file__).parents[2]
 sys.path.append(str(main_root))
+# The interactive tutorial blocks: the extension, and the parser the app's generator shares with it
+sys.path.insert(0, str(Path(__file__).parent / '_ext'))
+sys.path.insert(0, str(main_root / 'tools'))
 project_info = toml.load(os.path.join(main_root, 'pyproject.toml'))
 
 # -- General configuration ---------------------------------------------
@@ -53,7 +56,8 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx_copybutton',
     'nbsphinx',
-    'myst_parser'
+    'myst_parser',
+    'tutorial_directives',
 ]
 
 # Add any paths that contain templates here, relative to this directory.

@@ -48,6 +48,10 @@ Before opening a pull request:
   ```
 - Add a line describing the change to the `Unreleased` section of [CHANGELOG.md](./CHANGELOG.md).
 - Update the user documentation in `docs/` if the change is visible to users.
+- If you edited a `{tutorial-step}` block in `docs/src` (the interactive tutorials), regenerate
+  the app's copy with `python tools/make_tutorials.py`; `tests/test_tutorials.py` fails until
+  you do. A renamed control that a tutorial points at (its `objectName`) fails the same test.
+  The step format is described in `MD/INTERACTIVE_TUTORIALS_DESIGN.md`.
 
 Then push the branch to your fork and open a pull request against `develop` of the upstream repository.
 Every push also builds the installers; a branch's builds are attached to a draft prerelease named after the branch, so they can be tested before merging.

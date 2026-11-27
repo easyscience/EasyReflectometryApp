@@ -45,6 +45,7 @@ dependencies = [
 test = [
     'pytest',
     'pytest-cov',
+    'docutils',  # tests/test_tutorials.py: the heading ids a tutorial's "Read more" links to
 ]
 
 ci = [
