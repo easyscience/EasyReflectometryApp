@@ -39,6 +39,34 @@ def test_a_model_loaded_from_a_file_can_be_renamed():
     assert logic.set_name_at_index(1, 'Model') is False
 
 
+def test_the_instrument_model_is_that_of_the_selected_experiment(monkeypatch):
+    # With several contrasts each experiment has its own model, so its own scale,
+    # background and resolution; the Experiment page shows those, not the current model's.
+    monkeypatch.setattr(models_module, 'PercentageFwhm', FakeResolutionFunction)
+    from tests.factories import make_experiment
+
+    models = make_model_collection(
+        make_model(name='D2O', scale=1.0, background=2e-7, resolution_function=object()),
+        make_model(name='H2O', scale=0.95, background=5e-6, resolution_function=FakeResolutionFunction(5.0)),
+    )
+    experiments = {0: make_experiment('in D2O', model=models[0]), 1: make_experiment('in H2O', model=models[1])}
+    project = make_project(models=models, experiments=experiments)
+    logic = models_module.Models(project)
+
+    project.current_experiment_index = 1
+    assert logic.index == 0  # the Sample page's current model is left alone
+    assert logic.current_experiment_model_index == 1
+    assert (logic.scaling_at(1), logic.background_at(1), logic.resolution_at(1)) == (0.95, 5e-6, '5.0')
+    assert logic.set_background_at(1, 6e-6) is True
+    assert models[1].background.value == 6e-6
+    assert models[0].background.value == 2e-7
+    assert logic.set_resolution_at(0, '3.0') is False  # a measured resolution is not a percentage
+
+    experiments[1].model = None
+    assert logic.current_experiment_model_index is None
+    assert models_module.Models(make_project(models=models)).current_experiment_model_index is None
+
+
 def test_model_properties_and_resolution_handling(monkeypatch):
     monkeypatch.setattr(models_module, 'PercentageFwhm', FakeResolutionFunction)
     models = make_model_collection(

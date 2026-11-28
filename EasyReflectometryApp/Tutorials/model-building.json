@@ -1,0 +1,208 @@
+{
+  "format": 1,
+  "doc": "tutorials/model_def",
+  "id": "model-building",
+  "title": "Building a model",
+  "example": "PolymerFilm/project.json",
+  "data": [],
+  "minutes": 5,
+  "summary": "Add a material and a second polymer layer to the polymer film model.",
+  "steps": [
+    {
+      "id": "example",
+      "title": "The polymer film model",
+      "body": "The example *Polymer film on silicon* is loaded. Its model is a stack of assemblies:\nsilicon on top, an assembly with the silicon oxide and a polymer film, and heavy water\n(D₂O) at the bottom. You will add a second polymer layer, polystyrene (PS), on top of the\nfilm.",
+      "page": "project",
+      "sidebarTab": "",
+      "target": "",
+      "done": "",
+      "actions": [],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#material-and-model-setup"
+    },
+    {
+      "id": "open-sample",
+      "title": "Open the Sample page",
+      "body": "Open the **Sample** page with its tab in the application bar.",
+      "page": "",
+      "sidebarTab": "",
+      "target": "appbar.sampleTab",
+      "done": "ui.page == 'sample'",
+      "actions": [
+        {
+          "verb": "goto",
+          "args": [
+            "sample"
+          ]
+        }
+      ],
+      "advance": true,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#basic-controls"
+    },
+    {
+      "id": "add-material",
+      "title": "Add a material",
+      "body": "In the **Material editor**, press **Add material**. A row called *New material* appears at\nthe end of the table.",
+      "page": "sample",
+      "sidebarTab": "basic",
+      "target": "sample.addMaterial",
+      "done": "len(sample.material_slds) >= 5",
+      "actions": [
+        {
+          "verb": "click",
+          "args": [
+            "sample.addMaterial"
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#material-editor"
+    },
+    {
+      "id": "name-material",
+      "title": "Name the material and set its SLD",
+      "body": "In the new row, type `PS` as the name and `1.41` as the SLD, pressing Enter after each. The\nSLD is in units of 10⁻⁶ Å⁻²: polystyrene's is below the film's 2.0 and far below the D₂O's\n6.36, so the new layer will stand out against both.",
+      "page": "sample",
+      "sidebarTab": "basic",
+      "target": "sample.materialsTable",
+      "done": "abs(sample.material_slds.get('PS', 0) - 1.41) < 0.05",
+      "actions": [
+        {
+          "verb": "call",
+          "args": [
+            "sample.setMaterialNameAtIndex",
+            4,
+            "PS"
+          ]
+        },
+        {
+          "verb": "call",
+          "args": [
+            "sample.setMaterialSldAtIndex",
+            4,
+            1.41
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#material-editor"
+    },
+    {
+      "id": "select-assembly",
+      "title": "Select the assembly to change",
+      "body": "In the **Model editor**, click the *Oxide and film* row. The **Layer editor** below it shows\nthe layers of the selected assembly: the oxide and the film.",
+      "page": "sample",
+      "sidebarTab": "basic",
+      "target": "sample.assemblies",
+      "done": "sample.assembly == 'Oxide and film'",
+      "actions": [
+        {
+          "verb": "call",
+          "args": [
+            "sample.setCurrentAssemblyIndex",
+            1
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#model-creation-and-editing"
+    },
+    {
+      "id": "add-layer",
+      "title": "Add a layer",
+      "body": "Press **Add layer** below the Layer editor. The new layer is added at the end of the\nassembly, which is the side of the D₂O.",
+      "page": "sample",
+      "sidebarTab": "basic",
+      "target": "sample.addLayer",
+      "done": "len(sample.layers) >= 3",
+      "actions": [
+        {
+          "verb": "click",
+          "args": [
+            "sample.addLayer"
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#layer-editor"
+    },
+    {
+      "id": "set-layer",
+      "title": "Make it a PS layer",
+      "body": "In the new row, pick `PS` as the material and type `50` as the thickness, in Å. The layer\ntakes its name from the material: *PS Layer*. The SLD profile below the reflectivity now\ndips to 1.41 between the film and the D₂O.",
+      "page": "sample",
+      "sidebarTab": "basic",
+      "target": "sample.layersTable",
+      "done": "sample.layers[-1].material == 'PS' and abs(sample.layers[-1].thickness - 50) < 1",
+      "actions": [
+        {
+          "verb": "call",
+          "args": [
+            "sample.setLayerMaterialAtIndex",
+            2,
+            4
+          ]
+        },
+        {
+          "verb": "call",
+          "args": [
+            "sample.setLayerThicknessAtIndex",
+            2,
+            50
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#layer-editor"
+    },
+    {
+      "id": "structure",
+      "title": "See the new stack",
+      "body": "Open the **Structure** tab. The stack now has a *PS Layer* box between the film and the\nD₂O, in the colour the legend gives the PS material. Hover a box for its material, SLD,\nthickness and roughness.",
+      "page": "sample",
+      "sidebarTab": "",
+      "target": "sample.structureTab",
+      "done": "ui.sample_view == 'structure'",
+      "actions": [
+        {
+          "verb": "click",
+          "args": [
+            "sample.structureTab"
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/model_def.html#structure-view"
+    },
+    {
+      "id": "parameters",
+      "title": "The new parameters",
+      "body": "On the **Analysis** page, the parameter table now also lists the new parameters. The PS\nlayer's thickness and roughness arrive fixed. The SLD and iSLD of a new material arrive\nticked for fitting and without limits: untick them, or give them **Min** and **Max**,\nbefore the next fit.",
+      "page": "analysis",
+      "sidebarTab": "basic",
+      "target": "analysis.parameterTable",
+      "done": "",
+      "actions": [],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#the-parameter-table"
+    }
+  ]
+}

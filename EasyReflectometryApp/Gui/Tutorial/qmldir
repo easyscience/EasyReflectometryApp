@@ -1,0 +1,3 @@
+module Gui.Tutorial
+
+TutorialPanel TutorialPanel.qml

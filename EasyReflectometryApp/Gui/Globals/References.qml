@@ -14,6 +14,8 @@ QtObject {
     // Populated in ApplicationWindows.qml
     readonly property var applicationWindow: {
         'resetToInitialState': null,
+        'replaceSessionWithExample': null,  // (example {name, path}, onLoaded) -> asks, loads
+        'startTutorial': null,  // (tutorial {id, title, examplePath})
         'appBarCentralTabs': {
             'homeButton': null,
             'projectButton': null,

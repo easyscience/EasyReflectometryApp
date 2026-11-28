@@ -376,6 +376,7 @@ class FakeProject:
     _model_index = RealProject._model_index
     set_model_for_experiment = RealProject.set_model_for_experiment
     experiments_for_model = RealProject.experiments_for_model
+    current_experiment_index = RealProject.current_experiment_index
 
     @property
     def experiments(self):

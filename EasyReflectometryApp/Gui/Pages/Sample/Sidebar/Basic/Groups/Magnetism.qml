@@ -56,6 +56,7 @@ EaElements.GroupBox {
 
         EaComponents.TableView {
             id: magnetismView
+            objectName: 'sample.magnetismTable'  // a tutorial target
             // Not disabled when the engine cannot model magnetism: ticking
             // 'Magn.' is how the user asks for the engine that can.
             enabled: magnetismGroup.supported || magnetismGroup.magneticEngine !== ''
@@ -155,6 +156,7 @@ EaElements.GroupBox {
         // holds, and the arrow the Structure view draws, side by side. Follows
         // the selection the table already writes - no second "focused row".
         Gui.MagnetizationAngleSlider {
+            objectName: 'sample.momentAngle'  // a tutorial target
             visible: magnetismGroup.currentRow !== null && magnetismGroup.currentRow.magnetic === true
             height: visible ? implicitHeight : 0
             phi: visible ? Number(magnetismGroup.currentRow.phi) : 0
@@ -196,6 +198,7 @@ EaElements.GroupBox {
 
             EaElements.TextField {
                 id: guideFieldAngleField
+                objectName: 'sample.guideFieldAngle'  // a tutorial target
                 width: (EaStyle.Sizes.sideBarContentWidth - parent.spacing) / 2
                 topInset: guideFieldAngleLabel.height
                 topPadding: topInset + padding

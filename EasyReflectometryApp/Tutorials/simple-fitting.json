@@ -1,0 +1,211 @@
+{
+  "format": 1,
+  "doc": "tutorials/simple_fitting",
+  "id": "simple-fitting",
+  "title": "Simple fitting",
+  "example": "PolymerFilm/project.json",
+  "data": [],
+  "minutes": 5,
+  "summary": "Fit a slab model to a polymer film measured on Platypus.",
+  "steps": [
+    {
+      "id": "sample",
+      "title": "The sample",
+      "body": "The example *Polymer film on silicon* is loaded: a polymer film on a silicon block with its\nnative oxide, measured against heavy water (D₂O) on Platypus. The model has the film on the\noxide, with silicon as the super-phase and D₂O as the sub-phase.",
+      "page": "project",
+      "sidebarTab": "",
+      "target": "",
+      "done": "",
+      "actions": [],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#simple-fitting-with-a-slab-model"
+    },
+    {
+      "id": "open-analysis",
+      "title": "Open the Analysis page",
+      "body": "Open the **Analysis** page with its tab in the application bar.",
+      "page": "",
+      "sidebarTab": "",
+      "target": "appbar.analysisTab",
+      "done": "ui.page == 'analysis'",
+      "actions": [
+        {
+          "verb": "goto",
+          "args": [
+            "analysis"
+          ]
+        }
+      ],
+      "advance": true,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#the-analysis-page"
+    },
+    {
+      "id": "compare",
+      "title": "Compare the data and the model",
+      "body": "The **Reflectivity** chart shows the measured data and the model's reflectivity. At the\nstarting values the calculated fringes are spaced too far apart: the film is thicker than\nthe 250 Å the model starts from.",
+      "page": "analysis",
+      "sidebarTab": "",
+      "target": "analysis.reflectivityChart",
+      "done": "",
+      "actions": [],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#the-analysis-page"
+    },
+    {
+      "id": "parameters",
+      "title": "The parameters to fit",
+      "body": "Eight parameters are ticked **Fit**: the thickness and roughness of the oxide and of the\nfilm, the film's SLD, the roughness towards the D₂O, the scale and the background. The SLDs\nof Si, SiO₂ and D₂O are known and stay fixed.",
+      "page": "analysis",
+      "sidebarTab": "basic",
+      "target": "analysis.parameterTable",
+      "done": "",
+      "actions": [],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#the-parameter-table"
+    },
+    {
+      "id": "start-fit",
+      "title": "Start the fit",
+      "body": "Press **Start fitting**, below the sidebar. With the default minimiser, `Bumps_lm`, the fit\ntakes about a second.",
+      "page": "analysis",
+      "sidebarTab": "",
+      "target": "analysis.startFitting",
+      "done": "step.fits_finished >= 1 and fit.reduced_chi2 < 5",
+      "actions": [
+        {
+          "verb": "click",
+          "args": [
+            "analysis.startFitting"
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "The fit did not end with a good result. Press **Start fitting** again, or restart the tutorial to begin from the example's values.",
+      "more": "tutorials/simple_fitting.html#starting-following-and-cancelling-a-fit"
+    },
+    {
+      "id": "results",
+      "title": "Read the results",
+      "body": "The **Refinement Results** dialog reports the outcome: a reduced χ² of about 2.4, where 1\nwould mean the model describes the data within their uncertainties. Press **OK**. The table\nnow shows the fitted values with their uncertainties.",
+      "page": "analysis",
+      "sidebarTab": "",
+      "target": "",
+      "done": "not fit.results_dialog_open",
+      "actions": [
+        {
+          "verb": "call",
+          "args": [
+            "analysis.setShowFitResultsDialog",
+            false
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#the-fit-results"
+    },
+    {
+      "id": "residuals",
+      "title": "Look at the residuals",
+      "body": "Open the **Residuals** tab below the chart. After the fit, the residuals scatter around zero,\na little more widely at low q.",
+      "page": "analysis",
+      "sidebarTab": "",
+      "target": "analysis.residualsTab",
+      "done": "ui.plot_tab == 'residuals'",
+      "actions": [
+        {
+          "verb": "click",
+          "args": [
+            "analysis.residualsTab"
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#residuals"
+    },
+    {
+      "id": "thickness",
+      "title": "Change a parameter",
+      "body": "Type `230` as the **Value** of *Polymer film Film thickness* in the table and press Enter.\nThe curve follows at once: the fringes move apart again.",
+      "page": "analysis",
+      "sidebarTab": "basic",
+      "target": "analysis.parameterTable",
+      "done": "abs(params.value('polymer_film_film_thickness') - 230) < 5",
+      "actions": [
+        {
+          "verb": "call",
+          "args": [
+            "analysis.setParameterValue",
+            "polymer_film_film_thickness",
+            230
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/simple_fitting.html#the-parameter-table"
+    },
+    {
+      "id": "minimizer",
+      "title": "Fit with another minimiser",
+      "body": "Open **Extra controls**, pick `LMFit_leastsq` as the **Minimizer**, and press\n**Start fitting**. It finds the film thickness again, about 259 Å. Not every minimiser does:\n`Bumps_newton` stays at 230 Å. Start much further away, at 200 Å, and even `LMFit_leastsq`\ncan end in another minimum of χ², with fringes that do not match the data.",
+      "page": "analysis",
+      "sidebarTab": "advanced",
+      "target": "analysis.minimizer",
+      "done": "fit.minimizer == 'LMFit_leastsq' and step.fits_finished >= 1 and fit.reduced_chi2 < 5",
+      "actions": [
+        {
+          "verb": "set",
+          "args": [
+            "analysis.minimizer",
+            "LMFit_leastsq"
+          ]
+        },
+        {
+          "verb": "click",
+          "args": [
+            "analysis.startFitting"
+          ]
+        }
+      ],
+      "advance": false,
+      "requires": "",
+      "hint": "Pick `LMFit_leastsq` as the **Minimizer** and press **Start fitting**.",
+      "more": "tutorials/simple_fitting.html#minimization-method"
+    },
+    {
+      "id": "summary",
+      "title": "Continue to the Summary",
+      "body": "Press **Continue** at the bottom of the sidebar. The `Summary` page reports the model, the\ndata and the fit, and exports them.",
+      "page": "analysis",
+      "sidebarTab": "",
+      "target": "analysis.continue",
+      "done": "ui.page == 'summary'",
+      "actions": [
+        {
+          "verb": "click",
+          "args": [
+            "analysis.continue"
+          ]
+        }
+      ],
+      "advance": true,
+      "requires": "",
+      "hint": "",
+      "more": "tutorials/summary.html"
+    }
+  ]
+}

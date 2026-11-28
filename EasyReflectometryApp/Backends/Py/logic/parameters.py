@@ -212,13 +212,20 @@ class Parameters:
     def set_current_parameter_max(self, new_value: str) -> bool:
         return self._set_current_parameter('max', new_value)
 
+    def set_parameter_value(self, alias: str, new_value: str) -> bool:
+        """Set the value of the row with this alias, whatever the table filters show."""
+        row = next((row for row in self.all_parameters() if row['alias'] == alias), None)
+        return row is not None and self._set_parameter(row['object'], 'value', new_value)
+
     def _set_current_parameter(self, attribute: str, new_value: str) -> bool:
-        """Set the current row's value or bound as entered; False for no change or bad input.
+        return self._set_parameter(self._get_current_parameter(), attribute, new_value)
+
+    def _set_parameter(self, parameter: Parameter | None, attribute: str, new_value: str) -> bool:
+        """Set a value or bound as entered; False for no change or bad input.
 
         A bound is kept whatever it is, moving the value onto it when it lies past
         it (`set_bound`). A value is clamped to the bounds next to it in the table.
         """
-        parameter = self._get_current_parameter()
         if parameter is None or not is_independent(parameter):
             return False
         try:
@@ -238,7 +245,13 @@ class Parameters:
         return True
 
     def set_current_parameter_fit(self, new_value: bool) -> bool:
-        entry = self._get_current_parameter_entry()
+        return self._set_fit(self._get_current_parameter_entry(), new_value)
+
+    def set_parameter_fit(self, alias: str, new_value: bool) -> bool:
+        """Tick or untick Fit for the row with this alias, whatever the table filters show."""
+        return self._set_fit(next((row for row in self.all_parameters() if row['alias'] == alias), None), new_value)
+
+    def _set_fit(self, entry: dict[str, Any] | None, new_value: bool) -> bool:
         if entry is None:
             return False
         if entry.get('kind') == 'inactive':

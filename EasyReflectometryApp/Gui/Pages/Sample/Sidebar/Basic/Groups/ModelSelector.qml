@@ -18,6 +18,7 @@ EaElements.GroupBox {
         // Table
         EaComponents.TableView {
             id: modelView
+            objectName: 'sample.models'  // a tutorial target
             tallRows: false
             defaultInfoText: qsTr("No Models Present")
             model: Globals.BackendWrapper.sampleModels.length
@@ -138,6 +139,7 @@ EaElements.GroupBox {
             wide: true
             enabled: modelView.currentIndex > -1
             fontIcon: "layer-group"
+            objectName: 'sample.addContrast'  // a tutorial target
             text: qsTr("Add contrast of the selected model…")
             ToolTip.text: qsTr("A new model with the same structure, e.g. the sample measured in another solvent")
             onClicked: addContrastDialog.ask(Globals.BackendWrapper.sampleCurrentModelIndex)

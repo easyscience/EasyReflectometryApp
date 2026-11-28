@@ -741,6 +741,20 @@ class TestBayesianDiagnostics:
         # If arviz is not installed → 'rhatStatus' with arviz message
         assert 'rhat' in diag or 'rhatStatus' in diag
 
+    def test_chain_count_is_reported_apart_from_the_population_factor(self, analysis_with_posterior):
+        # BUMPS runs population x parameters chains: the view shows both numbers.
+        chains_3d = np.zeros((4, 6, 2))  # (n_generations, n_chains, n_params)
+        chains_3d[:, :, 0] = np.arange(6)
+        chains_3d[:, :, 1] = np.arange(4)[:, None]
+        posterior = dict(SAMPLE_POSTERIOR_2D)
+        posterior['internal_bumps_object'] = SimpleNamespace(chains=lambda: (None, chains_3d, None))
+        analysis_with_posterior._bayesian_logic._posterior = posterior
+        analysis_with_posterior._bayesian_logic.population = 3
+        analysis_with_posterior._compute_diagnostics()
+        diag = analysis_with_posterior._bayesian_logic.diagnostics
+        assert diag['population'] == 3
+        assert diag['chains'] == 6
+
     def test_clear_posterior_resets_diagnostics(self, analysis_with_posterior):
         analysis_with_posterior._compute_diagnostics()
         assert analysis_with_posterior._bayesian_logic.diagnostics != {}

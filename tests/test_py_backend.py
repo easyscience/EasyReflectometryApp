@@ -268,6 +268,11 @@ class StubPlotting(QObject):
         self.refresh_calls['preview'] = self.refresh_calls.get('preview', 0) + 1
 
 
+class StubTutorial(QObject):
+    def __init__(self, _project, _sample, _analysis, _status, _plotting, parent=None):
+        super().__init__(parent)
+
+
 def _make_backend(monkeypatch):
     monkeypatch.setattr(backend_module, 'ProjectLib', lambda: object())
     monkeypatch.setattr(backend_module, 'Home', StubHome)
@@ -278,6 +283,7 @@ def _make_backend(monkeypatch):
     monkeypatch.setattr(backend_module, 'Summary', StubSummary)
     monkeypatch.setattr(backend_module, 'Status', StubStatus)
     monkeypatch.setattr(backend_module, 'Plotting1d', StubPlotting)
+    monkeypatch.setattr(backend_module, 'Tutorial', StubTutorial)
     monkeypatch.setattr(backend_module, 'LoggerLevelHandler', StubLoggerLevelHandler)
     return backend_module.PyBackend()
 

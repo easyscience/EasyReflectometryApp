@@ -117,7 +117,7 @@ def onlineRepositoryUrl():
 
 def installerConfigXml():
     try:
-        message = f"create {CONFIG['ci']['app']['setup']['build']['config_xml']} content"
+        message = f'create {CONFIG["ci"]["app"]["setup"]["build"]["config_xml"]} content'
         app_url = CONFIG['release']['homepage']
         maintenance_tool_suffix = CONFIG['ci']['app']['setup']['maintenance_tool_suffix']
         maintenance_tool_name = maintenance_tool_suffix  # f'{CONFIG.app_name}{maintenance_tool_suffix}'
@@ -282,7 +282,7 @@ def createInstallerSourceDir():
         app_package_xml_path = os.path.join(app_meta_subsubdir_path, CONFIG['ci']['app']['setup']['build']['package_xml'])
         package_install_script_src = os.path.join(CONFIG.scripts_dir, CONFIG['ci']['scripts']['package_install'])
         freezed_app_src = os.path.join(
-            CONFIG.dist_dir, f"{CONFIG.app_name}{CONFIG['ci']['pyinstaller']['dir_suffix'][CONFIG.os]}"
+            CONFIG.dist_dir, f'{CONFIG.app_name}{CONFIG["ci"]["pyinstaller"]["dir_suffix"][CONFIG.os]}'
         )
         Functions.createDir(packagesDirPath())
         Functions.createDir(app_subdir_path)

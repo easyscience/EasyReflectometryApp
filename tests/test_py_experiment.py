@@ -5,10 +5,12 @@ from EasyReflectometryApp.Backends.Py import experiment as experiment_module
 
 class StubModelsLogic:
     def __init__(self, _project_lib):
-        self.scaling_at_current_index = 1.5
-        self.background_at_current_index = 0.02
-        self.resolution_at_current_index = '2%' 
+        # Model 0 is the current one (Sample page), model 1 the selected experiment's.
+        self.scalings = [1.5, 0.9]
+        self.backgrounds = [0.02, 5e-6]
+        self.resolutions = ['2%', '-']
         self.index = 0
+        self.current_experiment_model_index = 1
         self.set_scaling_result = True
         self.set_background_result = True
         self.set_resolution_result = True
@@ -16,16 +18,25 @@ class StubModelsLogic:
         self.last_background = None
         self.last_resolution = None
 
-    def set_scaling_at_current_index(self, value):
-        self.last_scaling = value
+    def scaling_at(self, index):
+        return self.scalings[index]
+
+    def background_at(self, index):
+        return self.backgrounds[index]
+
+    def resolution_at(self, index):
+        return self.resolutions[index]
+
+    def set_scaling_at(self, index, value):
+        self.last_scaling = (index, value)
         return self.set_scaling_result
 
-    def set_background_at_current_index(self, value):
-        self.last_background = value
+    def set_background_at(self, index, value):
+        self.last_background = (index, value)
         return self.set_background_result
 
-    def set_resolution_at_current_index(self, value):
-        self.last_resolution = value
+    def set_resolution_at(self, index, value):
+        self.last_resolution = (index, value)
         return self.set_resolution_result
 
 
@@ -66,10 +77,18 @@ def _build_experiment(monkeypatch):
 def test_experiment_properties_and_set_model_index(monkeypatch, qcore_application):
     experiment = _build_experiment(monkeypatch)
 
+    # The selected experiment's model, not the current one: each contrast shows its own.
+    assert experiment.scaling == 0.9
+    assert experiment.background == 5e-6
+    assert experiment.resolution == '-'
+    assert experiment.experimentalData is True
+
+    # Without a selected experiment (or one without a model): the current model, no data.
+    experiment._model_logic.current_experiment_model_index = None
     assert experiment.scaling == 1.5
     assert experiment.background == 0.02
     assert experiment.resolution == '2%'
-    assert experiment.experimentalData is True
+    assert experiment.experimentalData is False
 
     experiment.setModelIndex(3)
     assert experiment._model_logic.index == 3
@@ -85,9 +104,9 @@ def test_setters_emit_signals_only_when_logic_accepts_change(monkeypatch, qcore_
     experiment.setBackground(0.1)
     experiment.setResolution('3.3')
 
-    assert experiment._model_logic.last_scaling == 2.5
-    assert experiment._model_logic.last_background == 0.1
-    assert experiment._model_logic.last_resolution == '3.3'
+    assert experiment._model_logic.last_scaling == (1, 2.5)
+    assert experiment._model_logic.last_background == (1, 0.1)
+    assert experiment._model_logic.last_resolution == (1, '3.3')
     assert changed == {'experiment': 3, 'external': 3}
 
     experiment._model_logic.set_scaling_result = False

@@ -192,6 +192,11 @@ class Analysis(QObject):
     def fitSuccess(self) -> bool:
         return self._fitting_logic.fit_success
 
+    @Property(bool, notify=fittingChanged)
+    def fitCancelled(self) -> bool:
+        """The last run ended because the user cancelled it (until the next one starts)."""
+        return self._fitting_logic.fit_cancelled
+
     @Property(str, notify=fittingChanged)
     def fitErrorMessage(self) -> str:
         return self._fitting_logic.fit_error_message
@@ -912,6 +917,8 @@ class Analysis(QObject):
         if draws_3d is None:
             diagnostics['rhatStatus'] = rhat_status
         else:
+            # The population is a factor per parameter: BUMPS runs population x parameters chains.
+            diagnostics['chains'] = int(draws_3d.shape[0])
             diagnostics.update(self._rhat_diagnostics(draws_3d, posterior['param_names']))
 
         self._bayesian_logic.diagnostics = diagnostics
@@ -1514,6 +1521,19 @@ class Analysis(QObject):
         if self._parameters_logic.set_current_parameter_value(new_value):
             self._clearCacheAndEmitParametersChanged()
             self.externalParametersChanged.emit()
+
+    @Slot(str, float)
+    def setParameterValue(self, alias: str, new_value: float) -> None:
+        """Set a parameter by its alias, as an edit in the table would (a tutorial's Show me)."""
+        if self._parameters_logic.set_parameter_value(alias, new_value):
+            self._clearCacheAndEmitParametersChanged()
+            self.externalParametersChanged.emit()
+
+    @Slot(str, bool)
+    def setParameterFit(self, alias: str, new_value: bool) -> None:
+        """Tick or untick Fit by alias, as the table's checkbox would (a tutorial's Show me)."""
+        if self._parameters_logic.set_parameter_fit(alias, new_value):
+            self._clearCacheAndEmitParametersChanged()
 
     @Slot(float)
     def setCurrentParameterMin(self, new_value: float) -> None:

@@ -19,11 +19,17 @@ EaElements.GroupBox {
             enabled: true
             wide: true
             fontIcon: "upload"
+            objectName: 'experiment.loadData'  // a tutorial target
             text: qsTr("Load experiment(s) from file(s)")
 
             onClicked: {
                 console.debug(`Clicking '${text}' button ::: ${this}`)
-                Globals.References.pages.experiment.sidebar.basic.popups.loadExperimentFileDialog.open()
+                const dialog = Globals.References.pages.experiment.sidebar.basic.popups.loadExperimentFileDialog
+                // A tutorial's data files are where it says they are.
+                if (Globals.BackendWrapper.tutorialState === 'active') {
+                    dialog.currentFolder = Globals.BackendWrapper.tutorialDataFolderUrl
+                }
+                dialog.open()
             }
 
             Loader {

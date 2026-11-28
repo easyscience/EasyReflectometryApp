@@ -1,5 +1,110 @@
 # Unreleased
 
+- Interactive tutorials: the `Home` page lists tutorials that can be followed
+  step by step in the app. A panel on the left of the pages gives each step,
+  frames the control to use, and ticks the step off when the app reaches the
+  expected state; **Show me** performs a step, **Skip step** and
+  **Restart tutorial** get out of one that cannot be completed. The first
+  tutorial is *Simple fitting*. Its steps are written in the online
+  documentation, which shows them too, and a test runs every tutorial to the
+  end in the application window. A tutorial finished without skipping is
+  marked with a tick on the `Home` page.
+- An interactive tutorial, *Fitting several contrasts*, starts from an empty
+  project: it builds a film model from `film_contrasts.ort` (shipped with the
+  app), makes two water contrasts with **Add contrast**, loads and pairs the
+  three datasets, fits them together and detaches one parameter. The
+  tutorial's page now gives the χ² per point of the three datasets as 0.83
+  to 0.92 (it said 0.8 to 0.9).
+- An interactive tutorial, *Building a model*, adds a polystyrene layer to the
+  polymer film example: a new material in the `Material editor`, a new layer in
+  the `Layer editor`, and the result on the `Structure` tab.
+- A second interactive tutorial, *Magnetic layers*, works on the iron film
+  example: it shows the `ρM` profile, turns the moment with the slider, shows
+  it as an arrow on the `Structure` tab and reverses the guide field.
+- A layer of a repeating multilayer repeated more than once can no longer be
+  made magnetic, and such a stack holding a magnetic layer can no longer be
+  repeated: refl1d cannot calculate it, and the whole model then had no
+  reflectivity or SLD curve, with only "Repeated magnetic layers not
+  implemented" as an explanation. The `Magnetism` group says why the change
+  was refused. ORSO imports already warned about this case.
+- The θM curve of the SLD chart is drawn against its own axis on the right, as
+  intended. The axis used to stack on the left, next to the SLD axis.
+- The *Polarised data* tutorial has screenshots of the channel assignment
+  dialog, the channel chart, the `Polarization channels` group, the spin
+  asymmetry and a fit of the iron example. It lists the file name parts the
+  channel detection recognises, says that the spin asymmetry chart plots
+  `|SA|`, that the `Analysis` page draws the channels in shades of the
+  experiment's colour, and that the model's resolution follows the `pp`
+  channel when there is one.
+- The *Simple fitting* tutorial walks through a fit of the *Polymer film on
+  silicon* example, with new screenshots of both sidebar tabs, the
+  `Refinement Results` dialog and the residuals. It describes the `Data
+  Explorer`, the parameter table and its slider, the cancel dialog, every
+  minimiser setting (`Zero-variance points`, `Preview every (s)` and the
+  per-minimiser options) and the `SLD z range` group, and refers to the
+  `Sample` page by its current name.
+- The *Settings* tutorial has screenshots of the `Preferences` dialog and says
+  what each setting does. It notes that the update check, the language and the
+  logging level have no effect in this version and that the zoom is not kept.
+- The *Summary* tutorial has screenshots of the report, its `Experiments` and
+  `Refinement` sections and the exported figure. It says what each row of the
+  report means (the "Measured intensity range" is the reflectivity range, not
+  the `q` range), what the HTML and PDF exports contain, and how the exported
+  figure shifts several experiments and models.
+- The *Demo datasets* tutorial covers all seven simulated files, including
+  `linked_film_contrasts.ort`, the measured and polarised data and the example
+  project built from each. It has screenshots of a sample loaded from a file,
+  the warning for a file without a sample model, and the three experiments of
+  `film_contrasts.ort`. It no longer says that `ni_ti_multilayer.ort` loads as
+  flat layers (it loads as a repeating multilayer), and it corrects what the
+  `swapped_layers.ort` demo shows.
+- The *Magnetic layers* tutorial has screenshots of the `Magnetism` group, the
+  `Magnetic profile` group and the moment arrows on the `Structure` tab, and
+  names the page, groups and buttons as the app does.
+- The `Instrumental parameters` on the `Experiment` page show the scale,
+  background and resolution of the selected experiment's model. Before, they
+  showed (and edited) the model selected on the `Sample` page, so with several
+  contrasts, selecting e.g. the H2O experiment showed the D2O model's
+  background and resolution.
+- The background on the `Experiment` page is shown with four significant
+  digits (e.g. `9.27e-8`). Before, it was rounded to two decimals, so every
+  realistic background showed as `0.00`, and clicking into the field and out
+  again set the background to 0. The scale was rounded to three decimals the
+  same way. A field now changes the value only when its text was edited, and
+  text that is not a number is ignored.
+- The *Loading experimental data* tutorial has new screenshots and describes
+  the page as it is: the button names, the file formats and columns, where
+  the instrumental parameters come from, and adding files to an experiment.
+- Bayesian sampling of data without uncertainties (every point zero) is
+  refused with a message that says what to do: load the data with an
+  uncertainty column, or set **Zero-variance points** to mighell. Before, the
+  message named a Python argument. **Zero-variance points** stays in
+  `Extra controls` › `Minimization method` when BUMPS-DREAM is selected,
+  since sampling uses it too; before, it was hidden there.
+- A cancelled sampling run, or a fit cancelled before its first step, is
+  reported in a dialog titled *Cancelled* with "Sampling cancelled by user"
+  (or "Fitting cancelled by user"). Before, the dialog was titled
+  *Refinement Failed* and showed the message as an error.
+- The `Diagnostics` view of a Bayesian run shows the number of chains next to
+  the population. The population is a factor per parameter (the sampler runs
+  population × parameters chains), but the view labelled it as the number of
+  chains. Its three sections (configuration, acceptance rate, R̂) are all
+  shown at once. Before, they started collapsed and opening one closed the
+  others. The sampler's settings have tooltips that say what each one counts.
+- The sampling progress bar reaches the end when the run does. It counted
+  the population as the number of chains, so with several parameters the
+  total number of generations was far too high (e.g. "generation 229 of
+  4500" for a run of 1000), and the bar stopped at a fraction of its length.
+  The fix is in easyscience.
+- The headings of the Bayesian `Marginals`, `Corner Plot`, `Traces` and
+  `Diagnostics` views are bold, as intended. The font they asked for did not
+  exist, which also logged a QML warning per view.
+- The *Bayesian analysis* tutorial walks through a full sampling run on the
+  *Polymer film on silicon* example, with screenshots, settings that converge
+  in minutes instead of the defaults' hour, and how long a run takes. It
+  corrects what the settings mean, where the controls are, when the
+  `Bayesian Posterior` tab can be opened, and what happens to data without
+  uncertainties.
 - The **Add contrast** dialog is half as wide: the name field lines up with
   the replacement choices, and the explanation above wraps to the same width.
 - Hovering the **⇄** marker of a shared assembly in the `Model editor` shows

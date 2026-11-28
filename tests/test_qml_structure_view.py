@@ -1,6 +1,7 @@
 """Source-level assertions on the Structure tab QML (no QML engine is instantiated;
 rendering is verified by running the app)."""
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,7 +11,7 @@ GUI = ROOT / 'EasyReflectometryApp' / 'Gui'
 def test_sample_page_declares_structure_tab():
     layout_qml = (GUI / 'Pages' / 'Sample' / 'Layout.qml').read_text(encoding='utf-8')
 
-    assert "EaElements.TabButton { text: qsTr('Structure') }" in layout_qml
+    assert re.search(r"EaElements\.TabButton \{[^}]*text: qsTr\('Structure'\)", layout_qml)
     assert 'MainContent/StructureView.qml' in layout_qml
 
 

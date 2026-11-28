@@ -9,6 +9,7 @@ import EasyApplication.Gui.Components as EaComponents
 
 import Gui as Gui
 import Gui.Globals as Globals
+import Gui.Tutorial as Tutorial
 
 EaComponents.ApplicationWindow {
 
@@ -105,6 +106,7 @@ EaComponents.ApplicationWindow {
         // Home page
         EaElements.AppBarTabButton {
             id: homeButton
+            objectName: 'appbar.homeTab'  // a tutorial target
             fontIcon: "home"
             text: qsTr("Home")
             ToolTip.text: qsTr("Home")
@@ -116,6 +118,7 @@ EaComponents.ApplicationWindow {
         // Project page
         EaElements.AppBarTabButton {
             id: projectButton
+            objectName: 'appbar.projectTab'  // a tutorial target
             enabled: false
             fontIcon: "archive"
             text: qsTr("Project")
@@ -128,6 +131,7 @@ EaComponents.ApplicationWindow {
         // Sample page
         EaElements.AppBarTabButton {
             id: sampleButton
+            objectName: 'appbar.sampleTab'  // a tutorial target
             enabled: false
             fontIcon: "layer-group"
             text: qsTr("Sample")
@@ -140,6 +144,7 @@ EaComponents.ApplicationWindow {
         // Experiment tab
         EaElements.AppBarTabButton {
             id: experimentTabButton
+            objectName: 'appbar.experimentTab'  // a tutorial target
             enabled: false
             fontIcon: "microscope"
             text: qsTr("Experiment")
@@ -151,6 +156,7 @@ EaComponents.ApplicationWindow {
         // Analysis tab
         EaElements.AppBarTabButton {
             id: analysisTabButton
+            objectName: 'appbar.analysisTab'  // a tutorial target
             enabled: false
             fontIcon: "calculator"
             text: qsTr("Analysis")
@@ -161,6 +167,7 @@ EaComponents.ApplicationWindow {
         // Summary page
         EaElements.AppBarTabButton {
             id: summaryButton
+            objectName: 'appbar.summaryTab'  // a tutorial target
             enabled: false
             fontIcon: "clipboard-list"
             text: qsTr("Summary")
@@ -202,7 +209,7 @@ EaComponents.ApplicationWindow {
     // status bar lays its own children out in a Row, where anchoring is not possible.
     // Like the status bar, it is not shown on the Home page.
     statusBar: [
-        Gui.StatusBar {},
+        Gui.StatusBar { id: statusBarItem },
         Gui.FitProgressBar {
             visible: progress.phase !== '' && EaGlobals.Vars.appBarCurrentIndex !== 0
             anchors.top: parent.top
@@ -343,6 +350,8 @@ EaComponents.ApplicationWindow {
         target: applicationWindow.appBarCentralTabs
         function onCurrentIndexChanged() {
             Globals.BackendWrapper.projectAutosave('leaving a page')
+            // The tutorials' `ui.page` fact
+            Globals.BackendWrapper.tutorialReportUi('page', ['home', 'project', 'sample', 'experiment', 'analysis', 'summary'][applicationWindow.appBarCentralTabs.currentIndex] ?? '')
         }
     }
 
@@ -405,6 +414,69 @@ EaComponents.ApplicationWindow {
                 }
             }
         }
+    }
+
+    // Replacing the session with an example: Globals.References.applicationWindow.replaceSessionWithExample.
+    Gui.LoadExampleDialog {
+        id: loadExampleDialog
+    }
+
+    ////////////////////////
+    // INTERACTIVE TUTORIALS
+    ////////////////////////
+
+    // Load the tutorial's example (asking first about unsaved work), then start it. Also
+    // "Restart tutorial". Shared with the Home page's Tutorials list.
+    function startTutorial(tutorial) {
+        const example = Globals.BackendWrapper.projectExamples.find(entry => entry.path === tutorial.examplePath)
+        loadExampleDialog.request({ name: example ? example.name : tutorial.title, path: tutorial.examplePath }, () => {
+            Globals.BackendWrapper.tutorialStart(tutorial.id)
+            // Make room for the panel when the screen has it.
+            if (applicationWindow.visibility === Window.Windowed) {
+                const room = Screen.desktopAvailableWidth - applicationWindow.width
+                applicationWindow.width += Math.max(0, Math.min(tutorialPanel.fullWidth, room))
+            }
+            tutorialPanel.opened()
+        })
+    }
+
+    // Docked on the left of the pages. EasyApp's window is appContainer { appBar, contentArea,
+    // statusBarContainer } with no alias for contentArea, so Component.onCompleted finds it as
+    // the one other child and binds its left margin to the panel (section 5.7 of the design).
+    Tutorial.TutorialPanel {
+        id: tutorialPanel
+        parent: applicationWindow.appBar.parent
+        anchors.left: parent.left
+        targetRoot: applicationWindow.contentItem
+        windowWidth: applicationWindow.width
+        restart: () => applicationWindow.startTutorial({ id: Globals.BackendWrapper.tutorialId,
+                                                        title: Globals.BackendWrapper.tutorialTitle,
+                                                        examplePath: Globals.BackendWrapper.tutorialExamplePath })
+    }
+
+    // Whether the panel could be docked; false means EasyApp's window layout changed.
+    property bool tutorialPanelDocked: false
+    // For tests/test_tutorials_run.py
+    readonly property Item tutorialPanel: tutorialPanel
+
+    function dockTutorialPanel() {
+        const container = applicationWindow.appBar.parent
+        const others = []
+        for (let i = 0; i < container.children.length; ++i) {
+            const child = container.children[i]
+            if (child !== applicationWindow.appBar && child !== statusBarItem.parent && child !== tutorialPanel) {
+                others.push(child)
+            }
+        }
+        if (others.length !== 1) {
+            console.error(`Cannot dock the tutorial panel: ${others.length} candidates for the content area`)
+            return
+        }
+        const contentArea = others[0]
+        tutorialPanel.anchors.top = contentArea.top
+        tutorialPanel.anchors.bottom = contentArea.bottom
+        contentArea.anchors.leftMargin = Qt.binding(() => tutorialPanel.dockedWidth)
+        tutorialPanelDocked = true
     }
 
     // Back to the state the application starts in: default sample, no data, no project, and only
@@ -485,6 +557,9 @@ EaComponents.ApplicationWindow {
     Component.onCompleted: {
         console.debug(`Application window loaded ::: ${this}`)
         Globals.References.applicationWindow.resetToInitialState = resetToInitialState
+        Globals.References.applicationWindow.replaceSessionWithExample = loadExampleDialog.request
+        Globals.References.applicationWindow.startTutorial = startTutorial
+        dockTutorialPanel()
         if (Globals.BackendWrapper.testMode) {
 
             // To ensure that Qt starts up there is a delay before the it is shut down again.

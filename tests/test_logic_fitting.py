@@ -367,6 +367,9 @@ def test_a_cancelled_sampling_run_has_no_point_to_keep():
     assert free.value == 12.0
     assert logic.fit_cancel_pending is False
     assert logic.show_results_dialog is True
+    # Reported as a cancelled sampling run (the dialog says "Cancelled", not "Refinement Failed").
+    assert logic.fit_cancelled is True
+    assert logic.fit_error_message == 'Sampling cancelled by user'
 
 
 def test_fit_failure_and_cancellation_state_transitions():
@@ -565,6 +568,30 @@ def test_sampling_covers_the_included_experiments_only(monkeypatch):
     experiments[1].model = None
     assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
     assert 'no model' in logic.fit_error_message
+
+
+def test_data_without_uncertainties_is_refused_in_terms_of_the_gui(monkeypatch):
+    install_fake_multifitter(monkeypatch)
+    x, y = np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0, 6.0])
+    experiments = {
+        0: make_experiment('No errors', model=make_model(name='A'), x=x, y=y, ye=np.zeros(3)),
+        1: make_experiment('Some errors', model=make_model(name='B'), x=x, y=y, ye=np.array([0.0, 0.1, 0.2])),
+    }
+    project = make_project(experiments=experiments)
+    project.fit_settings = FitSettings(minimizer=MinimizerEnum.Bumps_simplex, mode='sample')
+    logic = fitting_module.Fitting(project)
+
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is None
+    assert logic.fit_error_message.startswith("'No errors': every point has zero uncertainty")
+    assert 'Zero-variance points' in logic.fit_error_message
+    assert 'Some errors' not in logic.fit_error_message
+
+    # Mighell needs no uncertainties, and a dataset with some is sampled as it is.
+    project.fit_settings.objective = 'mighell'
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is not None
+    project.fit_settings.objective = 'hybrid'
+    experiments[0].include_in_fit = False
+    assert logic.prepare_threaded_sample(StubMinimizersLogic()) is not None
 
 
 def test_a_project_refusal_is_reported_not_raised(monkeypatch):

@@ -134,6 +134,7 @@ EaElements.GroupBox {
 
             EaComponents.TableView {
                 id: dataTable
+                objectName: 'experiment.dataExplorer'  // a tutorial target
                 defaultInfoText: qsTr("No Experiments Loaded")
                 model: Globals.BackendWrapper.analysisExperimentsAvailable.length
                 

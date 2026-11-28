@@ -59,6 +59,10 @@ Item {
             // All visible tabs share the width equally: 33% each with the spin
             // asymmetry tab, 50%/50% without it.
             readonly property int visibleTabCount: root.spinAsymmetryAvailable ? 3 : 2
+
+            // The tutorials' `ui.plot_tab` fact
+            onCurrentIndexChanged: Globals.BackendWrapper.tutorialReportUi(
+                                       'plot_tab', ['sld', 'residuals', 'spin_asymmetry'][currentIndex] ?? '')
             readonly property real tabWidth: (width - spacing * (visibleTabCount - 1)) / visibleTabCount
 
             EaElements.TabButton {
@@ -68,6 +72,7 @@ Item {
                 width: tabBar.tabWidth
             }
             EaElements.TabButton {
+                objectName: 'analysis.residualsTab'  // a tutorial target
                 text: qsTr("Residuals")
                 font.pixelSize: EaStyle.Sizes.fontPixelSize * 0.9
                 implicitHeight: EaStyle.Sizes.toolButtonHeight

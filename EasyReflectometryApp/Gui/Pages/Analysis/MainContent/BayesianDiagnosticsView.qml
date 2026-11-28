@@ -35,7 +35,7 @@ Rectangle {
             EaElements.Label {
                 Layout.fillWidth: true
                 text: qsTr("MCMC Convergence Diagnostics")
-                font: EaStyle.Fonts.headingFont
+                font.bold: true
                 visible: Globals.BackendWrapper.bayesianResultAvailable
             }
 
@@ -54,6 +54,8 @@ Rectangle {
 
             // Sampling configuration
             EaElements.GroupBox {
+                // Short sections, all wanted at once: not an accordion of collapsed groups.
+                collapsible: false
                 title: qsTr("Sampling Configuration")
                 visible: Globals.BackendWrapper.bayesianResultAvailable
                 Layout.fillWidth: true
@@ -67,7 +69,9 @@ Rectangle {
                             { label: qsTr("Requested samples"), key: "samples" },
                             { label: qsTr("Burn-in steps"), key: "burnIn" },
                             { label: qsTr("Thinning"), key: "thin" },
-                            { label: qsTr("Population (chains)"), key: "population" },
+                            // A factor: BUMPS runs population x parameters chains (the next row).
+                            { label: qsTr("Population (per parameter)"), key: "population" },
+                            { label: qsTr("Chains"), key: "chains" },
                             { label: qsTr("Retained draws"), key: "nDraws" },
                             { label: qsTr("Parameters"), key: "nParams" },
                         ]
@@ -95,6 +99,8 @@ Rectangle {
 
             // Acceptance rate
             EaElements.GroupBox {
+                // Short sections, all wanted at once: not an accordion of collapsed groups.
+                collapsible: false
                 title: qsTr("Acceptance Rate")
                 visible: Globals.BackendWrapper.bayesianResultAvailable
                          && Globals.BackendWrapper.bayesianDiagnostics.acceptanceRate !== undefined
@@ -111,6 +117,8 @@ Rectangle {
 
             // Gelman-Rubin R-hat
             EaElements.GroupBox {
+                // Short sections, all wanted at once: not an accordion of collapsed groups.
+                collapsible: false
                 title: qsTr("Gelman-Rubin R̂ (Convergence)")
                 visible: Globals.BackendWrapper.bayesianResultAvailable
                          && Globals.BackendWrapper.bayesianDiagnostics.rhat !== undefined
@@ -157,6 +165,8 @@ Rectangle {
             }
 
             EaElements.GroupBox {
+                // Short sections, all wanted at once: not an accordion of collapsed groups.
+                collapsible: false
                 title: qsTr("Gelman-Rubin R̂ (Convergence)")
                 visible: Globals.BackendWrapper.bayesianResultAvailable
                          && Globals.BackendWrapper.bayesianDiagnostics.rhat === undefined

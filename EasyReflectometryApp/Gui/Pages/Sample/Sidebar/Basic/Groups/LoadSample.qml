@@ -15,6 +15,7 @@ EaElements.GroupBox {
     EaElements.GroupColumn {
         EaElements.CheckBox {
             id: appendCheckBox
+            objectName: 'sample.appendModels'  // a tutorial target
             text: qsTr("Append to existing models")
             checked: true
             width: EaStyle.Sizes.sideBarContentWidth
@@ -23,8 +24,15 @@ EaElements.GroupBox {
         EaElements.SideBarButton {
             width: EaStyle.Sizes.sideBarContentWidth
             fontIcon: "folder-open"
+            objectName: 'sample.loadSample'  // a tutorial target
             text: qsTr("Load sample from file")
-            onClicked: fileDialog.open()
+            onClicked: {
+                // A tutorial's data files are where it says they are.
+                if (Globals.BackendWrapper.tutorialState === 'active') {
+                    fileDialog.currentFolder = Globals.BackendWrapper.tutorialDataFolderUrl
+                }
+                fileDialog.open()
+            }
         }
 
         FileDialog {

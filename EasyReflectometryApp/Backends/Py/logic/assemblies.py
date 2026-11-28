@@ -159,7 +159,19 @@ class Assemblies:
         return 1
 
     def set_repeated_layer_repetitions(self, new_value: int) -> bool:
+        """Set the repetitions of the current repeating multilayer.
+
+        :raises NotImplementedError: repeating a stack that holds a magnetic layer, which
+            refl1d cannot calculate (the model would have no curve at all).
+        """
         if isinstance(self._assemblies[self.index], RepeatingMultilayer):
+            magnetic = [layer.name for layer in self._assemblies[self.index].layers if getattr(layer, 'magnetism', None) is not None]
+            if new_value > 1 and magnetic:
+                raise NotImplementedError(
+                    f'Magnetic layers cannot be repeated: refl1d cannot calculate magnetism inside a '
+                    f'repeating multilayer, and {", ".join(magnetic)} is magnetic. Remove its magnetism '
+                    f'first, or build the repeats as layers of a Multi-layer.'
+                )
             repetitions = self._assemblies[self.index].repetitions
             # A dependent or pinned repetition count follows its constraint.
             if is_independent(repetitions) and new_value != repetitions.value:

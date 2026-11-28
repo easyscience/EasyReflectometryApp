@@ -17,6 +17,7 @@ EaElements.GroupBox {
         // Table
         EaComponents.TableView {
             id: materialsView
+            objectName: 'sample.materialsTable'  // a tutorial target
             tallRows: false
             defaultInfoText: qsTr("No Materials Added/Loaded")
             model: Globals.BackendWrapper.sampleMaterials.length
@@ -122,6 +123,7 @@ EaElements.GroupBox {
             spacing: EaStyle.Sizes.fontPixelSize
 
             EaElements.SideBarButton {
+                objectName: 'sample.addMaterial'  // a tutorial target
                 enabled: true
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2
                 fontIcon: "plus-circle"

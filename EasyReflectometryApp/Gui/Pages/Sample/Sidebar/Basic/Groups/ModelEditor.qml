@@ -20,6 +20,7 @@ EaElements.GroupBox {
         // Table
         EaComponents.TableView {
             id: assembliesView
+            objectName: 'sample.assemblies'  // a tutorial target
             tallRows: false
             defaultInfoText: qsTr("No Model Present")
             model: Globals.BackendWrapper.sampleAssemblies.length

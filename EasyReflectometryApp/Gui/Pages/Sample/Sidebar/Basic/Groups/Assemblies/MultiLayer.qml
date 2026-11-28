@@ -11,6 +11,7 @@ import Gui.Globals as Globals
 EaElements.GroupColumn {
     EaComponents.TableView {
         id: layersView
+        objectName: 'sample.layersTable'  // a tutorial target
         tallRows: false
         defaultInfoText: qsTr("No Layers Added")
         model: Globals.BackendWrapper.sampleLayers.length
@@ -111,6 +112,7 @@ EaElements.GroupColumn {
 
         EaElements.SideBarButton {
             width: (EaStyle.Sizes.sideBarContentWidth - (2 * (EaStyle.Sizes.tableRowHeight + EaStyle.Sizes.fontPixelSize)) - EaStyle.Sizes.fontPixelSize) / 2
+            objectName: 'sample.addLayer'  // a tutorial target
             enabled: true
             fontIcon: "plus-circle"
             text: qsTr("Add layer")

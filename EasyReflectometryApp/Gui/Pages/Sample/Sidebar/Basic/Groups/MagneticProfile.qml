@@ -24,7 +24,9 @@ EaElements.GroupBox {
 
         // The depth profiles on the SLD chart; shared with the Analysis page,
         // hence a component of its own.
-        Gui.MagneticProfileControl {}
+        Gui.MagneticProfileControl {
+            rhoMCheckBox.objectName: 'sample.showRhoM'  // a tutorial target
+        }
 
         // The spin cross-sections on the reflectivity chart. Sample page only:
         // the Analysis chart already draws one calculated curve per measured

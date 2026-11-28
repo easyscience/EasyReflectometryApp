@@ -36,6 +36,7 @@ Rectangle {
 
             EaCharts.QtCharts1dMeasVsCalc {
                 id: analysisChartView
+                objectName: 'analysis.reflectivityChart'  // a tutorial target
 
                 property alias calculated: analysisChartView.calcSerie
                 property alias measured: analysisChartView.measSerie

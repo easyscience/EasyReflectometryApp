@@ -86,11 +86,18 @@ QtObject {
     ]
     property bool isExample: false
 
+    // Like the Python backend, for a path that does not exist.
+    signal projectLoadError(string message)
+
     function loadExample(path) {
         console.debug(`Loading example from ${path}`)
         const example = examples.find(item => item.path === path)
-        name = example ? example.name : name
-        description = example ? example.description : description
+        if (!example) {
+            projectLoadError(`The project file "${path}" does not exist.`)
+            return
+        }
+        name = example.name
+        description = example.description
         created = false
         isExample = true
         lastSaved = ''

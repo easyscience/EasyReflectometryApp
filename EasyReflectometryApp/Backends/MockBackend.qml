@@ -13,6 +13,7 @@ QtObject {
     property var summary: Backend.Summary
     property var sample: Backend.Sample
     property var status: Backend.Status
+    property var tutorial: Backend.Tutorial
     property var plotting: Backend.Plotting
     property var helpers: Backend.Helpers
 }

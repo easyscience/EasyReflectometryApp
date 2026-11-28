@@ -69,6 +69,7 @@ EaElements.GroupBox {
 
         EaElements.GroupRow{
             EaElements.ComboBox {
+                objectName: 'analysis.minimizer'  // a tutorial target
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2
                 topInset: minimizerLabel.height
                 topPadding: topInset + padding
@@ -77,8 +78,10 @@ EaElements.GroupBox {
                 // project shows its own minimizer.
                 currentIndex: Globals.BackendWrapper.analysisMinimizerCurrentIndex
                 // onActivated fires on user choice only, so a programmatic
-                // update (e.g. after a load) is not written back.
-                onActivated: Globals.BackendWrapper.analysisSetMinimizerCurrentIndex(currentIndex)
+                // update (e.g. after a load) is not written back. It writes the activated
+                // index, not currentIndex: a tutorial's Show me emits activated(index) alone,
+                // which leaves the currentIndex binding in place.
+                onActivated: (index) => Globals.BackendWrapper.analysisSetMinimizerCurrentIndex(index)
                 EaElements.Label {
                     id: minimizerLabel
                     text: qsTr("Minimizer")
@@ -130,11 +133,8 @@ EaElements.GroupBox {
             }
         }
 
-        // Zero-variance handling and the method-specific options — classical fits only
+        // Zero-variance handling (sampling uses it too) and the fit preview (classical fits only)
         EaElements.GroupRow {
-            visible: !Globals.BackendWrapper.analysisIsBayesianSelected
-            height: visible ? implicitHeight : 0
-
             EaElements.ComboBox {
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 2
                 topInset: objectiveLabel.height
@@ -157,6 +157,7 @@ EaElements.GroupBox {
             // How often the curves are redrawn with the best values while a fit runs.
             EaElements.TextField {
                 id: previewIntervalField
+                visible: !Globals.BackendWrapper.analysisIsBayesianSelected
                 width: (EaStyle.Sizes.sideBarContentWidth - EaStyle.Sizes.fontPixelSize) / 4
                 topInset: previewIntervalLabel.height
                 topPadding: topInset + padding
@@ -259,6 +260,9 @@ EaElements.GroupBox {
                 horizontalAlignment: TextInput.AlignLeft
                 onEditingFinished: Globals.BackendWrapper.bayesianSetSamples(Number(text))
                 text: Globals.BackendWrapper.bayesianSamples
+                ToolTip.delay: Globals.Variables.toolTipDelay
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Total number of draws to record, over all chains.")
                 EaElements.Label {
                     id: samplesLabel
                     text: qsTr("Samples")
@@ -273,6 +277,9 @@ EaElements.GroupBox {
                 horizontalAlignment: TextInput.AlignLeft
                 onEditingFinished: Globals.BackendWrapper.bayesianSetBurnIn(Number(text))
                 text: Globals.BackendWrapper.bayesianBurnIn
+                ToolTip.delay: Globals.Variables.toolTipDelay
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Generations run and discarded before recording. Each generation evaluates every chain once, so this sets most of the run time.")
                 EaElements.Label {
                     id: burninLabel
                     text: qsTr("Burn-in steps")
@@ -287,6 +294,9 @@ EaElements.GroupBox {
                 horizontalAlignment: TextInput.AlignLeft
                 onEditingFinished: Globals.BackendWrapper.bayesianSetPopulation(Number(text))
                 text: Globals.BackendWrapper.bayesianPopulation
+                ToolTip.delay: Globals.Variables.toolTipDelay
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Chains per fitted parameter: the sampler runs population × parameters chains.")
                 EaElements.Label {
                     id: populationLabel
                     text: qsTr("Population")
@@ -301,6 +311,9 @@ EaElements.GroupBox {
                 horizontalAlignment: TextInput.AlignLeft
                 onEditingFinished: Globals.BackendWrapper.bayesianSetThinning(Number(text))
                 text: Globals.BackendWrapper.bayesianThinning
+                ToolTip.delay: Globals.Variables.toolTipDelay
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Record every n-th generation, to reduce autocorrelation.")
                 EaElements.Label {
                     id: thinningLabel
                     text: qsTr("Thinning")
@@ -329,6 +342,9 @@ EaElements.GroupBox {
                         Globals.BackendWrapper.setBayesianInitializer(options[currentIndex])
                     }
                 }
+                ToolTip.delay: Globals.Variables.toolTipDelay
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Where the chains start: eps and cov close to the current values, lhs and random spread over the parameter ranges.")
                 EaElements.Label {
                     id: initLabel
                     text: qsTr("Initializer")

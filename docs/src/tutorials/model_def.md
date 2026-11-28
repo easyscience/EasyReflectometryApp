@@ -9,6 +9,130 @@ Let us first look at the general layout of the `Model` page, which is split up i
 - **B**: Graph control of ledger, visible coordinates on hower, zoom and pan control, and reset.
 - **C**: Basic controls, for defining material and model, and advanced controls for further setting parameters.
 
+## Adding a layer to an example
+
+```{tutorial} Building a model
+:id: model-building
+:example: PolymerFilm/project.json
+:minutes: 5
+:summary: Add a material and a second polymer layer to the polymer film model.
+```
+
+```{tutorial-step} The polymer film model
+:id: example
+:page: project
+:more: model_def.md#material-and-model-setup
+
+The example *Polymer film on silicon* is loaded. Its model is a stack of assemblies:
+silicon on top, an assembly with the silicon oxide and a polymer film, and heavy water
+(D₂O) at the bottom. You will add a second polymer layer, polystyrene (PS), on top of the
+film.
+```
+
+```{tutorial-step} Open the Sample page
+:id: open-sample
+:target: appbar.sampleTab
+:done: ui.page == 'sample'
+:do: goto sample
+:advance: auto
+:more: model_def.md#basic-controls
+
+Open the **Sample** page with its tab in the application bar.
+```
+
+```{tutorial-step} Add a material
+:id: add-material
+:page: sample
+:sidebar-tab: basic
+:target: sample.addMaterial
+:done: len(sample.material_slds) >= 5
+:do: click sample.addMaterial
+:more: model_def.md#material-editor
+
+In the **Material editor**, press **Add material**. A row called *New material* appears at
+the end of the table.
+```
+
+```{tutorial-step} Name the material and set its SLD
+:id: name-material
+:page: sample
+:sidebar-tab: basic
+:target: sample.materialsTable
+:done: abs(sample.material_slds.get('PS', 0) - 1.41) < 0.05
+:do: call sample.setMaterialNameAtIndex 4 PS; call sample.setMaterialSldAtIndex 4 1.41
+:more: model_def.md#material-editor
+
+In the new row, type `PS` as the name and `1.41` as the SLD, pressing Enter after each. The
+SLD is in units of 10⁻⁶ Å⁻²: polystyrene's is below the film's 2.0 and far below the D₂O's
+6.36, so the new layer will stand out against both.
+```
+
+```{tutorial-step} Select the assembly to change
+:id: select-assembly
+:page: sample
+:sidebar-tab: basic
+:target: sample.assemblies
+:done: sample.assembly == 'Oxide and film'
+:do: call sample.setCurrentAssemblyIndex 1
+:more: model_def.md#model-creation-and-editing
+
+In the **Model editor**, click the *Oxide and film* row. The **Layer editor** below it shows
+the layers of the selected assembly: the oxide and the film.
+```
+
+```{tutorial-step} Add a layer
+:id: add-layer
+:page: sample
+:sidebar-tab: basic
+:target: sample.addLayer
+:done: len(sample.layers) >= 3
+:do: click sample.addLayer
+:more: model_def.md#layer-editor
+
+Press **Add layer** below the Layer editor. The new layer is added at the end of the
+assembly, which is the side of the D₂O.
+```
+
+```{tutorial-step} Make it a PS layer
+:id: set-layer
+:page: sample
+:sidebar-tab: basic
+:target: sample.layersTable
+:done: sample.layers[-1].material == 'PS' and abs(sample.layers[-1].thickness - 50) < 1
+:do: call sample.setLayerMaterialAtIndex 2 4; call sample.setLayerThicknessAtIndex 2 50
+:more: model_def.md#layer-editor
+
+In the new row, pick `PS` as the material and type `50` as the thickness, in Å. The layer
+takes its name from the material: *PS Layer*. The SLD profile below the reflectivity now
+dips to 1.41 between the film and the D₂O.
+```
+
+```{tutorial-step} See the new stack
+:id: structure
+:page: sample
+:target: sample.structureTab
+:done: ui.sample_view == 'structure'
+:do: click sample.structureTab
+:more: model_def.md#structure-view
+
+Open the **Structure** tab. The stack now has a *PS Layer* box between the film and the
+D₂O, in the colour the legend gives the PS material. Hover a box for its material, SLD,
+thickness and roughness.
+```
+
+```{tutorial-step} The new parameters
+:id: parameters
+:page: analysis
+:sidebar-tab: basic
+:target: analysis.parameterTable
+:more: simple_fitting.md#the-parameter-table
+
+On the **Analysis** page, the parameter table now also lists the new parameters. The PS
+layer's thickness and roughness arrive fixed. The SLD and iSLD of a new material arrive
+ticked for fitting and without limits: untick them, or give them **Min** and **Max**,
+before the next fit.
+```
+
 ## Basic controls
 ### Material editor
 To construct a model in the app, first, you add the materials that will compose the layers in `Material Editor`.  
@@ -330,5 +454,5 @@ saved with the project. Linking the same models again, e.g. for a parameter left
 the first time, adds a second link row.
 
 ### Trying the constraints out
-Four simulated datasets with a known ground truth are provided for exercising these
-features - see [demo datasets](./datasets.md).
+Simulated datasets with a known ground truth are provided for trying these features out;
+see [demo datasets](./datasets.md).
