@@ -38,7 +38,13 @@ POLL_MS = 100
 def main() -> None:
     app = Application(sys.argv[:1])
     # Before any engine exists (see main.py).
-    qmlRegisterSingletonType(QObject, 'Backends', 1, 0, 'PyBackend', lambda engine: PyBackend())
+    backends = []  # the one the window uses, for what a timed-out step's condition read
+
+    def backend(engine):
+        backends.append(PyBackend())
+        return backends[0]
+
+    qmlRegisterSingletonType(QObject, 'Backends', 1, 0, 'PyBackend', backend)
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty('isTestMode', False)
     engine.rootContext().setContextProperty('pySettingsPath', QUrl.fromLocalFile(sys.argv[1]).toString())
@@ -106,11 +112,15 @@ def main() -> None:
         if not framed and read(panel, 'frameNote'):
             record['steps'][-1]['note'] = read(panel, 'frameNote')  # why not, as the user is told
         if time.monotonic() > current['deadline']:
+            tutorial = backends[0].tutorial
             record['steps'][-1].update(
                 state=step['state'],
-                message=step['message'] or read(panel, 'showMeError'),
+                message=step['message'],
+                show_me_error=read(panel, 'showMeError'),
                 note=read(panel, 'frameNote'),
                 showing_me=read(panel, 'showingMe'),
+                fit=vars(tutorial._facts()['fit']),
+                fits=dict(tutorial._run._counters),
             )
             record['state'] = 'timed out'
             if os.environ.get('HARNESS_SCREENSHOT'):
