@@ -193,11 +193,11 @@ a little more widely at low q.
 :page: analysis
 :sidebar-tab: basic
 :target: analysis.parameterTable
-:done: abs(params.value('polymer_film_film_thickness') - 200) < 5
-:do: call analysis.setParameterValue polymer_film_film_thickness 200
+:done: abs(params.value('polymer_film_film_thickness') - 230) < 5
+:do: call analysis.setParameterValue polymer_film_film_thickness 230
 :more: simple_fitting.md#the-parameter-table
 
-Type `200` as the **Value** of *Polymer film Film thickness* in the table and press Enter.
+Type `230` as the **Value** of *Polymer film Film thickness* in the table and press Enter.
 The curve follows at once: the fringes move apart again.
 ```
 
@@ -212,9 +212,9 @@ The curve follows at once: the fringes move apart again.
 :more: simple_fitting.md#minimization-method
 
 Open **Extra controls**, pick `LMFit_leastsq` as the **Minimizer**, and press
-**Start fitting**. It finds the film thickness again, about 258 Å. Not every minimiser does:
-200 Å is the lower limit of the thickness, and `Bumps_lm` or `Bumps_simplex` stay stuck
-there.
+**Start fitting**. It finds the film thickness again, about 259 Å. Not every minimiser does:
+`Bumps_newton` stays at 230 Å. Start much further away, at 200 Å, and even `LMFit_leastsq`
+can end in another minimum of χ², with fringes that do not match the data.
 ```
 
 ```{tutorial-step} Continue to the Summary
