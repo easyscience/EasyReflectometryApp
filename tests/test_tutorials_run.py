@@ -42,9 +42,18 @@ def test_every_tutorial_runs_to_the_end_in_the_window(tmp_path):
     # The panel is docked beside the pages: EasyApp's window layout is still what it expects.
     assert result['docked'] is True, output
     assert result['tutorials'], output
+    # Every problem of every tutorial at once, each step in full (pytest shortens a long dict
+    # before it gets to the one that matters), with what the panel itself warned about.
+    problems = []
     for tutorial in result['tutorials']:
-        assert tutorial['state'] == 'finished', tutorial
-        assert tutorial['steps'], tutorial  # it really ran, rather than finding a finished one
+        if not tutorial['steps']:  # it really ran, rather than finding a finished one
+            problems.append(f'{tutorial["id"]}: no steps ran')
+        elif tutorial['state'] != 'finished':
+            problems.append(f'{tutorial["id"]}: {tutorial["state"]} at {tutorial["steps"][-1]}')
+        unframed = [step for step in tutorial['steps'] if step['target'] and not step['framed']]
+        problems += [f'{tutorial["id"]}: never framed {step}' for step in unframed]
+    warnings = [line.strip() for line in output.splitlines() if 'Tutorial' in line]
+    assert not problems, '\n'.join(problems + ['Panel warnings:'] + warnings)
     # Completion went to the settings file the window was given, not to the installed one.
     [line] = [line for line in settings.read_text(encoding='utf-8').splitlines() if line.startswith('completed=')]
     assert sorted(line[len('completed=') :].strip('"').split(',')) == sorted(t['id'] for t in result['tutorials'])

@@ -3,9 +3,10 @@
     python tests/tutorial_run_harness.py <settings.ini>
 
 Starts the window as main.py does, with `pySettingsPath` pointed at the given file. For each
-tutorial: start it as the Home page does, then for every step wait until its control is framed,
-run **Show me** on a step with a condition and wait for it to complete, and press **Next**
-unless the step moves on by itself. Prints `RESULT {...}` as JSON at the end.
+tutorial: start it as the Home page does, then for every step run **Show me** on a step with a
+condition and wait for it to complete, wait until its control is framed (for FRAME_WAIT_S at
+most: the test reports a control that never was, rather than a step that times out), and press
+**Next** unless the step moves on by itself. Prints `RESULT {...}` as JSON at the end.
 """
 
 import json
@@ -30,6 +31,7 @@ from PySide6.QtQml import qmlRegisterSingletonType  # noqa: E402
 from Startup import Application  # noqa: E402
 
 STEP_TIMEOUT_S = 60
+FRAME_WAIT_S = 3
 POLL_MS = 100
 
 
@@ -95,12 +97,21 @@ def main() -> None:
             return
         step = read(wrapper, 'tutorialStep')
         if step['id'] != current.get('id'):
-            current.update(id=step['id'], deadline=time.monotonic() + STEP_TIMEOUT_S, acted=False)
-            record['steps'].append({'id': step['id'], 'framed': False})
+            now = time.monotonic()
+            current.update(id=step['id'], deadline=now + STEP_TIMEOUT_S, acted=False, began=now)
+            record['steps'].append({'id': step['id'], 'target': step['target'], 'framed': False})
         framed = read(panel, 'frameItem') is not None
         record['steps'][-1]['framed'] |= framed
+        record['steps'][-1]['seconds'] = round(time.monotonic() - current['began'], 1)
+        if not framed and read(panel, 'frameNote'):
+            record['steps'][-1]['note'] = read(panel, 'frameNote')  # why not, as the user is told
         if time.monotonic() > current['deadline']:
-            record['steps'][-1].update(message=step['message'] or read(panel, 'showMeError'), note=read(panel, 'frameNote'))
+            record['steps'][-1].update(
+                state=step['state'],
+                message=step['message'] or read(panel, 'showMeError'),
+                note=read(panel, 'frameNote'),
+                showing_me=read(panel, 'showingMe'),
+            )
             record['state'] = 'timed out'
             if os.environ.get('HARNESS_SCREENSHOT'):
                 window.grabWindow().save(os.environ['HARNESS_SCREENSHOT'])
@@ -110,8 +121,10 @@ def main() -> None:
             if not current['acted'] and read(panel, 'showMeEnabled'):
                 current['acted'] = True
                 call(panel, 'showMe')
-        elif step['canNext'] and not step['advance'] and (record['steps'][-1]['framed'] or not step['target']):
-            call(wrapper, 'tutorialNext')
+        elif step['canNext'] and not step['advance']:
+            waited = time.monotonic() - current['began'] > FRAME_WAIT_S
+            if record['steps'][-1]['framed'] or not step['target'] or waited:
+                call(wrapper, 'tutorialNext')
         QTimer.singleShot(POLL_MS, poll)
 
     QTimer.singleShot(500, next_tutorial)
